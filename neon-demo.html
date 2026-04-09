@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Real Neon Physics CSS - Interactive Demo</title>
+  <link rel="stylesheet" href="neon-effects.css">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      background: #0a0a0a;
+      color: #ffffff;
+      font-family: 'Courier New', monospace;
+      padding: 40px 20px;
+      min-height: 100vh;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    h1 {
+      text-align: center;
+      margin-bottom: 50px;
+      font-size: 2.5em;
+      font-weight: bold;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+    }
+
+    .section {
+      margin-bottom: 60px;
+    }
+
+    .section-title {
+      font-size: 1.8em;
+      margin-bottom: 30px;
+      padding-bottom: 15px;
+      border-bottom: 1px solid rgba(255, 102, 0, 0.3);
+      text-transform: uppercase;
+      letter-spacing: 2px;
+    }
+
+    .demo-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 30px;
+      margin-bottom: 40px;
+    }
+
+    .demo-box {
+      background: rgba(0, 0, 0, 0.8);
+      border: 1px solid rgba(255, 102, 0, 0.2);
+      padding: 30px;
+      border-radius: 4px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 200px;
+      backdrop-filter: blur(10px);
+    }
+
+    .demo-label {
+      font-size: 0.9em;
+      color: rgba(255, 102, 0, 0.7);
+      margin-bottom: 20px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .demo-text {
+      font-size: 1.5em;
+      font-weight: bold;
+      letter-spacing: 2px;
+      text-align: center;
+    }
+
+    /* ===== STARTUP & FLICKER SECTION ===== */
+
+    .section-startup .demo-box {
+      min-height: 180px;
+    }
+
+    /* ===== COLOR FAMILY SECTION ===== */
+
+    .section-colors .demo-box {
+      min-height: 150px;
+    }
+
+    /* ===== EFFECTS SECTION ===== */
+
+    .section-effects .demo-grid {
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    }
+
+    .section-effects .demo-box {
+      min-height: 160px;
+    }
+
+    /* ===== WEATHER SECTION ===== */
+
+    .section-weather .demo-text {
+      font-size: 1.3em;
+    }
+
+    /* ===== CODE DISPLAY ===== */
+
+    .code-block {
+      background: rgba(0, 0, 0, 0.9);
+      border: 1px solid rgba(255, 102, 0, 0.3);
+      border-radius: 4px;
+      padding: 20px;
+      margin: 20px 0;
+      overflow-x: auto;
+      font-size: 0.85em;
+      color: #00ff00;
+      line-height: 1.5;
+    }
+
+    .code-label {
+      color: rgba(255, 102, 0, 0.7);
+      margin-bottom: 10px;
+      font-size: 0.9em;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    /* ===== INTERACTIVE CONTROLS ===== */
+
+    .controls {
+      background: rgba(0, 0, 0, 0.8);
+      border: 1px solid rgba(255, 102, 0, 0.2);
+      padding: 20px;
+      border-radius: 4px;
+      margin: 30px 0;
+      display: flex;
+      gap: 15px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    button {
+      background: rgba(255, 102, 0, 0.2);
+      border: 1px solid rgba(255, 102, 0, 0.5);
+      color: #ff6600;
+      padding: 10px 20px;
+      border-radius: 2px;
+      cursor: pointer;
+      font-family: 'Courier New', monospace;
+      text-transform: uppercase;
+      font-size: 0.85em;
+      transition: all 0.3s ease;
+    }
+
+    button:hover {
+      background: rgba(255, 102, 0, 0.4);
+      box-shadow: 0 0 10px rgba(255, 102, 0, 0.5);
+    }
+
+    button.active {
+      background: rgba(255, 102, 0, 0.6);
+      box-shadow: 0 0 15px rgba(255, 102, 0, 0.7);
+    }
+
+    /* ===== RESPONSIVE ===== */
+
+    @media (max-width: 768px) {
+      h1 {
+        font-size: 1.8em;
+      }
+
+      .section-title {
+        font-size: 1.4em;
+      }
+
+      .demo-text {
+        font-size: 1.2em;
+      }
+
+      .demo-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    /* ===== FOOTER ===== */
+
+    .footer {
+      margin-top: 80px;
+      padding-top: 30px;
+      border-top: 1px solid rgba(255, 102, 0, 0.2);
+      text-align: center;
+      color: rgba(255, 102, 0, 0.5);
+      font-size: 0.9em;
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <h1 class="neon-orange">Real Neon Physics</h1>
+
+  <!-- ============================================
+       STARTUP & FLICKER EFFECTS
+       ============================================ -->
+
+  <div class="section section-startup">
+    <div class="section-title neon-orange">Startup Flicker (0-3 seconds)</div>
+    <p style="color: rgba(255,255,255,0.6); margin-bottom: 30px; font-size: 0.95em;">
+      When neon tubes power on, gas below ionization voltage flickers chaotically. The position moves randomly and
+      brightness oscillates unpredictably before stabilizing.
+    </p>
+
+    <div class="demo-grid">
+      <div class="demo-box">
+        <div class="demo-label">Pure Startup Flicker</div>
+        <div class="demo-text neon-orange neon-startup">NEON</div>
+      </div>
+
+      <div class="demo-box">
+        <div class="demo-label">Startup with Position Jitter</div>
+        <div class="demo-text neon-orange neon-jitter-startup">ZION</div>
+      </div>
+
+      <div class="demo-box">
+        <div class="demo-label">Startup + Breathing Pulse</div>
+        <div class="demo-text neon-orange neon-startup" style="animation: neonStartup 2.5s ease-out forwards, neonBreathe 3s ease-in-out 2.5s infinite;">MUSIC</div>
+      </div>
+    </div>
+
+    <div class="code-block">
+      <div class="code-label">CSS Usage</div>
+&lt;div class="demo-text neon-orange neon-startup"&gt;NEON&lt;/div&gt;
+.neon-startup { animation: neonStartup 2.5s ease-out forwards; }
+    </div>
+  </div>
+
+  <!-- ============================================
+       COLOR FAMILIES
+       ============================================ -->
+
+  <div class="section section-colors">
+    <div class="section-title">Color Families</div>
+    <p style="color: rgba(255,255,255,0.6); margin-bottom: 30px; font-size: 0.95em;">
+      <strong>Warm Neons:</strong> Pure neon gas (red/orange) radiates 360° continuously.
+      <strong>Cold Neons:</strong> Argon + phosphor coating (blue/green/purple) creates sharper, brighter light.
+    </p>
+
+    <!-- WARM NEONS -->
+    <h3 style="margin: 30px 0 15px 0; font-size: 1.3em; color: rgba(255,102,0,0.8);">Warm Neon Family (Direct Gas Emission)</h3>
+    <div class="demo-grid">
+      <div class="demo-box">
+        <div class="demo-label">Pure Red</div>
+        <div class="demo-text neon-red">NEON</div>
+      </div>
+
+      <div class="demo-box">
+        <div class="demo-label">Red-Orange</div>
+        <div class="demo-text neon-orange">GLOW</div>
+      </div>
+    </div>
+
+    <!-- COLD NEONS -->
+    <h3 style="margin: 30px 0 15px 0; font-size: 1.3em; color: rgba(0,204,255,0.8);">Cold Neon Family (Argon + Phosphor)</h3>
+    <div class="demo-grid">
+      <div class="demo-box">
+        <div class="demo-label">Blue (Argon + Blue Phosphor)</div>
+        <div class="demo-text neon-blue">ELECTRIC</div>
+      </div>
+
+      <div class="demo-box">
+        <div class="demo-label">Cyan (Brightest)</div>
+        <div class="demo-text neon-cyan">ULTRA</div>
+      </div>
+
+      <div class="demo-box">
+        <div class="demo-label">Green (Argon + Green Phosphor)</div>
+        <div class="demo-text neon-green">VIVID</div>
+      </div>
+
+      <div class="demo-box">
+        <div class="demo-label">Purple (Striking)</div>
+        <div class="demo-text neon-purple">MAGIC</div>
+      </div>
+
+      <div class="demo-box">
+        <div class="demo-label">Pink (Magenta Phosphor)</div>
+        <div class="demo-text neon-pink">BLAZE</div>
+      </div>
+    </div>
+
+    <div class="code-block">
+      <div class="code-label">Color Reference</div>
+.neon-red { color: #ff0000; }
+.neon-orange { color: #ff6600; }
+.neon-blue { color: #0080ff; }
+.neon-cyan { color: #00ffff; }
+.neon-green { color: #00ff00; }
+.neon-purple { color: #9933ff; }
+.neon-pink { color: #ff00ff; }
+    </div>
+  </div>
+
+  <!-- ============================================
+       BLOOM & GLOW VARIATIONS
+       ============================================ -->
+
+  <div class="section">
+    <div class="section-title">Light Bloom (Physical Glow Spread)</div>
+    <p style="color: rgba(255,255,255,0.6); margin-bottom: 30px; font-size: 0.95em;">
+      Real neon creates three layers of glow: sharp core, medium bloom, and soft diffuse halo. Power level affects
+      bloom radius—higher power = larger glow spread. This mimics light scattering through air and lens aberration.
+    </p>
+
+    <div class="demo-grid">
+      <div class="demo-box">
+        <div class="demo-label">Low Power (Dim)</div>
+        <div class="demo-text neon-warm low-power">SOFT</div>
+      </div>
+
+      <div class="demo-box">
+        <div class="demo-label">Standard Power</div>
+        <div class="demo-text neon-orange">NEON</div>
+      </div>
+
+      <div class="demo-box">
+        <div class="demo-label">High Power (Bright)</div>
+        <div class="demo-text neon-warm high-power">BLAZE</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================
+       DEGRADATION & FAILURE STATES
+       ============================================ -->
+
+  <div class="section section-effects">
+    <div class="section-title">Degradation & Failure States</div>
+    <p style="color: rgba(255,255,255,0.6); margin-bottom: 30px; font-size: 0.95em;">
+      Real neon signs degrade over time. Gas leaks cause dimming, contaminated tubes flicker chaotically,
+      electrode wear reduces efficiency, and phosphor ages (shifting color).
+    </p>
+
+    <div class="demo-grid">
+      <div class="demo-box">
+        <div class="demo-label">Dimmed (Gas Leak)</div>
+        <div class="demo-text neon-orange neon-dimmed">FADING</div>
+      </div>
+
+      <div class="demo-box">
+        <div class="demo-label">Severely Dimmed</div>
+        <div class="demo-text neon-orange neon-severely-dimmed">WEAK</div>
+      </div>
+
+      <div class="demo-box">
+        <div class="demo-label">Random Flickering</div>
+        <div class="demo-text neon-orange neon-broken">BROKEN</div>
+      </div>
+
+      <div class="demo-box">
+        <div class="demo-label">Severe Flicker</div>
+        <div class="demo-text neon-orange neon-severe-broken">DYING</div>
+      </div>
+
+      <div class="demo-box">
+        <div class="demo-label">Cold Weather Sluggish</div>
+        <div class="demo-text neon-orange neon-cold-sluggish">FROZEN</div>
+      </div>
+
+      <div class="demo-box">
+        <div class="demo-label">Aged Phosphor</div>
+        <div class="demo-text neon-orange neon-aged">VINTAGE</div>
+      </div>
+
+      <div class="demo-box">
+        <div class="demo-label">Breathing Pulse</div>
+        <div class="demo-text neon-orange neon-breathe">ALIVE</div>
+      </div>
+
+      <div class="demo-box">
+        <div class="demo-label">Fast AC Hum</div>
+        <div class="demo-text neon-orange neon-fast-pulse">HUMS</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================
+       WEATHER EFFECTS
+       ============================================ -->
+
+  <div class="section section-weather">
+    <div class="section-title">Weather Effects</div>
+    <p style="color: rgba(255,255,255,0.6); margin-bottom: 30px; font-size: 0.95em;">
+      Moisture and rain cause significant optical changes. Water droplets scatter light unpredictably, creating larger
+      halos and reducing color saturation. Fog diffuses the glow so much the sign almost disappears. Chromatic aberration
+      (color fringing) occurs from light refraction through water.
+    </p>
+
+    <div class="demo-grid">
+      <div class="demo-box">
+        <div class="demo-label">Clear Night (Normal)</div>
+        <div class="demo-text neon-orange">CLEAR</div>
+      </div>
+
+      <div class="demo-box">
+        <div class="demo-label">Light Rain</div>
+        <div class="demo-text neon-orange neon-light-rain">RAIN</div>
+      </div>
+
+      <div class="demo-box">
+        <div class="demo-label">Heavy Rain</div>
+        <div class="demo-text neon-orange neon-heavy-rain">STORM</div>
+      </div>
+
+      <div class="demo-box">
+        <div class="demo-label">Thick Fog</div>
+        <div class="demo-text neon-orange neon-fog">MIST</div>
+      </div>
+
+      <div class="demo-box">
+        <div class="demo-label">Heavy Fog</div>
+        <div class="demo-text neon-orange neon-heavy-fog">LOST</div>
+      </div>
+
+      <div class="demo-box">
+        <div class="demo-label">Chromatic Aberration</div>
+        <div class="demo-text neon-cyan neon-chromatic-static">PRISM</div>
+      </div>
+    </div>
+
+    <div style="margin-top: 40px;">
+      <h3 style="font-size: 1.2em; margin-bottom: 20px; color: rgba(255,102,0,0.8);">Weather Cycle Animation</h3>
+      <div class="demo-box" style="min-height: 180px; background: rgba(20, 20, 40, 0.8);">
+        <div class="demo-label">Clear → Rain → Fog → Clear (20s loop)</div>
+        <div class="demo-text neon-orange neon-weather-cycle">WEATHER</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================
+       ADVANCED EFFECTS
+       ============================================ -->
+
+  <div class="section">
+    <div class="section-title">Advanced Effects Combination</div>
+    <p style="color: rgba(255,255,255,0.6); margin-bottom: 30px; font-size: 0.95em;">
+      Combine multiple effects for realistic scenarios: neon sign during startup with breathing, degraded sign flickering
+      in the rain, chromatic aberration from moisture.
+    </p>
+
+    <div class="demo-grid">
+      <div class="demo-box">
+        <div class="demo-label">Startup + Breathing</div>
+        <div class="demo-text neon-orange" style="animation: neonStartup 2.5s ease-out forwards, neonBreathe 3s ease-in-out 2.5s infinite;">PULSE</div>
+      </div>
+
+      <div class="demo-box">
+        <div class="demo-label">Broken + Cyan Color</div>
+        <div class="demo-text neon-cyan neon-broken">ERROR</div>
+      </div>
+
+      <div class="demo-box">
+        <div class="demo-label">Rain + Chromatic</div>
+        <div class="demo-text neon-cyan neon-heavy-rain neon-chromatic-static">SPECTRUM</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================
+       TECHNICAL REFERENCE
+       ============================================ -->
+
+  <div class="section">
+    <div class="section-title">Technical Reference & Physics</div>
+
+    <h3 style="margin: 30px 0 15px 0; font-size: 1.2em; color: rgba(255,102,0,0.8);">Color Physics</h3>
+    <div class="code-block">
+      <div class="code-label">Gas Wavelengths (Physics)</div>
+Neon (Pure):         600-650nm (Red-Orange)      → Warm, nostalgic
+Argon (Pure):        420nm (Pale Blue)            → Cold, requires phosphor
+Helium:              587nm (Yellow)               → Warm, rare
+Xenon:               175nm (Deep Lavender)        → Very cold, rare
+Phosphor-Coated:     400-700nm (Any color)        → Depends on coating
+
+Key: Shorter wavelength = cooler feel, longer = warmer feel
+    </div>
+
+    <h3 style="margin: 30px 0 15px 0; font-size: 1.2em; color: rgba(255,102,0,0.8);">Text-Shadow Layers</h3>
+    <div class="code-block">
+      <div class="code-label">Three-Layer Bloom Structure</div>
+Layer 1 - Core Glow:     0-10px    → Sharp, intense, full saturation
+Layer 2 - Mid Bloom:     15-30px   → Medium blur, 0.5-0.8 opacity
+Layer 3 - Outer Halo:    40-80px+  → Very soft, 0.1-0.4 opacity
+
+Real Neon Parameters:
+• Temperature Shift: Warm = longer shadows, Cold = sharper shadows
+• Power Level: 2-3x bloom radius increase with higher voltage
+• Degradation: Each failure mode reduces bloom symmetry
+    </div>
+
+    <h3 style="margin: 30px 0 15px 0; font-size: 1.2em; color: rgba(255,102,0,0.8);">Animation Timing</h3>
+    <div class="code-block">
+      <div class="code-label">Real-World Durations</div>
+Startup Phase:       2-3 seconds (chaotic oscillation)
+Stabilization:       0.5-1 second (transition to steady)
+Breathing Pulse:     2-4 seconds (subtle power ripple)
+Flicker (Broken):    2-4 seconds (intermittent failures)
+AC Hum (60Hz):       0.0166 seconds per cycle
+Cold Weather Slug:   2-3 seconds (sluggish response)
+Striation Bands:     0.0333 seconds (50Hz mains frequency)
+    </div>
+  </div>
+
+  <!-- ============================================
+       FOOTER
+       ============================================ -->
+
+  <div class="footer">
+    <p>Real Neon Physics CSS Library — Based on actual neon sign behavior</p>
+    <p style="margin-top: 10px; font-size: 0.85em;">
+      See NEON_RESEARCH.md for complete physics documentation and sources
+    </p>
+  </div>
+
+</div>
+
+</body>
+</html>

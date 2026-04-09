@@ -1,0 +1,165 @@
+name: Moments Discovery Search
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 */6 * * *'  # Every 6 hours
+
+jobs:
+  search-discovery:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Setup
+        run: |
+          pip install requests beautifulsoup4 duckduckgo-search
+
+      - name: Run search discovery
+        env:
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+        run: |
+          cat << 'SCRIPT' > search_discover.py
+          import os, json, time, random, re, requests
+          from bs4 import BeautifulSoup
+          from duckduckgo_search import DDGS
+
+          SUPABASE_URL = "https://anmgyxhnyhbyxzpjhxgx.supabase.co"
+          SUPABASE_KEY = os.environ['SUPABASE_KEY']
+
+          # Search queries for finding creator directories
+          SEARCH_QUERIES = [
+              "top African dancers Instagram 2026",
+              "best Afrobeats TikTok creators to follow",
+              "Nigerian dance influencers Instagram list",
+              "Amapiano dancers South Africa TikTok",
+              "Ghana Azonto dancers Instagram",
+              "African music influencers list 2026",
+              "Afrobeats choreographers Instagram",
+              "viral African dance TikTok creators",
+              "top 100 African Instagram dancers",
+              "best Naija dancers to follow",
+              "Kenya gengetone dancers TikTok",
+              "African dance challenge creators",
+              "Francophone African dancers Instagram",
+              "UK Afroswing dancers TikTok",
+              "African diaspora dance influencers",
+              "emerging Afrobeats dancers 2026",
+              "African music reaction channels",
+              "Amapiano TikTok stars South Africa",
+              "Lagos dancers Instagram viral",
+              "African street dance performers"
+          ]
+
+          def log(msg): print(f"[SearchDiscovery] {msg}", flush=True)
+
+          def extract_usernames(text):
+              """Extract Instagram/TikTok usernames from text"""
+              patterns = [
+                  r'@([a-zA-Z0-9_\.]{1,30})',  # @username
+                  r'instagram\.com/([a-zA-Z0-9_\.]{1,30})',  # instagram.com/username
+                  r'tiktok\.com/@([a-zA-Z0-9_\.]{1,30})',  # tiktok.com/@username
+              ]
+              usernames = set()
+              for pattern in patterns:
+                  matches = re.findall(pattern, text, re.IGNORECASE)
+                  for m in matches:
+                      # Filter out common non-usernames
+                      if m.lower() not in ['instagram', 'tiktok', 'twitter', 'facebook', 'youtube', 'gmail', 'email', 'http', 'https', 'www', 'com']:
+                          if len(m) > 2 and not m.startswith('.') and not m.endswith('.'):
+                              usernames.add(m.lower())
+              return list(usernames)
+
+          def search_duckduckgo(query, max_results=10):
+              """Search DuckDuckGo and return URLs"""
+              try:
+                  with DDGS() as ddgs:
+                      results = list(ddgs.text(query, max_results=max_results))
+                      return [r['href'] for r in results if 'href' in r]
+              except Exception as e:
+                  log(f"Search error: {e}")
+                  return []
+
+          def fetch_page(url):
+              """Fetch and parse a webpage"""
+              try:
+                  headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+                  resp = requests.get(url, headers=headers, timeout=15)
+                  if resp.status_code == 200:
+                      soup = BeautifulSoup(resp.text, 'html.parser')
+                      # Get all text content
+                      text = soup.get_text(separator=' ')
+                      # Also get href attributes for profile links
+                      for a in soup.find_all('a', href=True):
+                          text += ' ' + a['href']
+                      return text
+              except Exception as e:
+                  log(f"Fetch error {url}: {e}")
+              return ""
+
+          def insert_creator(username, platform='instagram', source='search'):
+              """Insert creator to Supabase"""
+              headers = {
+                  "apikey": SUPABASE_KEY,
+                  "Authorization": f"Bearer {SUPABASE_KEY}",
+                  "Content-Type": "application/json",
+                  "Prefer": "resolution=merge-duplicates"
+              }
+              data = {
+                  "platform": platform,
+                  "username": username,
+                  "content_type": "dance",
+                  "status": "pending",
+                  "discovered_by": f"search-{source}"
+              }
+              try:
+                  resp = requests.post(f"{SUPABASE_URL}/rest/v1/voyo_pending_creators",
+                                      headers=headers, json=data, timeout=30)
+                  return resp.status_code in [200, 201, 409]
+              except:
+                  return False
+
+          def determine_platform(username, context=""):
+              """Guess platform based on context"""
+              context_lower = context.lower()
+              if 'tiktok' in context_lower:
+                  return 'tiktok'
+              return 'instagram'  # Default to Instagram
+
+          def main():
+              log("Starting Search-Based Discovery")
+              total_found = 0
+              total_inserted = 0
+
+              for query in SEARCH_QUERIES:
+                  log(f"Searching: {query}")
+                  urls = search_duckduckgo(query, max_results=8)
+                  log(f"  Found {len(urls)} URLs")
+
+                  for url in urls:
+                      # Skip social media directly (we want directories/lists)
+                      if any(x in url for x in ['instagram.com', 'tiktok.com', 'twitter.com', 'facebook.com']):
+                          continue
+
+                      log(f"  Fetching: {url[:60]}...")
+                      text = fetch_page(url)
+                      usernames = extract_usernames(text)
+
+                      if usernames:
+                          log(f"    Found {len(usernames)} usernames")
+                          total_found += len(usernames)
+
+                          for username in usernames:
+                              platform = determine_platform(username, text)
+                              if insert_creator(username, platform, query[:20]):
+                                  total_inserted += 1
+
+                      time.sleep(random.uniform(1, 3))
+
+                  time.sleep(random.uniform(2, 5))
+
+              log(f"COMPLETE: Found {total_found}, Inserted {total_inserted}")
+
+          if __name__ == "__main__":
+              main()
+          SCRIPT
+          python search_discover.py

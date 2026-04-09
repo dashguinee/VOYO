@@ -1,0 +1,64 @@
+{
+  "country": "south-africa",
+  "country_code": "ZA",
+  "region": "southern-africa",
+  "researched_at": "2024-12-31T15:15:00Z",
+  
+  "tier_a": {
+    "description": "Global/Continental - amapiano kings, house legends",
+    "artists": [
+      {"name": "Black Coffee", "notes": "Grammy winner, global DJ"},
+      {"name": "Tyla", "notes": "Water global #1, Grammy"},
+      {"name": "Kabza De Small", "notes": "King of Amapiano"},
+      {"name": "DJ Maphorisa", "notes": "Scorpion Kings, amapiano pioneer"},
+      {"name": "Master KG", "notes": "Jerusalema global viral"},
+      {"name": "Nasty C", "notes": "Rap star, international"},
+      {"name": "Makhadzi", "notes": "Massive in SA"},
+      {"name": "Focalistic", "notes": "Ke Star, amapiano"},
+      {"name": "Uncle Waffles", "notes": "DJ phenomenon"}
+    ]
+  },
+  
+  "tier_b_amapiano": {
+    "artists": [
+      "Young Stunna", "DBN Gogo", "Mas Musiq", "Tyler ICU", "De Mthuda",
+      "Kelvin Momo", "Vigro Deep", "Lady Du", "Mellow & Sleazy", "Busta 929",
+      "Daliwonga", "Mr JazziQ", "Major League DJz", "Semi Tee", "Kamo Mphela"
+    ]
+  },
+  
+  "tier_b_hiphop": {
+    "artists": [
+      "Cassper Nyovest", "A-Reece", "Blxckie", "Stogie T", "Kwesta",
+      "Shane Eagle", "Priddy Ugly", "YoungstaCPT", "Big Zulu", "K.O"
+    ]
+  },
+  
+  "tier_b_other": {
+    "artists": [
+      "Zakes Bantwini", "Sun-El Musician", "Ami Faku", "Elaine",
+      "Sha Sha", "Samthing Soweto", "Tresor", "Msaki", "Shekhinah"
+    ]
+  },
+  
+  "tier_c_kwaito_gqom": {
+    "artists": [
+      "DJ Lag", "Distruction Boyz", "Babes Wodumo", "Mampintsha",
+      "DJ Tira", "Heavy K", "Prince Kaybee", "DJ Shimza"
+    ]
+  },
+  
+  "tier_c_legends": {
+    "artists": [
+      "Brenda Fassie", "Hugh Masekela", "Miriam Makeba", "Lucky Dube",
+      "Ladysmith Black Mambazo", "Johnny Clegg", "Mafikizolo"
+    ]
+  },
+  
+  "summary": {
+    "tier_a": 9,
+    "tier_b": 34,
+    "tier_c": 15,
+    "total": 58
+  }
+}

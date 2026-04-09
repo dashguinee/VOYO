@@ -1,0 +1,701 @@
+/* =============================================================================
+   REAL NEON PHYSICS CSS LIBRARY
+   Based on actual neon sign behavior research
+   ============================================================================= */
+
+/* =============================================================================
+   STARTUP FLICKER - Chaotic ionization phase (0-3 seconds)
+   Physics: Gas below ignition voltage oscillates randomly
+   ============================================================================= */
+
+@keyframes neonStartup {
+  0% {
+    opacity: 0;
+    filter: blur(2px) brightness(0%);
+  }
+  3% {
+    opacity: 0.35;
+    filter: blur(1.5px) brightness(30%);
+  }
+  6% {
+    opacity: 0;
+    filter: blur(2px) brightness(0%);
+  }
+  9% {
+    opacity: 0.25;
+    filter: blur(1px) brightness(20%);
+  }
+  12% {
+    opacity: 0;
+    filter: blur(2px) brightness(0%);
+  }
+  15% {
+    opacity: 0.45;
+    filter: blur(1.5px) brightness(35%);
+  }
+  18% {
+    opacity: 0.1;
+    filter: blur(1px) brightness(8%);
+  }
+  21% {
+    opacity: 0.55;
+    filter: blur(1.5px) brightness(45%);
+  }
+  24% {
+    opacity: 0;
+    filter: blur(2px) brightness(0%);
+  }
+  30% {
+    opacity: 0.65;
+    filter: blur(1px) brightness(55%);
+  }
+  40% {
+    opacity: 0.8;
+    filter: blur(0.5px) brightness(70%);
+  }
+  55% {
+    opacity: 0.9;
+    filter: blur(0.3px) brightness(85%);
+  }
+  75% {
+    opacity: 0.95;
+    filter: blur(0.1px) brightness(95%);
+  }
+  100% {
+    opacity: 1;
+    filter: blur(0px) brightness(100%);
+  }
+}
+
+.neon-startup {
+  animation: neonStartup 2.5s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+}
+
+/* =============================================================================
+   POSITION JITTER - Flicker location moves slightly (realistic chaos)
+   ============================================================================= */
+
+@keyframes neonPositionJitter {
+  0% {
+    text-shadow:
+      0 0 4px currentColor,
+      0 0 8px rgba(255, 102, 0, 0.4);
+  }
+  5% {
+    text-shadow:
+      0.5px 0.5px 5px currentColor,
+      0.5px 0.5px 10px rgba(255, 102, 0, 0.5);
+  }
+  10% {
+    text-shadow:
+      -0.5px 0.5px 6px currentColor,
+      -0.5px 0.5px 12px rgba(255, 102, 0, 0.45);
+  }
+  15% {
+    text-shadow:
+      0.5px -0.5px 5px currentColor,
+      0.5px -0.5px 10px rgba(255, 102, 0, 0.4);
+  }
+  20% {
+    text-shadow:
+      -0.5px -0.5px 5px currentColor,
+      -0.5px -0.5px 10px rgba(255, 102, 0, 0.5);
+  }
+  100% {
+    text-shadow:
+      0 0 15px currentColor,
+      0 0 25px currentColor,
+      0 0 40px rgba(255, 102, 0, 0.4);
+  }
+}
+
+.neon-jitter-startup {
+  animation: neonPositionJitter 2.5s ease-out forwards;
+}
+
+/* =============================================================================
+   WARM NEON - Pure neon gas (direct emission, no phosphor)
+   Physics: Red-orange wavelength (600-650nm), warm feel, 360° radiation
+   ============================================================================= */
+
+.neon-warm,
+.neon-red,
+.neon-orange {
+  /* Smooth anti-aliasing for better glow */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.neon-red {
+  color: #ff0000;
+  text-shadow:
+    /* Core sharp glow - inner bright layer */
+    0 0 7px #ff0000,
+    0 0 10px #ff0000,
+    /* Mid bloom - medium spread with slight falloff */
+    0 0 15px #ff0000,
+    0 0 25px rgba(255, 0, 0, 0.7),
+    /* Outer halo - soft, diffuse, fading */
+    0 0 40px rgba(255, 0, 0, 0.4),
+    0 0 60px rgba(255, 0, 0, 0.2);
+}
+
+.neon-orange {
+  color: #ff6600;
+  text-shadow:
+    /* Core */
+    0 0 7px #ff6600,
+    0 0 10px #ff6600,
+    /* Mid bloom */
+    0 0 15px #ff6600,
+    0 0 25px rgba(255, 102, 0, 0.65),
+    /* Outer halo */
+    0 0 40px rgba(255, 102, 0, 0.4),
+    0 0 60px rgba(255, 102, 0, 0.2);
+}
+
+/* High-power warm neon - brighter, more spread */
+.neon-warm.high-power {
+  text-shadow:
+    0 0 10px #ff6600,
+    0 0 15px #ff6600,
+    0 0 30px rgba(255, 102, 0, 0.8),
+    0 0 50px rgba(255, 102, 0, 0.6),
+    0 0 80px rgba(255, 102, 0, 0.3);
+}
+
+/* Low-power warm neon - dimmer, tighter */
+.neon-warm.low-power {
+  text-shadow:
+    0 0 5px #ff6600,
+    0 0 8px #ff6600,
+    0 0 15px rgba(255, 102, 0, 0.4);
+}
+
+/* =============================================================================
+   COLD NEON - Argon + phosphor coating (artificial colors via excitation)
+   Physics: Blue, green, purple wavelengths, sharp digital feel, high power
+   ============================================================================= */
+
+.neon-blue {
+  color: #0080ff;
+  text-shadow:
+    /* Core - brighter than warm neon due to argon efficiency */
+    0 0 8px #0080ff,
+    0 0 12px #0080ff,
+    /* Mid bloom - more intense */
+    0 0 18px #0080ff,
+    0 0 30px rgba(0, 128, 255, 0.75),
+    /* Outer halo */
+    0 0 45px rgba(0, 128, 255, 0.5),
+    0 0 70px rgba(0, 128, 255, 0.25);
+}
+
+.neon-cyan {
+  color: #00ffff;
+  text-shadow:
+    0 0 8px #00ffff,
+    0 0 12px #00ffff,
+    0 0 18px #00ffff,
+    0 0 30px rgba(0, 255, 255, 0.7),
+    0 0 50px rgba(0, 255, 255, 0.5),
+    0 0 80px rgba(0, 255, 255, 0.25);
+}
+
+.neon-green {
+  color: #00ff00;
+  text-shadow:
+    0 0 8px #00ff00,
+    0 0 12px #00ff00,
+    0 0 18px #00ff00,
+    0 0 30px rgba(0, 255, 0, 0.65),
+    0 0 45px rgba(0, 255, 0, 0.4),
+    0 0 70px rgba(0, 255, 0, 0.2);
+}
+
+.neon-purple {
+  color: #9933ff;
+  text-shadow:
+    0 0 8px #9933ff,
+    0 0 12px #9933ff,
+    0 0 18px #9933ff,
+    0 0 30px rgba(153, 51, 255, 0.7),
+    0 0 45px rgba(153, 51, 255, 0.45),
+    0 0 70px rgba(153, 51, 255, 0.2);
+}
+
+.neon-pink {
+  color: #ff00ff;
+  text-shadow:
+    0 0 8px #ff00ff,
+    0 0 12px #ff00ff,
+    0 0 18px #ff00ff,
+    0 0 30px rgba(255, 0, 255, 0.7),
+    0 0 45px rgba(255, 0, 255, 0.4),
+    0 0 70px rgba(255, 0, 255, 0.2);
+}
+
+/* High-power cold neon - phosphor-enhanced brightness */
+.neon-cold.high-power {
+  filter: brightness(1.2) saturate(1.15);
+  text-shadow:
+    0 0 12px currentColor,
+    0 0 18px currentColor,
+    0 0 35px rgba(0, 204, 255, 0.85),
+    0 0 60px rgba(0, 204, 255, 0.65),
+    0 0 90px rgba(0, 204, 255, 0.35);
+}
+
+/* =============================================================================
+   BREATHING PULSE - Subtle power fluctuation (analog feel)
+   Physics: AC current ripple creating rhythmic intensity change
+   ============================================================================= */
+
+@keyframes neonBreathe {
+  0%, 100% {
+    opacity: 1;
+    filter: brightness(1) drop-shadow(0 0 2px currentColor);
+  }
+  50% {
+    opacity: 0.95;
+    filter: brightness(1.05) drop-shadow(0 0 3px currentColor);
+  }
+}
+
+.neon-breathe {
+  animation: neonBreathe 3s ease-in-out infinite;
+}
+
+/* Faster pulse (60Hz AC hum) */
+@keyframes neonFastPulse {
+  0%, 100% {
+    opacity: 1;
+    filter: brightness(1);
+  }
+  50% {
+    opacity: 0.97;
+    filter: brightness(1.02);
+  }
+}
+
+.neon-fast-pulse {
+  animation: neonFastPulse 0.033s linear infinite; /* 60Hz */
+}
+
+/* =============================================================================
+   BROKEN NEON - Random flickering (air contamination or power issues)
+   Physics: Gas below ionization threshold oscillates unpredictably
+   ============================================================================= */
+
+@keyframes neonFlicker {
+  0% {
+    opacity: 1;
+    filter: brightness(1);
+  }
+  5% {
+    opacity: 0;
+    filter: brightness(0);
+  }
+  6% {
+    opacity: 1;
+    filter: brightness(0.95);
+  }
+  15% {
+    opacity: 0;
+    filter: brightness(0);
+  }
+  16% {
+    opacity: 0.8;
+    filter: brightness(0.8);
+  }
+  30% {
+    opacity: 1;
+    filter: brightness(1);
+  }
+  31% {
+    opacity: 0;
+    filter: brightness(0);
+  }
+  35% {
+    opacity: 0.5;
+    filter: brightness(0.6);
+  }
+  48% {
+    opacity: 1;
+    filter: brightness(1);
+  }
+  65% {
+    opacity: 1;
+    filter: brightness(1);
+  }
+  66% {
+    opacity: 0;
+    filter: brightness(0);
+  }
+  67% {
+    opacity: 0.9;
+    filter: brightness(0.9);
+  }
+  100% {
+    opacity: 1;
+    filter: brightness(1);
+  }
+}
+
+.neon-broken {
+  animation: neonFlicker 3.5s steps(2, end) infinite;
+}
+
+/* Severe flicker (near total failure) */
+@keyframes neonSevereBroken {
+  0% { opacity: 0.3; }
+  8% { opacity: 0; }
+  9% { opacity: 0.2; }
+  15% { opacity: 0; }
+  18% { opacity: 0.4; }
+  25% { opacity: 0; }
+  28% { opacity: 0.1; }
+  35% { opacity: 0; }
+  100% { opacity: 0.2; }
+}
+
+.neon-severe-broken {
+  animation: neonSevereBroken 2s steps(3, end) infinite;
+}
+
+/* =============================================================================
+   STRIATION EFFECT - Audio frequency banding (50/60Hz electrical oscillation)
+   Physics: Standing wave pattern in gas creates visible bands
+   ============================================================================= */
+
+@keyframes neonStriations {
+  0%, 100% {
+    background-position: 0 0;
+  }
+  50% {
+    background-position: 0 4px;
+  }
+}
+
+.neon-striations {
+  background:
+    repeating-linear-gradient(
+      0deg,
+      rgba(0, 0, 0, 0.1) 0px,
+      rgba(0, 0, 0, 0.1) 2px,
+      transparent 2px,
+      transparent 4px
+    );
+  animation: neonStriations 0.0333s linear infinite; /* 60Hz = 16.7ms = 0.0333s */
+}
+
+/* =============================================================================
+   DIMMED NEON - Gradual brightness loss (gas leak or electrode wear)
+   Physics: Argon/Neon escaping through hairline crack
+   ============================================================================= */
+
+@keyframes neonDimmed {
+  0%, 100% {
+    opacity: 0.6;
+    filter: brightness(0.75);
+  }
+  50% {
+    opacity: 0.5;
+    filter: brightness(0.65);
+  }
+}
+
+.neon-dimmed {
+  animation: neonDimmed 4s ease-in-out infinite;
+}
+
+/* Severely dimmed (major leak) */
+.neon-severely-dimmed {
+  opacity: 0.35;
+  filter: brightness(0.5);
+}
+
+/* =============================================================================
+   COLD WEATHER SLUGGISH - Argon below 45°F (slow response, stuttering)
+   Physics: Lower gas temperature = slower electron movement
+   ============================================================================= */
+
+@keyframes neonColdSlug {
+  0% { opacity: 0.4; filter: brightness(0.6); }
+  15% { opacity: 0.5; filter: brightness(0.65); }
+  25% { opacity: 0.35; filter: brightness(0.55); }
+  40% { opacity: 0.6; filter: brightness(0.75); }
+  50% { opacity: 0.45; filter: brightness(0.65); }
+  65% { opacity: 0.7; filter: brightness(0.8); }
+  80% { opacity: 0.55; filter: brightness(0.7); }
+  100% { opacity: 0.8; filter: brightness(0.9); }
+}
+
+.neon-cold-sluggish {
+  animation: neonColdSlug 2.5s ease-in-out infinite;
+}
+
+/* =============================================================================
+   PHOSPHOR AGING - Color shift and degradation over time
+   Physics: UV-excited phosphor coating degrades, shifts red
+   ============================================================================= */
+
+.neon-aged {
+  filter: hue-rotate(-25deg) saturate(0.6) brightness(0.8);
+}
+
+.neon-severely-aged {
+  filter: hue-rotate(-35deg) saturate(0.4) brightness(0.65);
+}
+
+/* =============================================================================
+   DEAD SPOTS - Partial tube failure (specific sections don't glow)
+   Physics: Electrode erosion or pressure point failure in tube
+   ============================================================================= */
+
+@keyframes neonDeadSpots {
+  0% {
+    background-position: 0% 0%;
+  }
+  100% {
+    background-position: 100% 0%;
+  }
+}
+
+.neon-dead-spots {
+  background: linear-gradient(
+    90deg,
+    rgba(255, 102, 0, 1) 0%,
+    rgba(255, 102, 0, 0) 10%,
+    rgba(255, 102, 0, 1) 15%,
+    rgba(255, 102, 0, 0) 25%,
+    rgba(255, 102, 0, 1) 30%,
+    rgba(255, 102, 0, 0.3) 45%,
+    rgba(255, 102, 0, 1) 55%,
+    rgba(255, 102, 0, 0) 70%,
+    rgba(255, 102, 0, 1) 85%
+  );
+  background-size: 200% 100%;
+  animation: neonDeadSpots 4s linear infinite;
+}
+
+/* =============================================================================
+   RAIN EFFECT - Increased bloom from water scatter, reduced saturation
+   Physics: Water droplets refract and scatter light in all directions
+   ============================================================================= */
+
+.neon-rain {
+  filter: blur(0.5px) saturate(0.75) brightness(1.08);
+  text-shadow:
+    /* Tight core remains sharp */
+    0 0 5px currentColor,
+    0 0 10px currentColor,
+    /* Bloom extends much further (2-3x normal) */
+    0 0 25px rgba(255, 102, 0, 0.65),
+    0 0 45px rgba(255, 102, 0, 0.45),
+    0 0 70px rgba(255, 102, 0, 0.25),
+    /* Extra diffuse outer halo from water scatter */
+    0 0 100px rgba(255, 102, 0, 0.12);
+}
+
+/* Light rain - starting to affect appearance */
+.neon-light-rain {
+  filter: blur(0.3px) saturate(0.85) brightness(1.04);
+  text-shadow:
+    0 0 7px currentColor,
+    0 0 15px currentColor,
+    0 0 30px rgba(255, 102, 0, 0.55),
+    0 0 50px rgba(255, 102, 0, 0.3),
+    0 0 75px rgba(255, 102, 0, 0.15);
+}
+
+/* Heavy rain - significant scatter */
+.neon-heavy-rain {
+  filter: blur(0.8px) saturate(0.6) brightness(1.12);
+  text-shadow:
+    0 0 8px currentColor,
+    0 0 18px currentColor,
+    0 0 40px rgba(255, 102, 0, 0.6),
+    0 0 70px rgba(255, 102, 0, 0.35),
+    0 0 110px rgba(255, 102, 0, 0.15);
+}
+
+/* =============================================================================
+   FOG EFFECT - Maximum diffusion, softest appearance
+   Physics: Dense moisture particles scatter light uniformly in all directions
+   ============================================================================= */
+
+.neon-fog {
+  filter: blur(1.5px) saturate(0.55) brightness(1.18) opacity(0.92);
+  text-shadow:
+    /* Very soft, diffuse at all scales */
+    0 0 12px rgba(255, 102, 0, 0.5),
+    0 0 30px rgba(255, 102, 0, 0.4),
+    0 0 60px rgba(255, 102, 0, 0.3),
+    0 0 100px rgba(255, 102, 0, 0.15),
+    0 0 150px rgba(255, 102, 0, 0.05);
+}
+
+/* Heavy fog - almost lost in mist */
+.neon-heavy-fog {
+  filter: blur(2px) saturate(0.4) brightness(1.25) opacity(0.85);
+  text-shadow:
+    0 0 20px rgba(255, 102, 0, 0.4),
+    0 0 50px rgba(255, 102, 0, 0.25),
+    0 0 100px rgba(255, 102, 0, 0.15),
+    0 0 150px rgba(255, 102, 0, 0.08);
+}
+
+/* =============================================================================
+   CHROMATIC ABERRATION - Color fringing in moisture/rain
+   Physics: Light refraction through water droplets splits wavelengths
+   ============================================================================= */
+
+@keyframes neonChromaticPulse {
+  0%, 100% {
+    text-shadow:
+      -1px 0 3px #ff0000,
+      1px 0 3px #0080ff,
+      0 0 15px rgba(255, 102, 0, 0.7);
+  }
+  50% {
+    text-shadow:
+      -2px 0 4px #ff0000,
+      2px 0 4px #0080ff,
+      0 0 15px rgba(255, 102, 0, 0.5);
+  }
+}
+
+.neon-chromatic {
+  animation: neonChromaticPulse 1.5s ease-in-out infinite;
+}
+
+/* Static chromatic aberration */
+.neon-chromatic-static {
+  text-shadow:
+    -1px 0 3px rgba(255, 0, 0, 0.7),
+    1px 0 3px rgba(0, 128, 255, 0.7),
+    0 0 15px currentColor;
+}
+
+/* =============================================================================
+   PUDDLE REFLECTION - Neon reflecting in rain water
+   Uses CSS custom property for reflection text (JS integration optional)
+   ============================================================================= */
+
+.neon-with-reflection {
+  position: relative;
+}
+
+.neon-with-reflection::after {
+  content: attr(data-reflection);
+  position: absolute;
+  top: 100%;
+  left: 0;
+  width: 100%;
+  transform: scaleY(-1);
+  filter: blur(1px) opacity(0.3) brightness(0.65);
+  pointer-events: none;
+  text-shadow:
+    0 0 8px rgba(255, 102, 0, 0.3),
+    0 0 15px rgba(255, 102, 0, 0.15);
+  margin-top: 5px;
+}
+
+/* =============================================================================
+   WEATHER CYCLE ANIMATION - Clear → Rain → Fog → Clear
+   ============================================================================= */
+
+@keyframes neonWeatherCycle {
+  /* Clear - Normal neon operation */
+  0%, 100% {
+    filter: blur(0px) saturate(1) brightness(1);
+    text-shadow:
+      0 0 8px currentColor,
+      0 0 15px currentColor,
+      0 0 30px rgba(255, 102, 0, 0.5),
+      0 0 50px rgba(255, 102, 0, 0.25);
+  }
+
+  /* Light rain starting - slight blur, increased bloom */
+  25% {
+    filter: blur(0.3px) saturate(0.9) brightness(1.05);
+    text-shadow:
+      0 0 8px currentColor,
+      0 0 18px currentColor,
+      0 0 40px rgba(255, 102, 0, 0.6),
+      0 0 65px rgba(255, 102, 0, 0.3),
+      0 0 90px rgba(255, 102, 0, 0.1);
+  }
+
+  /* Heavy rain/fog - max blur, lost in mist */
+  50% {
+    filter: blur(1.2px) saturate(0.5) brightness(1.2);
+    text-shadow:
+      0 0 15px currentColor,
+      0 0 35px rgba(255, 102, 0, 0.5),
+      0 0 70px rgba(255, 102, 0, 0.3),
+      0 0 120px rgba(255, 102, 0, 0.1);
+  }
+
+  /* Rain clearing - blur decreasing, color returning */
+  75% {
+    filter: blur(0.5px) saturate(0.75) brightness(1.1);
+    text-shadow:
+      0 0 10px currentColor,
+      0 0 22px currentColor,
+      0 0 45px rgba(255, 102, 0, 0.55),
+      0 0 75px rgba(255, 102, 0, 0.25),
+      0 0 100px rgba(255, 102, 0, 0.1);
+  }
+}
+
+.neon-weather-cycle {
+  animation: neonWeatherCycle 20s ease-in-out infinite;
+}
+
+/* =============================================================================
+   UTILITY CLASSES
+   ============================================================================= */
+
+/* Force GPU acceleration for smooth animations */
+.neon {
+  will-change: text-shadow, filter;
+  transform: translateZ(0);
+}
+
+/* Combine multiple effects */
+.neon.startup-and-pulse {
+  animation: neonStartup 2.5s ease-out forwards, neonBreathe 3s ease-in-out 2.5s infinite;
+}
+
+/* Dynamic text color with neon text-shadow */
+.neon-dynamic {
+  filter: brightness(1);
+  transition: filter 0.3s ease;
+}
+
+.neon-dynamic:hover {
+  filter: brightness(1.15);
+}
+
+/* =============================================================================
+   ACCESSIBILITY - Respect motion preferences
+   ============================================================================= */
+
+@media (prefers-reduced-motion: reduce) {
+  .neon-startup,
+  .neon-jitter-startup,
+  .neon-breathe,
+  .neon-fast-pulse,
+  .neon-flicker,
+  .neon-broken,
+  .neon-severe-broken,
+  .neon-striations,
+  .neon-dimmed,
+  .neon-cold-sluggish,
+  .neon-weather-cycle {
+    animation: none;
+    opacity: 1;
+  }
+}

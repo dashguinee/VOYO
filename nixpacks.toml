@@ -1,0 +1,14 @@
+# VOYO Music Server - Nixpacks Config
+# This overrides auto-detection to run the server folder only
+
+[phases.setup]
+nixPkgs = ["nodejs_20", "yt-dlp", "ffmpeg", "python311"]
+
+[phases.install]
+cmds = ["cd server && npm install", "pip3 install --break-system-packages bgutil-ytdlp-pot-provider"]
+
+[phases.build]
+cmds = ["echo 'Server-only build'"]
+
+[start]
+cmd = "cd server && node index.js"

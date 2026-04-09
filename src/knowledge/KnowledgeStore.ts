@@ -1,0 +1,808 @@
+/**
+ * VOYO Knowledge Store
+ *
+ * The Brain's memory. Pre-classified artist and track knowledge.
+ * Brain reads, Scouts write. No searching, just knowing.
+ */
+
+import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
+import {
+  PrimaryMood,
+  FeelingTag,
+  EnergyLevel,
+  AfricanRegion,
+  AfricanGenre,
+  VibeProfile,
+  ArtistTier,
+  CanonLevel,
+  CulturalTag,
+  AestheticTag,
+  ContentType,
+  MusicalEra,
+  CanonScore,
+  QuickScore
+} from './MoodTags';
+
+// ============================================
+// KNOWLEDGE TYPES
+// ============================================
+
+export interface ArtistKnowledge {
+  id: string;
+  name: string;
+  normalizedName: string; // lowercase, no special chars
+  primaryMoods: PrimaryMood[];
+  feelings: FeelingTag[];
+  avgEnergy: EnergyLevel;
+  regions: AfricanRegion[];
+  genres: AfricanGenre[];
+  languages: string[];
+  similarArtists: string[]; // artist IDs
+  trackCount: number;
+  discoveredAt: number;
+  lastUpdated: number;
+  popularity: number; // 0-100
+  verified: boolean; // manually verified quality
+
+  // === CANON SYSTEM (Cultural Weapon) ===
+  tier: ArtistTier;         // A=Global Icon, B=Regional Star, C=National, D=Underground/Echo
+  culturalTags: CulturalTag[];  // Cultural significance markers
+  peakYear?: number;        // Year of peak influence (for canon calculation)
+  debutYear?: number;       // When they started (for legacy calculation)
+  isEcho?: boolean;         // Hidden gem - deserves more shine
+
+  // === MULTI-DIMENSIONAL SCORING (V4 - Research-based) ===
+  aestheticTags?: AestheticTag[];  // innovative, influential, virtuosic, etc.
+  totalViews?: number;             // Combined YouTube views across all tracks
+  avgViewCount?: number;           // Average views per track
+
+  // Cultural Significance scores (0-5 scale)
+  culturalScore?: {
+    historical: number;      // Pioneer status, movement-defining
+    social: number;          // Protest, liberation, unity impact
+    diasporic: number;       // Bridges Africa and diaspora
+    preservational: number;  // Documents endangered traditions
+  };
+
+  // Aesthetic Merit scores (0-5 scale)
+  aestheticScore?: {
+    innovation: number;      // Genre-defining, pioneering
+    craft: number;           // Virtuosity, production quality
+    influence: number;       // Copied by others
+  };
+
+  // Classification metadata
+  classifiedBy?: 'pattern' | 'llm' | 'hybrid' | 'human';
+  enrichedFrom?: string[];        // ['youtube', 'musicbrainz', 'discogs', 'spotify']
+
+  // Relationships (knowledge graph)
+  influencedBy?: string[];        // Artist IDs this artist was influenced by
+  influences?: string[];          // Artist IDs this artist influences
+  collaborators?: string[];       // Artist IDs frequently collaborated with
+  labelId?: string;               // Record label
+  countryCode?: string;           // ISO country code (NG, GH, ZA, etc.)
+}
+
+export interface TrackKnowledge {
+  id: string; // YouTube video ID or VOYO ID
+  title: string;
+  artistId: string;
+  artistName: string;
+  primaryMood: PrimaryMood;
+  feelings: FeelingTag[];
+  energy: EnergyLevel;
+  region?: AfricanRegion;
+  genre?: AfricanGenre;
+  language?: string;
+  duration?: number; // seconds
+  releaseYear?: number;
+  isClassic: boolean; // timeless track
+  isTrending: boolean; // currently hot
+  discoveredAt: number;
+  classifiedAt: number;
+  confidence: number; // 0-1, how confident is the classification
+
+  // === CANON SYSTEM (Cultural Weapon) ===
+  canonLevel: CanonLevel;         // CORE, ESSENTIAL, DEEP_CUT, ARCHIVE, ECHO
+  culturalTags: CulturalTag[];    // Cultural significance (anthem, diaspora, etc.)
+  isEcho?: boolean;               // Hidden gem that deserves recognition
+  echoReason?: string;            // Why this track is an echo (optional context)
+
+  // === MULTI-DIMENSIONAL SCORING (V4 - Research-based) ===
+  contentType?: ContentType;      // original, remix, live, dj_mix, etc.
+  era?: MusicalEra;               // independence, golden-age, streaming-era, etc.
+  aestheticTags?: AestheticTag[]; // innovative, virtuosic, influential, etc.
+  viewCount?: number;             // YouTube view count (objective metric)
+  viewPercentile?: number;        // 0-100 relative to corpus
+
+  // Full multi-dimensional score (for deeply classified tracks)
+  canonScore?: CanonScore;
+
+  // Quick score (for batch-classified tracks)
+  quickScore?: QuickScore;
+
+  // Classification metadata
+  classifiedBy?: 'pattern' | 'llm' | 'hybrid' | 'human';
+  llmModel?: string;              // which LLM classified this (claude-3, gemini-2, etc.)
+  enrichedFrom?: string[];        // ['youtube', 'musicbrainz', 'discogs']
+}
+
+export interface VibeClustersEntry {
+  id: string;
+  name: string;
+  description: string;
+  vibe: VibeProfile;
+  trackIds: string[];
+  artistIds: string[];
+  createdAt: number;
+  autoGenerated: boolean;
+}
+
+// Scout discovery batch
+export interface ScoutDiscovery {
+  scoutId: string;
+  scoutType: string;
+  timestamp: number;
+  tracksFound: number;
+  artistsFound: number;
+  region?: AfricanRegion;
+  genre?: AfricanGenre;
+}
+
+// ============================================
+// KNOWLEDGE STORE STATE
+// ============================================
+
+interface KnowledgeState {
+  // Core knowledge
+  artists: Map<string, ArtistKnowledge>;
+  tracks: Map<string, TrackKnowledge>;
+  vibeClusters: Map<string, VibeClustersEntry>;
+
+  // Indexes for fast lookup
+  artistsByName: Map<string, string>; // normalizedName -> artistId
+  artistsByTier: Map<ArtistTier, Set<string>>; // tier -> artistIds
+  tracksByMood: Map<PrimaryMood, Set<string>>; // mood -> trackIds
+  tracksByGenre: Map<AfricanGenre, Set<string>>; // genre -> trackIds
+  tracksByRegion: Map<AfricanRegion, Set<string>>; // region -> trackIds
+  tracksByEnergy: Map<EnergyLevel, Set<string>>; // energy -> trackIds
+  tracksByArtist: Map<string, Set<string>>; // artistId -> trackIds
+  tracksByCanon: Map<CanonLevel, Set<string>>; // canonLevel -> trackIds
+  tracksByCulturalTag: Map<CulturalTag, Set<string>>; // culturalTag -> trackIds
+  echoTracks: Set<string>; // Track IDs of hidden gems
+
+  // Scout history
+  discoveries: ScoutDiscovery[];
+  lastScoutRun: number;
+  totalTracksDiscovered: number;
+  totalArtistsDiscovered: number;
+
+  // Actions
+  addArtist: (artist: ArtistKnowledge) => void;
+  addTrack: (track: TrackKnowledge) => void;
+  addTracks: (tracks: TrackKnowledge[]) => void;
+  updateArtist: (id: string, updates: Partial<ArtistKnowledge>) => void;
+  updateTrack: (id: string, updates: Partial<TrackKnowledge>) => void;
+  getArtist: (id: string) => ArtistKnowledge | undefined;
+  getTrack: (id: string) => TrackKnowledge | undefined;
+  getArtistByName: (name: string) => ArtistKnowledge | undefined;
+  findTracksByMood: (mood: PrimaryMood, limit?: number) => TrackKnowledge[];
+  findTracksByGenre: (genre: AfricanGenre, limit?: number) => TrackKnowledge[];
+  findTracksByRegion: (region: AfricanRegion, limit?: number) => TrackKnowledge[];
+  findTracksByEnergy: (energy: EnergyLevel, tolerance?: number, limit?: number) => TrackKnowledge[];
+  findTracksByFeeling: (feeling: FeelingTag, limit?: number) => TrackKnowledge[];
+  findSimilarTracks: (trackId: string, limit?: number) => TrackKnowledge[];
+  findArtistTracks: (artistId: string) => TrackKnowledge[];
+  // Canon system methods
+  findTracksByCanon: (canon: CanonLevel, limit?: number) => TrackKnowledge[];
+  findTracksByCulturalTag: (tag: CulturalTag, limit?: number) => TrackKnowledge[];
+  findEchoTracks: (limit?: number) => TrackKnowledge[];
+  findArtistsByTier: (tier: ArtistTier, limit?: number) => ArtistKnowledge[];
+  recordDiscovery: (discovery: ScoutDiscovery) => void;
+  getStats: () => KnowledgeStats;
+  clear: () => void;
+}
+
+interface KnowledgeStats {
+  totalArtists: number;
+  totalTracks: number;
+  totalClusters: number;
+  tracksByMood: Record<PrimaryMood, number>;
+  tracksByGenre: Partial<Record<AfricanGenre, number>>;
+  tracksByRegion: Partial<Record<AfricanRegion, number>>;
+  lastScoutRun: number;
+  totalDiscoveries: number;
+}
+
+// ============================================
+// HELPER FUNCTIONS
+// ============================================
+
+function normalizeArtistName(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function mapToObject<K extends string, V>(map: Map<K, V>): Record<string, V> {
+  const obj: Record<string, V> = {} as Record<string, V>;
+  map.forEach((v, k) => { obj[k] = v; });
+  return obj;
+}
+
+function objectToMap<K extends string, V>(obj: Record<string, V> | undefined): Map<K, V> {
+  const map = new Map<K, V>();
+  if (obj) {
+    Object.entries(obj).forEach(([k, v]) => map.set(k as K, v as V));
+  }
+  return map;
+}
+
+function setToArray<T>(set: Set<T>): T[] {
+  return Array.from(set);
+}
+
+function arrayToSet<T>(arr: T[] | undefined): Set<T> {
+  return new Set(arr || []);
+}
+
+// ============================================
+// KNOWLEDGE STORE
+// ============================================
+
+export const useKnowledgeStore = create<KnowledgeState>()(
+  persist(
+    (set, get) => ({
+      // Initial state
+      artists: new Map(),
+      tracks: new Map(),
+      vibeClusters: new Map(),
+      artistsByName: new Map(),
+      artistsByTier: new Map(),
+      tracksByMood: new Map(),
+      tracksByGenre: new Map(),
+      tracksByRegion: new Map(),
+      tracksByEnergy: new Map(),
+      tracksByArtist: new Map(),
+      tracksByCanon: new Map(),
+      tracksByCulturalTag: new Map(),
+      echoTracks: new Set(),
+      discoveries: [],
+      lastScoutRun: 0,
+      totalTracksDiscovered: 0,
+      totalArtistsDiscovered: 0,
+
+      // Add artist
+      addArtist: (artist) => {
+        set((state) => {
+          const newArtists = new Map(state.artists);
+          const newArtistsByName = new Map(state.artistsByName);
+          const newArtistsByTier = new Map(state.artistsByTier);
+
+          newArtists.set(artist.id, artist);
+          newArtistsByName.set(artist.normalizedName, artist.id);
+
+          // Index by tier
+          if (artist.tier) {
+            const tierSet = newArtistsByTier.get(artist.tier) || new Set();
+            tierSet.add(artist.id);
+            newArtistsByTier.set(artist.tier, tierSet);
+          }
+
+          return {
+            artists: newArtists,
+            artistsByName: newArtistsByName,
+            artistsByTier: newArtistsByTier,
+            totalArtistsDiscovered: state.totalArtistsDiscovered + 1
+          };
+        });
+      },
+
+      // Add track
+      addTrack: (track) => {
+        set((state) => {
+          const newTracks = new Map(state.tracks);
+          const newTracksByMood = new Map(state.tracksByMood);
+          const newTracksByGenre = new Map(state.tracksByGenre);
+          const newTracksByRegion = new Map(state.tracksByRegion);
+          const newTracksByEnergy = new Map(state.tracksByEnergy);
+          const newTracksByArtist = new Map(state.tracksByArtist);
+          const newTracksByCanon = new Map(state.tracksByCanon);
+          const newTracksByCulturalTag = new Map(state.tracksByCulturalTag);
+          const newEchoTracks = new Set(state.echoTracks);
+
+          // Add track
+          newTracks.set(track.id, track);
+
+          // Index by mood
+          const moodSet = newTracksByMood.get(track.primaryMood) || new Set();
+          moodSet.add(track.id);
+          newTracksByMood.set(track.primaryMood, moodSet);
+
+          // Index by genre
+          if (track.genre) {
+            const genreSet = newTracksByGenre.get(track.genre) || new Set();
+            genreSet.add(track.id);
+            newTracksByGenre.set(track.genre, genreSet);
+          }
+
+          // Index by region
+          if (track.region) {
+            const regionSet = newTracksByRegion.get(track.region) || new Set();
+            regionSet.add(track.id);
+            newTracksByRegion.set(track.region, regionSet);
+          }
+
+          // Index by energy
+          const energySet = newTracksByEnergy.get(track.energy) || new Set();
+          energySet.add(track.id);
+          newTracksByEnergy.set(track.energy, energySet);
+
+          // Index by artist
+          const artistSet = newTracksByArtist.get(track.artistId) || new Set();
+          artistSet.add(track.id);
+          newTracksByArtist.set(track.artistId, artistSet);
+
+          // === CANON SYSTEM INDEXES ===
+
+          // Index by canon level
+          if (track.canonLevel) {
+            const canonSet = newTracksByCanon.get(track.canonLevel) || new Set();
+            canonSet.add(track.id);
+            newTracksByCanon.set(track.canonLevel, canonSet);
+          }
+
+          // Index by cultural tags
+          if (track.culturalTags) {
+            for (const tag of track.culturalTags) {
+              const tagSet = newTracksByCulturalTag.get(tag) || new Set();
+              tagSet.add(track.id);
+              newTracksByCulturalTag.set(tag, tagSet);
+            }
+          }
+
+          // Index echo tracks (hidden gems)
+          if (track.isEcho || track.canonLevel === 'ECHO') {
+            newEchoTracks.add(track.id);
+          }
+
+          return {
+            tracks: newTracks,
+            tracksByMood: newTracksByMood,
+            tracksByGenre: newTracksByGenre,
+            tracksByRegion: newTracksByRegion,
+            tracksByEnergy: newTracksByEnergy,
+            tracksByArtist: newTracksByArtist,
+            tracksByCanon: newTracksByCanon,
+            tracksByCulturalTag: newTracksByCulturalTag,
+            echoTracks: newEchoTracks,
+            totalTracksDiscovered: state.totalTracksDiscovered + 1
+          };
+        });
+      },
+
+      // Batch add tracks
+      addTracks: (tracks) => {
+        tracks.forEach(track => get().addTrack(track));
+      },
+
+      // Update artist
+      updateArtist: (id, updates) => {
+        set((state) => {
+          const artist = state.artists.get(id);
+          if (!artist) return state;
+
+          const newArtists = new Map(state.artists);
+          newArtists.set(id, { ...artist, ...updates, lastUpdated: Date.now() });
+          return { artists: newArtists };
+        });
+      },
+
+      // Update track
+      updateTrack: (id, updates) => {
+        set((state) => {
+          const track = state.tracks.get(id);
+          if (!track) return state;
+
+          const newTracks = new Map(state.tracks);
+          newTracks.set(id, { ...track, ...updates });
+          return { tracks: newTracks };
+        });
+      },
+
+      // Get artist by ID
+      getArtist: (id) => get().artists.get(id),
+
+      // Get track by ID
+      getTrack: (id) => get().tracks.get(id),
+
+      // Get artist by name
+      getArtistByName: (name) => {
+        const normalized = normalizeArtistName(name);
+        const artistId = get().artistsByName.get(normalized);
+        return artistId ? get().artists.get(artistId) : undefined;
+      },
+
+      // Find tracks by mood
+      findTracksByMood: (mood, limit = 50) => {
+        const trackIds = get().tracksByMood.get(mood);
+        if (!trackIds) return [];
+
+        const tracks: TrackKnowledge[] = [];
+        for (const id of trackIds) {
+          if (tracks.length >= limit) break;
+          const track = get().tracks.get(id);
+          if (track) tracks.push(track);
+        }
+        return tracks;
+      },
+
+      // Find tracks by genre
+      findTracksByGenre: (genre, limit = 50) => {
+        const trackIds = get().tracksByGenre.get(genre);
+        if (!trackIds) return [];
+
+        const tracks: TrackKnowledge[] = [];
+        for (const id of trackIds) {
+          if (tracks.length >= limit) break;
+          const track = get().tracks.get(id);
+          if (track) tracks.push(track);
+        }
+        return tracks;
+      },
+
+      // Find tracks by region
+      findTracksByRegion: (region, limit = 50) => {
+        const trackIds = get().tracksByRegion.get(region);
+        if (!trackIds) return [];
+
+        const tracks: TrackKnowledge[] = [];
+        for (const id of trackIds) {
+          if (tracks.length >= limit) break;
+          const track = get().tracks.get(id);
+          if (track) tracks.push(track);
+        }
+        return tracks;
+      },
+
+      // Find tracks by energy level (with tolerance)
+      findTracksByEnergy: (energy, tolerance = 1, limit = 50) => {
+        const tracks: TrackKnowledge[] = [];
+
+        for (let e = Math.max(1, energy - tolerance); e <= Math.min(5, energy + tolerance); e++) {
+          const trackIds = get().tracksByEnergy.get(e as EnergyLevel);
+          if (trackIds) {
+            for (const id of trackIds) {
+              if (tracks.length >= limit) break;
+              const track = get().tracks.get(id);
+              if (track) tracks.push(track);
+            }
+          }
+        }
+
+        return tracks;
+      },
+
+      // Find tracks by feeling tag
+      findTracksByFeeling: (feeling, limit = 50) => {
+        const tracks: TrackKnowledge[] = [];
+
+        for (const track of get().tracks.values()) {
+          if (tracks.length >= limit) break;
+          if (track.feelings.includes(feeling)) {
+            tracks.push(track);
+          }
+        }
+
+        return tracks;
+      },
+
+      // Find similar tracks
+      findSimilarTracks: (trackId, limit = 20) => {
+        const track = get().tracks.get(trackId);
+        if (!track) return [];
+
+        const candidates: TrackKnowledge[] = [];
+
+        // Same mood
+        const moodTracks = get().findTracksByMood(track.primaryMood, 100);
+        candidates.push(...moodTracks.filter(t => t.id !== trackId));
+
+        // Same energy (tolerance 1)
+        const energyTracks = get().findTracksByEnergy(track.energy, 1, 50);
+        candidates.push(...energyTracks.filter(t => t.id !== trackId));
+
+        // Same genre
+        if (track.genre) {
+          const genreTracks = get().findTracksByGenre(track.genre, 50);
+          candidates.push(...genreTracks.filter(t => t.id !== trackId));
+        }
+
+        // Score and dedupe
+        const scored = new Map<string, { track: TrackKnowledge; score: number }>();
+        for (const candidate of candidates) {
+          const existing = scored.get(candidate.id);
+          const score = (existing?.score || 0) + 1;
+
+          // Bonus for matching feelings
+          const feelingMatch = candidate.feelings.filter(f => track.feelings.includes(f)).length;
+
+          scored.set(candidate.id, {
+            track: candidate,
+            score: score + feelingMatch * 0.5
+          });
+        }
+
+        return Array.from(scored.values())
+          .sort((a, b) => b.score - a.score)
+          .slice(0, limit)
+          .map(s => s.track);
+      },
+
+      // Find artist's tracks
+      findArtistTracks: (artistId) => {
+        const trackIds = get().tracksByArtist.get(artistId);
+        if (!trackIds) return [];
+
+        const tracks: TrackKnowledge[] = [];
+        for (const id of trackIds) {
+          const track = get().tracks.get(id);
+          if (track) tracks.push(track);
+        }
+        return tracks;
+      },
+
+      // === CANON SYSTEM LOOKUP METHODS ===
+
+      // Find tracks by canon level
+      findTracksByCanon: (canon, limit = 50) => {
+        const trackIds = get().tracksByCanon.get(canon);
+        if (!trackIds) return [];
+
+        const tracks: TrackKnowledge[] = [];
+        for (const id of trackIds) {
+          if (tracks.length >= limit) break;
+          const track = get().tracks.get(id);
+          if (track) tracks.push(track);
+        }
+        return tracks;
+      },
+
+      // Find tracks by cultural tag
+      findTracksByCulturalTag: (tag, limit = 50) => {
+        const trackIds = get().tracksByCulturalTag.get(tag);
+        if (!trackIds) return [];
+
+        const tracks: TrackKnowledge[] = [];
+        for (const id of trackIds) {
+          if (tracks.length >= limit) break;
+          const track = get().tracks.get(id);
+          if (track) tracks.push(track);
+        }
+        return tracks;
+      },
+
+      // Find echo tracks (hidden gems that deserve recognition)
+      findEchoTracks: (limit = 50) => {
+        const tracks: TrackKnowledge[] = [];
+        for (const id of get().echoTracks) {
+          if (tracks.length >= limit) break;
+          const track = get().tracks.get(id);
+          if (track) tracks.push(track);
+        }
+        return tracks;
+      },
+
+      // Find artists by tier
+      findArtistsByTier: (tier, limit = 50) => {
+        const artistIds = get().artistsByTier.get(tier);
+        if (!artistIds) return [];
+
+        const artists: ArtistKnowledge[] = [];
+        for (const id of artistIds) {
+          if (artists.length >= limit) break;
+          const artist = get().artists.get(id);
+          if (artist) artists.push(artist);
+        }
+        return artists;
+      },
+
+      // Record a scout discovery
+      recordDiscovery: (discovery) => {
+        set((state) => ({
+          discoveries: [...state.discoveries.slice(-99), discovery], // Keep last 100
+          lastScoutRun: discovery.timestamp
+        }));
+      },
+
+      // Get knowledge stats
+      getStats: () => {
+        const state = get();
+        const tracksByMood: Record<PrimaryMood, number> = {} as Record<PrimaryMood, number>;
+        const tracksByGenre: Partial<Record<AfricanGenre, number>> = {};
+        const tracksByRegion: Partial<Record<AfricanRegion, number>> = {};
+
+        state.tracksByMood.forEach((set, mood) => {
+          tracksByMood[mood] = set.size;
+        });
+
+        state.tracksByGenre.forEach((set, genre) => {
+          tracksByGenre[genre] = set.size;
+        });
+
+        state.tracksByRegion.forEach((set, region) => {
+          tracksByRegion[region] = set.size;
+        });
+
+        return {
+          totalArtists: state.artists.size,
+          totalTracks: state.tracks.size,
+          totalClusters: state.vibeClusters.size,
+          tracksByMood,
+          tracksByGenre,
+          tracksByRegion,
+          lastScoutRun: state.lastScoutRun,
+          totalDiscoveries: state.discoveries.length
+        };
+      },
+
+      // Clear all knowledge
+      clear: () => {
+        set({
+          artists: new Map(),
+          tracks: new Map(),
+          vibeClusters: new Map(),
+          artistsByName: new Map(),
+          artistsByTier: new Map(),
+          tracksByMood: new Map(),
+          tracksByGenre: new Map(),
+          tracksByRegion: new Map(),
+          tracksByEnergy: new Map(),
+          tracksByArtist: new Map(),
+          tracksByCanon: new Map(),
+          tracksByCulturalTag: new Map(),
+          echoTracks: new Set(),
+          discoveries: [],
+          lastScoutRun: 0,
+          totalTracksDiscovered: 0,
+          totalArtistsDiscovered: 0
+        });
+      }
+    }),
+    {
+      name: 'voyo-knowledge',
+      // Custom serialization for Maps and Sets
+      storage: {
+        getItem: (name) => {
+          const str = localStorage.getItem(name);
+          if (!str) return null;
+
+          const data = JSON.parse(str);
+          return {
+            state: {
+              ...data.state,
+              artists: objectToMap(data.state.artists),
+              tracks: objectToMap(data.state.tracks),
+              vibeClusters: objectToMap(data.state.vibeClusters),
+              artistsByName: objectToMap(data.state.artistsByName),
+              tracksByMood: new Map(
+                Object.entries(data.state.tracksByMood || {}).map(
+                  ([k, v]) => [k as PrimaryMood, arrayToSet(v as string[])]
+                )
+              ),
+              tracksByGenre: new Map(
+                Object.entries(data.state.tracksByGenre || {}).map(
+                  ([k, v]) => [k as AfricanGenre, arrayToSet(v as string[])]
+                )
+              ),
+              tracksByRegion: new Map(
+                Object.entries(data.state.tracksByRegion || {}).map(
+                  ([k, v]) => [k as AfricanRegion, arrayToSet(v as string[])]
+                )
+              ),
+              tracksByEnergy: new Map(
+                Object.entries(data.state.tracksByEnergy || {}).map(
+                  ([k, v]) => [Number(k) as EnergyLevel, arrayToSet(v as string[])]
+                )
+              ),
+              tracksByArtist: new Map(
+                Object.entries(data.state.tracksByArtist || {}).map(
+                  ([k, v]) => [k, arrayToSet(v as string[])]
+                )
+              )
+            }
+          };
+        },
+        setItem: (name, value: { state: KnowledgeState }) => {
+          const state = value.state;
+          const serialized = {
+            state: {
+              discoveries: state.discoveries,
+              lastScoutRun: state.lastScoutRun,
+              totalTracksDiscovered: state.totalTracksDiscovered,
+              totalArtistsDiscovered: state.totalArtistsDiscovered,
+              artists: mapToObject(state.artists as Map<string, ArtistKnowledge>),
+              tracks: mapToObject(state.tracks as Map<string, TrackKnowledge>),
+              vibeClusters: mapToObject(state.vibeClusters as Map<string, VibeClustersEntry>),
+              artistsByName: mapToObject(state.artistsByName as Map<string, string>),
+              tracksByMood: {} as Record<string, string[]>,
+              tracksByGenre: {} as Record<string, string[]>,
+              tracksByRegion: {} as Record<string, string[]>,
+              tracksByEnergy: {} as Record<string, string[]>,
+              tracksByArtist: {} as Record<string, string[]>
+            }
+          };
+
+          // Convert Map<K, Set<string>> to Record<string, string[]>
+          (state.tracksByMood as Map<PrimaryMood, Set<string>>).forEach((v, k) => {
+            serialized.state.tracksByMood[k] = setToArray(v);
+          });
+          (state.tracksByGenre as Map<AfricanGenre, Set<string>>).forEach((v, k) => {
+            serialized.state.tracksByGenre[k] = setToArray(v);
+          });
+          (state.tracksByRegion as Map<AfricanRegion, Set<string>>).forEach((v, k) => {
+            serialized.state.tracksByRegion[k] = setToArray(v);
+          });
+          (state.tracksByEnergy as Map<EnergyLevel, Set<string>>).forEach((v, k) => {
+            serialized.state.tracksByEnergy[String(k)] = setToArray(v);
+          });
+          (state.tracksByArtist as Map<string, Set<string>>).forEach((v, k) => {
+            serialized.state.tracksByArtist[k] = setToArray(v);
+          });
+
+          localStorage.setItem(name, JSON.stringify(serialized));
+        },
+        removeItem: (name) => localStorage.removeItem(name)
+      }
+    }
+  )
+);
+
+// ============================================
+// CONVENIENCE EXPORTS
+// ============================================
+
+export function getKnowledgeStats() {
+  return useKnowledgeStore.getState().getStats();
+}
+
+export function findTracksByVibeProfile(vibe: VibeProfile, limit = 50): TrackKnowledge[] {
+  const store = useKnowledgeStore.getState();
+
+  // Start with mood
+  const moodTracks = store.findTracksByMood(vibe.primary, 200);
+
+  // Filter by energy (with tolerance)
+  const energyFiltered = moodTracks.filter(
+    t => Math.abs(t.energy - vibe.energy) <= 1
+  );
+
+  // Filter by genre if specified
+  let genreFiltered = energyFiltered;
+  if (vibe.genre) {
+    genreFiltered = energyFiltered.filter(t => t.genre === vibe.genre);
+    // Fall back to all if too few
+    if (genreFiltered.length < 5) genreFiltered = energyFiltered;
+  }
+
+  // Filter by region if specified
+  let regionFiltered = genreFiltered;
+  if (vibe.region) {
+    regionFiltered = genreFiltered.filter(t => t.region === vibe.region);
+    if (regionFiltered.length < 5) regionFiltered = genreFiltered;
+  }
+
+  // Score by feeling matches
+  const scored = regionFiltered.map(track => {
+    const feelingScore = vibe.feelings.filter(f => track.feelings.includes(f)).length;
+    return { track, score: feelingScore };
+  });
+
+  return scored
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit)
+    .map(s => s.track);
+}

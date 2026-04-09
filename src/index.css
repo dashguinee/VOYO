@@ -1,0 +1,961 @@
+@import "tailwindcss";
+
+/* VOYO Music Device - NEON AFRO-FUTURISM V2.0 */
+/* Deep Neon Void - Expensive. Cinematic. Glass. */
+:root {
+  /* === CORE BACKGROUNDS === */
+  --voyo-bg-void: #020203;         /* Deepest black - main bg */
+  --voyo-bg-deep: #050507;         /* Card backgrounds */
+  --voyo-bg-card: rgba(20, 20, 30, 0.6);
+  --voyo-bg-elevated: #1a1a24;     /* Elevated surfaces */
+
+  /* === PRIMARY BRAND - PURPLE SYSTEM === */
+  /* Use these 3 primary purples + 3 glow levels consistently */
+  --voyo-purple: #8b5cf6;          /* Main purple (violet-500) */
+  --voyo-purple-light: #a78bfa;    /* Light purple (violet-400) */
+  --voyo-purple-dark: #7c3aed;     /* Dark purple (violet-600) */
+
+  /* Standardized glow levels - USE THESE instead of inline rgba() */
+  --glow-primary-soft: rgba(139, 92, 246, 0.2);
+  --glow-primary: rgba(139, 92, 246, 0.5);
+  --glow-primary-intense: rgba(139, 92, 246, 0.8);
+
+  /* === ACCENT COLORS — Purple family only === */
+  --voyo-accent: #a78bfa;          /* Violet-400 - light accent */
+  --voyo-accent-glow: rgba(139, 92, 246, 0.5);
+  --voyo-pink: #a78bfa;            /* Mapped to purple-light */
+  --voyo-pink-glow: rgba(139, 92, 246, 0.4);
+  --glow-accent: rgba(139, 92, 246, 0.4);
+
+  /* === FUNCTIONAL COLORS === */
+  --voyo-blue: #a78bfa;            /* Mapped to violet-400 */
+  --voyo-blue-glow: rgba(139, 92, 246, 0.4);
+  --voyo-red: #ef4444;             /* Red-500 - errors + live only */
+  --voyo-red-glow: rgba(239, 68, 68, 0.4);
+  --voyo-cyan: #a78bfa;            /* Mapped to violet-400 */
+  --voyo-gold: #a78bfa;            /* Mapped to violet-400 */
+  --voyo-neon-green: #a78bfa;      /* Mapped to violet-400 */
+  --voyo-amber: #a78bfa;           /* Mapped to violet-400 */
+  --voyo-success: #a78bfa;         /* Mapped to violet-400 */
+
+  /* OYÉ Zone Colors — toned down, white-based differentiation */
+  --oye-hot: rgba(255, 255, 255, 0.85);
+  --oye-ai: #8b5cf6;
+  --oye-discover: rgba(255, 255, 255, 0.6);
+
+  /* === TEXT HIERARCHY === */
+  --voyo-text: #ffffff;
+  --voyo-text-secondary: rgba(255, 255, 255, 0.7);
+  --voyo-text-muted: rgba(255, 255, 255, 0.4);
+  --voyo-text-hint: rgba(255, 255, 255, 0.25);
+
+  /* === VIEWPORT FIX === */
+  --vh: 1vh; /* Updated by JS for iOS browser chrome fix */
+}
+
+@layer base {
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+}
+
+html, body, #root {
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+}
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: var(--voyo-bg-deep);
+  color: var(--voyo-text);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  touch-action: manipulation;
+  user-select: none;
+}
+
+/* Scrollbar Styling */
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--voyo-purple);
+  border-radius: 2px;
+}
+
+/* Glow Effects */
+.glow-purple {
+  box-shadow: 0 0 20px var(--voyo-purple-glow), 0 0 40px var(--voyo-purple-glow);
+}
+
+.glow-blue {
+  box-shadow: 0 0 20px var(--glow-primary-soft), 0 0 40px var(--glow-primary-soft);
+}
+
+.glow-red {
+  box-shadow: 0 0 20px var(--voyo-red-glow), 0 0 40px var(--voyo-red-glow);
+}
+
+.glow-pink {
+  box-shadow: 0 0 20px var(--glow-primary-soft), 0 0 40px var(--glow-primary-soft);
+}
+
+/* Neon Text */
+.neon-text {
+  text-shadow: 0 0 10px currentColor, 0 0 20px currentColor, 0 0 40px currentColor;
+}
+
+/* Glass Effect */
+.glass {
+  background: rgba(18, 18, 26, 0.8);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Card Blur Effect (for played tracks) */
+.blur-card {
+  filter: blur(2px) brightness(0.6);
+  transition: filter 0.3s ease;
+}
+
+.blur-card:hover {
+  filter: blur(0) brightness(1);
+}
+
+/* Smooth Transitions */
+.transition-smooth {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Hide scrollbar but allow scrolling */
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+/* Pulse Animation for reactions */
+@keyframes pulse-glow {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.8;
+    transform: scale(1.1);
+  }
+}
+
+.pulse-glow {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+/* Float Animation for OYÉ reactions */
+@keyframes float-up {
+  0% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-100px) scale(1.5);
+  }
+}
+
+.float-reaction {
+  animation: float-up 2s ease-out forwards;
+}
+
+/* Slide animations */
+@keyframes slide-up {
+  from {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.slide-up {
+  animation: slide-up 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Snap Scrolling for roulette */
+.snap-x {
+  scroll-snap-type: x mandatory;
+}
+
+.snap-center {
+  scroll-snap-align: center;
+}
+
+/* Active/Playing indicator */
+@keyframes playing-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 var(--voyo-purple-glow);
+  }
+  50% {
+    box-shadow: 0 0 0 10px transparent;
+  }
+}
+
+.playing-indicator {
+  animation: playing-pulse 2s ease-in-out infinite;
+}
+
+/* ============================================ */
+/* GLASSMORPHISM UTILITIES - Apple Vision Pro Feel */
+/* ============================================ */
+
+.glass-panel {
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(40px);
+  -webkit-backdrop-filter: blur(40px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.glass-nav {
+  background: rgba(10, 10, 15, 0.65);
+  backdrop-filter: blur(16px) saturate(150%);
+  -webkit-backdrop-filter: blur(16px) saturate(150%);
+  border-top: 1px solid rgba(139, 92, 246, 0.08);
+}
+
+.glass-card {
+  background: rgba(20, 20, 30, 0.6);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.text-gradient {
+  background: linear-gradient(135deg, #a78bfa 0%, #8b5cf6 50%, #7c3aed 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.text-gradient-gold {
+  background: linear-gradient(135deg, #a78bfa 0%, #8b5cf6 50%, #7c3aed 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Voyo Container - Mobile frame simulation */
+.voyo-container {
+  max-width: 28rem;
+  margin: 0 auto;
+  height: 100%;
+  position: relative;
+  overflow: hidden;
+  background: var(--voyo-bg-deep);
+  box-shadow: 0 0 100px rgba(139, 92, 246, 0.15), 0 25px 50px rgba(0, 0, 0, 0.5);
+}
+
+/* ============================================ */
+/* NEON ANIMATIONS */
+/* ============================================ */
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-20px); }
+}
+
+@keyframes glow-pulse {
+  0%, 100% { box-shadow: 0 0 20px rgba(139, 92, 246, 0.3), 0 0 40px rgba(139, 92, 246, 0.1); }
+  50% { box-shadow: 0 0 40px rgba(139, 92, 246, 0.6), 0 0 80px rgba(139, 92, 246, 0.3); }
+}
+
+@keyframes border-glow {
+  0%, 100% { border-color: rgba(139, 92, 246, 0.3); }
+  50% { border-color: rgba(139, 92, 246, 0.6); }
+}
+
+.animate-float {
+  animation: float 6s ease-in-out infinite;
+}
+
+.animate-glow-pulse {
+  animation: glow-pulse 2s ease-in-out infinite;
+}
+
+.animate-border-glow {
+  animation: border-glow 3s ease-in-out infinite;
+}
+
+/* Safe area padding for bottom nav */
+.pb-safe {
+  padding-bottom: max(1rem, env(safe-area-inset-bottom));
+}
+
+/* Nav sits low - buttons feel native, branding at edge */
+.pb-nav-native {
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 0.5rem);
+}
+
+/* Drop shadow for text over video */
+.text-shadow-video {
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.8), 0 4px 16px rgba(0, 0, 0, 0.6);
+}
+
+/* Line clamp utilities */
+.line-clamp-1 {
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.line-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Space Grotesk for display/headings — matches Tivi+ */
+.font-display {
+  font-family: 'Space Grotesk', system-ui, sans-serif;
+}
+
+/* ============================================ */
+/* MOBILE-OPTIMIZED ANIMATIONS (Dec 2025)
+/* GPU-accelerated, respects prefers-reduced-motion
+/* ============================================ */
+
+/* EnergyWave bar pulse - subtle, GPU-accelerated */
+@keyframes wave-pulse {
+  0%, 100% { transform: scaleY(1); }
+  50% { transform: scaleY(1.05); }
+}
+
+.animate-wave-pulse {
+  animation: wave-pulse 0.8s ease-in-out infinite;
+}
+
+/* Current position glow pulse */
+@keyframes glow-pulse-energy {
+  0%, 100% {
+    opacity: 0.6;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.1);
+  }
+}
+
+.animate-glow-pulse {
+  animation: glow-pulse-energy 1s ease-in-out infinite;
+}
+
+/* Shimmer effect - desktop only */
+@keyframes shimmer {
+  0% {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+  50% { opacity: 0.5; }
+  100% {
+    transform: translateY(-100%);
+    opacity: 0;
+  }
+}
+
+.animate-shimmer {
+  animation: shimmer 2s linear infinite;
+}
+
+/* Quick fade in */
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.15s ease-out forwards;
+}
+
+/* Spinning vinyl - CSS instead of JS */
+@keyframes spin-vinyl {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.animate-spin-vinyl {
+  animation: spin-vinyl 4s linear infinite;
+}
+
+/* Fast spin for scrubbing */
+.animate-spin-fast {
+  animation: spin-vinyl 0.4s linear infinite;
+}
+
+/* Ambient glow breathing - for backgrounds */
+@keyframes ambient-breathe {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 0.6;
+  }
+  50% {
+    transform: scale(1.1);
+    opacity: 0.8;
+  }
+}
+
+.animate-ambient-breathe {
+  animation: ambient-breathe 6s ease-in-out infinite;
+}
+
+/* Secondary ambient glow with movement */
+@keyframes ambient-secondary {
+  0%, 100% {
+    transform: translate(0, 0) scale(1);
+  }
+  50% {
+    transform: translate(30px, -20px) scale(1.15);
+  }
+}
+
+.animate-ambient-secondary {
+  animation: ambient-secondary 8s ease-in-out infinite;
+}
+
+/* Custom Backdrop Animations */
+@keyframes backdrop-zoom {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.1);
+  }
+}
+
+@keyframes backdrop-pan {
+  0% {
+    transform: translateX(0);
+  }
+  50% {
+    transform: translateX(-5%);
+  }
+  100% {
+    transform: translateX(0);
+  }
+}
+
+.animate-backdrop-zoom {
+  animation: backdrop-zoom 20s ease-in-out infinite;
+}
+
+.animate-backdrop-pan {
+  animation: backdrop-pan 30s ease-in-out infinite;
+}
+
+/* Slider thumb styling for custom backdrop settings */
+input[type="range"].slider-thumb::-webkit-slider-thumb {
+  width: 16px;
+  height: 16px;
+  background: var(--voyo-purple);
+  cursor: pointer;
+  border-radius: 50%;
+  box-shadow: 0 0 8px rgba(139, 92, 246, 0.8);
+}
+
+input[type="range"].slider-thumb::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  background: var(--voyo-purple);
+  cursor: pointer;
+  border-radius: 50%;
+  box-shadow: 0 0 8px rgba(139, 92, 246, 0.8);
+}
+
+/* LottieIcon replacement - lightweight CSS pulse */
+@keyframes voyo-lottie-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.08); }
+}
+
+/* ============================================ */
+/* REDUCED MOTION SUPPORT
+/* Respects user's accessibility preferences
+/* ============================================ */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .animate-wave-pulse,
+  .animate-glow-pulse,
+  .animate-shimmer,
+  .animate-spin-vinyl,
+  .animate-spin-fast,
+  .animate-ambient-breathe,
+  .animate-ambient-secondary,
+  .animate-backdrop-zoom,
+  .animate-backdrop-pan,
+  .animate-float,
+  .pulse-glow,
+  .playing-indicator {
+    animation: none !important;
+  }
+}
+
+/* ============================================ */
+/* MOBILE PERFORMANCE OPTIMIZATIONS
+/* ============================================ */
+
+@media (max-width: 768px), (pointer: coarse) {
+  /* Disable blur effects on mobile - major performance killer */
+  .blur-2xl {
+    filter: blur(12px) !important; /* Reduced from 24px */
+  }
+
+  /* Reduce backdrop blur intensity */
+  .backdrop-blur-xl {
+    backdrop-filter: blur(12px) !important;
+    -webkit-backdrop-filter: blur(12px) !important;
+  }
+
+  /* Disable shimmer on mobile */
+  .animate-shimmer {
+    animation: none !important;
+  }
+
+  /* Simpler shadows on mobile */
+  .glass-panel,
+  .glass-card {
+    backdrop-filter: blur(10px) !important;
+    -webkit-backdrop-filter: blur(10px) !important;
+  }
+}
+
+/* ============================================ */
+/* PROGRESS BAR RANGE INPUT STYLING
+/* Custom slider for seek/progress control
+/* ============================================ */
+
+/* Remove default styling */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  background: transparent;
+  cursor: pointer;
+}
+
+/* Firefox */
+input[type="range"]::-moz-range-track {
+  height: 0;
+  background: transparent;
+  border: none;
+}
+
+input[type="range"]::-moz-range-thumb {
+  -moz-appearance: none;
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: white;
+  border: none;
+  cursor: pointer;
+  box-shadow: 0 0 12px rgba(147, 51, 234, 0.8);
+}
+
+/* WebKit (Chrome, Safari, Edge) */
+input[type="range"]::-webkit-slider-track {
+  height: 0;
+  background: transparent;
+  border: none;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: white;
+  border: none;
+  cursor: pointer;
+  box-shadow: 0 0 12px rgba(147, 51, 234, 0.8);
+  margin-top: -5.5px; /* Center thumb on track */
+}
+
+/* Focus states */
+input[type="range"]:focus {
+  outline: none;
+}
+
+input[type="range"]:focus::-webkit-slider-thumb {
+  box-shadow: 0 0 16px rgba(147, 51, 234, 1);
+}
+
+input[type="range"]:focus::-moz-range-thumb {
+  box-shadow: 0 0 16px rgba(147, 51, 234, 1);
+}
+
+/* ============================================ */
+/* CSS ANIMATION SYSTEM (Replaces Framer Motion)
+/* DashTivi+ Standard — GPU-accelerated, premium
+/* ============================================ */
+
+/* === ENTRANCE ANIMATIONS === */
+@keyframes voyo-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes voyo-fade-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+@keyframes voyo-slide-up {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes voyo-slide-down {
+  from { opacity: 0; transform: translateY(-16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes voyo-slide-in-right {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+
+@keyframes voyo-slide-in-left {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(0); }
+}
+
+@keyframes voyo-slide-in-bottom {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+@keyframes voyo-slide-out-bottom {
+  from { transform: translateY(0); }
+  to { transform: translateY(100%); }
+}
+
+@keyframes voyo-slide-out-right {
+  from { transform: translateX(0); }
+  to { transform: translateX(100%); }
+}
+
+@keyframes voyo-scale-in {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes voyo-scale-out {
+  from { opacity: 1; transform: scale(1); }
+  to { opacity: 0; transform: scale(0.95); }
+}
+
+@keyframes voyo-pop-in {
+  from { opacity: 0; transform: scale(0.8); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+/* === REACTION / FLOAT ANIMATIONS === */
+@keyframes voyo-float-reaction {
+  0% { opacity: 1; transform: translateY(0) scale(0.5); }
+  30% { opacity: 1; transform: translateY(-75px) scale(1.3); }
+  60% { opacity: 0.8; transform: translateY(-175px) scale(1); }
+  100% { opacity: 0; transform: translateY(-250px) scale(1); }
+}
+
+@keyframes voyo-burst {
+  0% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.8); opacity: 0.6; }
+  100% { transform: scale(2.2); opacity: 0; }
+}
+
+@keyframes voyo-spark {
+  0% { opacity: 0; transform: scale(0) translate(0, 0); }
+  50% { opacity: 1; transform: scale(1) translate(var(--spark-x, 20px), var(--spark-y, -20px)); }
+  100% { opacity: 0; transform: scale(0) translate(var(--spark-x, 20px), var(--spark-y, -20px)); }
+}
+
+/* === SKELETON / SHIMMER === */
+@keyframes voyo-skeleton-shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+/* === SPRING-LIKE MOTION (Bounce easing via CSS) === */
+@keyframes voyo-spring-in {
+  0% { transform: translateY(100%); }
+  60% { transform: translateY(-3%); }
+  80% { transform: translateY(1%); }
+  100% { transform: translateY(0); }
+}
+
+/* === TOGGLE SLIDE === */
+@keyframes voyo-toggle-on {
+  from { left: 4px; }
+  to { left: 26px; }
+}
+
+@keyframes voyo-toggle-off {
+  from { left: 26px; }
+  to { left: 4px; }
+}
+
+/* === PROGRESS RING (SVG stroke animation via CSS) === */
+@keyframes voyo-ring-prime {
+  0% { stroke-dashoffset: var(--circumference); }
+  45% { stroke-dashoffset: 0; }
+  50% { stroke-dashoffset: var(--circumference); }
+  100% { stroke-dashoffset: 0; }
+}
+
+/* === UTILITY CLASSES === */
+.animate-voyo-fade-in {
+  animation: voyo-fade-in 0.3s ease-out forwards;
+}
+
+.animate-voyo-fade-in-slow {
+  animation: voyo-fade-in 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-voyo-fade-in-delayed {
+  animation: voyo-fade-in 0.5s cubic-bezier(0.16, 1, 0.3, 1) 2s forwards;
+  opacity: 0;
+}
+
+.animate-voyo-slide-up {
+  animation: voyo-slide-up 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-voyo-slide-down {
+  animation: voyo-slide-down 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-voyo-slide-in-right {
+  animation: voyo-slide-in-right 0.35s cubic-bezier(0.32, 0.72, 0, 1) forwards;
+}
+
+.animate-voyo-slide-in-bottom {
+  animation: voyo-slide-in-bottom 0.4s cubic-bezier(0.32, 0.72, 0, 1) forwards;
+}
+
+.animate-voyo-spring-in-bottom {
+  animation: voyo-spring-in 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-voyo-scale-in {
+  animation: voyo-scale-in 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-voyo-pop-in {
+  animation: voyo-pop-in 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Stagger children with CSS custom property */
+.voyo-stagger {
+  animation: voyo-slide-up 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: calc(var(--i, 0) * 60ms);
+}
+
+/* Reaction float */
+.animate-voyo-float-reaction {
+  animation: voyo-float-reaction 2.5s ease-out forwards;
+}
+
+/* Burst effect */
+.animate-voyo-burst {
+  animation: voyo-burst 0.8s ease-out forwards;
+}
+
+/* Interactive feedback */
+.voyo-tap-scale {
+  transition: transform 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+  cursor: pointer;
+}
+
+.voyo-tap-scale:active {
+  transform: scale(0.95);
+}
+
+.voyo-hover-scale {
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.voyo-hover-scale:hover {
+  transform: scale(1.05);
+}
+
+.voyo-hover-lift {
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.voyo-hover-lift:hover {
+  transform: scale(1.15) translateY(-2px);
+}
+
+/* Transition utilities */
+.voyo-transition-opacity {
+  transition: opacity 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.voyo-transition-transform {
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.voyo-transition-all {
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Conditional show/hide with transitions */
+.voyo-show {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+  transition: opacity 0.3s ease, transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.voyo-hide {
+  opacity: 0;
+  transform: translateY(-16px);
+  pointer-events: none;
+  transition: opacity 0.3s ease, transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.voyo-show-bottom {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+  transition: opacity 0.3s ease, transform 0.4s cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.voyo-hide-bottom {
+  opacity: 0;
+  transform: translateY(100%);
+  pointer-events: none;
+  transition: opacity 0.3s ease, transform 0.4s cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+/* Glow pulse animation (replaces framer animate loops) */
+@keyframes voyo-glow-breathe {
+  0%, 100% { transform: scale(1); opacity: 0.5; }
+  50% { transform: scale(1.4); opacity: 0.8; }
+}
+
+.animate-voyo-glow-breathe {
+  animation: voyo-glow-breathe 2s ease-in-out infinite;
+}
+
+/* Lightning pulse (replaces framer motion.path animations) */
+@keyframes voyo-lightning-pulse {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 0.8; }
+}
+
+.animate-voyo-lightning-pulse {
+  animation: voyo-lightning-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes voyo-charging-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.6; transform: scale(1.1); }
+}
+
+.animate-voyo-charging {
+  animation: voyo-charging-pulse 0.4s ease-in-out infinite;
+}
+
+@keyframes voyo-outline-pulse {
+  0%, 100% { opacity: 0.7; }
+  50% { opacity: 1; }
+}
+
+.animate-voyo-outline-pulse {
+  animation: voyo-outline-pulse 1.5s ease-in-out infinite;
+}
+
+/* Storage bar width animation */
+.voyo-bar-animate {
+  transition: width 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* === MISSING KEYFRAMES (Post Framer-Motion Cleanup) === */
+
+/* Gradient shift for VOYO logo shimmer */
+@keyframes voyo-gradient-shift {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+/* Water drop fall for splash screen */
+@keyframes voyo-drop-fall {
+  0% { transform: translateY(0) scale(1); opacity: 1; }
+  70% { transform: translateY(120px) scale(0.9); opacity: 0.8; }
+  100% { transform: translateY(160px) scale(0.5); opacity: 0; }
+}
+
+/* Float-up for OYE hearts in Moments feed */
+@keyframes voyo-float-up {
+  0% { opacity: 1; transform: translateY(0) scale(1); }
+  30% { opacity: 1; transform: translateY(-60px) scale(1.3); }
+  70% { opacity: 0.6; transform: translateY(-140px) scale(1.1); }
+  100% { opacity: 0; transform: translateY(-200px) scale(0.8); }
+}
+
+/* Shimmer sweep for promo cards and skeletons */
+@keyframes voyo-shimmer {
+  0% { opacity: 0; transform: translateX(-100%); }
+  50% { opacity: 0.6; }
+  100% { opacity: 0; transform: translateX(100%); }
+}
+
+/* Skeleton shimmer effect */
+.voyo-skeleton-shimmer {
+  position: relative;
+  overflow: hidden;
+}
+
+.voyo-skeleton-shimmer::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.05) 50%, transparent 100%);
+  animation: voyo-skeleton-shimmer 1.5s linear infinite;
+}

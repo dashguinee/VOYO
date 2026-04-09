@@ -1,0 +1,38 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="voyoGrad512" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#8b5cf6"/>
+      <stop offset="50%" style="stop-color:#a855f7"/>
+      <stop offset="100%" style="stop-color:#ec4899"/>
+    </linearGradient>
+    <linearGradient id="glowGrad512" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#8b5cf6;stop-opacity:0.6"/>
+      <stop offset="100%" style="stop-color:#ec4899;stop-opacity:0.3"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="512" height="512" rx="100" fill="#0a0a1a"/>
+
+  <!-- Outer glow ring -->
+  <circle cx="256" cy="256" r="186" fill="none" stroke="url(#glowGrad512)" stroke-width="6"/>
+
+  <!-- Main V shape -->
+  <path d="M149 133 L256 347 L363 133"
+        fill="none"
+        stroke="url(#voyoGrad512)"
+        stroke-width="42"
+        stroke-linecap="round"
+        stroke-linejoin="round"/>
+
+  <!-- Sound waves (left) -->
+  <path d="M107 200 Q80 256 107 312" fill="none" stroke="#8b5cf6" stroke-width="8" stroke-linecap="round" opacity="0.7"/>
+  <path d="M80 173 Q40 256 80 339" fill="none" stroke="#8b5cf6" stroke-width="5" stroke-linecap="round" opacity="0.4"/>
+
+  <!-- Sound waves (right) -->
+  <path d="M405 200 Q432 256 405 312" fill="none" stroke="#ec4899" stroke-width="8" stroke-linecap="round" opacity="0.7"/>
+  <path d="M432 173 Q472 256 432 339" fill="none" stroke="#ec4899" stroke-width="5" stroke-linecap="round" opacity="0.4"/>
+
+  <!-- Center dot (play indicator) -->
+  <circle cx="256" cy="387" r="16" fill="url(#voyoGrad512)"/>
+</svg>

@@ -1,0 +1,637 @@
+{
+  "burna boy": {
+    "completed": true,
+    "tracks": 404,
+    "updated": 93
+  },
+  "wizkid": {
+    "completed": true,
+    "tracks": 328,
+    "updated": 70
+  },
+  "davido": {
+    "completed": true,
+    "tracks": 356,
+    "updated": 98
+  },
+  "rema": {
+    "completed": true,
+    "tracks": 439,
+    "updated": 161
+  },
+  "asake": {
+    "completed": true,
+    "tracks": 170,
+    "updated": 30
+  },
+  "tems": {
+    "completed": true,
+    "tracks": 132,
+    "updated": 11
+  },
+  "ckay": {
+    "completed": true,
+    "tracks": 150,
+    "updated": 17
+  },
+  "ayra starr": {
+    "completed": true,
+    "tracks": 167,
+    "updated": 22
+  },
+  "fela kuti": {
+    "completed": true,
+    "tracks": 196,
+    "updated": 156
+  },
+  "kizz daniel": {
+    "completed": true,
+    "tracks": 113,
+    "updated": 7
+  },
+  "omah lay": {
+    "completed": true,
+    "tracks": 111,
+    "updated": 4
+  },
+  "fireboy dml": {
+    "completed": true,
+    "tracks": 166,
+    "updated": 27
+  },
+  "olamide": {
+    "completed": true,
+    "tracks": 200,
+    "updated": 55
+  },
+  "tiwa savage": {
+    "completed": true,
+    "tracks": 180,
+    "updated": 20
+  },
+  "yemi alade": {
+    "completed": true,
+    "tracks": 144,
+    "updated": 37
+  },
+  "ruger": {
+    "completed": true,
+    "tracks": 107,
+    "updated": 65
+  },
+  "p square": {
+    "completed": true,
+    "tracks": 1,
+    "updated": 1
+  },
+  "dbanj": {
+    "completed": true,
+    "tracks": 0
+  },
+  "2baba": {
+    "completed": true,
+    "tracks": 119,
+    "updated": 82
+  },
+  "black coffee": {
+    "completed": true,
+    "tracks": 137,
+    "updated": 89
+  },
+  "tyla": {
+    "completed": true,
+    "tracks": 112,
+    "updated": 33
+  },
+  "kabza de small": {
+    "completed": true,
+    "tracks": 330,
+    "updated": 96
+  },
+  "dj maphorisa": {
+    "completed": true,
+    "tracks": 269,
+    "updated": 32
+  },
+  "master kg": {
+    "completed": true,
+    "tracks": 84,
+    "updated": 21
+  },
+  "nasty c": {
+    "completed": true,
+    "tracks": 190,
+    "updated": 62
+  },
+  "focalistic": {
+    "completed": true,
+    "tracks": 117,
+    "updated": 24
+  },
+  "uncle waffles": {
+    "completed": true,
+    "tracks": 63,
+    "updated": 21
+  },
+  "black sherif": {
+    "completed": true,
+    "tracks": 105,
+    "updated": 10
+  },
+  "sarkodie": {
+    "completed": true,
+    "tracks": 259,
+    "updated": 118
+  },
+  "stonebwoy": {
+    "completed": true,
+    "tracks": 118,
+    "updated": 12
+  },
+  "shatta wale": {
+    "completed": true,
+    "tracks": 141,
+    "updated": 28
+  },
+  "king promise": {
+    "completed": true,
+    "tracks": 116,
+    "updated": 21
+  },
+  "kidi": {
+    "completed": true,
+    "tracks": 72,
+    "updated": 4
+  },
+  "kuami eugene": {
+    "completed": true,
+    "tracks": 78,
+    "updated": 4
+  },
+  "diamond platnumz": {
+    "completed": true,
+    "tracks": 131,
+    "updated": 31
+  },
+  "harmonize": {
+    "completed": true,
+    "tracks": 174,
+    "updated": 28
+  },
+  "rayvanny": {
+    "completed": true,
+    "tracks": 164,
+    "updated": 22
+  },
+  "zuchu": {
+    "completed": true,
+    "tracks": 100,
+    "updated": 41
+  },
+  "ali kiba": {
+    "completed": true,
+    "tracks": 43,
+    "updated": 35
+  },
+  "fally ipupa": {
+    "completed": true,
+    "tracks": 326,
+    "updated": 141
+  },
+  "koffi olomide": {
+    "completed": true,
+    "tracks": 303,
+    "updated": 198
+  },
+  "innossb": {
+    "completed": true,
+    "tracks": 9,
+    "updated": 9
+  },
+  "gims": {
+    "completed": true,
+    "tracks": 151,
+    "updated": 11
+  },
+  "dadju": {
+    "completed": true,
+    "tracks": 111,
+    "updated": 13
+  },
+  "papa wemba": {
+    "completed": true,
+    "tracks": 220,
+    "updated": 189
+  },
+  "saifond balde": {
+    "completed": true,
+    "tracks": 8,
+    "updated": 8
+  },
+  "azaya": {
+    "completed": true,
+    "tracks": 58,
+    "updated": 8
+  },
+  "sekouba bambino": {
+    "completed": true,
+    "tracks": 49,
+    "updated": 0
+  },
+  "mory kante": {
+    "completed": true,
+    "tracks": 24,
+    "updated": 13
+  },
+  "soul bangs": {
+    "completed": true,
+    "tracks": 0
+  },
+  "djanii alfa": {
+    "completed": true,
+    "tracks": 159,
+    "updated": 159
+  },
+  "instinct killers": {
+    "completed": true,
+    "tracks": 0
+  },
+  "straiker": {
+    "completed": true,
+    "tracks": 1,
+    "updated": 1
+  },
+  "king alasko": {
+    "completed": true,
+    "tracks": 64,
+    "updated": 64
+  },
+  "youssou ndour": {
+    "completed": true,
+    "tracks": 27,
+    "updated": 8
+  },
+  "akon": {
+    "completed": true,
+    "tracks": 127,
+    "updated": 103
+  },
+  "wally seck": {
+    "completed": true,
+    "tracks": 73,
+    "updated": 60
+  },
+  "dj arafat": {
+    "completed": true,
+    "tracks": 169,
+    "updated": 133
+  },
+  "magic system": {
+    "completed": true,
+    "tracks": 156,
+    "updated": 124
+  },
+  "alpha blondy": {
+    "completed": true,
+    "tracks": 232,
+    "updated": 79
+  },
+  "sauti sol": {
+    "completed": true,
+    "tracks": 136,
+    "updated": 5
+  },
+  "nyashinski": {
+    "completed": true,
+    "tracks": 78,
+    "updated": 16
+  },
+  "salif keita": {
+    "completed": true,
+    "tracks": 164,
+    "updated": 150
+  },
+  "amadou mariam": {
+    "completed": true,
+    "tracks": 0
+  },
+  "teddy afro": {
+    "completed": true,
+    "tracks": 88,
+    "updated": 88
+  },
+  "adekunle gold": {
+    "completed": true,
+    "tracks": 118,
+    "updated": 117
+  },
+  "simi": {
+    "completed": true,
+    "tracks": 149,
+    "updated": 97
+  },
+  "wande coal": {
+    "completed": true,
+    "tracks": 76,
+    "updated": 74
+  },
+  "flavour": {
+    "completed": true,
+    "tracks": 246,
+    "updated": 231
+  },
+  "tekno": {
+    "completed": true,
+    "tracks": 80,
+    "updated": 77
+  },
+  "phyno": {
+    "completed": true,
+    "tracks": 144,
+    "updated": 125
+  },
+  "zlatan": {
+    "completed": true,
+    "tracks": 87,
+    "updated": 11
+  },
+  "mr eazi": {
+    "completed": true,
+    "tracks": 102,
+    "updated": 90
+  },
+  "joeboy": {
+    "completed": true,
+    "tracks": 113,
+    "updated": 93
+  },
+  "bnxn": {
+    "completed": true,
+    "tracks": 121,
+    "updated": 54
+  },
+  "victony": {
+    "completed": true,
+    "tracks": 136,
+    "updated": 49
+  },
+  "pheelz": {
+    "completed": true,
+    "tracks": 74,
+    "updated": 43
+  },
+  "bella shmurda": {
+    "completed": true,
+    "tracks": 111,
+    "updated": 14
+  },
+  "seyi vibez": {
+    "completed": true,
+    "tracks": 122,
+    "updated": 37
+  },
+  "oxlade": {
+    "completed": true,
+    "tracks": 103,
+    "updated": 83
+  },
+  "mayorkun": {
+    "completed": true,
+    "tracks": 63,
+    "updated": 20
+  },
+  "falz": {
+    "completed": true,
+    "tracks": 104,
+    "updated": 87
+  },
+  "patoranking": {
+    "completed": true,
+    "tracks": 83,
+    "updated": 79
+  },
+  "timaya": {
+    "completed": true,
+    "tracks": 133,
+    "updated": 113
+  },
+  "young stunna": {
+    "completed": true,
+    "tracks": 64,
+    "updated": 39
+  },
+  "dbn gogo": {
+    "completed": true,
+    "tracks": 104,
+    "updated": 82
+  },
+  "cassper nyovest": {
+    "completed": true,
+    "tracks": 161,
+    "updated": 147
+  },
+  "makhadzi": {
+    "completed": true,
+    "tracks": 125,
+    "updated": 117
+  },
+  "a reece": {
+    "completed": true,
+    "tracks": 0
+  },
+  "takana zion": {
+    "completed": true,
+    "tracks": 158,
+    "updated": 101
+  },
+  "mamady keita": {
+    "completed": true,
+    "tracks": 2,
+    "updated": 2
+  },
+  "koury simple": {
+    "completed": true,
+    "tracks": 0
+  },
+  "bembeya jazz": {
+    "completed": true,
+    "tracks": 60,
+    "updated": 57
+  },
+  "mc freshh": {
+    "completed": true,
+    "tracks": 0
+  },
+  "thiird": {
+    "completed": true,
+    "tracks": 2,
+    "updated": 2
+  },
+  "maxim bk": {
+    "completed": true,
+    "tracks": 2,
+    "updated": 1
+  },
+  "wada du game": {
+    "completed": true,
+    "tracks": 0
+  },
+  "hezbo rap": {
+    "completed": true,
+    "tracks": 0
+  },
+  "nandy": {
+    "completed": true,
+    "tracks": 86,
+    "updated": 80
+  },
+  "mbosso": {
+    "completed": true,
+    "tracks": 61,
+    "updated": 60
+  },
+  "marioo": {
+    "completed": true,
+    "tracks": 113,
+    "updated": 78
+  },
+  "ferre gola": {
+    "completed": true,
+    "tracks": 233,
+    "updated": 93
+  },
+  "heritier watanabe": {
+    "completed": true,
+    "tracks": 22,
+    "updated": 12
+  },
+  "werrason": {
+    "completed": true,
+    "tracks": 209,
+    "updated": 118
+  },
+  "aya nakamura": {
+    "completed": true,
+    "tracks": 108,
+    "updated": 104
+  },
+  "damso": {
+    "completed": true,
+    "tracks": 195,
+    "updated": 189
+  },
+  "gyakie": {
+    "completed": true,
+    "tracks": 96,
+    "updated": 73
+  },
+  "camidoh": {
+    "completed": true,
+    "tracks": 94,
+    "updated": 46
+  },
+  "medikal": {
+    "completed": true,
+    "tracks": 73,
+    "updated": 11
+  },
+  "kwesi arthur": {
+    "completed": true,
+    "tracks": 80,
+    "updated": 54
+  },
+  "r2bees": {
+    "completed": true,
+    "tracks": 137,
+    "updated": 68
+  },
+  "burnaboy": {
+    "completed": true,
+    "tracks": 0
+  },
+  "wiz kid": {
+    "completed": true,
+    "tracks": 3,
+    "updated": 0
+  },
+  "starboy": {
+    "completed": true,
+    "tracks": 50,
+    "updated": 44
+  },
+  "obo": {
+    "completed": true,
+    "tracks": 341,
+    "updated": 281
+  },
+  "fela": {
+    "completed": true,
+    "tracks": 251,
+    "updated": 52
+  },
+  "diamond": {
+    "completed": true,
+    "tracks": 455,
+    "updated": 141
+  },
+  "blackcoffee": {
+    "completed": true,
+    "tracks": 0
+  },
+  "psquare": {
+    "completed": true,
+    "tracks": 0
+  },
+  "p-square": {
+    "completed": true,
+    "tracks": 89,
+    "updated": 80
+  },
+  "innoss b": {
+    "completed": true,
+    "tracks": 0
+  },
+  "innoss'b": {
+    "completed": true,
+    "tracks": 108,
+    "updated": 86
+  },
+  "youssou n dour": {
+    "completed": true,
+    "tracks": 0
+  },
+  "youssou n'dour": {
+    "completed": true,
+    "tracks": 229,
+    "updated": 167
+  },
+  "sekouba": {
+    "completed": true,
+    "tracks": 75,
+    "updated": 26
+  },
+  "bambino": {
+    "completed": true,
+    "tracks": 96,
+    "updated": 15
+  },
+  "maitre gims": {
+    "completed": true,
+    "tracks": 1,
+    "updated": 0
+  },
+  "maitre gim": {
+    "completed": true,
+    "tracks": 1,
+    "updated": 0
+  },
+  "buju bnxn": {
+    "completed": true,
+    "tracks": 0
+  },
+  "buju": {
+    "completed": true,
+    "tracks": 260,
+    "updated": 214
+  }
+}

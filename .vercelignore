@@ -1,0 +1,12 @@
+# Large data files - not needed for frontend (root level only)
+/data/
+/conquest_output/
+/server/
+
+# Dev files
+*.log
+.env.local
+.env*.local
+
+# Already ignored but explicit
+node_modules/

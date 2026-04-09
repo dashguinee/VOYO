@@ -1,0 +1,256 @@
+╔═══════════════════════════════════════════════════════════════════════════╗
+║                  REAL NEON PHYSICS CSS - CHEAT SHEET                      ║
+║                         December 16, 2025                                 ║
+╚═══════════════════════════════════════════════════════════════════════════╝
+
+QUICK COLOR MATRIX
+═══════════════════════════════════════════════════════════════════════════
+
+WARM NEONS (Direct Gas - Nostalgic)
+  .neon-red      #ff0000   Pure red - deepest, most striking
+  .neon-orange   #ff6600   Red-orange - most common, balanced
+
+COLD NEONS (Argon+Phosphor - Modern)
+  .neon-blue     #0080ff   Bright blue - professional, calming
+  .neon-cyan     #00ffff   Brightest - eye-catching, modern
+  .neon-green    #00ff00   Electric green - sci-fi, unusual
+  .neon-purple   #9933ff   Striking - premium, contemporary
+  .neon-pink     #ff00ff   Vibrant magenta - trendy, hot
+
+
+ANIMATION STATES
+═══════════════════════════════════════════════════════════════════════════
+
+Power-On Sequence:
+  .neon-startup              (2.5s) Chaotic flicker → stabilize
+  .neon-jitter-startup       (2.5s) Startup + position movement
+  .neon-breathe              (3s)   Subtle pulse effect
+  .neon-fast-pulse           (0.033s) AC ripple hum
+
+Failure States:
+  .neon-broken               (3.5s) Random flickering
+  .neon-severe-broken        (2s)   Heavy flicker near death
+  .neon-dimmed               (4s)   Gradual brightness loss
+  .neon-severely-dimmed      Static Permanently dim
+
+
+WEATHER & ATMOSPHERE
+═══════════════════════════════════════════════════════════════════════════
+
+Environmental Effects:
+  .neon-light-rain           Rain starting (blur 0.3px)
+  .neon-rain                 Moderate rain (blur 0.5px)
+  .neon-heavy-rain           Heavy downpour (blur 0.8px)
+  .neon-fog                  Dense fog (blur 1.5px)
+  .neon-heavy-fog            Very thick (blur 2px)
+  .neon-chromatic-static     Color fringing (refraction)
+
+Cycles:
+  .neon-weather-cycle        (20s) Clear→Rain→Fog→Clear
+
+
+POWER LEVELS
+═══════════════════════════════════════════════════════════════════════════
+
+  .neon.low-power            Dim, tight glow (old sign)
+  Standard (no modifier)      Balanced, medium glow (normal)
+  .neon.high-power           Bright, wide bloom (new sign)
+
+
+IMPLEMENTATION TEMPLATE
+═══════════════════════════════════════════════════════════════════════════
+
+BASIC USAGE:
+  <div class="neon-orange">TEXT</div>
+
+WITH ANIMATION:
+  <div class="neon-cyan neon-breathe">TEXT</div>
+
+COMBINED EFFECTS:
+  <div class="neon-orange neon-heavy-rain">TEXT</div>
+
+CUSTOM STARTUP TO BREATHING:
+  <div class="neon-orange" style="
+    animation: neonStartup 2.5s ease-out forwards,
+               neonBreathe 3s ease-in-out 2.5s infinite;">
+    TEXT
+  </div>
+
+
+PHYSICS REFERENCE
+═══════════════════════════════════════════════════════════════════════════
+
+STARTUP (0-3 seconds):
+  Physics: Gas below ignition voltage oscillates chaotically
+  Effect:  Random on/off flicker, position shifts, brightness oscillates
+  CSS:     Irregular keyframes, opacity changes, blur changes
+
+WARM vs COLD:
+  Warm Neon:     Pure gas (600-650nm) → Direct emission → Nostalgic
+  Cold Neon:     Argon + Phosphor → Artificial colors → Modern
+  Key:           Warm = longer shadows, Cold = sharper shadows
+
+THREE-LAYER BLOOM:
+  Layer 1:       0-10px    Core (sharp, full saturation)
+  Layer 2:       15-30px   Mid-bloom (medium spread)
+  Layer 3:       40-80px+  Outer halo (very soft)
+
+ATMOSPHERIC SCATTER (Rain/Fog):
+  Rain:          Water droplets scatter light → larger halo, less saturation
+  Fog:           Dense moisture → extreme blur, almost invisible
+  Chromatic:     Light refraction → color separation (red/blue shift)
+
+DEGRADATION TIMELINE:
+  Fresh:         Full power, breathing pulse
+  Leaking:       Gradual dimming, color still vibrant
+  Contaminated:  Random flickering, unstable brightness
+  Dying:         Severe flicker, very dim, colors faded
+  Dead:          No glow, off
+
+
+REAL-WORLD SCENARIOS
+═══════════════════════════════════════════════════════════════════════════
+
+Fresh Night Sign:
+  <div class="neon-orange neon-breathe">OPEN</div>
+
+Aged Vintage Sign:
+  <div class="neon-orange neon-dimmed neon-aged">RETRO</div>
+
+Sign in Rain:
+  <div class="neon-cyan neon-heavy-rain">BAR</div>
+
+Loading/Startup:
+  <div class="neon-cyan neon-startup">LOADING</div>
+
+Error State:
+  <div class="neon-red neon-broken">ERROR</div>
+
+Sign in Fog:
+  <div class="neon-purple neon-fog">MYSTERY</div>
+
+Modern Premium:
+  <div class="neon-cyan neon-breathe">PREMIUM</div>
+
+
+COLOR PHYSICS CHART
+═══════════════════════════════════════════════════════════════════════════
+
+Gas Type     Wavelength    Color        Temperature  Use Case
+─────────────────────────────────────────────────────────────────────────
+Neon         600-650nm     Red-Orange   WARM         Vintage, Nostalgic
+Helium       587nm         Yellow       WARM         Rare, Expensive
+Argon        420nm         Pale Blue    COLD         Base for all colors
++ Blue Phosphor             Bright Blue  COLD         Professional
++ Green Phosphor            Green        COOL         Sci-Fi
++ Purple Phosphor           Purple       COLD         Modern, Premium
++ Magenta Phosphor          Pink         COLD         Trendy, Hot
+
+
+ANIMATION TIMING GUIDE
+═══════════════════════════════════════════════════════════════════════════
+
+Startup Phase:              2-3 seconds (chaotic)
+Stabilization:              0.5-1 second (transition)
+Breathing Pulse:            2-4 seconds (loop)
+Broken Flicker:             2-4 seconds (loop)
+AC Hum (60Hz):              0.0166 seconds per cycle
+AC Hum (50Hz):              0.0200 seconds per cycle
+Cold Weather Behavior:      2-3 seconds (loop)
+Weather Cycle:              15-20 seconds (loop)
+
+
+BROWSER SUPPORT
+═══════════════════════════════════════════════════════════════════════════
+
+✓ Chrome         Full support  ✓ Firefox        Full support
+✓ Safari         Full support  ✓ Edge           Full support
+✓ iOS (12+)      Full support  ✓ Android (5+)   Full support
+
+Dependencies: CSS text-shadow (since 2008), CSS filter (since 2014),
+              CSS animations (since 2012)
+
+
+PERFORMANCE TIPS
+═══════════════════════════════════════════════════════════════════════════
+
+✓ Use GPU acceleration:
+  .neon { will-change: text-shadow, filter; transform: translateZ(0); }
+
+✓ Limit shadow layers:
+  Max 4 text-shadow layers per element for smooth 60fps
+
+✓ Mobile optimization:
+  Reduce blur radius, fewer shadow layers on mobile devices
+
+✓ Heavy use (50+ elements):
+  Consider CSS-in-JS or layer caching for performance
+
+
+ACCESSIBILITY
+═══════════════════════════════════════════════════════════════════════════
+
+Respects prefers-reduced-motion:
+  @media (prefers-reduced-motion: reduce) {
+    .neon-startup, .neon-breathe { animation: none; }
+  }
+
+High contrast maintained:
+  All neon colors chosen for WCAG AA/AAA on dark backgrounds
+
+
+TROUBLESHOOTING
+═══════════════════════════════════════════════════════════════════════════
+
+Glow too dim?
+  → Add .high-power class OR increase shadow opacity (0.7+ alpha)
+  → Ensure dark background (#000-#0a0a0a recommended)
+
+Glow too sharp?
+  → Increase shadow spread: 0 0 15px → 0 0 25px
+  → Add more shadow layers
+
+Animation stutters?
+  → Remove animation, use static glow only
+  → Reduce number of elements or layers
+  → Use .low-power variant to reduce rendering cost
+
+Color looks off?
+  → Check text color matches shadow hex: color: #ff6600 with
+    text-shadow: 0 0 10px #ff6600
+
+Doesn't work on light background?
+  → Neon designed for dark mode. Add background: #000
+  → OR use neon-cyan which is brightest
+
+
+FILES REFERENCE
+═══════════════════════════════════════════════════════════════════════════
+
+neon-effects.css            Main CSS library (18KB)
+neon-demo.html              Interactive visual demo
+NEON_RESEARCH.md            Full physics documentation (22KB)
+NEON_QUICK_REFERENCE.md     Copy-paste solutions (11KB)
+NEON_ADVANCED_PATTERNS.md   Implementation patterns (17KB)
+NEON_INDEX.md               Complete index & guide
+NEON_CHEAT_SHEET.txt        This file
+
+
+QUICK IMPORT
+═══════════════════════════════════════════════════════════════════════════
+
+1. Add to HTML <head>:
+   <link rel="stylesheet" href="neon-effects.css">
+
+2. Use in HTML:
+   <div class="neon-cyan neon-breathe">Your Text</div>
+
+3. Optional JavaScript for advanced patterns:
+   See NEON_ADVANCED_PATTERNS.md for 12 patterns
+
+
+═══════════════════════════════════════════════════════════════════════════
+Created: December 16, 2025
+Based on: Real neon sign physics & optical principles
+Last Updated: December 16, 2025
+═══════════════════════════════════════════════════════════════════════════

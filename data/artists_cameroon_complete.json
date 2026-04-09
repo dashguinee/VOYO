@@ -1,0 +1,32 @@
+{
+  "country": "cameroon",
+  "country_code": "CM",
+  "region": "central-africa",
+  "researched_at": "2024-12-31T15:45:00Z",
+  
+  "tier_a": {
+    "artists": [
+      {"name": "Manu Dibango", "notes": "Soul Makossa legend"},
+      {"name": "Richard Bona", "notes": "Jazz legend"},
+      {"name": "Mr Leo", "notes": "Big star"},
+      {"name": "Locko", "notes": "Huge"}
+    ]
+  },
+  
+  "tier_b": {
+    "artists": [
+      "Salatiel", "Daphne", "Ko-c", "Tenor", "Magasco", "Reniss",
+      "Blick Bassy", "Petit Pays", "Charlotte Dipanda", "X Maleya",
+      "Dynastie le Tigre", "Mink's", "Numerica", "Stanley Enow"
+    ]
+  },
+  
+  "tier_c": {
+    "artists": [
+      "Ambe", "Jovi", "Pascal", "Askia", "Nabila", "Annie Anzouer",
+      "Coco Argentée", "Lady Ponce", "Ben Decca"
+    ]
+  },
+  
+  "summary": {"tier_a": 4, "tier_b": 14, "tier_c": 9, "total": 27}
+}

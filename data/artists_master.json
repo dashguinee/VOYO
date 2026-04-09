@@ -1,0 +1,87 @@
+{
+  "version": "v1.0",
+  "generated_at": "2025-12-31T22:22:48.018606",
+  "description": "VOYO Music Artist Tier Database - African Artists Canonization",
+  "methodology": {
+    "tier_a": "Global/Continental stars - 100M+ views or Grammy/international recognition",
+    "tier_b": "National stars - 10M-100M views, strong local following",
+    "tier_c": "Regional/Emerging - 1M-10M views",
+    "tier_d": "Local/Underground - under 1M views"
+  },
+  "countries": {
+    "kenya": {
+      "tier_a": 3,
+      "tier_b": 14,
+      "tier_c": 9,
+      "total": 26
+    },
+    "drc": {
+      "tier_a": 10,
+      "tier_b": 12,
+      "tier_c": 9,
+      "total": 31
+    },
+    "nigeria": {
+      "tier_a_global": 9,
+      "tier_a_continental": 19,
+      "tier_b_national": 38,
+      "tier_b_gospel": 12,
+      "tier_b_alte": 9,
+      "tier_c_regional": 17,
+      "tier_c_hausa": 13,
+      "total_classified": 117,
+      "note": "300+ more artists on viberate.com list - most are Tier C/D"
+    },
+    "south-africa": {
+      "tier_a": 9,
+      "tier_b": 34,
+      "tier_c": 15,
+      "total": 58
+    },
+    "ghana": {
+      "tier_a": 10,
+      "tier_b": 25,
+      "tier_c": 30,
+      "total": 65
+    },
+    "cameroon": {
+      "tier_a": 4,
+      "tier_b": 14,
+      "tier_c": 9,
+      "total": 27
+    },
+    "guinea": {
+      "tier_a": 10,
+      "tier_b": 13,
+      "tier_c": 2,
+      "unverified": 90,
+      "total": 115,
+      "total_verified_views": 256900000
+    },
+    "ivory-coast": {
+      "tier_a": 4,
+      "tier_b": 13,
+      "tier_c": 8,
+      "total": 25
+    },
+    "senegal": {
+      "tier_a": 3,
+      "tier_b": 12,
+      "tier_c": 8,
+      "total": 23
+    },
+    "tanzania": {
+      "tier_a": 5,
+      "tier_b": 16,
+      "tier_c": 10,
+      "total": 31
+    }
+  },
+  "summary": {
+    "total_countries": 16,
+    "total_tier_a": 105,
+    "total_tier_b": 241,
+    "total_tier_c": 130,
+    "total_artists": 566
+  }
+}

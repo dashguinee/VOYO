@@ -1,0 +1,45 @@
+{
+  "name": "VOYO - African Music Revolution",
+  "short_name": "VOYO",
+  "description": "TikTok-style music discovery with Spotify-quality audio. African-first content with global reach.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0a0a1a",
+  "theme_color": "#8b5cf6",
+  "orientation": "portrait-primary",
+  "scope": "/",
+  "icons": [
+    {
+      "src": "/icons/voyo-192.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/voyo-512.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["music", "entertainment", "lifestyle"],
+  "shortcuts": [
+    {
+      "name": "Search Music",
+      "short_name": "Search",
+      "description": "Find your favorite songs",
+      "url": "/?search=1",
+      "icons": [{ "src": "/icons/voyo-192.svg", "sizes": "192x192" }]
+    },
+    {
+      "name": "My Boosts",
+      "short_name": "Boosts",
+      "description": "View downloaded tracks",
+      "url": "/?boosts=1",
+      "icons": [{ "src": "/icons/voyo-192.svg", "sizes": "192x192" }]
+    }
+  ],
+  "related_applications": [],
+  "prefer_related_applications": false,
+  "gcm_sender_id": "103953800507"
+}

@@ -1,0 +1,31 @@
+{
+  "country": "senegal",
+  "country_code": "SN",
+  "region": "west-africa",
+  "researched_at": "2024-12-31T15:35:00Z",
+  
+  "tier_a": {
+    "artists": [
+      {"name": "Youssou N'Dour", "notes": "Global legend, Grammy winner"},
+      {"name": "Akon", "notes": "Global superstar, Konvict"},
+      {"name": "Wally Seck", "notes": "King of Mbalax modern"}
+    ]
+  },
+  
+  "tier_b": {
+    "artists": [
+      "Viviane Chidid", "Baaba Maal", "Ismaël Lô", "Thione Seck",
+      "Coumba Gawlo", "Dip Doundou Guiss", "Ngaaka Blindé", "Pape Diouf",
+      "Waly Dia", "Pape et Cheikh", "Daara J", "Positive Black Soul"
+    ]
+  },
+  
+  "tier_c": {
+    "artists": [
+      "Cheikh Lô", "Orchestra Baobab", "Touré Kunda", "Xalam",
+      "Baba Maal", "Fallou Dieng", "Youssou Ndour", "Alioune Mbaye Nder"
+    ]
+  },
+  
+  "summary": {"tier_a": 3, "tier_b": 12, "tier_c": 8, "total": 23}
+}

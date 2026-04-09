@@ -1,0 +1,261 @@
+{
+  "afrobeats": {
+    "afro_heat": 85,
+    "chill": 35,
+    "party": 75,
+    "workout": 70,
+    "late_night": 45
+  },
+  "afropop": {
+    "afro_heat": 80,
+    "chill": 45,
+    "party": 70,
+    "workout": 60,
+    "late_night": 50
+  },
+  "afro-fusion": {
+    "afro_heat": 70,
+    "chill": 55,
+    "party": 60,
+    "workout": 50,
+    "late_night": 65
+  },
+  "alte": {
+    "afro_heat": 50,
+    "chill": 80,
+    "party": 40,
+    "workout": 30,
+    "late_night": 85
+  },
+  "fuji": {
+    "afro_heat": 70,
+    "chill": 40,
+    "party": 80,
+    "workout": 50,
+    "late_night": 45
+  },
+  "juju": {
+    "afro_heat": 60,
+    "chill": 55,
+    "party": 70,
+    "workout": 40,
+    "late_night": 50
+  },
+  "amapiano": {
+    "afro_heat": 70,
+    "chill": 50,
+    "party": 90,
+    "workout": 60,
+    "late_night": 80
+  },
+  "gqom": {
+    "afro_heat": 90,
+    "chill": 10,
+    "party": 95,
+    "workout": 85,
+    "late_night": 70
+  },
+  "kwaito": {
+    "afro_heat": 65,
+    "chill": 55,
+    "party": 75,
+    "workout": 50,
+    "late_night": 65
+  },
+  "maskandi": {
+    "afro_heat": 50,
+    "chill": 60,
+    "party": 55,
+    "workout": 40,
+    "late_night": 45
+  },
+  "sa-house": {
+    "afro_heat": 75,
+    "chill": 40,
+    "party": 85,
+    "workout": 70,
+    "late_night": 75
+  },
+  "bongo-flava": {
+    "afro_heat": 75,
+    "chill": 45,
+    "party": 70,
+    "workout": 55,
+    "late_night": 50
+  },
+  "gengetone": {
+    "afro_heat": 80,
+    "chill": 20,
+    "party": 85,
+    "workout": 70,
+    "late_night": 60
+  },
+  "benga": {
+    "afro_heat": 60,
+    "chill": 50,
+    "party": 65,
+    "workout": 45,
+    "late_night": 40
+  },
+  "taarab": {
+    "afro_heat": 30,
+    "chill": 75,
+    "party": 40,
+    "workout": 20,
+    "late_night": 70
+  },
+  "ndombolo": {
+    "afro_heat": 80,
+    "chill": 20,
+    "party": 90,
+    "workout": 70,
+    "late_night": 60
+  },
+  "soukous": {
+    "afro_heat": 75,
+    "chill": 35,
+    "party": 85,
+    "workout": 60,
+    "late_night": 55
+  },
+  "rumba": {
+    "afro_heat": 50,
+    "chill": 75,
+    "party": 60,
+    "workout": 30,
+    "late_night": 80
+  },
+  "makossa": {
+    "afro_heat": 70,
+    "chill": 40,
+    "party": 80,
+    "workout": 55,
+    "late_night": 50
+  },
+  "highlife": {
+    "afro_heat": 60,
+    "chill": 70,
+    "party": 65,
+    "workout": 40,
+    "late_night": 55
+  },
+  "hiplife": {
+    "afro_heat": 70,
+    "chill": 45,
+    "party": 75,
+    "workout": 55,
+    "late_night": 50
+  },
+  "azonto": {
+    "afro_heat": 85,
+    "chill": 20,
+    "party": 90,
+    "workout": 75,
+    "late_night": 55
+  },
+  "mbalax": {
+    "afro_heat": 75,
+    "chill": 30,
+    "party": 80,
+    "workout": 65,
+    "late_night": 40
+  },
+  "coupe-decale": {
+    "afro_heat": 85,
+    "chill": 15,
+    "party": 95,
+    "workout": 70,
+    "late_night": 60
+  },
+  "afro-house": {
+    "afro_heat": 65,
+    "chill": 40,
+    "party": 85,
+    "workout": 75,
+    "late_night": 70
+  },
+  "afro-soul": {
+    "afro_heat": 40,
+    "chill": 85,
+    "party": 30,
+    "workout": 20,
+    "late_night": 75
+  },
+  "afro-rnb": {
+    "afro_heat": 45,
+    "chill": 80,
+    "party": 35,
+    "workout": 25,
+    "late_night": 80
+  },
+  "african-gospel": {
+    "afro_heat": 30,
+    "chill": 70,
+    "party": 40,
+    "workout": 35,
+    "late_night": 25
+  },
+  "reggae": {
+    "afro_heat": 40,
+    "chill": 85,
+    "party": 50,
+    "workout": 30,
+    "late_night": 70
+  },
+  "dancehall": {
+    "afro_heat": 75,
+    "chill": 25,
+    "party": 90,
+    "workout": 70,
+    "late_night": 65
+  },
+  "hip-hop": {
+    "afro_heat": 70,
+    "chill": 40,
+    "party": 65,
+    "workout": 80,
+    "late_night": 55
+  },
+  "rnb": {
+    "afro_heat": 35,
+    "chill": 80,
+    "party": 40,
+    "workout": 25,
+    "late_night": 85
+  },
+  "neo-soul": {
+    "afro_heat": 30,
+    "chill": 90,
+    "party": 25,
+    "workout": 20,
+    "late_night": 80
+  },
+  "gospel": {
+    "afro_heat": 35,
+    "chill": 65,
+    "party": 45,
+    "workout": 40,
+    "late_night": 30
+  },
+  "zouk": {
+    "afro_heat": 55,
+    "chill": 65,
+    "party": 70,
+    "workout": 35,
+    "late_night": 80
+  },
+  "kompa": {
+    "afro_heat": 50,
+    "chill": 70,
+    "party": 65,
+    "workout": 30,
+    "late_night": 75
+  },
+  "unknown": {
+    "afro_heat": 50,
+    "chill": 50,
+    "party": 50,
+    "workout": 50,
+    "late_night": 50
+  }
+}

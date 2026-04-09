@@ -1,0 +1,71 @@
+{
+  "country": "guinea",
+  "country_code": "GN",
+  "region": "west-africa",
+  "researched_at": "2024-12-31T14:30:00Z",
+  "sources": ["voyo_api", "viberate.com", "gnakrylive.com", "afroguinee.com", "training_data"],
+  
+  "tier_a_verified": [
+    {"name": "Saifond Baldé", "views": 59850781, "genre": "afro-mandingue"},
+    {"name": "Azaya", "views": 55865540, "genre": "afro-mandingue"},
+    {"name": "Sékouba Bambino", "views": 52413434, "genre": "traditional/griot"},
+    {"name": "Mory Kanté", "views": 28002527, "genre": "manding/world"},
+    {"name": "Soul Bang's", "views": 16119423, "genre": "rnb/afropop"},
+    {"name": "Djanii Alfa", "views": 14000000, "genre": "rap"},
+    {"name": "Instinct Killers", "views": 13654161, "genre": "hip-hop/dancehall"},
+    {"name": "Hezbo Rap", "views": 12946574, "genre": "rap"},
+    {"name": "King Alasko", "views": 8721160, "genre": "dancehall"},
+    {"name": "Straiker", "views": 8677892, "genre": "rap/drill"}
+  ],
+  
+  "tier_b_verified": [
+    {"name": "Wada Du Game", "views": 6994749, "genre": "rap"},
+    {"name": "Mamady Keïta", "views": 6687729, "genre": "djembe/percussion"},
+    {"name": "Maxim BK", "views": 6008859, "genre": "rap"},
+    {"name": "Takana Zion", "views": 5148463, "genre": "reggae"},
+    {"name": "Koury Simple", "views": 4968660, "genre": "afropop"},
+    {"name": "Bembeya Jazz National", "views": 3996214, "genre": "jazz/traditional"},
+    {"name": "Sory Kandia Kouyaté", "views": 2867788, "genre": "griot"},
+    {"name": "MC Freshh", "views": 2758861, "genre": "rap"},
+    {"name": "Thiird", "views": 2179338, "genre": "rap/drill"},
+    {"name": "Keckson", "views": 1691509, "genre": "rap"},
+    {"name": "Diop Souare", "views": 1555198, "genre": "rap"},
+    {"name": "Le Mélangeur", "views": 1530923, "genre": "rap"},
+    {"name": "Les Amazones de Guinée", "views": 1174863, "genre": "traditional"}
+  ],
+  
+  "tier_c_verified": [
+    {"name": "Keletigui et ses Tambourinis", "views": 418193, "genre": "traditional"},
+    {"name": "Momo Wandel Soumah", "views": 343054, "genre": "jazz/sax"}
+  ],
+  
+  "tier_b_c_unverified": [
+    "AK4seven", "Rim'4", "Babalan", "Ixo Ekx", "Dépotoir", "Limo", "Soulby",
+    "Djélykaba Bintou", "Habib Fatako", "Ans-T Crazy", "Yama Sega", "Manamba Kanté",
+    "Mousto Camara", "Ibro Gnamet", "Lil Saako", "Aicha Kindia", "AB 6ylla",
+    "Gwada Maga", "Wandjan dimedi", "DTM", "Banlieuz'Art", "Tènin Diawara",
+    "MIMI PAYA PAYA", "Zaga Boy", "Mariama Kankalabé", "Fode Baro", "Kandia Kora",
+    "Doura Yzzy", "Sayon Camara", "Sms Tueur de Scène", "Ousmane Paikoun",
+    "Cheka Katenen Dioubate", "Bébé Baya", "Pétit Kandia", "Binette Diallo",
+    "Mohamed Fatako", "Fish Killa", "JUPITER DAVIBE", "PETIT OUSTÉ", "Sagatala",
+    "Safa Diallo", "Bah Wury", "Gnamakalah", "Khady Diop", "Les Espoirs de Coronthie",
+    "MOUSKID PETIT AZAYA", "Falle Nioke", "One Time", "4G Officiel", "Balla Et Ses Balladins",
+    "King détruit", "Binta Laly Sow", "Maciré Sylla", "Sia Tolno", "Keanu", "Gran Matias",
+    "Ba Cissoko", "Diamounou Condé", "MDD LE FAMEUX", "Antoine Flingo", "AMINA GAZA",
+    "Chema", "Natu Camara", "Alpha Dioumessy", "Styla Bando", "Djeli Moussa Diawara",
+    "Sékou Kouyaté", "Famoudou Konate", "MARIO BLASS", "BALTHAZARD DY", "KOSA PIC",
+    "Koumba Aviane", "Sory Diabate", "King Dio", "SAYON BAMBA", "Sona Diabate",
+    "Salamata Ilboudo", "Issa Dioubaté", "SLIM NARY", "bakari bombo", "Kirai",
+    "Moussa N'tanga", "Silatigui", "Alisko Diabaté", "Jay Double X", "Baron ya Buk-lu",
+    "Safiska", "Toumaranke", "AdibBeats", "Kerfala Kante Jr.", "Hakim 224", "Drizzy Vybz", "Wakili"
+  ],
+  
+  "summary": {
+    "tier_a": 10,
+    "tier_b": 13,
+    "tier_c": 2,
+    "unverified": 90,
+    "total": 115,
+    "total_verified_views": 256900000
+  }
+}

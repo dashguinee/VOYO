@@ -1,0 +1,33 @@
+{
+  "country": "ivory-coast",
+  "country_code": "CI",
+  "region": "west-africa",
+  "researched_at": "2024-12-31T15:40:00Z",
+  "notes": "Coupé-Décalé and Zouglou powerhouse",
+  
+  "tier_a": {
+    "artists": [
+      {"name": "DJ Arafat", "notes": "RIP, Coupé-Décalé king"},
+      {"name": "Magic System", "notes": "Premier Gaou global"},
+      {"name": "Alpha Blondy", "notes": "Reggae legend"},
+      {"name": "Tiken Jah Fakoly", "notes": "Reggae star"}
+    ]
+  },
+  
+  "tier_b": {
+    "artists": [
+      "Serge Beynaud", "Debordo Leekunfa", "Kerozen", "Ariel Sheney",
+      "Josey", "Roseline Layo", "Suspect 95", "VDA", "Nash",
+      "Bamba Ami Sarah", "Molare", "Bebi Philip", "Mix Premier"
+    ]
+  },
+  
+  "tier_c": {
+    "artists": [
+      "Tenor", "Douk Saga", "Espoir 2000", "Petit Denis",
+      "Les Garagistes", "Revolution", "Kajeem", "Kajolly"
+    ]
+  },
+  
+  "summary": {"tier_a": 4, "tier_b": 13, "tier_c": 8, "total": 25}
+}

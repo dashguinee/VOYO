@@ -1,0 +1,173 @@
+name: Audio Conquest dashgn0016
+
+on:
+  workflow_dispatch:
+    inputs:
+      chunk_size:
+        description: 'Tracks per worker'
+        default: '5000'
+        type: string
+      start_offset:
+        description: 'Starting offset (worker 0)'
+        default: '0'
+        type: string
+
+jobs:
+  download:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    strategy:
+      fail-fast: false
+      matrix:
+        worker: [0, 1, 2]
+    steps:
+      - name: Setup
+        run: |
+          OFFSET=$(( ${{ inputs.start_offset }} + ${{ matrix.worker }} * ${{ inputs.chunk_size }} ))
+          echo "Conquest dashgn0016 Worker ${{ matrix.worker }}: offset=$OFFSET, limit=${{ inputs.chunk_size }}"
+          sudo apt-get update && sudo apt-get install -y ffmpeg
+          curl -fsSL https://deno.land/install.sh | sh
+          export DENO_INSTALL="$HOME/.deno"
+          export PATH="$DENO_INSTALL/bin:$PATH"
+          echo "$DENO_INSTALL/bin" >> $GITHUB_PATH
+          sudo curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp
+          sudo chmod a+rx /usr/local/bin/yt-dlp
+          pip install boto3 requests
+          echo "IyBOZXRzY2FwZSBIVFRQIENvb2tpZSBGaWxlCiMgaHR0cHM6Ly9jdXJsLmhheHguc2UvcmZjL2Nvb2tpZV9zcGVjLmh0bWwKIyBUaGlzIGlzIGEgZ2VuZXJhdGVkIGZpbGUhIERvIG5vdCBlZGl0LgoKLnlvdXR1YmUuY29tCVRSVUUJLwlGQUxTRQkxODAyMDMxNjkzCVNJRAlnLmEwMDA1UWpzNUhjNUw0RGNyT0gwR1FMRjlTQnRoRWI0OFdiWUh1SWt5VEJzUm5DV3JGQno5c2pwYng2UXNFc1pBeHN2MHk4S1JBQUNnWUtBZlFTQVE4U0ZRSEdYMk1pRVp2Q09HYXhhenp4cUVLLTdpYXc1Um9WQVVGOHlLb0VuaFNvX1JtbFJQZUpwSGY5MVVMeDAwNzYKLnlvdXR1YmUuY29tCVRSVUUJLwlUUlVFCTE4MDIwMzE2OTMJX19TZWN1cmUtMVBTSUQJZy5hMDAwNVFqczVIYzVMNERjck9IMEdRTEY5U0J0aEViNDhXYllIdUlreVRCc1JuQ1dyRkJ6Z3hMMnNFbXlmaDZjWmJxZWxPRmxlUUFDZ1lLQVlNU0FROFNGUUhHWDJNaUN5eXNvc3FoM2d1Y004em4ySy1YekJvVkFVRjh5S3F1ZUdDWE8wanFsLW00SFZaX29OWU4wMDc2Ci55b3V0dWJlLmNvbQlUUlVFCS8JVFJVRQkxODAyMDMxNjkzCV9fU2VjdXJlLTNQU0lECWcuYTAwMDVRanM1SGM1TDREY3JPSDBHUUxGOVNCdGhFYjQ4V2JZSHVJa3lUQnNSbkNXckZCelFQSTBVNTVDcmlBWUowRldXNm5wRGdBQ2dZS0FaY1NBUThTRlFIR1gyTWlESWpWd2prWGdCV195N3luVFY5a0Job1ZBVUY4eUtxS0NyZkxLNzh4M1RNakhIazFBa2xuMDA3NgoueW91dHViZS5jb20JVFJVRQkvCUZBTFNFCTE4MDIwMzE2OTMJSFNJRAlBX05faldfRnVOMGtFT1ZsSwoueW91dHViZS5jb20JVFJVRQkvCVRSVUUJMTgwMjAzMTY5MwlTU0lECUEyQnhSSTdONmhiVFVPYmZyCi55b3V0dWJlLmNvbQlUUlVFCS8JRkFMU0UJMTgwMjAzMTY5MwlBUElTSUQJMVRNakhoaEE4NWRBRl9iWS9BbXdZcGhUNEFrcWRucm9iaQoueW91dHViZS5jb20JVFJVRQkvCVRSVUUJMTgwMjAzMTY5MwlTQVBJU0lECTFIRW8xXzZvSGhNblFhZzUvQXVzX3N3Q1FPaE56cjYwTkUKLnlvdXR1YmUuY29tCVRSVUUJLwlUUlVFCTE4MDIwMzE2OTMJX19TZWN1cmUtMVBBUElTSUQJMUhFbzFfNm9IaE1uUWFnNS9BdXNfc3dDUU9oTnpyNjBORQoueW91dHViZS5jb20JVFJVRQkvCVRSVUUJMTgwMjAzMTY5MwlfX1NlY3VyZS0zUEFQSVNJRAkxSEVvMV82b0hoTW5RYWc1L0F1c19zd0NRT2hOenI2ME5FCi55b3V0dWJlLmNvbQlUUlVFCS8JVFJVRQkxODAyMDY4NjQ4CUxPR0lOX0lORk8JQUZtbUYyc3dSUUloQUp3VEZseEpILWttbUFPVkVjY0VTWFNnbU95STdWMEpoSlI3R2o4Rk4zR29BaUFWZ1ZkSGVWWk1DTl9PWWdLcVkwZFF6bmdaQU9yUkgtbFVJNDl0Q3ZtWVp3OlFVUTNNak5tZVRWTmRVaE9UamMwUjI0d1FrUkdVMEZtTmtNeVNtcGlZemhuTFZoQ1lUTXdZWE01ZFdnNVNsUkhRbHBPUjFweWFtODFlVVpoYlVGdFdVaHVXVGRMWm1OTE1WOXpRbXQ2ZVY5bmFuUlBOMmhmVUdsSVgwNXNOR0pJYkMxamIyUnhUVFo0ZUVrdGJIYzFPSGhFU1U1WGNteG1MVmxaVnpGUFVEQTVlRTVQVnpocU1saHdRMUpWWXpVMlIyMWZXRU5zZEhsTFRqVnllVWhVTFhWMwoueW91dHViZS5jb20JVFJVRQkvCVRSVUUJMTgwMjA2ODY4OAlQUkVGCWY0PTQwMDAwMDAmZjY9NDAwMDAwMDAmdHo9QXNpYS5LdWFsYV9MdW1wdXImZjc9MTAwCi55b3V0dWJlLmNvbQlUUlVFCS8JVFJVRQkxNzk5MDQ1ODYwCV9fU2VjdXJlLTFQU0lEVFMJc2lkdHMtQ2pJQmZsYUNkZTJlcUM1RTY0ejd3SlNQZ0tmaGpGYWdXWEIzcnRQcHIyRHpkMVJNemwzV19jS2JkRGlZdlpyOWx3QWlleEFBCi55b3V0dWJlLmNvbQlUUlVFCS8JVFJVRQkxNzk5MDQ1ODYwCV9fU2VjdXJlLTNQU0lEVFMJc2lkdHMtQ2pJQmZsYUNkZTJlcUM1RTY0ejd3SlNQZ0tmaGpGYWdXWEIzcnRQcHIyRHpkMVJNemwzV19jS2JkRGlZdlpyOWx3QWlleEFBCi55b3V0dWJlLmNvbQlUUlVFCS8JRkFMU0UJMTc5OTA0NTg2MAlTSURDQwlBS0V5WHpYTm8yRmx1SkhvTjJyanFZRXYyTTU0SXU1NEhqc0t2d1o3UWxtY0JSMnVHYTI1QjRHYXF5Slh6eWZWQ2QzNEdqb1cKLnlvdXR1YmUuY29tCVRSVUUJLwlUUlVFCTE3OTkwNDU4NjAJX19TZWN1cmUtMVBTSURDQwlBS0V5WHpVS1psdWl5MUFxRDBWdUtjdWpLQi11NDUwTklwa3p5ZE1Ob2R6OUlhamVjYThHOUdBNWYxcERjdW56ODdYZ0NhVm45QQoueW91dHViZS5jb20JVFJVRQkvCVRSVUUJMTc5OTA0NTg2MAlfX1NlY3VyZS0zUFNJRENDCUFLRXlYelgwc1BBbHA0Q242TTh4Z2FNaC11ZS1TamxqRG5TQl9zNjRtVVI1RFZ4aDhnbWduellSVEpBaFp4M1ZKbnd0Zng0QzNBCi55b3V0dWJlLmNvbQlUUlVFCS8JVFJVRQkwCVlTQwluNlhIVnpybGEwNAoueW91dHViZS5jb20JVFJVRQkvCVRSVUUJMTc4MzA2MDY1NglWSVNJVE9SX0lORk8xX0xJVkUJR2VKSGEzdkVodWsKLnlvdXR1YmUuY29tCVRSVUUJLwlUUlVFCTE3ODMwNjA2NTYJVklTSVRPUl9QUklWQUNZX01FVEFEQVRBCUNnSk5XUklFR2dBZ1VRJTNEJTNECi55b3V0dWJlLmNvbQlUUlVFCS8JVFJVRQkxNzgzMDYwNjU2CV9fU2VjdXJlLVlOSUQJMTQuWVQ9SEpIV2c2YWdRR1Z6bWxlYW44bXFvWG1nNEhJRFE1ZE02cDlETXp6MGNfcFMwbzdaSEUyWXFvOFd6MlM0ZDR1ZmhOX2w2LUpKLUVJaHJtVTlZdDVwR2dNUWRWVkQ1MFFMWDBMZXI4LTYzN3VZMmFKTmxTWmpSejBTbzVTRnNCb0wtRmNURDFJSG1SR0ZvWWk1X1hwVHFOQ3JjcHFkUjlGQlJULUNkOG9OZk1STW5ZMXpmRHQtSHFxRnVDem51dmIxZXJqYjdVMGdJRWRQckhOWlFqSzZUMUpIRVhFNUNhYW4tQnhqNWFkRUZheWZpVzh2blFpTjJ5MXBsamN3ZDJhX3l1c3Y1cHN0UlJDYTlXaFVfcVlacTR0bktiajczZkdESmZaclNLc0NNVVp3T2JiLVVkaDhKbzE2NDN5a2tpcVdodzcxcERvbEtNTmFfN2lybjhfR3FnCi55b3V0dWJlLmNvbQlUUlVFCS8JVFJVRQkxNzgzMDYwNjU2CV9fU2VjdXJlLVJPTExPVVRfVE9LRU4JQ0xmZ3VmZmw2b1d2WVJEMWpPUHJvdkdSQXhqRHhJenNvdkdSQXclM0QlM0QK" | base64 -d > /tmp/cookies.txt
+
+      - name: Create worker script
+        run: |
+          cat << 'SCRIPT' > worker.py
+          import os
+          import subprocess
+          import time
+          import random
+          from pathlib import Path
+          import boto3
+          from botocore.config import Config
+          import requests
+
+          SUPABASE_URL = "https://anmgyxhnyhbyxzpjhxgx.supabase.co"
+          SUPABASE_KEY = os.environ['SUPABASE_KEY']
+          R2_ACCOUNT_ID = os.environ['R2_ACCOUNT_ID']
+          R2_ACCESS_KEY = os.environ['R2_ACCESS_KEY']
+          R2_SECRET_KEY = os.environ['R2_SECRET_KEY']
+          R2_BUCKET = 'voyo-audio'
+          OFFSET = int(os.environ['OFFSET'])
+          LIMIT = int(os.environ['LIMIT'])
+          WORKER = os.environ['WORKER']
+
+          TEMP_DIR = Path("/tmp/voyo-audio")
+          TEMP_DIR.mkdir(exist_ok=True)
+
+          r2 = boto3.client('s3',
+              endpoint_url=f'https://{R2_ACCOUNT_ID}.r2.cloudflarestorage.com',
+              aws_access_key_id=R2_ACCESS_KEY,
+              aws_secret_access_key=R2_SECRET_KEY,
+              config=Config(retries={'max_attempts': 3}))
+
+          def log(msg):
+              print(f"[dashgn0016-W{WORKER}] {msg}", flush=True)
+
+          def get_tracks():
+              headers = {"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}"}
+              all_tracks = []
+              current_offset = OFFSET
+              remaining = LIMIT
+              while remaining > 0:
+                  batch_size = min(1000, remaining)
+                  url = f"{SUPABASE_URL}/rest/v1/video_intelligence?select=youtube_id&limit={batch_size}&offset={current_offset}"
+                  resp = requests.get(url, headers=headers, timeout=60)
+                  resp.raise_for_status()
+                  batch = [t['youtube_id'] for t in resp.json() if t.get('youtube_id')]
+                  if not batch:
+                      break
+                  all_tracks.extend(batch)
+                  current_offset += len(batch)
+                  remaining -= len(batch)
+              return all_tracks
+
+          def get_existing():
+              existing = set()
+              try:
+                  paginator = r2.get_paginator('list_objects_v2')
+                  for page in paginator.paginate(Bucket=R2_BUCKET, Prefix="128/"):
+                      for obj in page.get('Contents', []):
+                          key = obj['Key']
+                          if '/' in key:
+                              filename = key.split('/')[-1]
+                              if '.' in filename:
+                                  existing.add(filename.rsplit('.', 1)[0])
+              except Exception as e:
+                  log(f"Warning getting existing: {e}")
+              return existing
+
+          def download_and_upload(yt_id, debug=False):
+              output = TEMP_DIR / f"{yt_id}.opus"
+              cmd = ["yt-dlp", "-x", "--audio-format", "opus", "--audio-quality", "5",
+                  "-o", str(TEMP_DIR / f"{yt_id}.%(ext)s"),
+                  "--no-playlist",
+                  "--cookies", "/tmp/cookies.txt",
+                  "--retries", "2", "--socket-timeout", "30",
+                  f"https://www.youtube.com/watch?v={yt_id}"]
+              try:
+                  result = subprocess.run(cmd, capture_output=True, timeout=120, text=True)
+                  if debug or result.returncode != 0:
+                      log(f"yt-dlp exit={result.returncode} stderr={result.stderr[:200] if result.stderr else 'none'}")
+                  if not output.exists():
+                      webm = TEMP_DIR / f"{yt_id}.webm"
+                      if webm.exists():
+                          webm.rename(output)
+                  if output.exists():
+                      r2.upload_file(str(output), R2_BUCKET, f"128/{yt_id}.opus")
+                      output.unlink()
+                      return True
+              except Exception as e:
+                  log(f"Exception for {yt_id}: {e}")
+              return False
+
+          def main():
+              log(f"Starting: offset={OFFSET}, limit={LIMIT}")
+              tracks = get_tracks()
+              log(f"Got {len(tracks)} tracks from DB")
+
+              existing = get_existing()
+              log(f"Found {len(existing)} already on R2")
+
+              to_process = [t for t in tracks if t not in existing]
+              log(f"Need to process: {len(to_process)}")
+
+              if not to_process:
+                  log("Nothing to process!")
+                  return
+
+              uploaded = 0
+              failed = 0
+
+              for i, yt_id in enumerate(to_process):
+                  time.sleep(random.uniform(0.1, 0.3))
+                  if download_and_upload(yt_id, debug=(i < 3)):
+                      uploaded += 1
+                  else:
+                      failed += 1
+                  if (i + 1) % 25 == 0:
+                      log(f"Progress: {i+1}/{len(to_process)} | ✅ {uploaded} | ❌ {failed}")
+
+              log(f"DONE: ✅ {uploaded} | ❌ {failed}")
+
+          if __name__ == "__main__":
+              main()
+          SCRIPT
+
+      - name: Run worker
+        env:
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY: ${{ secrets.R2_ACCESS_KEY }}
+          R2_SECRET_KEY: ${{ secrets.R2_SECRET_KEY }}
+          OFFSET: ${{ inputs.start_offset }}
+          LIMIT: ${{ inputs.chunk_size }}
+          WORKER: ${{ matrix.worker }}
+        run: |
+          REAL_OFFSET=$(( ${{ inputs.start_offset }} + ${{ matrix.worker }} * ${{ inputs.chunk_size }} ))
+          OFFSET=$REAL_OFFSET python worker.py

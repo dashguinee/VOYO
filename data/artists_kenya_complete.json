@@ -1,0 +1,31 @@
+{
+  "country": "kenya",
+  "country_code": "KE",
+  "region": "east-africa",
+  "researched_at": "2024-12-31T15:25:00Z",
+  
+  "tier_a": {
+    "artists": [
+      {"name": "Sauti Sol", "notes": "International, MTV awards"},
+      {"name": "Nyashinski", "notes": "Legend returned"},
+      {"name": "Khaligraph Jones", "notes": "Rap king"}
+    ]
+  },
+  
+  "tier_b": {
+    "artists": [
+      "Otile Brown", "Nviiri the Storyteller", "Bien", "Bensoul",
+      "Nadia Mukami", "Willy Paul", "Bahati", "Femi One", "Karun",
+      "Tanasha Donna", "Mejja", "Benzema", "Wanavokali", "H_art the Band"
+    ]
+  },
+  
+  "tier_c": {
+    "artists": [
+      "Gengetone: Ethic", "Sailors", "Boondocks Gang", "Ochungulo Family",
+      "Masauti", "Arrow Bwoy", "King Kaka", "Nameless", "Wahu"
+    ]
+  },
+  
+  "summary": {"tier_a": 3, "tier_b": 14, "tier_c": 9, "total": 26}
+}

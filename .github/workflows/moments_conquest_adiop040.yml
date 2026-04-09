@@ -1,0 +1,280 @@
+name: Moments Conquest adiop040
+
+on:
+  workflow_dispatch:
+    inputs:
+      chunk_size:
+        description: 'Videos per worker'
+        default: '500'
+        type: string
+      start_offset:
+        description: 'Starting offset (worker 0)'
+        default: '0'
+        type: string
+
+jobs:
+  conquest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    strategy:
+      fail-fast: false
+      matrix:
+        worker: [0, 1, 2]
+    steps:
+      - name: Setup
+        run: |
+          OFFSET=$(( ${{ inputs.start_offset }} + ${{ matrix.worker }} * ${{ inputs.chunk_size }} ))
+          echo "Moments Conquest adiop040 Worker ${{ matrix.worker }}: offset=$OFFSET, limit=${{ inputs.chunk_size }}"
+          sudo apt-get update && sudo apt-get install -y ffmpeg
+          sudo curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp
+          sudo chmod a+rx /usr/local/bin/yt-dlp
+          pip install boto3 requests
+          echo "IyBOZXRzY2FwZSBIVFRQIENvb2tpZSBGaWxlCiMgaHR0cHM6Ly9jdXJsLmhheHguc2UvcmZjL2Nvb2tpZV9zcGVjLmh0bWwKIyBUaGlzIGlzIGEgZ2VuZXJhdGVkIGZpbGUhIERvIG5vdCBlZGl0LgoKLnlvdXR1YmUuY29tCVRSVUUJLwlUUlVFCTE3Njc0NjE5MDgJR1BTCTEKLnlvdXR1YmUuY29tCVRSVUUJLwlUUlVFCTE3OTg5OTYzNTEJX19TZWN1cmUtMVBTSURUUwlzaWR0cy1DalFCZmxhQ2RTUFhoTmFPVkFpRUliYVY1U2Q1VjgxOTBSQThnd0I3cHM1MFVXWjNvZnh3R2JaZW5SZ0FONXBjZlVRelM3dUdFQUEKLnlvdXR1YmUuY29tCVRSVUUJLwlUUlVFCTE3OTg5OTYzNTEJX19TZWN1cmUtM1BTSURUUwlzaWR0cy1DalFCZmxhQ2RTUFhoTmFPVkFpRUliYVY1U2Q1VjgxOTBSQThnd0I3cHM1MFVXWjNvZnh3R2JaZW5SZ0FONXBjZlVRelM3dUdFQUEKLnlvdXR1YmUuY29tCVRSVUUJLwlGQUxTRQkxODAyMDIwMzUxCUhTSUQJQWREMGQ2Q3drcHdaMkpGRmwKLnlvdXR1YmUuY29tCVRSVUUJLwlUUlVFCTE4MDIwMjAzNTEJU1NJRAlBVFBOYnBJOHF1ZFZLVXVwawoueW91dHViZS5jb20JVFJVRQkvCUZBTFNFCTE4MDIwMjAzNTEJQVBJU0lECVNBbmtZbV9oWWMxVGVNaHUvQU52dDhmYW0zdmdFTWJ0a08KLnlvdXR1YmUuY29tCVRSVUUJLwlUUlVFCTE4MDIwMjAzNTEJU0FQSVNJRAlQdzMtUTUzb0NYaEVKaWxmL0FzaEZGMjlTY0loWVN0WHRiCi55b3V0dWJlLmNvbQlUUlVFCS8JVFJVRQkxODAyMDIwMzUxCV9fU2VjdXJlLTFQQVBJU0lECVB3My1RNTNvQ1hoRUppbGYvQXNoRkYyOVNjSWhZU3RYdGIKLnlvdXR1YmUuY29tCVRSVUUJLwlUUlVFCTE4MDIwMjAzNTEJX19TZWN1cmUtM1BBUElTSUQJUHczLVE1M29DWGhFSmlsZi9Bc2hGRjI5U2NJaFlTdFh0YgoueW91dHViZS5jb20JVFJVRQkvCUZBTFNFCTE4MDIwMjAzNTEJU0lECWcuYTAwMDVRaEtsTklKdHZrcWJWaDBPVWN3Rlk5VXJXVVZjbElzUF9qNGwwMWZYdXdJU2ctRUluRmlhVXhGQWlqZFRpdDRrTVZUbGdBQ2dZS0FUSVNBUkVTRlFIR1gyTWlmWEYxazNqd0RTVWk0Q1RRUGYxcldob1ZBVUY4eUtxbFZSMFBYMThaa21ET2gxdWwxUU5RMDA3NgoueW91dHViZS5jb20JVFJVRQkvCVRSVUUJMTgwMjAyMDM1MQlfX1NlY3VyZS0xUFNJRAlnLmEwMDA1UWhLbE5JSnR2a3FiVmgwT1Vjd0ZZOVVyV1VWY2xJc1BfajRsMDFmWHV3SVNnLUVudE1aclJhVk5XOXdpOGFkTkVWT0dnQUNnWUtBVDhTQVJFU0ZRSEdYMk1pYk10ZnZDRzlncFkzR0lBYnNSdkI4eG9WQVVGOHlLcjRGNTI2TldPdzFIRTRtTFRHWmZqTTAwNzYKLnlvdXR1YmUuY29tCVRSVUUJLwlUUlVFCTE4MDIwMjAzNTEJX19TZWN1cmUtM1BTSUQJZy5hMDAwNVFoS2xOSUp0dmtxYlZoME9VY3dGWTlVcldVVmNsSXNQX2o0bDAxZlh1d0lTZy1FNEpZUnVqQ2E1ckZienMxbUljMkVqUUFDZ1lLQVJvU0FSRVNGUUhHWDJNaTR4WEd1LWtrYkJPR2I2OFBDVlJTUWhvVkFVRjh5S29leEVibTUwZm5aQ0pKa0RJSWlGV3AwMDc2" | base64 -d > /tmp/cookies.txt
+
+      - name: Create worker script
+        run: |
+          cat << 'SCRIPT' > worker.py
+          import os
+          import subprocess
+          import time
+          import random
+          from pathlib import Path
+          import boto3
+          from botocore.config import Config
+          import requests
+
+          SUPABASE_URL = "https://anmgyxhnyhbyxzpjhxgx.supabase.co"
+          SUPABASE_KEY = os.environ['SUPABASE_KEY']
+          R2_ACCOUNT_ID = os.environ['R2_ACCOUNT_ID']
+          R2_ACCESS_KEY = os.environ['R2_ACCESS_KEY']
+          R2_SECRET_KEY = os.environ['R2_SECRET_KEY']
+          R2_AUDIO_BUCKET = 'voyo-audio'
+          OFFSET = int(os.environ['OFFSET'])
+          LIMIT = int(os.environ['LIMIT'])
+          WORKER = os.environ['WORKER']
+
+          TEMP_DIR = Path("/tmp/feed-conquest")
+          TEMP_DIR.mkdir(exist_ok=True)
+
+          r2 = boto3.client('s3',
+              endpoint_url=f'https://{R2_ACCOUNT_ID}.r2.cloudflarestorage.com',
+              aws_access_key_id=R2_ACCESS_KEY,
+              aws_secret_access_key=R2_SECRET_KEY,
+              config=Config(retries={'max_attempts': 3}))
+
+          def log(msg):
+              print(f"[FeedConquest-adiop040-W{WORKER}] {msg}", flush=True)
+
+          def get_pending_videos():
+              """Get videos that need music matching"""
+              headers = {"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}"}
+              url = f"{SUPABASE_URL}/rest/v1/voyo_feed_content?needs_music_match=eq.true&track_id=is.null&select=video_id,music_artist,music_title,platform,creator&limit={LIMIT}&offset={OFFSET}"
+              resp = requests.get(url, headers=headers, timeout=60)
+              resp.raise_for_status()
+              return resp.json()
+
+          def get_existing_audio():
+              """Get list of audio already in R2"""
+              existing = set()
+              try:
+                  paginator = r2.get_paginator('list_objects_v2')
+                  for page in paginator.paginate(Bucket=R2_AUDIO_BUCKET, Prefix="128/"):
+                      for obj in page.get('Contents', []):
+                          key = obj['Key']
+                          if '/' in key:
+                              filename = key.split('/')[-1]
+                              if '.' in filename:
+                                  existing.add(filename.rsplit('.', 1)[0])
+              except Exception as e:
+                  log(f"Warning: Could not list R2: {e}")
+              return existing
+
+          def search_youtube(artist, title):
+              """Search YouTube for music"""
+              query = f"{artist} {title}".strip()
+              if not query or len(query) < 3:
+                  return None
+
+              # Clean query
+              query = ''.join(c for c in query if c.isalnum() or c.isspace() or c in '-_').strip()
+              if not query:
+                  return None
+
+              try:
+                  result = subprocess.run([
+                      'yt-dlp',
+                      f'ytsearch1:{query}',
+                      '--get-id',
+                      '--get-title',
+                      '--cookies', '/tmp/cookies.txt',
+                      '--no-warnings',
+                      '-q'
+                  ], capture_output=True, text=True, timeout=30)
+
+                  if result.returncode == 0 and result.stdout.strip():
+                      lines = result.stdout.strip().split('\n')
+                      if len(lines) >= 2:
+                          return {'title': lines[0], 'youtube_id': lines[1]}
+              except Exception as e:
+                  log(f"Search failed for '{query}': {e}")
+              return None
+
+          def download_audio(youtube_id):
+              """Download audio in OPUS format"""
+              output = TEMP_DIR / f"{youtube_id}.opus"
+              webm = TEMP_DIR / f"{youtube_id}.webm"
+
+              try:
+                  result = subprocess.run([
+                      'yt-dlp',
+                      f'https://www.youtube.com/watch?v={youtube_id}',
+                      '-x',
+                      '--audio-format', 'opus',
+                      '--audio-quality', '5',
+                      '-o', str(TEMP_DIR / f'{youtube_id}.%(ext)s'),
+                      '--no-playlist',
+                      '--cookies', '/tmp/cookies.txt',
+                      '--retries', '2',
+                      '--socket-timeout', '30'
+                  ], capture_output=True, text=True, timeout=120)
+
+                  # Handle webm fallback
+                  if not output.exists() and webm.exists():
+                      webm.rename(output)
+
+                  if output.exists():
+                      return str(output)
+              except Exception as e:
+                  log(f"Download failed for {youtube_id}: {e}")
+              return None
+
+          def upload_to_r2(local_path, key):
+              """Upload to R2"""
+              try:
+                  r2.upload_file(local_path, R2_AUDIO_BUCKET, key)
+                  return True
+              except Exception as e:
+                  log(f"R2 upload failed: {e}")
+                  return False
+
+          def update_video_track(video_id, track_id):
+              """Update video with matched track_id"""
+              headers = {
+                  "apikey": SUPABASE_KEY,
+                  "Authorization": f"Bearer {SUPABASE_KEY}",
+                  "Content-Type": "application/json"
+              }
+              data = {"track_id": track_id, "needs_music_match": False}
+              url = f"{SUPABASE_URL}/rest/v1/voyo_feed_content?video_id=eq.{video_id}"
+              resp = requests.patch(url, headers=headers, json=data, timeout=30)
+              return resp.status_code in [200, 204]
+
+          def insert_track(youtube_id, title, artist, platform):
+              """Insert new track to video_intelligence"""
+              headers = {
+                  "apikey": SUPABASE_KEY,
+                  "Authorization": f"Bearer {SUPABASE_KEY}",
+                  "Content-Type": "application/json",
+                  "Prefer": "resolution=merge-duplicates"
+              }
+              data = {
+                  "youtube_id": youtube_id,
+                  "title": title,
+                  "artist": artist,
+                  "thumbnail_url": f"https://i.ytimg.com/vi/{youtube_id}/hqdefault.jpg",
+                  "discovery_method": f"feed-conquest-{platform}",
+                  "artist_tier": "D",
+                  "canon_level": "ECHO",
+                  "is_echo": True
+              }
+              url = f"{SUPABASE_URL}/rest/v1/video_intelligence"
+              resp = requests.post(url, headers=headers, json=data, timeout=30)
+              return resp.status_code in [200, 201, 409]
+
+          def main():
+              log(f"Starting Moments Conquest - offset={OFFSET}, limit={LIMIT}")
+
+              videos = get_pending_videos()
+              log(f"Found {len(videos)} videos needing music match")
+
+              if not videos:
+                  log("No videos to process")
+                  return
+
+              existing_audio = get_existing_audio()
+              log(f"Found {len(existing_audio)} existing audio files in R2")
+
+              processed = 0
+              matched = 0
+              downloaded = 0
+
+              for video in videos:
+                  video_id = video['video_id']
+                  artist = video.get('music_artist') or video.get('creator') or ''
+                  title = video.get('music_title') or 'original sound'
+                  platform = video.get('platform', 'unknown')
+
+                  # Skip "original sound" only entries
+                  if title.lower() == 'original sound' and not artist:
+                      log(f"  Skip {video_id}: no music info")
+                      update_video_track(video_id, None)  # Mark as processed
+                      processed += 1
+                      continue
+
+                  # Search YouTube
+                  yt = search_youtube(artist, title)
+                  if not yt:
+                      log(f"  Skip {video_id}: no YouTube match for '{artist} - {title}'")
+                      processed += 1
+                      continue
+
+                  youtube_id = yt['youtube_id']
+                  yt_title = yt['title']
+
+                  # Check if audio exists
+                  if youtube_id not in existing_audio:
+                      audio_path = download_audio(youtube_id)
+                      if audio_path:
+                          r2_key = f"128/{youtube_id}.opus"
+                          if upload_to_r2(audio_path, r2_key):
+                              downloaded += 1
+                              existing_audio.add(youtube_id)
+                              log(f"  ✓ Downloaded: {youtube_id} | {yt_title[:50]}")
+                          # Cleanup
+                          try: os.unlink(audio_path)
+                          except: pass
+                      else:
+                          log(f"  ✗ Download failed: {youtube_id}")
+
+                  # Insert track to video_intelligence
+                  insert_track(youtube_id, yt_title, artist, platform)
+
+                  # Link video to track
+                  update_video_track(video_id, youtube_id)
+                  matched += 1
+                  processed += 1
+
+                  # Rate limit
+                  time.sleep(random.uniform(0.5, 1.5))
+
+                  if processed % 50 == 0:
+                      log(f"Progress: {processed}/{len(videos)} | Matched: {matched} | Downloaded: {downloaded}")
+
+              log(f"Complete: {processed} processed, {matched} matched, {downloaded} new downloads")
+
+          if __name__ == "__main__":
+              main()
+          SCRIPT
+
+      - name: Run worker
+        env:
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY: ${{ secrets.R2_ACCESS_KEY }}
+          R2_SECRET_KEY: ${{ secrets.R2_SECRET_KEY }}
+          OFFSET: ${{ inputs.start_offset }}
+          LIMIT: ${{ inputs.chunk_size }}
+          WORKER: ${{ matrix.worker }}
+        run: |
+          REAL_OFFSET=$(( ${{ inputs.start_offset }} + ${{ matrix.worker }} * ${{ inputs.chunk_size }} ))
+          OFFSET=$REAL_OFFSET python worker.py

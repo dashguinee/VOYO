@@ -1,0 +1,113 @@
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                  VOYO MUSIC - PLAYBACK CONTROLS SUMMARY                      ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ FEATURE 1: SHUFFLE MODE (with ROULETTE animation)                           │
+├──────────────────────────────────────────────────────────────────────────────┤
+│ • Toggle: Click shuffle button                                              │
+│ • Animation: 360° spin + scale effect (0.6s)                                │
+│ • Active State: Purple glow (#a855f7)                                       │
+│ • Behavior: Picks random track from discover/hot/all tracks                 │
+│ • Visual: White icon with drop-shadow when active                           │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ FEATURE 2: REPEAT MODE (3 states)                                           │
+├──────────────────────────────────────────────────────────────────────────────┤
+│ • OFF:  No repeat (default)                                                 │
+│         Icon: Repeat, Color: Gray                                           │
+│                                                                              │
+│ • ALL:  Repeat entire queue/history                                         │
+│         Icon: Repeat, Color: Purple + glow                                  │
+│         Behavior: Restart from first track when queue empty                 │
+│                                                                              │
+│ • ONE:  Repeat current track                                                │
+│         Icon: Repeat1, Color: Purple + glow                                 │
+│         Behavior: Replay same track continuously                            │
+│                                                                              │
+│ • Cycle: Click to go: OFF → ALL → ONE → OFF                                │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ FEATURE 3: VOLUME CONTROL                                                   │
+├──────────────────────────────────────────────────────────────────────────────┤
+│ • Slider: 80px wide, 4px tall horizontal bar                                │
+│ • Fill: Purple gradient (0-100%)                                            │
+│ • Interaction: Click anywhere to jump to position                           │
+│ • Mute: Click volume icon to toggle mute/unmute                             │
+│ • Icon: Volume2 (normal) or VolumeX (muted)                                 │
+│ • Display: Shows percentage in non-compact mode                             │
+│ • Hover: Reveals slider in compact mode                                     │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ COMPONENT PROPS                                                              │
+├──────────────────────────────────────────────────────────────────────────────┤
+│ interface PlaybackControlsProps {                                           │
+│   className?: string;    // Additional CSS classes                          │
+│   compact?: boolean;     // true = icons only, false = icons + labels       │
+│ }                                                                            │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ USAGE EXAMPLES                                                               │
+├──────────────────────────────────────────────────────────────────────────────┤
+│ // Full controls with labels                                                │
+│ <PlaybackControls />                                                        │
+│                                                                              │
+│ // Compact mode (icons only)                                                │
+│ <PlaybackControls compact />                                                │
+│                                                                              │
+│ // Custom styling                                                           │
+│ <PlaybackControls className="justify-center" />                            │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ FILES CREATED/MODIFIED                                                       │
+├──────────────────────────────────────────────────────────────────────────────┤
+│ ✓ src/store/playerStore.ts                   (Modified - added state)      │
+│ ✓ src/components/player/PlaybackControls.tsx (New component)               │
+│ ✓ src/components/player/index.ts             (Export file)                 │
+│ ✓ src/components/player/PlaybackControls.example.tsx (Usage examples)      │
+│ ✓ PLAYBACK_CONTROLS.md                       (Documentation)               │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ STORE STATE ADDITIONS                                                        │
+├──────────────────────────────────────────────────────────────────────────────┤
+│ shuffleMode: boolean                                                        │
+│ repeatMode: 'off' | 'all' | 'one'                                           │
+│                                                                              │
+│ toggleShuffle: () => void                                                   │
+│ cycleRepeat: () => void                                                     │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ MODIFIED LOGIC: nextTrack()                                                  │
+├──────────────────────────────────────────────────────────────────────────────┤
+│ 1. Check repeatMode === 'one' → Restart current track                       │
+│ 2. Check queue → Play next in queue                                         │
+│ 3. Check repeatMode === 'all' → Restart from first in history               │
+│ 4. Check shuffleMode → Pick random track (ROULETTE)                         │
+│ 5. Else → Pick from discover/hot tracks                                     │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ BUILD STATUS                                                                 │
+├──────────────────────────────────────────────────────────────────────────────┤
+│ ✓ TypeScript compilation: PASSED                                            │
+│ ✓ Vite build: SUCCESS (427.87 kB)                                           │
+│ ✓ All imports: VALID                                                        │
+│ ✓ No errors or warnings                                                     │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                          VOYO TWIST: ROULETTE MODE                           ║
+╠══════════════════════════════════════════════════════════════════════════════╣
+║ When shuffle is activated, the button performs a smooth 360° rotation       ║
+║ with a scale effect, creating a "spinning roulette" feel. This gives the    ║
+║ user visual feedback that the system is "rolling the dice" to pick the      ║
+║ next track. It's playful, premium, and matches VOYO's energetic vibe!       ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+

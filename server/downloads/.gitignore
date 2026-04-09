@@ -1,0 +1,5 @@
+# Ignore all downloaded audio files
+*.mp3
+*.m4a
+*.webm
+*.opus

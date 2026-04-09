@@ -1,0 +1,64 @@
+{
+  "country": "ghana",
+  "country_code": "GH",
+  "region": "west-africa", 
+  "researched_at": "2024-12-31T15:10:00Z",
+  "sources": ["training_data", "viberate.com"],
+  
+  "tier_a": {
+    "description": "International recognition, 100M+ views",
+    "artists": [
+      {"name": "Black Sherif", "notes": "Kwaku the Traveller global hit"},
+      {"name": "Sarkodie", "notes": "Rap legend, BET winner"},
+      {"name": "Stonebwoy", "notes": "Reggae/Dancehall king"},
+      {"name": "Shatta Wale", "notes": "Dancehall, Beyonce collab"},
+      {"name": "King Promise", "notes": "Afrobeats star"},
+      {"name": "KiDi", "notes": "Touch It viral"},
+      {"name": "Kuami Eugene", "notes": "Rockstar, highlife modern"},
+      {"name": "R2Bees", "notes": "Legendary duo"},
+      {"name": "Gyakie", "notes": "Forever, international"},
+      {"name": "Camidoh", "notes": "Sugarcane viral"}
+    ]
+  },
+  
+  "tier_b": {
+    "description": "National stars, 10M-100M views",
+    "artists": [
+      "Medikal", "Kwesi Arthur", "Efya", "Bisa Kdei", "Kofi Kinaata",
+      "Darkovibes", "Joey B", "Kelvyn Boy", "Wendy Shay", "Sista Afia",
+      "Amerado", "Mr Drew", "Fameye", "Strongman", "Yaw Tog",
+      "Kwame Eugene", "Samini", "Okyeame Kwame", "Edem", "M.anทอง",
+      "Manifest", "Obrafour", "Reggie Rockstone", "Lord Kenya", "Tic Tac"
+    ]
+  },
+  
+  "tier_c": {
+    "description": "Regional/Emerging",
+    "artists": [
+      "Black Sheriff", "Lasmid", "Olivetheboy", "Chief One", "Jay Bahd",
+      "O'Kenneth", "Kawabanga", "Asakaa Boys", "City Boy", "Sean Lifer",
+      "Xlimkid", "Oseikrom Sikanii", "Kofi Jamar", "DopeNation", "Keche"
+    ]
+  },
+  
+  "tier_c_gospel": {
+    "artists": [
+      "Joe Mettle", "Diana Hamilton", "Ceccy Twum", "Ohemaa Mercy",
+      "Nacee", "MOG Music", "Empress Gifty", "Bethel Revival Choir"
+    ]
+  },
+  
+  "tier_c_highlife_legends": {
+    "artists": [
+      "Amakye Dede", "Kojo Antwi", "Daddy Lumba", "Nana Ampadu",
+      "A.B. Crentsil", "Pat Thomas", "Gyedu-Blay Ambolley"
+    ]
+  },
+  
+  "summary": {
+    "tier_a": 10,
+    "tier_b": 25,
+    "tier_c": 30,
+    "total": 65
+  }
+}

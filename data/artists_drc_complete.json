@@ -1,0 +1,44 @@
+{
+  "country": "drc",
+  "country_code": "CD",
+  "region": "central-africa",
+  "researched_at": "2024-12-31T15:30:00Z",
+  "notes": "Rumba and Ndombolo powerhouse",
+  
+  "tier_a": {
+    "artists": [
+      {"name": "Fally Ipupa", "notes": "Biggest Congolese artist alive"},
+      {"name": "Koffi Olomide", "notes": "Quadra Kora legend"},
+      {"name": "Innoss'B", "notes": "Yope viral, new gen"},
+      {"name": "Gims", "notes": "France-based, massive globally"},
+      {"name": "Dadju", "notes": "Gims' brother, huge in francophone"},
+      {"name": "Ferre Gola", "notes": "Rumba king"}
+    ]
+  },
+  
+  "tier_a_legends": {
+    "artists": [
+      {"name": "Papa Wemba", "notes": "King of Rumba, RIP"},
+      {"name": "Franco", "notes": "Founder OK Jazz"},
+      {"name": "Tabu Ley Rochereau", "notes": "Legend"},
+      {"name": "Pepe Kalle", "notes": "Giant of Rumba"}
+    ]
+  },
+  
+  "tier_b": {
+    "artists": [
+      "Héritier Watanabe", "Werrason", "JB Mpiana", "Gaz Mawete",
+      "Aya Nakamura", "Extra Musica", "Zaiko Langa Langa", "Awilo Longomba",
+      "Kanda Bongo Man", "Lokua Kanza", "Mbilia Bel", "Tshala Muana"
+    ]
+  },
+  
+  "tier_c": {
+    "artists": [
+      "Roga Roga", "Ferre Gola", "Bill Clinton Kalonji", "Deplick Pomba",
+      "Mohombi", "Youssoupha", "Vegedream", "Ninho", "Damso"
+    ]
+  },
+  
+  "summary": {"tier_a": 10, "tier_b": 12, "tier_c": 9, "total": 31}
+}

@@ -1,0 +1,33 @@
+{
+  "country": "tanzania",
+  "country_code": "TZ",
+  "region": "east-africa",
+  "researched_at": "2024-12-31T15:20:00Z",
+  
+  "tier_a": {
+    "artists": [
+      {"name": "Diamond Platnumz", "notes": "Biggest in East Africa, billions views"},
+      {"name": "Harmonize", "notes": "Former WCB, massive"},
+      {"name": "Rayvanny", "notes": "WCB star"},
+      {"name": "Zuchu", "notes": "WCB queen"},
+      {"name": "Ali Kiba", "notes": "Legend, rival to Diamond"}
+    ]
+  },
+  
+  "tier_b": {
+    "artists": [
+      "Nandy", "Mbosso", "Lava Lava", "Marioo", "Darassa", "Jux",
+      "Navy Kenzo", "Vanessa Mdee", "Barnaba", "Rich Mavoko", "Alikiba",
+      "Aslay", "Ben Pol", "Mwana FA", "Professor Jay", "Lady Jaydee"
+    ]
+  },
+  
+  "tier_c": {
+    "artists": [
+      "Tommy Flavour", "Kusah", "Ibraah", "Billnass", "Country Wizzy",
+      "Stamina", "Roma", "Juma Nature", "Mr Blue", "Dully Sykes"
+    ]
+  },
+  
+  "summary": {"tier_a": 5, "tier_b": 16, "tier_c": 10, "total": 31}
+}

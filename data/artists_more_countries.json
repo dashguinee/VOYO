@@ -1,0 +1,37 @@
+{
+  "countries": {
+    "mali": {
+      "tier_a": ["Salif Keita", "Amadou & Mariam", "Toumani Diabaté", "Ali Farka Touré", "Oumou Sangaré"],
+      "tier_b": ["Rokia Traoré", "Fatoumata Diawara", "Tinariwen", "Habib Koité", "Bassekou Kouyaté"]
+    },
+    "angola": {
+      "tier_a": ["Anselmo Ralph", "C4 Pedro", "Matias Damásio", "Yola Semedo"],
+      "tier_b": ["Nelson Freitas", "Kaysha", "Calema", "Badoxa", "Yuri da Cunha"]
+    },
+    "zimbabwe": {
+      "tier_a": ["Oliver Mtukudzi", "Thomas Mapfumo"],
+      "tier_b": ["Winky D", "Jah Prayzah", "Ammara Brown", "Takura", "ExQ"]
+    },
+    "uganda": {
+      "tier_a": ["Eddy Kenzo", "Bobi Wine"],
+      "tier_b": ["Bebe Cool", "Jose Chameleone", "Sheebah", "Spice Diana", "Fik Fameica"]
+    },
+    "ethiopia": {
+      "tier_a": ["Teddy Afro", "Mulatu Astatke", "Gigi"],
+      "tier_b": ["Aster Aweke", "Mahmoud Ahmed", "Tilahun Gessesse", "Hamelmal Abate"]
+    },
+    "morocco": {
+      "tier_a": ["Saad Lamjarred", "Hatim Ammor", "Ahmed Chawki"],
+      "tier_b": ["Douzi", "Fnaire", "Nass El Ghiwane", "Oum", "Hindi Zahra"]
+    }
+  },
+  "summary": {
+    "mali": 10,
+    "angola": 9,
+    "zimbabwe": 7,
+    "uganda": 7,
+    "ethiopia": 7,
+    "morocco": 8,
+    "total": 48
+  }
+}

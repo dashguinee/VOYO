@@ -1,0 +1,108 @@
+{
+  "country": "nigeria",
+  "country_code": "NG", 
+  "region": "west-africa",
+  "researched_at": "2024-12-31T15:00:00Z",
+  "sources": ["voyo_api", "viberate.com", "training_data", "billboard"],
+  "note": "Nigeria is the largest African music market. View counts are astronomical.",
+  
+  "tier_a_global": {
+    "description": "Global icons - billions of views, Grammy nominations, global tours",
+    "artists": [
+      {"name": "Rema", "views_estimate": "2B+", "notes": "Calm Down global #1"},
+      {"name": "Burna Boy", "views_estimate": "1.5B+", "notes": "Grammy winner"},
+      {"name": "Davido", "views_estimate": "1B+", "notes": "Fall, If global hits"},
+      {"name": "Wizkid", "views_estimate": "600M+", "notes": "Grammy, Essence"},
+      {"name": "Asake", "views_estimate": "450M+", "notes": "BNXN collab king"},
+      {"name": "Tems", "views_estimate": "400M+", "notes": "Grammy winner, Beyonce collab"},
+      {"name": "CKay", "views_estimate": "500M+", "notes": "Love Nwantiti viral"},
+      {"name": "Ayra Starr", "views_estimate": "300M+", "notes": "Rush, Sability"},
+      {"name": "Fela Kuti", "views_estimate": "100M+", "notes": "Legend, founder of Afrobeat"}
+    ]
+  },
+  
+  "tier_a_continental": {
+    "description": "Continental stars - 100M+ views, pan-African recognition",
+    "artists": [
+      {"name": "Kizz Daniel", "views_estimate": "400M+"},
+      {"name": "Omah Lay", "views_estimate": "300M+"},
+      {"name": "Fireboy DML", "views_estimate": "250M+"},
+      {"name": "Olamide", "views_estimate": "300M+"},
+      {"name": "Ruger", "views_estimate": "200M+"},
+      {"name": "Tiwa Savage", "views_estimate": "200M+"},
+      {"name": "Yemi Alade", "views_estimate": "300M+"},
+      {"name": "Patoranking", "views_estimate": "150M+"},
+      {"name": "Mr Eazi", "views_estimate": "150M+"},
+      {"name": "P-Square", "views_estimate": "500M+"},
+      {"name": "D'banj", "views_estimate": "200M+"},
+      {"name": "2Baba", "views_estimate": "150M+"},
+      {"name": "Flavour", "views_estimate": "200M+"},
+      {"name": "Tekno", "views_estimate": "200M+"},
+      {"name": "Joeboy", "views_estimate": "150M+"},
+      {"name": "BNXN", "views_estimate": "150M+"},
+      {"name": "Victony", "views_estimate": "100M+"},
+      {"name": "Pheelz", "views_estimate": "100M+"},
+      {"name": "Lojay", "views_estimate": "100M+"}
+    ]
+  },
+  
+  "tier_b_national": {
+    "description": "National stars - 10M-100M views, strong local following",
+    "artists": [
+      "Adekunle Gold", "Simi", "Wande Coal", "Phyno", "Zlatan",
+      "Bella Shmurda", "Seyi Vibez", "Zinoleesky", "Oxlade", "Blaqbonez",
+      "Mayorkun", "Falz", "Naira Marley", "Runtown", "Reekado Banks",
+      "Skiibii", "Timaya", "Iyanya", "Korede Bello", "Crayon", "Fave",
+      "Ice Prince", "Lil Kesh", "Small Doctor", "Teni", "Johnny Drille",
+      "Chike", "Ladipoe", "1da Banton", "Spyro", "T.I Blaze", "Portable",
+      "MohBad", "Barry Jhay", "Peruzzi", "Victor AD", "Niniola", "Bad Boy Timz"
+    ]
+  },
+  
+  "tier_b_gospel": {
+    "description": "Gospel giants - massive in church/religious market",
+    "artists": [
+      "Nathaniel Bassey", "Mercy Chinwo", "Moses Bliss", "Sinach",
+      "Dunsin Oyekan", "Tim Godfrey", "Frank Edwards", "Tope Alabi",
+      "Ada Ehi", "Minister GUC", "Prospa Ochimana", "Ebuka Songs"
+    ]
+  },
+  
+  "tier_b_alte": {
+    "description": "Alté scene - alternative/experimental Nigerian music",
+    "artists": [
+      "Sarz", "Odunsi", "Lady Donli", "Tay Iwar", "Cruel Santino",
+      "Psycho YP", "Boj", "Prettyboy D-O", "Show Dem Camp"
+    ]
+  },
+  
+  "tier_c_regional": {
+    "description": "Regional stars, emerging talent",
+    "artists": [
+      "Zoro", "CDQ", "Reminisce", "9ice", "Vector", "M.I Abaga",
+      "Harrysong", "Oritse Femi", "Duncan Mighty", "Qdot", "Erigga",
+      "Cheque", "Hotkid", "Ycee", "Dice Ailes", "L.A.X", "Dremo"
+    ]
+  },
+  
+  "tier_c_hausa": {
+    "description": "Hausa/Northern Nigerian artists",
+    "artists": [
+      "Nura M Inuwa", "Umar M Shareef", "Dj AB", "Ali Jita", "Nazir M Ahmad",
+      "Auta Mg Boy", "Hamisu Breaker", "Ado Gwanja", "Momee Gombe",
+      "Salim Smart", "Sadiq Saleh", "Garzali Miko", "Abdul D One"
+    ]
+  },
+  
+  "summary": {
+    "tier_a_global": 9,
+    "tier_a_continental": 19,
+    "tier_b_national": 38,
+    "tier_b_gospel": 12,
+    "tier_b_alte": 9,
+    "tier_c_regional": 17,
+    "tier_c_hausa": 13,
+    "total_classified": 117,
+    "note": "300+ more artists on viberate.com list - most are Tier C/D"
+  }
+}

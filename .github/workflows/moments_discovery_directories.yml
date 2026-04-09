@@ -1,0 +1,221 @@
+name: Moments Discovery Directories
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 3,15 * * *'  # Twice daily
+
+jobs:
+  directory-discovery:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: Setup
+        run: |
+          pip install requests beautifulsoup4 duckduckgo-search
+
+      - name: Run directory discovery
+        env:
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+        run: |
+          cat << 'SCRIPT' > directory_discover.py
+          import os, json, time, random, re, requests
+          from bs4 import BeautifulSoup
+          from duckduckgo_search import DDGS
+
+          SUPABASE_URL = "https://anmgyxhnyhbyxzpjhxgx.supabase.co"
+          SUPABASE_KEY = os.environ['SUPABASE_KEY']
+
+          # Directory-focused queries - looking for lists and compilations
+          DIRECTORY_QUERIES = [
+              # Top lists
+              "site:okayafrica.com dancers Instagram",
+              "site:bellanaija.com dancers follow",
+              "top 50 African dancers Instagram list",
+              "top 100 Afrobeats influencers 2026",
+              "best African TikTok dancers ranked",
+              "100 Nigerian influencers to follow",
+
+              # Country-specific directories
+              "Nigeria top dancers Instagram directory",
+              "South Africa Amapiano dancers list",
+              "Ghana dancers Instagram accounts",
+              "Kenya dance influencers list",
+              "Tanzania Bongo dancers TikTok",
+              "Ivory Coast coupe decale dancers",
+              "Senegal mbalax dancers Instagram",
+              "Uganda Afrobeat dancers",
+              "Cameroon makossa dancers",
+              "Congo ndombolo dancers Instagram",
+
+              # Platform-specific
+              "African Instagram dancers directory 2026",
+              "TikTok African dance creators list",
+              "YouTube African dance channels list",
+              "African dance influencer database",
+
+              # Genre-specific
+              "Amapiano dance challenge creators list",
+              "Afrobeats choreographers directory",
+              "Azonto dance influencers Ghana",
+              "Gengetone dancers Kenya list",
+              "Kizomba dancers Instagram Angola",
+              "Kuduro dancers Angola list",
+
+              # Viral/trending
+              "viral African dancers 2026 list",
+              "trending Afrobeats dancers TikTok",
+              "most followed African dancers Instagram",
+              "African dance influencers million followers",
+
+              # Industry lists
+              "music video dancers Africa list",
+              "Afrobeats backup dancers Instagram",
+              "African choreographers directory",
+              "dance crews Africa Instagram"
+          ]
+
+          # Known directory sites to scrape deeply
+          DIRECTORY_SITES = [
+              "https://www.okayafrica.com/the-top-25-african-dancers-to-follow-on-instagram/",
+              "https://www.bellanaija.com/tag/dance/",
+              "https://notjustok.com/tag/dance/",
+              "https://www.pulse.ng/entertainment/celebrities/",
+              "https://theculturecustodian.com/category/dance/",
+          ]
+
+          def log(msg): print(f"[DirectoryDiscovery] {msg}", flush=True)
+
+          def extract_usernames(text):
+              patterns = [
+                  r'@([a-zA-Z0-9_\.]{3,30})',
+                  r'instagram\.com/([a-zA-Z0-9_\.]{3,30})',
+                  r'tiktok\.com/@([a-zA-Z0-9_\.]{3,30})',
+                  r'twitter\.com/([a-zA-Z0-9_]{3,30})',
+              ]
+              usernames = set()
+              blacklist = ['instagram', 'tiktok', 'twitter', 'facebook', 'youtube',
+                          'gmail', 'email', 'http', 'https', 'www', 'com', 'org',
+                          'share', 'search', 'login', 'signup', 'about', 'contact',
+                          'privacy', 'terms', 'help', 'support', 'settings']
+
+              for pattern in patterns:
+                  matches = re.findall(pattern, text, re.IGNORECASE)
+                  for m in matches:
+                      m_clean = m.lower().strip('.')
+                      if m_clean not in blacklist and len(m_clean) > 2:
+                          if not any(m_clean.startswith(b) for b in ['http', 'www']):
+                              usernames.add(m_clean)
+              return list(usernames)
+
+          def search_directories(query, max_results=15):
+              try:
+                  with DDGS() as ddgs:
+                      results = list(ddgs.text(query, max_results=max_results))
+                      return [r['href'] for r in results if 'href' in r]
+              except Exception as e:
+                  log(f"Search error: {e}")
+                  return []
+
+          def fetch_and_extract(url):
+              try:
+                  headers = {
+                      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                  }
+                  resp = requests.get(url, headers=headers, timeout=20, allow_redirects=True)
+                  if resp.status_code == 200:
+                      soup = BeautifulSoup(resp.text, 'html.parser')
+
+                      # Remove script and style elements
+                      for script in soup(["script", "style", "nav", "footer", "header"]):
+                          script.decompose()
+
+                      text = soup.get_text(separator=' ')
+
+                      # Also capture all links
+                      for a in soup.find_all('a', href=True):
+                          text += ' ' + a['href']
+
+                      return text
+              except Exception as e:
+                  log(f"Fetch error: {e}")
+              return ""
+
+          def insert_creator(username, platform='instagram', source='directory'):
+              headers = {
+                  "apikey": SUPABASE_KEY,
+                  "Authorization": f"Bearer {SUPABASE_KEY}",
+                  "Content-Type": "application/json",
+                  "Prefer": "resolution=merge-duplicates"
+              }
+              data = {
+                  "platform": platform,
+                  "username": username,
+                  "content_type": "dance",
+                  "status": "pending",
+                  "discovered_by": source[:50]
+              }
+              try:
+                  resp = requests.post(f"{SUPABASE_URL}/rest/v1/voyo_pending_creators",
+                                      headers=headers, json=data, timeout=30)
+                  return resp.status_code in [200, 201, 409]
+              except:
+                  return False
+
+          def process_url(url, source):
+              text = fetch_and_extract(url)
+              usernames = extract_usernames(text)
+              inserted = 0
+
+              for username in usernames:
+                  platform = 'tiktok' if 'tiktok' in url.lower() or 'tiktok' in text.lower()[:500] else 'instagram'
+                  if insert_creator(username, platform, source):
+                      inserted += 1
+
+              return len(usernames), inserted
+
+          def main():
+              log("Starting Directory-Based Discovery")
+              total_found = 0
+              total_inserted = 0
+
+              # First, scrape known directory sites
+              log("=== PHASE 1: Known Directories ===")
+              for url in DIRECTORY_SITES:
+                  log(f"Scraping: {url[:50]}...")
+                  found, inserted = process_url(url, "known-directory")
+                  log(f"  Found {found}, Inserted {inserted}")
+                  total_found += found
+                  total_inserted += inserted
+                  time.sleep(random.uniform(2, 4))
+
+              # Second, search for more directories
+              log("=== PHASE 2: Search Discovery ===")
+              for query in DIRECTORY_QUERIES:
+                  log(f"Searching: {query[:40]}...")
+                  urls = search_directories(query, max_results=10)
+                  log(f"  Found {len(urls)} URLs")
+
+                  for url in urls:
+                      # Skip direct social media links
+                      if any(x in url for x in ['instagram.com/p/', 'tiktok.com/@', 'twitter.com/status']):
+                          continue
+
+                      # Prioritize article/list pages
+                      if any(x in url.lower() for x in ['top', 'best', 'list', 'directory', 'influencer', 'dancer', 'follow']):
+                          log(f"  Processing: {url[:50]}...")
+                          found, inserted = process_url(url, query[:30])
+                          log(f"    Found {found}, Inserted {inserted}")
+                          total_found += found
+                          total_inserted += inserted
+                          time.sleep(random.uniform(1, 3))
+
+                  time.sleep(random.uniform(3, 6))
+
+              log(f"COMPLETE: Total Found {total_found}, Total Inserted {total_inserted}")
+
+          if __name__ == "__main__":
+              main()
+          SCRIPT
+          python directory_discover.py

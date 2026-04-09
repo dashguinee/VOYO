@@ -1,0 +1,12 @@
+name = "voyo-edge"
+main = "index.js"
+compatibility_date = "2024-01-01"
+
+[vars]
+ENVIRONMENT = "production"
+SUPABASE_URL = "https://anmgyxhnyhbyxzpjhxgx.supabase.co"
+
+# R2 Bucket Binding - 342K audio files
+[[r2_buckets]]
+binding = "VOYO_AUDIO"
+bucket_name = "voyo-audio"

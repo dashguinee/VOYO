@@ -1,0 +1,3916 @@
+{
+  "version": "1.0",
+  "total_artists": 110,
+  "total_with_aliases": 130,
+  "tier_breakdown": {
+    "A": 64,
+    "B": 46
+  },
+  "artists": {
+    "burna boy": {
+      "canonical_name": "Burna Boy",
+      "normalized_name": "burna boy",
+      "tier": "A",
+      "country": "NG",
+      "region": "west-africa",
+      "primary_genre": "afrobeats",
+      "era_active": [
+        "2010s",
+        "2020s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 85,
+        "chill": 35,
+        "party": 75,
+        "workout": 70,
+        "late_night": 45
+      },
+      "cultural_significance": {
+        "historical": 3,
+        "social": 3,
+        "diasporic": 3,
+        "preservational": 2
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "influential",
+        "production"
+      ]
+    },
+    "wizkid": {
+      "canonical_name": "Wizkid",
+      "normalized_name": "wizkid",
+      "tier": "A",
+      "country": "NG",
+      "region": "west-africa",
+      "primary_genre": "afrobeats",
+      "era_active": [
+        "2010s",
+        "2020s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 85,
+        "chill": 35,
+        "party": 75,
+        "workout": 70,
+        "late_night": 45
+      },
+      "cultural_significance": {
+        "historical": 3,
+        "social": 3,
+        "diasporic": 3,
+        "preservational": 2
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "influential",
+        "production"
+      ]
+    },
+    "davido": {
+      "canonical_name": "Davido",
+      "normalized_name": "davido",
+      "tier": "A",
+      "country": "NG",
+      "region": "west-africa",
+      "primary_genre": "afropop",
+      "era_active": [
+        "2010s",
+        "2020s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 80,
+        "chill": 45,
+        "party": 70,
+        "workout": 60,
+        "late_night": 50
+      },
+      "cultural_significance": {
+        "historical": 3,
+        "social": 3,
+        "diasporic": 3,
+        "preservational": 2
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "influential",
+        "production"
+      ]
+    },
+    "rema": {
+      "canonical_name": "Rema",
+      "normalized_name": "rema",
+      "tier": "A",
+      "country": "NG",
+      "region": "west-africa",
+      "primary_genre": "afrobeats",
+      "era_active": [
+        "2020s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 85,
+        "chill": 35,
+        "party": 75,
+        "workout": 70,
+        "late_night": 45
+      },
+      "cultural_significance": {
+        "historical": 3,
+        "social": 3,
+        "diasporic": 3,
+        "preservational": 2
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "influential",
+        "production"
+      ]
+    },
+    "asake": {
+      "canonical_name": "Asake",
+      "normalized_name": "asake",
+      "tier": "A",
+      "country": "NG",
+      "region": "west-africa",
+      "primary_genre": "amapiano",
+      "era_active": [
+        "2020s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 70,
+        "chill": 50,
+        "party": 90,
+        "workout": 60,
+        "late_night": 80
+      },
+      "cultural_significance": {
+        "historical": 3,
+        "social": 3,
+        "diasporic": 3,
+        "preservational": 2
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "influential",
+        "production"
+      ]
+    },
+    "tems": {
+      "canonical_name": "Tems",
+      "normalized_name": "tems",
+      "tier": "A",
+      "country": "NG",
+      "region": "west-africa",
+      "primary_genre": "afro-soul",
+      "era_active": [
+        "2020s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 40,
+        "chill": 85,
+        "party": 30,
+        "workout": 20,
+        "late_night": 75
+      },
+      "cultural_significance": {
+        "historical": 3,
+        "social": 3,
+        "diasporic": 3,
+        "preservational": 2
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "influential",
+        "production"
+      ]
+    },
+    "ckay": {
+      "canonical_name": "Ckay",
+      "normalized_name": "ckay",
+      "tier": "A",
+      "country": "NG",
+      "region": "west-africa",
+      "primary_genre": "afropop",
+      "era_active": [
+        "2020s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 80,
+        "chill": 45,
+        "party": 70,
+        "workout": 60,
+        "late_night": 50
+      },
+      "cultural_significance": {
+        "historical": 3,
+        "social": 3,
+        "diasporic": 3,
+        "preservational": 2
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "influential",
+        "production"
+      ]
+    },
+    "ayra starr": {
+      "canonical_name": "Ayra Starr",
+      "normalized_name": "ayra starr",
+      "tier": "A",
+      "country": "NG",
+      "region": "west-africa",
+      "primary_genre": "afropop",
+      "era_active": [
+        "2020s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 80,
+        "chill": 45,
+        "party": 70,
+        "workout": 60,
+        "late_night": 50
+      },
+      "cultural_significance": {
+        "historical": 3,
+        "social": 3,
+        "diasporic": 3,
+        "preservational": 2
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "influential",
+        "production"
+      ]
+    },
+    "fela kuti": {
+      "canonical_name": "Fela Kuti",
+      "normalized_name": "fela kuti",
+      "tier": "A",
+      "country": "NG",
+      "region": "west-africa",
+      "primary_genre": "afrobeats",
+      "era_active": [
+        "1970s",
+        "1980s",
+        "1990s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 85,
+        "chill": 35,
+        "party": 75,
+        "workout": 70,
+        "late_night": 45
+      },
+      "cultural_significance": {
+        "historical": 5,
+        "social": 5,
+        "diasporic": 5,
+        "preservational": 5
+      },
+      "default_cultural_tags": [
+        "revolution",
+        "protest",
+        "liberation",
+        "pan-african"
+      ],
+      "default_aesthetic_tags": [
+        "influential",
+        "production"
+      ]
+    },
+    "kizz daniel": {
+      "canonical_name": "Kizz Daniel",
+      "normalized_name": "kizz daniel",
+      "tier": "A",
+      "country": "NG",
+      "region": "west-africa",
+      "primary_genre": "afrobeats",
+      "era_active": [
+        "2010s",
+        "2020s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 85,
+        "chill": 35,
+        "party": 75,
+        "workout": 70,
+        "late_night": 45
+      },
+      "cultural_significance": {
+        "historical": 3,
+        "social": 3,
+        "diasporic": 3,
+        "preservational": 2
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "influential",
+        "production"
+      ]
+    },
+    "omah lay": {
+      "canonical_name": "Omah Lay",
+      "normalized_name": "omah lay",
+      "tier": "A",
+      "country": "NG",
+      "region": "west-africa",
+      "primary_genre": "afro-fusion",
+      "era_active": [
+        "2020s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 70,
+        "chill": 55,
+        "party": 60,
+        "workout": 50,
+        "late_night": 65
+      },
+      "cultural_significance": {
+        "historical": 3,
+        "social": 3,
+        "diasporic": 3,
+        "preservational": 2
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "influential",
+        "production"
+      ]
+    },
+    "fireboy dml": {
+      "canonical_name": "Fireboy Dml",
+      "normalized_name": "fireboy dml",
+      "tier": "A",
+      "country": "NG",
+      "region": "west-africa",
+      "primary_genre": "afropop",
+      "era_active": [
+        "2020s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 80,
+        "chill": 45,
+        "party": 70,
+        "workout": 60,
+        "late_night": 50
+      },
+      "cultural_significance": {
+        "historical": 3,
+        "social": 3,
+        "diasporic": 3,
+        "preservational": 2
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "influential",
+        "production"
+      ]
+    },
+    "olamide": {
+      "canonical_name": "Olamide",
+      "normalized_name": "olamide",
+      "tier": "A",
+      "country": "NG",
+      "region": "west-africa",
+      "primary_genre": "afrobeats",
+      "era_active": [
+        "2010s",
+        "2020s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 85,
+        "chill": 35,
+        "party": 75,
+        "workout": 70,
+        "late_night": 45
+      },
+      "cultural_significance": {
+        "historical": 3,
+        "social": 3,
+        "diasporic": 3,
+        "preservational": 2
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "influential",
+        "production"
+      ]
+    },
+    "tiwa savage": {
+      "canonical_name": "Tiwa Savage",
+      "normalized_name": "tiwa savage",
+      "tier": "A",
+      "country": "NG",
+      "region": "west-africa",
+      "primary_genre": "afropop",
+      "era_active": [
+        "2010s",
+        "2020s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 80,
+        "chill": 45,
+        "party": 70,
+        "workout": 60,
+        "late_night": 50
+      },
+      "cultural_significance": {
+        "historical": 3,
+        "social": 3,
+        "diasporic": 3,
+        "preservational": 2
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "influential",
+        "production"
+      ]
+    },
+    "yemi alade": {
+      "canonical_name": "Yemi Alade",
+      "normalized_name": "yemi alade",
+      "tier": "A",
+      "country": "NG",
+      "region": "west-africa",
+      "primary_genre": "afropop",
+      "era_active": [
+        "2010s",
+        "2020s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 80,
+        "chill": 45,
+        "party": 70,
+        "workout": 60,
+        "late_night": 50
+      },
+      "cultural_significance": {
+        "historical": 3,
+        "social": 3,
+        "diasporic": 3,
+        "preservational": 2
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "influential",
+        "production"
+      ]
+    },
+    "ruger": {
+      "canonical_name": "Ruger",
+      "normalized_name": "ruger",
+      "tier": "A",
+      "country": "NG",
+      "region": "west-africa",
+      "primary_genre": "afrobeats",
+      "era_active": [
+        "2020s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 85,
+        "chill": 35,
+        "party": 75,
+        "workout": 70,
+        "late_night": 45
+      },
+      "cultural_significance": {
+        "historical": 3,
+        "social": 3,
+        "diasporic": 3,
+        "preservational": 2
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "influential",
+        "production"
+      ]
+    },
+    "p square": {
+      "canonical_name": "P Square",
+      "normalized_name": "p square",
+      "tier": "A",
+      "country": "NG",
+      "region": "west-africa",
+      "primary_genre": "afropop",
+      "era_active": [
+        "2000s",
+        "2010s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 80,
+        "chill": 45,
+        "party": 70,
+        "workout": 60,
+        "late_night": 50
+      },
+      "cultural_significance": {
+        "historical": 3,
+        "social": 3,
+        "diasporic": 3,
+        "preservational": 2
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "influential",
+        "production"
+      ]
+    },
+    "dbanj": {
+      "canonical_name": "Dbanj",
+      "normalized_name": "dbanj",
+      "tier": "A",
+      "country": "NG",
+      "region": "west-africa",
+      "primary_genre": "afropop",
+      "era_active": [
+        "2000s",
+        "2010s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 80,
+        "chill": 45,
+        "party": 70,
+        "workout": 60,
+        "late_night": 50
+      },
+      "cultural_significance": {
+        "historical": 3,
+        "social": 3,
+        "diasporic": 3,
+        "preservational": 2
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "influential",
+        "production"
+      ]
+    },
+    "2baba": {
+      "canonical_name": "2Baba",
+      "normalized_name": "2baba",
+      "tier": "A",
+      "country": "NG",
+      "region": "west-africa",
+      "primary_genre": "afropop",
+      "era_active": [
+        "2000s",
+        "2010s",
+        "2020s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 80,
+        "chill": 45,
+        "party": 70,
+        "workout": 60,
+        "late_night": 50
+      },
+      "cultural_significance": {
+        "historical": 3,
+        "social": 3,
+        "diasporic": 3,
+        "preservational": 2
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "influential",
+        "production"
+      ]
+    },
+    "black coffee": {
+      "canonical_name": "Black Coffee",
+      "normalized_name": "black coffee",
+      "tier": "A",
+      "country": "ZA",
+      "region": "south-africa",
+      "primary_genre": "afro-house",
+      "era_active": [
+        "2010s",
+        "2020s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 65,
+        "chill": 40,
+        "party": 85,
+        "workout": 75,
+        "late_night": 70
+      },
+      "cultural_significance": {
+        "historical": 3,
+        "social": 3,
+        "diasporic": 3,
+        "preservational": 2
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "influential",
+        "production"
+      ]
+    },
+    "tyla": {
+      "canonical_name": "Tyla",
+      "normalized_name": "tyla",
+      "tier": "A",
+      "country": "ZA",
+      "region": "south-africa",
+      "primary_genre": "amapiano",
+      "era_active": [
+        "2020s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 70,
+        "chill": 50,
+        "party": 90,
+        "workout": 60,
+        "late_night": 80
+      },
+      "cultural_significance": {
+        "historical": 3,
+        "social": 3,
+        "diasporic": 3,
+        "preservational": 2
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "influential",
+        "production"
+      ]
+    },
+    "kabza de small": {
+      "canonical_name": "Kabza De Small",
+      "normalized_name": "kabza de small",
+      "tier": "A",
+      "country": "ZA",
+      "region": "south-africa",
+      "primary_genre": "amapiano",
+      "era_active": [
+        "2020s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 70,
+        "chill": 50,
+        "party": 90,
+        "workout": 60,
+        "late_night": 80
+      },
+      "cultural_significance": {
+        "historical": 3,
+        "social": 3,
+        "diasporic": 3,
+        "preservational": 2
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "influential",
+        "production"
+      ]
+    },
+    "dj maphorisa": {
+      "canonical_name": "Dj Maphorisa",
+      "normalized_name": "dj maphorisa",
+      "tier": "A",
+      "country": "ZA",
+      "region": "south-africa",
+      "primary_genre": "amapiano",
+      "era_active": [
+        "2010s",
+        "2020s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 70,
+        "chill": 50,
+        "party": 90,
+        "workout": 60,
+        "late_night": 80
+      },
+      "cultural_significance": {
+        "historical": 3,
+        "social": 3,
+        "diasporic": 3,
+        "preservational": 2
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "influential",
+        "production"
+      ]
+    },
+    "master kg": {
+      "canonical_name": "Master Kg",
+      "normalized_name": "master kg",
+      "tier": "A",
+      "country": "ZA",
+      "region": "south-africa",
+      "primary_genre": "sa-house",
+      "era_active": [
+        "2020s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 75,
+        "chill": 40,
+        "party": 85,
+        "workout": 70,
+        "late_night": 75
+      },
+      "cultural_significance": {
+        "historical": 3,
+        "social": 3,
+        "diasporic": 3,
+        "preservational": 2
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "influential",
+        "production"
+      ]
+    },
+    "nasty c": {
+      "canonical_name": "Nasty C",
+      "normalized_name": "nasty c",
+      "tier": "A",
+      "country": "ZA",
+      "region": "south-africa",
+      "primary_genre": "hip-hop",
+      "era_active": [
+        "2010s",
+        "2020s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 70,
+        "chill": 40,
+        "party": 65,
+        "workout": 80,
+        "late_night": 55
+      },
+      "cultural_significance": {
+        "historical": 3,
+        "social": 3,
+        "diasporic": 3,
+        "preservational": 2
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "influential",
+        "production"
+      ]
+    },
+    "focalistic": {
+      "canonical_name": "Focalistic",
+      "normalized_name": "focalistic",
+      "tier": "A",
+      "country": "ZA",
+      "region": "south-africa",
+      "primary_genre": "amapiano",
+      "era_active": [
+        "2020s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 70,
+        "chill": 50,
+        "party": 90,
+        "workout": 60,
+        "late_night": 80
+      },
+      "cultural_significance": {
+        "historical": 3,
+        "social": 3,
+        "diasporic": 3,
+        "preservational": 2
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "influential",
+        "production"
+      ]
+    },
+    "uncle waffles": {
+      "canonical_name": "Uncle Waffles",
+      "normalized_name": "uncle waffles",
+      "tier": "A",
+      "country": "ZA",
+      "region": "south-africa",
+      "primary_genre": "amapiano",
+      "era_active": [
+        "2020s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 70,
+        "chill": 50,
+        "party": 90,
+        "workout": 60,
+        "late_night": 80
+      },
+      "cultural_significance": {
+        "historical": 3,
+        "social": 3,
+        "diasporic": 3,
+        "preservational": 2
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "influential",
+        "production"
+      ]
+    },
+    "black sherif": {
+      "canonical_name": "Black Sherif",
+      "normalized_name": "black sherif",
+      "tier": "A",
+      "country": "GH",
+      "region": "west-africa",
+      "primary_genre": "afrobeats",
+      "era_active": [
+        "2020s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 85,
+        "chill": 35,
+        "party": 75,
+        "workout": 70,
+        "late_night": 45
+      },
+      "cultural_significance": {
+        "historical": 3,
+        "social": 3,
+        "diasporic": 3,
+        "preservational": 2
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "influential",
+        "production"
+      ]
+    },
+    "sarkodie": {
+      "canonical_name": "Sarkodie",
+      "normalized_name": "sarkodie",
+      "tier": "A",
+      "country": "GH",
+      "region": "west-africa",
+      "primary_genre": "hiplife",
+      "era_active": [
+        "2010s",
+        "2020s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 70,
+        "chill": 45,
+        "party": 75,
+        "workout": 55,
+        "late_night": 50
+      },
+      "cultural_significance": {
+        "historical": 3,
+        "social": 3,
+        "diasporic": 3,
+        "preservational": 2
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "influential",
+        "production"
+      ]
+    },
+    "stonebwoy": {
+      "canonical_name": "Stonebwoy",
+      "normalized_name": "stonebwoy",
+      "tier": "A",
+      "country": "GH",
+      "region": "west-africa",
+      "primary_genre": "reggae",
+      "era_active": [
+        "2010s",
+        "2020s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 40,
+        "chill": 85,
+        "party": 50,
+        "workout": 30,
+        "late_night": 70
+      },
+      "cultural_significance": {
+        "historical": 3,
+        "social": 3,
+        "diasporic": 3,
+        "preservational": 2
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "influential",
+        "production"
+      ]
+    },
+    "shatta wale": {
+      "canonical_name": "Shatta Wale",
+      "normalized_name": "shatta wale",
+      "tier": "A",
+      "country": "GH",
+      "region": "west-africa",
+      "primary_genre": "dancehall",
+      "era_active": [
+        "2010s",
+        "2020s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 75,
+        "chill": 25,
+        "party": 90,
+        "workout": 70,
+        "late_night": 65
+      },
+      "cultural_significance": {
+        "historical": 3,
+        "social": 3,
+        "diasporic": 3,
+        "preservational": 2
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "influential",
+        "production"
+      ]
+    },
+    "king promise": {
+      "canonical_name": "King Promise",
+      "normalized_name": "king promise",
+      "tier": "A",
+      "country": "GH",
+      "region": "west-africa",
+      "primary_genre": "afropop",
+      "era_active": [
+        "2020s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 80,
+        "chill": 45,
+        "party": 70,
+        "workout": 60,
+        "late_night": 50
+      },
+      "cultural_significance": {
+        "historical": 3,
+        "social": 3,
+        "diasporic": 3,
+        "preservational": 2
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "influential",
+        "production"
+      ]
+    },
+    "kidi": {
+      "canonical_name": "Kidi",
+      "normalized_name": "kidi",
+      "tier": "A",
+      "country": "GH",
+      "region": "west-africa",
+      "primary_genre": "highlife",
+      "era_active": [
+        "2020s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 60,
+        "chill": 70,
+        "party": 65,
+        "workout": 40,
+        "late_night": 55
+      },
+      "cultural_significance": {
+        "historical": 3,
+        "social": 3,
+        "diasporic": 3,
+        "preservational": 2
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "influential",
+        "production"
+      ]
+    },
+    "kuami eugene": {
+      "canonical_name": "Kuami Eugene",
+      "normalized_name": "kuami eugene",
+      "tier": "A",
+      "country": "GH",
+      "region": "west-africa",
+      "primary_genre": "highlife",
+      "era_active": [
+        "2020s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 60,
+        "chill": 70,
+        "party": 65,
+        "workout": 40,
+        "late_night": 55
+      },
+      "cultural_significance": {
+        "historical": 3,
+        "social": 3,
+        "diasporic": 3,
+        "preservational": 2
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "influential",
+        "production"
+      ]
+    },
+    "diamond platnumz": {
+      "canonical_name": "Diamond Platnumz",
+      "normalized_name": "diamond platnumz",
+      "tier": "A",
+      "country": "TZ",
+      "region": "east-africa",
+      "primary_genre": "bongo-flava",
+      "era_active": [
+        "2010s",
+        "2020s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 75,
+        "chill": 45,
+        "party": 70,
+        "workout": 55,
+        "late_night": 50
+      },
+      "cultural_significance": {
+        "historical": 3,
+        "social": 3,
+        "diasporic": 3,
+        "preservational": 2
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "influential",
+        "production"
+      ]
+    },
+    "harmonize": {
+      "canonical_name": "Harmonize",
+      "normalized_name": "harmonize",
+      "tier": "A",
+      "country": "TZ",
+      "region": "east-africa",
+      "primary_genre": "bongo-flava",
+      "era_active": [
+        "2010s",
+        "2020s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 75,
+        "chill": 45,
+        "party": 70,
+        "workout": 55,
+        "late_night": 50
+      },
+      "cultural_significance": {
+        "historical": 3,
+        "social": 3,
+        "diasporic": 3,
+        "preservational": 2
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "influential",
+        "production"
+      ]
+    },
+    "rayvanny": {
+      "canonical_name": "Rayvanny",
+      "normalized_name": "rayvanny",
+      "tier": "A",
+      "country": "TZ",
+      "region": "east-africa",
+      "primary_genre": "bongo-flava",
+      "era_active": [
+        "2010s",
+        "2020s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 75,
+        "chill": 45,
+        "party": 70,
+        "workout": 55,
+        "late_night": 50
+      },
+      "cultural_significance": {
+        "historical": 3,
+        "social": 3,
+        "diasporic": 3,
+        "preservational": 2
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "influential",
+        "production"
+      ]
+    },
+    "zuchu": {
+      "canonical_name": "Zuchu",
+      "normalized_name": "zuchu",
+      "tier": "A",
+      "country": "TZ",
+      "region": "east-africa",
+      "primary_genre": "bongo-flava",
+      "era_active": [
+        "2020s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 75,
+        "chill": 45,
+        "party": 70,
+        "workout": 55,
+        "late_night": 50
+      },
+      "cultural_significance": {
+        "historical": 3,
+        "social": 3,
+        "diasporic": 3,
+        "preservational": 2
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "influential",
+        "production"
+      ]
+    },
+    "ali kiba": {
+      "canonical_name": "Ali Kiba",
+      "normalized_name": "ali kiba",
+      "tier": "A",
+      "country": "TZ",
+      "region": "east-africa",
+      "primary_genre": "bongo-flava",
+      "era_active": [
+        "2000s",
+        "2010s",
+        "2020s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 75,
+        "chill": 45,
+        "party": 70,
+        "workout": 55,
+        "late_night": 50
+      },
+      "cultural_significance": {
+        "historical": 3,
+        "social": 3,
+        "diasporic": 3,
+        "preservational": 2
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "influential",
+        "production"
+      ]
+    },
+    "fally ipupa": {
+      "canonical_name": "Fally Ipupa",
+      "normalized_name": "fally ipupa",
+      "tier": "A",
+      "country": "CD",
+      "region": "central-africa",
+      "primary_genre": "ndombolo",
+      "era_active": [
+        "2000s",
+        "2010s",
+        "2020s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 80,
+        "chill": 20,
+        "party": 90,
+        "workout": 70,
+        "late_night": 60
+      },
+      "cultural_significance": {
+        "historical": 3,
+        "social": 3,
+        "diasporic": 3,
+        "preservational": 2
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "influential",
+        "production"
+      ]
+    },
+    "koffi olomide": {
+      "canonical_name": "Koffi Olomide",
+      "normalized_name": "koffi olomide",
+      "tier": "A",
+      "country": "CD",
+      "region": "central-africa",
+      "primary_genre": "soukous",
+      "era_active": [
+        "1980s",
+        "1990s",
+        "2000s",
+        "2010s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 75,
+        "chill": 35,
+        "party": 85,
+        "workout": 60,
+        "late_night": 55
+      },
+      "cultural_significance": {
+        "historical": 3,
+        "social": 3,
+        "diasporic": 3,
+        "preservational": 2
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "influential",
+        "production"
+      ]
+    },
+    "innossb": {
+      "canonical_name": "Innossb",
+      "normalized_name": "innossb",
+      "tier": "A",
+      "country": "CD",
+      "region": "central-africa",
+      "primary_genre": "afrobeats",
+      "era_active": [
+        "2020s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 85,
+        "chill": 35,
+        "party": 75,
+        "workout": 70,
+        "late_night": 45
+      },
+      "cultural_significance": {
+        "historical": 3,
+        "social": 3,
+        "diasporic": 3,
+        "preservational": 2
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "influential",
+        "production"
+      ]
+    },
+    "gims": {
+      "canonical_name": "Gims",
+      "normalized_name": "gims",
+      "tier": "A",
+      "country": "CD",
+      "region": "central-africa",
+      "primary_genre": "hip-hop",
+      "era_active": [
+        "2010s",
+        "2020s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 70,
+        "chill": 40,
+        "party": 65,
+        "workout": 80,
+        "late_night": 55
+      },
+      "cultural_significance": {
+        "historical": 3,
+        "social": 3,
+        "diasporic": 3,
+        "preservational": 2
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "influential",
+        "production"
+      ]
+    },
+    "dadju": {
+      "canonical_name": "Dadju",
+      "normalized_name": "dadju",
+      "tier": "A",
+      "country": "CD",
+      "region": "central-africa",
+      "primary_genre": "rnb",
+      "era_active": [
+        "2010s",
+        "2020s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 35,
+        "chill": 80,
+        "party": 40,
+        "workout": 25,
+        "late_night": 85
+      },
+      "cultural_significance": {
+        "historical": 3,
+        "social": 3,
+        "diasporic": 3,
+        "preservational": 2
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "influential",
+        "production"
+      ]
+    },
+    "papa wemba": {
+      "canonical_name": "Papa Wemba",
+      "normalized_name": "papa wemba",
+      "tier": "A",
+      "country": "CD",
+      "region": "central-africa",
+      "primary_genre": "rumba",
+      "era_active": [
+        "1970s",
+        "1980s",
+        "1990s",
+        "2000s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 50,
+        "chill": 75,
+        "party": 60,
+        "workout": 30,
+        "late_night": 80
+      },
+      "cultural_significance": {
+        "historical": 4,
+        "social": 3,
+        "diasporic": 4,
+        "preservational": 5
+      },
+      "default_cultural_tags": [
+        "tradition",
+        "roots"
+      ],
+      "default_aesthetic_tags": [
+        "influential",
+        "production"
+      ]
+    },
+    "saifond balde": {
+      "canonical_name": "Saifond Balde",
+      "normalized_name": "saifond balde",
+      "tier": "A",
+      "country": "GN",
+      "region": "west-africa",
+      "primary_genre": "afropop",
+      "era_active": [
+        "2020s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 80,
+        "chill": 45,
+        "party": 70,
+        "workout": 60,
+        "late_night": 50
+      },
+      "cultural_significance": {
+        "historical": 3,
+        "social": 3,
+        "diasporic": 3,
+        "preservational": 2
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "influential",
+        "production"
+      ]
+    },
+    "azaya": {
+      "canonical_name": "Azaya",
+      "normalized_name": "azaya",
+      "tier": "A",
+      "country": "GN",
+      "region": "west-africa",
+      "primary_genre": "afropop",
+      "era_active": [
+        "2010s",
+        "2020s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 80,
+        "chill": 45,
+        "party": 70,
+        "workout": 60,
+        "late_night": 50
+      },
+      "cultural_significance": {
+        "historical": 3,
+        "social": 3,
+        "diasporic": 3,
+        "preservational": 2
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "influential",
+        "production"
+      ]
+    },
+    "sekouba bambino": {
+      "canonical_name": "Sekouba Bambino",
+      "normalized_name": "sekouba bambino",
+      "tier": "A",
+      "country": "GN",
+      "region": "west-africa",
+      "primary_genre": "highlife",
+      "era_active": [
+        "1990s",
+        "2000s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 60,
+        "chill": 70,
+        "party": 65,
+        "workout": 40,
+        "late_night": 55
+      },
+      "cultural_significance": {
+        "historical": 3,
+        "social": 3,
+        "diasporic": 3,
+        "preservational": 2
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "influential",
+        "production"
+      ]
+    },
+    "mory kante": {
+      "canonical_name": "Mory Kante",
+      "normalized_name": "mory kante",
+      "tier": "A",
+      "country": "GN",
+      "region": "west-africa",
+      "primary_genre": "highlife",
+      "era_active": [
+        "1980s",
+        "1990s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 60,
+        "chill": 70,
+        "party": 65,
+        "workout": 40,
+        "late_night": 55
+      },
+      "cultural_significance": {
+        "historical": 4,
+        "social": 3,
+        "diasporic": 4,
+        "preservational": 4
+      },
+      "default_cultural_tags": [
+        "tradition",
+        "bridge"
+      ],
+      "default_aesthetic_tags": [
+        "influential",
+        "production"
+      ],
+      "is_alias": true,
+      "alias_of": "mory kante"
+    },
+    "soul bangs": {
+      "canonical_name": "Soul Bangs",
+      "normalized_name": "soul bangs",
+      "tier": "A",
+      "country": "GN",
+      "region": "west-africa",
+      "primary_genre": "reggae",
+      "era_active": [
+        "2010s",
+        "2020s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 40,
+        "chill": 85,
+        "party": 50,
+        "workout": 30,
+        "late_night": 70
+      },
+      "cultural_significance": {
+        "historical": 3,
+        "social": 3,
+        "diasporic": 3,
+        "preservational": 2
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "influential",
+        "production"
+      ]
+    },
+    "djanii alfa": {
+      "canonical_name": "Djanii Alfa",
+      "normalized_name": "djanii alfa",
+      "tier": "A",
+      "country": "GN",
+      "region": "west-africa",
+      "primary_genre": "afropop",
+      "era_active": [
+        "2010s",
+        "2020s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 80,
+        "chill": 45,
+        "party": 70,
+        "workout": 60,
+        "late_night": 50
+      },
+      "cultural_significance": {
+        "historical": 3,
+        "social": 3,
+        "diasporic": 3,
+        "preservational": 2
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "influential",
+        "production"
+      ]
+    },
+    "instinct killers": {
+      "canonical_name": "Instinct Killers",
+      "normalized_name": "instinct killers",
+      "tier": "A",
+      "country": "GN",
+      "region": "west-africa",
+      "primary_genre": "hip-hop",
+      "era_active": [
+        "2010s",
+        "2020s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 70,
+        "chill": 40,
+        "party": 65,
+        "workout": 80,
+        "late_night": 55
+      },
+      "cultural_significance": {
+        "historical": 3,
+        "social": 3,
+        "diasporic": 3,
+        "preservational": 2
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "influential",
+        "production"
+      ]
+    },
+    "straiker": {
+      "canonical_name": "Straiker",
+      "normalized_name": "straiker",
+      "tier": "A",
+      "country": "GN",
+      "region": "west-africa",
+      "primary_genre": "hip-hop",
+      "era_active": [
+        "2020s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 70,
+        "chill": 40,
+        "party": 65,
+        "workout": 80,
+        "late_night": 55
+      },
+      "cultural_significance": {
+        "historical": 3,
+        "social": 3,
+        "diasporic": 3,
+        "preservational": 2
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "influential",
+        "production"
+      ]
+    },
+    "king alasko": {
+      "canonical_name": "King Alasko",
+      "normalized_name": "king alasko",
+      "tier": "A",
+      "country": "GN",
+      "region": "west-africa",
+      "primary_genre": "afropop",
+      "era_active": [
+        "2010s",
+        "2020s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 80,
+        "chill": 45,
+        "party": 70,
+        "workout": 60,
+        "late_night": 50
+      },
+      "cultural_significance": {
+        "historical": 3,
+        "social": 3,
+        "diasporic": 3,
+        "preservational": 2
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "influential",
+        "production"
+      ]
+    },
+    "youssou ndour": {
+      "canonical_name": "Youssou Ndour",
+      "normalized_name": "youssou ndour",
+      "tier": "A",
+      "country": "SN",
+      "region": "west-africa",
+      "primary_genre": "mbalax",
+      "era_active": [
+        "1980s",
+        "1990s",
+        "2000s",
+        "2010s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 75,
+        "chill": 30,
+        "party": 80,
+        "workout": 65,
+        "late_night": 40
+      },
+      "cultural_significance": {
+        "historical": 4,
+        "social": 4,
+        "diasporic": 4,
+        "preservational": 5
+      },
+      "default_cultural_tags": [
+        "tradition",
+        "roots",
+        "motherland"
+      ],
+      "default_aesthetic_tags": [
+        "influential",
+        "production"
+      ]
+    },
+    "akon": {
+      "canonical_name": "Akon",
+      "normalized_name": "akon",
+      "tier": "A",
+      "country": "SN",
+      "region": "west-africa",
+      "primary_genre": "rnb",
+      "era_active": [
+        "2000s",
+        "2010s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 35,
+        "chill": 80,
+        "party": 40,
+        "workout": 25,
+        "late_night": 85
+      },
+      "cultural_significance": {
+        "historical": 3,
+        "social": 3,
+        "diasporic": 3,
+        "preservational": 2
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "influential",
+        "production"
+      ]
+    },
+    "wally seck": {
+      "canonical_name": "Wally Seck",
+      "normalized_name": "wally seck",
+      "tier": "A",
+      "country": "SN",
+      "region": "west-africa",
+      "primary_genre": "mbalax",
+      "era_active": [
+        "2010s",
+        "2020s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 75,
+        "chill": 30,
+        "party": 80,
+        "workout": 65,
+        "late_night": 40
+      },
+      "cultural_significance": {
+        "historical": 3,
+        "social": 3,
+        "diasporic": 3,
+        "preservational": 2
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "influential",
+        "production"
+      ]
+    },
+    "dj arafat": {
+      "canonical_name": "Dj Arafat",
+      "normalized_name": "dj arafat",
+      "tier": "A",
+      "country": "CI",
+      "region": "west-africa",
+      "primary_genre": "coupe-decale",
+      "era_active": [
+        "2000s",
+        "2010s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 85,
+        "chill": 15,
+        "party": 95,
+        "workout": 70,
+        "late_night": 60
+      },
+      "cultural_significance": {
+        "historical": 3,
+        "social": 3,
+        "diasporic": 3,
+        "preservational": 2
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "influential",
+        "production"
+      ]
+    },
+    "magic system": {
+      "canonical_name": "Magic System",
+      "normalized_name": "magic system",
+      "tier": "A",
+      "country": "CI",
+      "region": "west-africa",
+      "primary_genre": "coupe-decale",
+      "era_active": [
+        "2000s",
+        "2010s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 85,
+        "chill": 15,
+        "party": 95,
+        "workout": 70,
+        "late_night": 60
+      },
+      "cultural_significance": {
+        "historical": 3,
+        "social": 3,
+        "diasporic": 3,
+        "preservational": 2
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "influential",
+        "production"
+      ]
+    },
+    "alpha blondy": {
+      "canonical_name": "Alpha Blondy",
+      "normalized_name": "alpha blondy",
+      "tier": "A",
+      "country": "CI",
+      "region": "west-africa",
+      "primary_genre": "reggae",
+      "era_active": [
+        "1980s",
+        "1990s",
+        "2000s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 40,
+        "chill": 85,
+        "party": 50,
+        "workout": 30,
+        "late_night": 70
+      },
+      "cultural_significance": {
+        "historical": 4,
+        "social": 4,
+        "diasporic": 3,
+        "preservational": 3
+      },
+      "default_cultural_tags": [
+        "spiritual",
+        "liberation"
+      ],
+      "default_aesthetic_tags": [
+        "influential",
+        "production"
+      ]
+    },
+    "sauti sol": {
+      "canonical_name": "Sauti Sol",
+      "normalized_name": "sauti sol",
+      "tier": "A",
+      "country": "KE",
+      "region": "east-africa",
+      "primary_genre": "afropop",
+      "era_active": [
+        "2010s",
+        "2020s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 80,
+        "chill": 45,
+        "party": 70,
+        "workout": 60,
+        "late_night": 50
+      },
+      "cultural_significance": {
+        "historical": 3,
+        "social": 3,
+        "diasporic": 3,
+        "preservational": 2
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "influential",
+        "production"
+      ]
+    },
+    "nyashinski": {
+      "canonical_name": "Nyashinski",
+      "normalized_name": "nyashinski",
+      "tier": "A",
+      "country": "KE",
+      "region": "east-africa",
+      "primary_genre": "hip-hop",
+      "era_active": [
+        "2010s",
+        "2020s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 70,
+        "chill": 40,
+        "party": 65,
+        "workout": 80,
+        "late_night": 55
+      },
+      "cultural_significance": {
+        "historical": 3,
+        "social": 3,
+        "diasporic": 3,
+        "preservational": 2
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "influential",
+        "production"
+      ]
+    },
+    "salif keita": {
+      "canonical_name": "Salif Keita",
+      "normalized_name": "salif keita",
+      "tier": "A",
+      "country": "ML",
+      "region": "west-africa",
+      "primary_genre": "highlife",
+      "era_active": [
+        "1980s",
+        "1990s",
+        "2000s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 60,
+        "chill": 70,
+        "party": 65,
+        "workout": 40,
+        "late_night": 55
+      },
+      "cultural_significance": {
+        "historical": 4,
+        "social": 3,
+        "diasporic": 4,
+        "preservational": 5
+      },
+      "default_cultural_tags": [
+        "tradition",
+        "roots"
+      ],
+      "default_aesthetic_tags": [
+        "influential",
+        "production"
+      ]
+    },
+    "amadou mariam": {
+      "canonical_name": "Amadou Mariam",
+      "normalized_name": "amadou mariam",
+      "tier": "A",
+      "country": "ML",
+      "region": "west-africa",
+      "primary_genre": "highlife",
+      "era_active": [
+        "2000s",
+        "2010s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 60,
+        "chill": 70,
+        "party": 65,
+        "workout": 40,
+        "late_night": 55
+      },
+      "cultural_significance": {
+        "historical": 3,
+        "social": 3,
+        "diasporic": 3,
+        "preservational": 2
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "influential",
+        "production"
+      ]
+    },
+    "teddy afro": {
+      "canonical_name": "Teddy Afro",
+      "normalized_name": "teddy afro",
+      "tier": "A",
+      "country": "ET",
+      "region": "east-africa",
+      "primary_genre": "afropop",
+      "era_active": [
+        "2000s",
+        "2010s",
+        "2020s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 80,
+        "chill": 45,
+        "party": 70,
+        "workout": 60,
+        "late_night": 50
+      },
+      "cultural_significance": {
+        "historical": 3,
+        "social": 3,
+        "diasporic": 3,
+        "preservational": 2
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "influential",
+        "production"
+      ]
+    },
+    "adekunle gold": {
+      "canonical_name": "Adekunle Gold",
+      "normalized_name": "adekunle gold",
+      "tier": "B",
+      "country": "NG",
+      "region": "west-africa",
+      "primary_genre": "afro-soul",
+      "era_active": [
+        "2010s",
+        "2020s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 40,
+        "chill": 85,
+        "party": 30,
+        "workout": 20,
+        "late_night": 75
+      },
+      "cultural_significance": {
+        "historical": 2,
+        "social": 2,
+        "diasporic": 2,
+        "preservational": 1
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "production"
+      ]
+    },
+    "simi": {
+      "canonical_name": "Simi",
+      "normalized_name": "simi",
+      "tier": "B",
+      "country": "NG",
+      "region": "west-africa",
+      "primary_genre": "afro-soul",
+      "era_active": [
+        "2010s",
+        "2020s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 40,
+        "chill": 85,
+        "party": 30,
+        "workout": 20,
+        "late_night": 75
+      },
+      "cultural_significance": {
+        "historical": 2,
+        "social": 2,
+        "diasporic": 2,
+        "preservational": 1
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "production"
+      ]
+    },
+    "wande coal": {
+      "canonical_name": "Wande Coal",
+      "normalized_name": "wande coal",
+      "tier": "B",
+      "country": "NG",
+      "region": "west-africa",
+      "primary_genre": "afropop",
+      "era_active": [
+        "2000s",
+        "2010s",
+        "2020s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 80,
+        "chill": 45,
+        "party": 70,
+        "workout": 60,
+        "late_night": 50
+      },
+      "cultural_significance": {
+        "historical": 2,
+        "social": 2,
+        "diasporic": 2,
+        "preservational": 1
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "production"
+      ]
+    },
+    "flavour": {
+      "canonical_name": "Flavour",
+      "normalized_name": "flavour",
+      "tier": "B",
+      "country": "NG",
+      "region": "west-africa",
+      "primary_genre": "highlife",
+      "era_active": [
+        "2010s",
+        "2020s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 60,
+        "chill": 70,
+        "party": 65,
+        "workout": 40,
+        "late_night": 55
+      },
+      "cultural_significance": {
+        "historical": 2,
+        "social": 2,
+        "diasporic": 2,
+        "preservational": 1
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "production"
+      ]
+    },
+    "tekno": {
+      "canonical_name": "Tekno",
+      "normalized_name": "tekno",
+      "tier": "B",
+      "country": "NG",
+      "region": "west-africa",
+      "primary_genre": "afropop",
+      "era_active": [
+        "2010s",
+        "2020s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 80,
+        "chill": 45,
+        "party": 70,
+        "workout": 60,
+        "late_night": 50
+      },
+      "cultural_significance": {
+        "historical": 2,
+        "social": 2,
+        "diasporic": 2,
+        "preservational": 1
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "production"
+      ]
+    },
+    "phyno": {
+      "canonical_name": "Phyno",
+      "normalized_name": "phyno",
+      "tier": "B",
+      "country": "NG",
+      "region": "west-africa",
+      "primary_genre": "hip-hop",
+      "era_active": [
+        "2010s",
+        "2020s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 70,
+        "chill": 40,
+        "party": 65,
+        "workout": 80,
+        "late_night": 55
+      },
+      "cultural_significance": {
+        "historical": 2,
+        "social": 2,
+        "diasporic": 2,
+        "preservational": 1
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "production"
+      ]
+    },
+    "zlatan": {
+      "canonical_name": "Zlatan",
+      "normalized_name": "zlatan",
+      "tier": "B",
+      "country": "NG",
+      "region": "west-africa",
+      "primary_genre": "afrobeats",
+      "era_active": [
+        "2010s",
+        "2020s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 85,
+        "chill": 35,
+        "party": 75,
+        "workout": 70,
+        "late_night": 45
+      },
+      "cultural_significance": {
+        "historical": 2,
+        "social": 2,
+        "diasporic": 2,
+        "preservational": 1
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "production"
+      ]
+    },
+    "mr eazi": {
+      "canonical_name": "Mr Eazi",
+      "normalized_name": "mr eazi",
+      "tier": "B",
+      "country": "NG",
+      "region": "west-africa",
+      "primary_genre": "afrobeats",
+      "era_active": [
+        "2010s",
+        "2020s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 85,
+        "chill": 35,
+        "party": 75,
+        "workout": 70,
+        "late_night": 45
+      },
+      "cultural_significance": {
+        "historical": 2,
+        "social": 2,
+        "diasporic": 2,
+        "preservational": 1
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "production"
+      ]
+    },
+    "joeboy": {
+      "canonical_name": "Joeboy",
+      "normalized_name": "joeboy",
+      "tier": "B",
+      "country": "NG",
+      "region": "west-africa",
+      "primary_genre": "afropop",
+      "era_active": [
+        "2020s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 80,
+        "chill": 45,
+        "party": 70,
+        "workout": 60,
+        "late_night": 50
+      },
+      "cultural_significance": {
+        "historical": 2,
+        "social": 2,
+        "diasporic": 2,
+        "preservational": 1
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "production"
+      ]
+    },
+    "bnxn": {
+      "canonical_name": "Bnxn",
+      "normalized_name": "bnxn",
+      "tier": "B",
+      "country": "NG",
+      "region": "west-africa",
+      "primary_genre": "afrobeats",
+      "era_active": [
+        "2020s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 85,
+        "chill": 35,
+        "party": 75,
+        "workout": 70,
+        "late_night": 45
+      },
+      "cultural_significance": {
+        "historical": 2,
+        "social": 2,
+        "diasporic": 2,
+        "preservational": 1
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "production"
+      ]
+    },
+    "victony": {
+      "canonical_name": "Victony",
+      "normalized_name": "victony",
+      "tier": "B",
+      "country": "NG",
+      "region": "west-africa",
+      "primary_genre": "afro-fusion",
+      "era_active": [
+        "2020s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 70,
+        "chill": 55,
+        "party": 60,
+        "workout": 50,
+        "late_night": 65
+      },
+      "cultural_significance": {
+        "historical": 2,
+        "social": 2,
+        "diasporic": 2,
+        "preservational": 1
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "production"
+      ]
+    },
+    "pheelz": {
+      "canonical_name": "Pheelz",
+      "normalized_name": "pheelz",
+      "tier": "B",
+      "country": "NG",
+      "region": "west-africa",
+      "primary_genre": "afrobeats",
+      "era_active": [
+        "2020s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 85,
+        "chill": 35,
+        "party": 75,
+        "workout": 70,
+        "late_night": 45
+      },
+      "cultural_significance": {
+        "historical": 2,
+        "social": 2,
+        "diasporic": 2,
+        "preservational": 1
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "production"
+      ]
+    },
+    "bella shmurda": {
+      "canonical_name": "Bella Shmurda",
+      "normalized_name": "bella shmurda",
+      "tier": "B",
+      "country": "NG",
+      "region": "west-africa",
+      "primary_genre": "afrobeats",
+      "era_active": [
+        "2020s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 85,
+        "chill": 35,
+        "party": 75,
+        "workout": 70,
+        "late_night": 45
+      },
+      "cultural_significance": {
+        "historical": 2,
+        "social": 2,
+        "diasporic": 2,
+        "preservational": 1
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "production"
+      ]
+    },
+    "seyi vibez": {
+      "canonical_name": "Seyi Vibez",
+      "normalized_name": "seyi vibez",
+      "tier": "B",
+      "country": "NG",
+      "region": "west-africa",
+      "primary_genre": "afrobeats",
+      "era_active": [
+        "2020s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 85,
+        "chill": 35,
+        "party": 75,
+        "workout": 70,
+        "late_night": 45
+      },
+      "cultural_significance": {
+        "historical": 2,
+        "social": 2,
+        "diasporic": 2,
+        "preservational": 1
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "production"
+      ]
+    },
+    "oxlade": {
+      "canonical_name": "Oxlade",
+      "normalized_name": "oxlade",
+      "tier": "B",
+      "country": "NG",
+      "region": "west-africa",
+      "primary_genre": "afro-fusion",
+      "era_active": [
+        "2020s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 70,
+        "chill": 55,
+        "party": 60,
+        "workout": 50,
+        "late_night": 65
+      },
+      "cultural_significance": {
+        "historical": 2,
+        "social": 2,
+        "diasporic": 2,
+        "preservational": 1
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "production"
+      ]
+    },
+    "mayorkun": {
+      "canonical_name": "Mayorkun",
+      "normalized_name": "mayorkun",
+      "tier": "B",
+      "country": "NG",
+      "region": "west-africa",
+      "primary_genre": "afropop",
+      "era_active": [
+        "2010s",
+        "2020s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 80,
+        "chill": 45,
+        "party": 70,
+        "workout": 60,
+        "late_night": 50
+      },
+      "cultural_significance": {
+        "historical": 2,
+        "social": 2,
+        "diasporic": 2,
+        "preservational": 1
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "production"
+      ]
+    },
+    "falz": {
+      "canonical_name": "Falz",
+      "normalized_name": "falz",
+      "tier": "B",
+      "country": "NG",
+      "region": "west-africa",
+      "primary_genre": "hip-hop",
+      "era_active": [
+        "2010s",
+        "2020s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 70,
+        "chill": 40,
+        "party": 65,
+        "workout": 80,
+        "late_night": 55
+      },
+      "cultural_significance": {
+        "historical": 2,
+        "social": 2,
+        "diasporic": 2,
+        "preservational": 1
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "production"
+      ]
+    },
+    "patoranking": {
+      "canonical_name": "Patoranking",
+      "normalized_name": "patoranking",
+      "tier": "B",
+      "country": "NG",
+      "region": "west-africa",
+      "primary_genre": "dancehall",
+      "era_active": [
+        "2010s",
+        "2020s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 75,
+        "chill": 25,
+        "party": 90,
+        "workout": 70,
+        "late_night": 65
+      },
+      "cultural_significance": {
+        "historical": 2,
+        "social": 2,
+        "diasporic": 2,
+        "preservational": 1
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "production"
+      ]
+    },
+    "timaya": {
+      "canonical_name": "Timaya",
+      "normalized_name": "timaya",
+      "tier": "B",
+      "country": "NG",
+      "region": "west-africa",
+      "primary_genre": "dancehall",
+      "era_active": [
+        "2000s",
+        "2010s",
+        "2020s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 75,
+        "chill": 25,
+        "party": 90,
+        "workout": 70,
+        "late_night": 65
+      },
+      "cultural_significance": {
+        "historical": 2,
+        "social": 2,
+        "diasporic": 2,
+        "preservational": 1
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "production"
+      ]
+    },
+    "young stunna": {
+      "canonical_name": "Young Stunna",
+      "normalized_name": "young stunna",
+      "tier": "B",
+      "country": "ZA",
+      "region": "south-africa",
+      "primary_genre": "amapiano",
+      "era_active": [
+        "2020s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 70,
+        "chill": 50,
+        "party": 90,
+        "workout": 60,
+        "late_night": 80
+      },
+      "cultural_significance": {
+        "historical": 2,
+        "social": 2,
+        "diasporic": 2,
+        "preservational": 1
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "production"
+      ]
+    },
+    "dbn gogo": {
+      "canonical_name": "Dbn Gogo",
+      "normalized_name": "dbn gogo",
+      "tier": "B",
+      "country": "ZA",
+      "region": "south-africa",
+      "primary_genre": "amapiano",
+      "era_active": [
+        "2020s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 70,
+        "chill": 50,
+        "party": 90,
+        "workout": 60,
+        "late_night": 80
+      },
+      "cultural_significance": {
+        "historical": 2,
+        "social": 2,
+        "diasporic": 2,
+        "preservational": 1
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "production"
+      ]
+    },
+    "cassper nyovest": {
+      "canonical_name": "Cassper Nyovest",
+      "normalized_name": "cassper nyovest",
+      "tier": "B",
+      "country": "ZA",
+      "region": "south-africa",
+      "primary_genre": "hip-hop",
+      "era_active": [
+        "2010s",
+        "2020s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 70,
+        "chill": 40,
+        "party": 65,
+        "workout": 80,
+        "late_night": 55
+      },
+      "cultural_significance": {
+        "historical": 2,
+        "social": 2,
+        "diasporic": 2,
+        "preservational": 1
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "production"
+      ]
+    },
+    "makhadzi": {
+      "canonical_name": "Makhadzi",
+      "normalized_name": "makhadzi",
+      "tier": "B",
+      "country": "ZA",
+      "region": "south-africa",
+      "primary_genre": "sa-house",
+      "era_active": [
+        "2020s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 75,
+        "chill": 40,
+        "party": 85,
+        "workout": 70,
+        "late_night": 75
+      },
+      "cultural_significance": {
+        "historical": 2,
+        "social": 2,
+        "diasporic": 2,
+        "preservational": 1
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "production"
+      ]
+    },
+    "a reece": {
+      "canonical_name": "A Reece",
+      "normalized_name": "a reece",
+      "tier": "B",
+      "country": "ZA",
+      "region": "south-africa",
+      "primary_genre": "hip-hop",
+      "era_active": [
+        "2010s",
+        "2020s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 70,
+        "chill": 40,
+        "party": 65,
+        "workout": 80,
+        "late_night": 55
+      },
+      "cultural_significance": {
+        "historical": 2,
+        "social": 2,
+        "diasporic": 2,
+        "preservational": 1
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "production"
+      ]
+    },
+    "takana zion": {
+      "canonical_name": "Takana Zion",
+      "normalized_name": "takana zion",
+      "tier": "B",
+      "country": "GN",
+      "region": "west-africa",
+      "primary_genre": "reggae",
+      "era_active": [
+        "2010s",
+        "2020s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 40,
+        "chill": 85,
+        "party": 50,
+        "workout": 30,
+        "late_night": 70
+      },
+      "cultural_significance": {
+        "historical": 2,
+        "social": 2,
+        "diasporic": 2,
+        "preservational": 1
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "production"
+      ]
+    },
+    "mamady keita": {
+      "canonical_name": "Mamady Keita",
+      "normalized_name": "mamady keita",
+      "tier": "B",
+      "country": "GN",
+      "region": "west-africa",
+      "primary_genre": "highlife",
+      "era_active": [
+        "1990s",
+        "2000s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 60,
+        "chill": 70,
+        "party": 65,
+        "workout": 40,
+        "late_night": 55
+      },
+      "cultural_significance": {
+        "historical": 2,
+        "social": 2,
+        "diasporic": 2,
+        "preservational": 1
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "production"
+      ]
+    },
+    "koury simple": {
+      "canonical_name": "Koury Simple",
+      "normalized_name": "koury simple",
+      "tier": "B",
+      "country": "GN",
+      "region": "west-africa",
+      "primary_genre": "hip-hop",
+      "era_active": [
+        "2020s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 70,
+        "chill": 40,
+        "party": 65,
+        "workout": 80,
+        "late_night": 55
+      },
+      "cultural_significance": {
+        "historical": 2,
+        "social": 2,
+        "diasporic": 2,
+        "preservational": 1
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "production"
+      ]
+    },
+    "bembeya jazz": {
+      "canonical_name": "Bembeya Jazz",
+      "normalized_name": "bembeya jazz",
+      "tier": "B",
+      "country": "GN",
+      "region": "west-africa",
+      "primary_genre": "highlife",
+      "era_active": [
+        "1960s",
+        "1970s",
+        "1980s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 60,
+        "chill": 70,
+        "party": 65,
+        "workout": 40,
+        "late_night": 55
+      },
+      "cultural_significance": {
+        "historical": 2,
+        "social": 2,
+        "diasporic": 2,
+        "preservational": 1
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "production"
+      ]
+    },
+    "mc freshh": {
+      "canonical_name": "Mc Freshh",
+      "normalized_name": "mc freshh",
+      "tier": "B",
+      "country": "GN",
+      "region": "west-africa",
+      "primary_genre": "hip-hop",
+      "era_active": [
+        "2020s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 70,
+        "chill": 40,
+        "party": 65,
+        "workout": 80,
+        "late_night": 55
+      },
+      "cultural_significance": {
+        "historical": 2,
+        "social": 2,
+        "diasporic": 2,
+        "preservational": 1
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "production"
+      ]
+    },
+    "thiird": {
+      "canonical_name": "Thiird",
+      "normalized_name": "thiird",
+      "tier": "B",
+      "country": "GN",
+      "region": "west-africa",
+      "primary_genre": "hip-hop",
+      "era_active": [
+        "2020s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 70,
+        "chill": 40,
+        "party": 65,
+        "workout": 80,
+        "late_night": 55
+      },
+      "cultural_significance": {
+        "historical": 2,
+        "social": 2,
+        "diasporic": 2,
+        "preservational": 1
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "production"
+      ]
+    },
+    "maxim bk": {
+      "canonical_name": "Maxim Bk",
+      "normalized_name": "maxim bk",
+      "tier": "B",
+      "country": "GN",
+      "region": "west-africa",
+      "primary_genre": "afropop",
+      "era_active": [
+        "2010s",
+        "2020s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 80,
+        "chill": 45,
+        "party": 70,
+        "workout": 60,
+        "late_night": 50
+      },
+      "cultural_significance": {
+        "historical": 2,
+        "social": 2,
+        "diasporic": 2,
+        "preservational": 1
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "production"
+      ]
+    },
+    "wada du game": {
+      "canonical_name": "Wada Du Game",
+      "normalized_name": "wada du game",
+      "tier": "B",
+      "country": "GN",
+      "region": "west-africa",
+      "primary_genre": "hip-hop",
+      "era_active": [
+        "2020s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 70,
+        "chill": 40,
+        "party": 65,
+        "workout": 80,
+        "late_night": 55
+      },
+      "cultural_significance": {
+        "historical": 2,
+        "social": 2,
+        "diasporic": 2,
+        "preservational": 1
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "production"
+      ]
+    },
+    "hezbo rap": {
+      "canonical_name": "Hezbo Rap",
+      "normalized_name": "hezbo rap",
+      "tier": "B",
+      "country": "GN",
+      "region": "west-africa",
+      "primary_genre": "hip-hop",
+      "era_active": [
+        "2020s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 70,
+        "chill": 40,
+        "party": 65,
+        "workout": 80,
+        "late_night": 55
+      },
+      "cultural_significance": {
+        "historical": 2,
+        "social": 2,
+        "diasporic": 2,
+        "preservational": 1
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "production"
+      ]
+    },
+    "nandy": {
+      "canonical_name": "Nandy",
+      "normalized_name": "nandy",
+      "tier": "B",
+      "country": "TZ",
+      "region": "east-africa",
+      "primary_genre": "bongo-flava",
+      "era_active": [
+        "2010s",
+        "2020s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 75,
+        "chill": 45,
+        "party": 70,
+        "workout": 55,
+        "late_night": 50
+      },
+      "cultural_significance": {
+        "historical": 2,
+        "social": 2,
+        "diasporic": 2,
+        "preservational": 1
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "production"
+      ]
+    },
+    "mbosso": {
+      "canonical_name": "Mbosso",
+      "normalized_name": "mbosso",
+      "tier": "B",
+      "country": "TZ",
+      "region": "east-africa",
+      "primary_genre": "bongo-flava",
+      "era_active": [
+        "2020s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 75,
+        "chill": 45,
+        "party": 70,
+        "workout": 55,
+        "late_night": 50
+      },
+      "cultural_significance": {
+        "historical": 2,
+        "social": 2,
+        "diasporic": 2,
+        "preservational": 1
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "production"
+      ]
+    },
+    "marioo": {
+      "canonical_name": "Marioo",
+      "normalized_name": "marioo",
+      "tier": "B",
+      "country": "TZ",
+      "region": "east-africa",
+      "primary_genre": "bongo-flava",
+      "era_active": [
+        "2020s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 75,
+        "chill": 45,
+        "party": 70,
+        "workout": 55,
+        "late_night": 50
+      },
+      "cultural_significance": {
+        "historical": 2,
+        "social": 2,
+        "diasporic": 2,
+        "preservational": 1
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "production"
+      ]
+    },
+    "ferre gola": {
+      "canonical_name": "Ferre Gola",
+      "normalized_name": "ferre gola",
+      "tier": "B",
+      "country": "CD",
+      "region": "central-africa",
+      "primary_genre": "ndombolo",
+      "era_active": [
+        "2000s",
+        "2010s",
+        "2020s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 80,
+        "chill": 20,
+        "party": 90,
+        "workout": 70,
+        "late_night": 60
+      },
+      "cultural_significance": {
+        "historical": 2,
+        "social": 2,
+        "diasporic": 2,
+        "preservational": 1
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "production"
+      ]
+    },
+    "heritier watanabe": {
+      "canonical_name": "Heritier Watanabe",
+      "normalized_name": "heritier watanabe",
+      "tier": "B",
+      "country": "CD",
+      "region": "central-africa",
+      "primary_genre": "ndombolo",
+      "era_active": [
+        "2010s",
+        "2020s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 80,
+        "chill": 20,
+        "party": 90,
+        "workout": 70,
+        "late_night": 60
+      },
+      "cultural_significance": {
+        "historical": 2,
+        "social": 2,
+        "diasporic": 2,
+        "preservational": 1
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "production"
+      ]
+    },
+    "werrason": {
+      "canonical_name": "Werrason",
+      "normalized_name": "werrason",
+      "tier": "B",
+      "country": "CD",
+      "region": "central-africa",
+      "primary_genre": "ndombolo",
+      "era_active": [
+        "1990s",
+        "2000s",
+        "2010s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 80,
+        "chill": 20,
+        "party": 90,
+        "workout": 70,
+        "late_night": 60
+      },
+      "cultural_significance": {
+        "historical": 2,
+        "social": 2,
+        "diasporic": 2,
+        "preservational": 1
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "production"
+      ]
+    },
+    "aya nakamura": {
+      "canonical_name": "Aya Nakamura",
+      "normalized_name": "aya nakamura",
+      "tier": "B",
+      "country": "CD",
+      "region": "central-africa",
+      "primary_genre": "rnb",
+      "era_active": [
+        "2010s",
+        "2020s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 35,
+        "chill": 80,
+        "party": 40,
+        "workout": 25,
+        "late_night": 85
+      },
+      "cultural_significance": {
+        "historical": 2,
+        "social": 2,
+        "diasporic": 2,
+        "preservational": 1
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "production"
+      ]
+    },
+    "damso": {
+      "canonical_name": "Damso",
+      "normalized_name": "damso",
+      "tier": "B",
+      "country": "CD",
+      "region": "central-africa",
+      "primary_genre": "hip-hop",
+      "era_active": [
+        "2010s",
+        "2020s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 70,
+        "chill": 40,
+        "party": 65,
+        "workout": 80,
+        "late_night": 55
+      },
+      "cultural_significance": {
+        "historical": 2,
+        "social": 2,
+        "diasporic": 2,
+        "preservational": 1
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "production"
+      ]
+    },
+    "gyakie": {
+      "canonical_name": "Gyakie",
+      "normalized_name": "gyakie",
+      "tier": "B",
+      "country": "GH",
+      "region": "west-africa",
+      "primary_genre": "afropop",
+      "era_active": [
+        "2020s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 80,
+        "chill": 45,
+        "party": 70,
+        "workout": 60,
+        "late_night": 50
+      },
+      "cultural_significance": {
+        "historical": 2,
+        "social": 2,
+        "diasporic": 2,
+        "preservational": 1
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "production"
+      ]
+    },
+    "camidoh": {
+      "canonical_name": "Camidoh",
+      "normalized_name": "camidoh",
+      "tier": "B",
+      "country": "GH",
+      "region": "west-africa",
+      "primary_genre": "afrobeats",
+      "era_active": [
+        "2020s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 85,
+        "chill": 35,
+        "party": 75,
+        "workout": 70,
+        "late_night": 45
+      },
+      "cultural_significance": {
+        "historical": 2,
+        "social": 2,
+        "diasporic": 2,
+        "preservational": 1
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "production"
+      ]
+    },
+    "medikal": {
+      "canonical_name": "Medikal",
+      "normalized_name": "medikal",
+      "tier": "B",
+      "country": "GH",
+      "region": "west-africa",
+      "primary_genre": "hip-hop",
+      "era_active": [
+        "2010s",
+        "2020s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 70,
+        "chill": 40,
+        "party": 65,
+        "workout": 80,
+        "late_night": 55
+      },
+      "cultural_significance": {
+        "historical": 2,
+        "social": 2,
+        "diasporic": 2,
+        "preservational": 1
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "production"
+      ]
+    },
+    "kwesi arthur": {
+      "canonical_name": "Kwesi Arthur",
+      "normalized_name": "kwesi arthur",
+      "tier": "B",
+      "country": "GH",
+      "region": "west-africa",
+      "primary_genre": "hip-hop",
+      "era_active": [
+        "2010s",
+        "2020s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 70,
+        "chill": 40,
+        "party": 65,
+        "workout": 80,
+        "late_night": 55
+      },
+      "cultural_significance": {
+        "historical": 2,
+        "social": 2,
+        "diasporic": 2,
+        "preservational": 1
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "production"
+      ]
+    },
+    "r2bees": {
+      "canonical_name": "R2Bees",
+      "normalized_name": "r2bees",
+      "tier": "B",
+      "country": "GH",
+      "region": "west-africa",
+      "primary_genre": "hiplife",
+      "era_active": [
+        "2010s",
+        "2020s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 70,
+        "chill": 45,
+        "party": 75,
+        "workout": 55,
+        "late_night": 50
+      },
+      "cultural_significance": {
+        "historical": 2,
+        "social": 2,
+        "diasporic": 2,
+        "preservational": 1
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "production"
+      ]
+    },
+    "burnaboy": {
+      "canonical_name": "Burna Boy",
+      "normalized_name": "burna boy",
+      "tier": "A",
+      "country": "NG",
+      "region": "west-africa",
+      "primary_genre": "afrobeats",
+      "era_active": [
+        "2010s",
+        "2020s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 85,
+        "chill": 35,
+        "party": 75,
+        "workout": 70,
+        "late_night": 45
+      },
+      "cultural_significance": {
+        "historical": 3,
+        "social": 3,
+        "diasporic": 3,
+        "preservational": 2
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "influential",
+        "production"
+      ],
+      "is_alias": true,
+      "alias_of": "burna boy"
+    },
+    "wiz kid": {
+      "canonical_name": "Wizkid",
+      "normalized_name": "wizkid",
+      "tier": "A",
+      "country": "NG",
+      "region": "west-africa",
+      "primary_genre": "afrobeats",
+      "era_active": [
+        "2010s",
+        "2020s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 85,
+        "chill": 35,
+        "party": 75,
+        "workout": 70,
+        "late_night": 45
+      },
+      "cultural_significance": {
+        "historical": 3,
+        "social": 3,
+        "diasporic": 3,
+        "preservational": 2
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "influential",
+        "production"
+      ],
+      "is_alias": true,
+      "alias_of": "wizkid"
+    },
+    "starboy": {
+      "canonical_name": "Wizkid",
+      "normalized_name": "wizkid",
+      "tier": "A",
+      "country": "NG",
+      "region": "west-africa",
+      "primary_genre": "afrobeats",
+      "era_active": [
+        "2010s",
+        "2020s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 85,
+        "chill": 35,
+        "party": 75,
+        "workout": 70,
+        "late_night": 45
+      },
+      "cultural_significance": {
+        "historical": 3,
+        "social": 3,
+        "diasporic": 3,
+        "preservational": 2
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "influential",
+        "production"
+      ],
+      "is_alias": true,
+      "alias_of": "wizkid"
+    },
+    "obo": {
+      "canonical_name": "Davido",
+      "normalized_name": "davido",
+      "tier": "A",
+      "country": "NG",
+      "region": "west-africa",
+      "primary_genre": "afropop",
+      "era_active": [
+        "2010s",
+        "2020s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 80,
+        "chill": 45,
+        "party": 70,
+        "workout": 60,
+        "late_night": 50
+      },
+      "cultural_significance": {
+        "historical": 3,
+        "social": 3,
+        "diasporic": 3,
+        "preservational": 2
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "influential",
+        "production"
+      ],
+      "is_alias": true,
+      "alias_of": "davido"
+    },
+    "fela": {
+      "canonical_name": "Fela Kuti",
+      "normalized_name": "fela kuti",
+      "tier": "A",
+      "country": "NG",
+      "region": "west-africa",
+      "primary_genre": "afrobeats",
+      "era_active": [
+        "1970s",
+        "1980s",
+        "1990s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 85,
+        "chill": 35,
+        "party": 75,
+        "workout": 70,
+        "late_night": 45
+      },
+      "cultural_significance": {
+        "historical": 5,
+        "social": 5,
+        "diasporic": 5,
+        "preservational": 5
+      },
+      "default_cultural_tags": [
+        "revolution",
+        "protest",
+        "liberation",
+        "pan-african"
+      ],
+      "default_aesthetic_tags": [
+        "influential",
+        "production"
+      ],
+      "is_alias": true,
+      "alias_of": "fela kuti"
+    },
+    "diamond": {
+      "canonical_name": "Diamond Platnumz",
+      "normalized_name": "diamond platnumz",
+      "tier": "A",
+      "country": "TZ",
+      "region": "east-africa",
+      "primary_genre": "bongo-flava",
+      "era_active": [
+        "2010s",
+        "2020s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 75,
+        "chill": 45,
+        "party": 70,
+        "workout": 55,
+        "late_night": 50
+      },
+      "cultural_significance": {
+        "historical": 3,
+        "social": 3,
+        "diasporic": 3,
+        "preservational": 2
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "influential",
+        "production"
+      ],
+      "is_alias": true,
+      "alias_of": "diamond platnumz"
+    },
+    "blackcoffee": {
+      "canonical_name": "Black Coffee",
+      "normalized_name": "black coffee",
+      "tier": "A",
+      "country": "ZA",
+      "region": "south-africa",
+      "primary_genre": "afro-house",
+      "era_active": [
+        "2010s",
+        "2020s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 65,
+        "chill": 40,
+        "party": 85,
+        "workout": 75,
+        "late_night": 70
+      },
+      "cultural_significance": {
+        "historical": 3,
+        "social": 3,
+        "diasporic": 3,
+        "preservational": 2
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "influential",
+        "production"
+      ],
+      "is_alias": true,
+      "alias_of": "black coffee"
+    },
+    "psquare": {
+      "canonical_name": "P Square",
+      "normalized_name": "p square",
+      "tier": "A",
+      "country": "NG",
+      "region": "west-africa",
+      "primary_genre": "afropop",
+      "era_active": [
+        "2000s",
+        "2010s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 80,
+        "chill": 45,
+        "party": 70,
+        "workout": 60,
+        "late_night": 50
+      },
+      "cultural_significance": {
+        "historical": 3,
+        "social": 3,
+        "diasporic": 3,
+        "preservational": 2
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "influential",
+        "production"
+      ],
+      "is_alias": true,
+      "alias_of": "p square"
+    },
+    "p-square": {
+      "canonical_name": "P Square",
+      "normalized_name": "p square",
+      "tier": "A",
+      "country": "NG",
+      "region": "west-africa",
+      "primary_genre": "afropop",
+      "era_active": [
+        "2000s",
+        "2010s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 80,
+        "chill": 45,
+        "party": 70,
+        "workout": 60,
+        "late_night": 50
+      },
+      "cultural_significance": {
+        "historical": 3,
+        "social": 3,
+        "diasporic": 3,
+        "preservational": 2
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "influential",
+        "production"
+      ],
+      "is_alias": true,
+      "alias_of": "p square"
+    },
+    "innoss b": {
+      "canonical_name": "Innossb",
+      "normalized_name": "innossb",
+      "tier": "A",
+      "country": "CD",
+      "region": "central-africa",
+      "primary_genre": "afrobeats",
+      "era_active": [
+        "2020s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 85,
+        "chill": 35,
+        "party": 75,
+        "workout": 70,
+        "late_night": 45
+      },
+      "cultural_significance": {
+        "historical": 3,
+        "social": 3,
+        "diasporic": 3,
+        "preservational": 2
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "influential",
+        "production"
+      ],
+      "is_alias": true,
+      "alias_of": "innossb"
+    },
+    "innoss'b": {
+      "canonical_name": "Innossb",
+      "normalized_name": "innossb",
+      "tier": "A",
+      "country": "CD",
+      "region": "central-africa",
+      "primary_genre": "afrobeats",
+      "era_active": [
+        "2020s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 85,
+        "chill": 35,
+        "party": 75,
+        "workout": 70,
+        "late_night": 45
+      },
+      "cultural_significance": {
+        "historical": 3,
+        "social": 3,
+        "diasporic": 3,
+        "preservational": 2
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "influential",
+        "production"
+      ],
+      "is_alias": true,
+      "alias_of": "innossb"
+    },
+    "youssou n dour": {
+      "canonical_name": "Youssou Ndour",
+      "normalized_name": "youssou ndour",
+      "tier": "A",
+      "country": "SN",
+      "region": "west-africa",
+      "primary_genre": "mbalax",
+      "era_active": [
+        "1980s",
+        "1990s",
+        "2000s",
+        "2010s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 75,
+        "chill": 30,
+        "party": 80,
+        "workout": 65,
+        "late_night": 40
+      },
+      "cultural_significance": {
+        "historical": 4,
+        "social": 4,
+        "diasporic": 4,
+        "preservational": 5
+      },
+      "default_cultural_tags": [
+        "tradition",
+        "roots",
+        "motherland"
+      ],
+      "default_aesthetic_tags": [
+        "influential",
+        "production"
+      ],
+      "is_alias": true,
+      "alias_of": "youssou ndour"
+    },
+    "youssou n'dour": {
+      "canonical_name": "Youssou Ndour",
+      "normalized_name": "youssou ndour",
+      "tier": "A",
+      "country": "SN",
+      "region": "west-africa",
+      "primary_genre": "mbalax",
+      "era_active": [
+        "1980s",
+        "1990s",
+        "2000s",
+        "2010s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 75,
+        "chill": 30,
+        "party": 80,
+        "workout": 65,
+        "late_night": 40
+      },
+      "cultural_significance": {
+        "historical": 4,
+        "social": 4,
+        "diasporic": 4,
+        "preservational": 5
+      },
+      "default_cultural_tags": [
+        "tradition",
+        "roots",
+        "motherland"
+      ],
+      "default_aesthetic_tags": [
+        "influential",
+        "production"
+      ],
+      "is_alias": true,
+      "alias_of": "youssou ndour"
+    },
+    "sekouba": {
+      "canonical_name": "Sekouba Bambino",
+      "normalized_name": "sekouba bambino",
+      "tier": "A",
+      "country": "GN",
+      "region": "west-africa",
+      "primary_genre": "highlife",
+      "era_active": [
+        "1990s",
+        "2000s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 60,
+        "chill": 70,
+        "party": 65,
+        "workout": 40,
+        "late_night": 55
+      },
+      "cultural_significance": {
+        "historical": 3,
+        "social": 3,
+        "diasporic": 3,
+        "preservational": 2
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "influential",
+        "production"
+      ],
+      "is_alias": true,
+      "alias_of": "sekouba bambino"
+    },
+    "bambino": {
+      "canonical_name": "Sekouba Bambino",
+      "normalized_name": "sekouba bambino",
+      "tier": "A",
+      "country": "GN",
+      "region": "west-africa",
+      "primary_genre": "highlife",
+      "era_active": [
+        "1990s",
+        "2000s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 60,
+        "chill": 70,
+        "party": 65,
+        "workout": 40,
+        "late_night": 55
+      },
+      "cultural_significance": {
+        "historical": 3,
+        "social": 3,
+        "diasporic": 3,
+        "preservational": 2
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "influential",
+        "production"
+      ],
+      "is_alias": true,
+      "alias_of": "sekouba bambino"
+    },
+    "maitre gims": {
+      "canonical_name": "Gims",
+      "normalized_name": "gims",
+      "tier": "A",
+      "country": "CD",
+      "region": "central-africa",
+      "primary_genre": "hip-hop",
+      "era_active": [
+        "2010s",
+        "2020s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 70,
+        "chill": 40,
+        "party": 65,
+        "workout": 80,
+        "late_night": 55
+      },
+      "cultural_significance": {
+        "historical": 3,
+        "social": 3,
+        "diasporic": 3,
+        "preservational": 2
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "influential",
+        "production"
+      ],
+      "is_alias": true,
+      "alias_of": "gims"
+    },
+    "maitre gim": {
+      "canonical_name": "Gims",
+      "normalized_name": "gims",
+      "tier": "A",
+      "country": "CD",
+      "region": "central-africa",
+      "primary_genre": "hip-hop",
+      "era_active": [
+        "2010s",
+        "2020s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 70,
+        "chill": 40,
+        "party": 65,
+        "workout": 80,
+        "late_night": 55
+      },
+      "cultural_significance": {
+        "historical": 3,
+        "social": 3,
+        "diasporic": 3,
+        "preservational": 2
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "influential",
+        "production"
+      ],
+      "is_alias": true,
+      "alias_of": "gims"
+    },
+    "buju bnxn": {
+      "canonical_name": "Bnxn",
+      "normalized_name": "bnxn",
+      "tier": "B",
+      "country": "NG",
+      "region": "west-africa",
+      "primary_genre": "afrobeats",
+      "era_active": [
+        "2020s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 85,
+        "chill": 35,
+        "party": 75,
+        "workout": 70,
+        "late_night": 45
+      },
+      "cultural_significance": {
+        "historical": 2,
+        "social": 2,
+        "diasporic": 2,
+        "preservational": 1
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "production"
+      ],
+      "is_alias": true,
+      "alias_of": "bnxn"
+    },
+    "buju": {
+      "canonical_name": "Bnxn",
+      "normalized_name": "bnxn",
+      "tier": "B",
+      "country": "NG",
+      "region": "west-africa",
+      "primary_genre": "afrobeats",
+      "era_active": [
+        "2020s"
+      ],
+      "default_vibe_scores": {
+        "afro_heat": 85,
+        "chill": 35,
+        "party": 75,
+        "workout": 70,
+        "late_night": 45
+      },
+      "cultural_significance": {
+        "historical": 2,
+        "social": 2,
+        "diasporic": 2,
+        "preservational": 1
+      },
+      "default_cultural_tags": [],
+      "default_aesthetic_tags": [
+        "production"
+      ],
+      "is_alias": true,
+      "alias_of": "bnxn"
+    }
+  }
+}
