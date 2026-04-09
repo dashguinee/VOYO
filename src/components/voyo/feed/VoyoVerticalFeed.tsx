@@ -663,10 +663,11 @@ const FeedCard = memo(({
               className="flex items-center justify-center animate-voyo-pop-in"
             >
               <Zap
-                className="w-24 h-24 text-purple-400"
+                className="w-24 h-24"
                 style={{
-                  fill: '#8b5cf6',
-                  filter: 'drop-shadow(0 0 15px rgba(251, 191, 36, 0.5))',
+                  color: '#fbbf24',
+                  fill: '#f97316',
+                  filter: 'drop-shadow(0 0 20px rgba(249, 115, 22, 0.6)) drop-shadow(0 0 40px rgba(251, 191, 36, 0.3))',
                 }}
               />
             </div>

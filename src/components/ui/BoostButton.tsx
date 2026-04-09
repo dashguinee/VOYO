@@ -46,24 +46,24 @@ const PRESET_COLORS = {
     text: 'text-purple-400',
   },
   calm: {
-    primary: '#a78bfa',    // Violet-400
-    secondary: '#7c3aed',
-    light: '#c4b5fd',
-    glow: 'rgba(167,139,250,0.6)',
-    bg: 'bg-violet-500/30',
-    border: 'border-violet-400/60',
-    shadow: 'shadow-violet-500/30',
-    text: 'text-violet-400',
+    primary: '#fbbf24',    // Sunset yellow (warm calm)
+    secondary: '#f59e0b',
+    light: '#fde68a',
+    glow: 'rgba(251,191,36,0.6)',
+    bg: 'bg-amber-500/30',
+    border: 'border-amber-400/60',
+    shadow: 'shadow-amber-500/30',
+    text: 'text-amber-400',
   },
   voyex: {
-    primary: '#a855f7',    // Purple
-    secondary: '#7c3aed',
-    light: '#c084fc',
-    glow: 'rgba(168,85,247,0.6)',
-    bg: 'bg-purple-500/30',
-    border: 'border-purple-400/60',
-    shadow: 'shadow-purple-500/30',
-    text: 'text-purple-400',
+    primary: '#f97316',    // Sunset orange (VOYEX = full sunset)
+    secondary: '#ec4899',
+    light: '#fb923c',
+    glow: 'rgba(249,115,22,0.6)',
+    bg: 'bg-orange-500/30',
+    border: 'border-orange-400/60',
+    shadow: 'shadow-orange-500/30',
+    text: 'text-orange-400',
   },
 };
 
@@ -382,11 +382,12 @@ export const BoostButton = ({ variant = 'toolbar', className = '' }: BoostButton
         onClick={handleTap}
         className={`w-11 h-11 rounded-full flex items-center justify-center backdrop-blur-md shadow-lg transition-all duration-300 relative voyo-hover-lift voyo-tap-scale ${
           showOutline
-            ? `bg-black/40 border-2 ${colors.border}`
+            ? `border-2 ${colors.border}`
             : showFilled
               ? `${colors.bg} border ${colors.border} ${colors.shadow}`
-              : 'bg-black/40 border border-white/20 hover:bg-black/50'
+              : 'border border-[#28282f] hover:border-white/20'
         } ${className}`}
+        style={!showFilled ? { background: 'rgba(28, 28, 35, 0.65)' } : undefined}
         title={getTitle()}
       >
         {/* Glow effect when EQ is ON */}

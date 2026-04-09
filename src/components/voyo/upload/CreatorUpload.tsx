@@ -44,7 +44,7 @@ export const CreatorUpload = ({ onClose }: CreatorUploadProps) => {
 
   return (
     <div
-      className="absolute inset-0 z-50 bg-[#0a0a0f] flex flex-col"
+      className="absolute inset-0 z-50 bg-[#0a0a0c] flex flex-col"
     >
       {/* Header */}
       <div className="flex items-center justify-between p-4 border-b border-white/10">

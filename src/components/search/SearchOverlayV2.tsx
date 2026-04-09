@@ -60,8 +60,8 @@ const TrackItem = memo(({
 
   return (
     <div
-      className="flex items-center gap-3 p-3 rounded-xl cursor-pointer group active:bg-white/[0.06]"
-      style={{ background: 'rgba(255,255,255,0.03)' }}
+      className="flex items-center gap-3 p-3 rounded-xl cursor-pointer group active:bg-white/[0.06] border border-transparent hover:border-[#28282f]"
+      style={{ background: 'rgba(28, 28, 35, 0.4)' }}
       onClick={() => onSelect(result)}
     >
       {/* Thumbnail */}
@@ -105,11 +105,11 @@ const TrackItem = memo(({
           <ListPlus className="w-4 h-4 text-purple-400" />
         </button>
         <button
-          className="p-2 rounded-full bg-blue-500/15 border border-blue-500/20 active:scale-90 transition-transform"
+          className="p-2 rounded-full bg-[#f97316]/15 border border-[#f97316]/20 active:scale-90 transition-transform"
           onClick={handleDiscoveryClick}
           title="Discover More Like This"
         >
-          <Compass className="w-4 h-4 text-blue-400" />
+          <Compass className="w-4 h-4 text-[#f97316]" />
         </button>
       </div>
     </div>
@@ -386,10 +386,10 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap }: SearchOverlayP
               <div className="flex items-center gap-3">
                 {/* Search Input */}
                 <div
-                  className="flex-1 flex items-center gap-3 px-4 py-3 rounded-2xl"
+                  className="flex-1 flex items-center gap-3 px-4 py-3 rounded-2xl transition-all focus-within:ring-1 focus-within:ring-[#8b5cf6]/40"
                   style={{
-                    background: 'rgba(255,255,255,0.08)',
-                    border: '1px solid rgba(255,255,255,0.1)',
+                    background: 'rgba(28, 28, 35, 0.65)',
+                    border: '1px solid #28282f',
                     }}
                 >
                   <Search className="w-5 h-5 text-white/40 flex-shrink-0" />
@@ -452,8 +452,8 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap }: SearchOverlayP
                       .map((artist) => (
                         <div
                           key={artist.normalized_name}
-                          className="flex items-center gap-3 p-3 rounded-xl cursor-pointer active:bg-white/[0.06]"
-                          style={{ background: 'rgba(255,255,255,0.03)' }}
+                          className="flex items-center gap-3 p-3 rounded-xl cursor-pointer active:bg-white/[0.06] border border-transparent hover:border-[#28282f]"
+                          style={{ background: 'rgba(28, 28, 35, 0.4)' }}
                           onClick={() => {
                             if (onArtistTap) {
                               onArtistTap(artist.canonical_name);
@@ -595,7 +595,7 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap }: SearchOverlayP
                 style={{
                   background: toast.type === 'queue'
                     ? 'rgba(139,92,246,0.9)'
-                    : 'rgba(59,130,246,0.9)',
+                    : 'rgba(249,115,22,0.9)',
                   backdropFilter: 'blur(8px)',
                   }}
               >

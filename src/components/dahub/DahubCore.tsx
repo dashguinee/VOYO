@@ -858,7 +858,7 @@ export function DahubCore({
   const totalUnread = conversations.reduce((sum, c) => sum + c.unread_count, 0);
 
   return (
-    <div className="h-full bg-[#0a0a0f] flex flex-col">
+    <div className="h-full bg-[#0a0a0c] flex flex-col">
       {/* Direct Message Chat */}
       
         {activeChat && (

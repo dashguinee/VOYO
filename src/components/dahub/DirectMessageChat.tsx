@@ -270,10 +270,10 @@ export function DirectMessageChat({
 
   return (
     <div
-      className="fixed inset-0 z-[80] bg-[#0a0a0f] flex flex-col"
+      className="fixed inset-0 z-[80] bg-[#0a0a0c] flex flex-col"
     >
       {/* Header */}
-      <div className="flex-shrink-0 flex items-center gap-4 px-4 py-4 border-b border-white/[0.06] bg-[#0a0a0f]/95 backdrop-blur-xl">
+      <div className="flex-shrink-0 flex items-center gap-4 px-4 py-4 border-b border-white/[0.06] bg-[#0a0a0c]/95 backdrop-blur-xl">
         <button
           onClick={onClose}
           className="p-2 -ml-2 rounded-full hover:bg-white/[0.08] transition-colors"
@@ -356,7 +356,7 @@ export function DirectMessageChat({
       </div>
 
       {/* Input */}
-      <div className="flex-shrink-0 px-4 py-3 border-t border-white/[0.06] bg-[#0a0a0f]/95 backdrop-blur-xl">
+      <div className="flex-shrink-0 px-4 py-3 border-t border-white/[0.06] bg-[#0a0a0c]/95 backdrop-blur-xl">
         <div className="flex items-end gap-3">
           {/* Attachment button */}
           <button

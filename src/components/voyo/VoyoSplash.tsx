@@ -121,7 +121,7 @@ export const VoyoSplash = ({ onComplete, minDuration = 2800 }: VoyoSplashProps) 
         <div
           className="fixed inset-0 z-[9999] flex flex-col items-center justify-center overflow-hidden"
           style={{
-            background: 'linear-gradient(180deg, #0a0612 0%, #1a0a18 30%, #1a100a 60%, #0a0612 100%)',
+            background: 'linear-gradient(180deg, #0a0612 0%, #1a0a18 25%, #1a100a 50%, #1a0e08 70%, #0a0612 100%)',
           }}
         >
           {/* Ambient particles */}
@@ -129,7 +129,7 @@ export const VoyoSplash = ({ onComplete, minDuration = 2800 }: VoyoSplashProps) 
             {[...Array(20)].map((_, i) => (
               <div
                 key={i}
-                className="absolute w-1 h-1 rounded-full bg-orange-400/15"
+                className={`absolute w-1 h-1 rounded-full ${i % 3 === 0 ? 'bg-orange-400/20' : i % 3 === 1 ? 'bg-purple-400/15' : 'bg-amber-400/15'}`}
                 style={{
                   left: `${10 + (i * 4.5) % 80}%`,
                   top: `${20 + (i * 7) % 60}%`,
@@ -140,11 +140,11 @@ export const VoyoSplash = ({ onComplete, minDuration = 2800 }: VoyoSplashProps) 
             ))}
           </div>
 
-          {/* Central glow */}
+          {/* Central glow — sunset warmth + purple energy */}
           <div
             className="absolute w-96 h-96 rounded-full blur-3xl"
             style={{
-              background: 'radial-gradient(circle, rgba(249, 115, 22, 0.2) 0%, rgba(139, 92, 246, 0.15) 40%, transparent 70%)',
+              background: 'radial-gradient(circle, rgba(249, 115, 22, 0.25) 0%, rgba(251, 191, 36, 0.12) 25%, rgba(139, 92, 246, 0.18) 50%, transparent 70%)',
             }}
           />
 
@@ -152,11 +152,11 @@ export const VoyoSplash = ({ onComplete, minDuration = 2800 }: VoyoSplashProps) 
           <div
             className="relative z-20 mb-8 animate-[voyo-scale-in_0.6s_ease_forwards]"
           >
-            {/* Outer ring glow */}
+            {/* Outer ring glow — purple core, sunset fringe */}
             <div
               className="absolute -inset-8 rounded-full"
               style={{
-                background: 'radial-gradient(circle, rgba(147, 51, 234, 0.2) 0%, transparent 70%)',
+                background: 'radial-gradient(circle, rgba(147, 51, 234, 0.25) 0%, rgba(249, 115, 22, 0.08) 50%, transparent 70%)',
               }}
             />
 

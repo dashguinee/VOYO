@@ -877,7 +877,7 @@ const BackdropLibrary = ({
 
       {/* Library panel */}
       <div
-        className="relative w-full max-w-md bg-[#0a0a0f]/95 backdrop-blur-xl border-t border-white/10 rounded-t-3xl p-6 pb-10"
+        className="relative w-full max-w-md bg-[#111114]/95 backdrop-blur-xl border-t border-[#28282f] rounded-t-3xl p-6 pb-10"
       >
         {/* Handle */}
         <div className="absolute top-3 left-1/2 -translate-x-1/2 w-12 h-1 bg-white/20 rounded-full" />
@@ -981,7 +981,8 @@ const BackdropLibrary = ({
 const ExpandVideoButton = memo(({ onClick }: { onClick: () => void }) => (
   <button
     onClick={onClick}
-    className="absolute top-3 right-3 z-30 px-3 py-1.5 rounded-full bg-black/50 backdrop-blur-sm border border-white/20 text-white text-xs font-medium flex items-center gap-1.5 hover:bg-black/70 hover:border-purple-500/40 transition-all"
+    className="absolute top-3 right-3 z-30 px-3 py-1.5 rounded-full backdrop-blur-sm border border-[#28282f] text-white text-xs font-medium flex items-center gap-1.5 hover:border-purple-500/40 transition-all"
+    style={{ background: 'rgba(28, 28, 35, 0.65)' }}
   >
     <Play size={12} fill="currentColor" />
     <span>Video</span>
@@ -1008,20 +1009,24 @@ const RightToolbar = memo(({ onSettingsClick }: { onSettingsClick: () => void })
     <div
       className="absolute right-6 top-[42%] -translate-y-1/2 z-50 flex flex-col gap-3"
     >
-      {/* Like Button - Premium floating */}
+      {/* Like Button — pamplo pink when active */}
       <button
         onClick={handleLike}
         className={`w-11 h-11 rounded-full flex items-center justify-center backdrop-blur-md shadow-lg transition-all duration-300 ${
           isLiked
-            ? 'bg-purple-500/30 border border-purple-400/60 shadow-purple-500/30'
-            : 'bg-black/40 border border-white/10 hover:bg-black/50 hover:border-white/20'
+            ? 'border border-[#ec4899]/60'
+            : 'border border-[#28282f] hover:border-white/20'
         }`}
+        style={{
+          background: isLiked ? 'rgba(236, 72, 153, 0.25)' : 'rgba(28, 28, 35, 0.65)',
+        }}
         title={isLiked ? 'Unlike' : 'Like'}
       >
-        <Heart size={16} className={isLiked ? 'text-purple-300 fill-purple-300' : 'text-white/70'} />
+        <Heart size={16} className={isLiked ? 'text-[#ec4899] fill-[#ec4899]' : 'text-white/70'} />
         {isLiked && (
           <div
-            className="absolute inset-0 rounded-full bg-purple-500/20 blur-md -z-10"
+            className="absolute inset-0 rounded-full blur-md -z-10"
+            style={{ background: 'rgba(236, 72, 153, 0.2)' }}
           />
         )}
       </button>
@@ -1029,10 +1034,11 @@ const RightToolbar = memo(({ onSettingsClick }: { onSettingsClick: () => void })
       {/* Boost Button - Lightning Power */}
       <BoostButton variant="toolbar" />
 
-      {/* Settings Button - Premium floating */}
+      {/* Settings Button — metallic grey */}
       <button
         onClick={onSettingsClick}
-        className="w-11 h-11 rounded-full bg-black/40 backdrop-blur-md border border-white/10 flex items-center justify-center hover:bg-black/50 hover:border-white/20 shadow-lg transition-all duration-300"
+        className="w-11 h-11 rounded-full backdrop-blur-md border border-[#28282f] flex items-center justify-center hover:border-white/20 shadow-lg transition-all duration-300"
+        style={{ background: 'rgba(28, 28, 35, 0.65)' }}
         title="Audio settings"
       >
         <Settings size={16} className="text-white/70" />
@@ -3051,7 +3057,8 @@ const LyricsOverlay = memo(({ track, isOpen, onClose, currentTime }: LyricsOverl
 
   return (
     <div
-      className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-xl animate-voyo-fade-in"
+      className="fixed inset-0 z-[100] backdrop-blur-xl animate-voyo-fade-in"
+      style={{ background: 'rgba(17, 17, 20, 0.92)' }}
       onClick={closePopup}
     >
       {/* Close button */}

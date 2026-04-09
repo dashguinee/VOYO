@@ -184,7 +184,7 @@ export const ProfilePage = () => {
   // Loading state
   if (loadingProfile) {
     return (
-      <div className="min-h-screen bg-[#0a0a0f] flex items-center justify-center">
+      <div className="min-h-screen bg-[#0a0a0c] flex items-center justify-center">
         <div
           className="w-16 h-16 rounded-full border-4 border-purple-500/30 border-t-purple-500"
         />
@@ -195,7 +195,7 @@ export const ProfilePage = () => {
   // Not found
   if (!profile) {
     return (
-      <div className="min-h-screen bg-[#0a0a0f] flex items-center justify-center p-8">
+      <div className="min-h-screen bg-[#0a0a0c] flex items-center justify-center p-8">
         <div className="text-center">
           <div className="w-24 h-24 mx-auto mb-6 rounded-full bg-white/5 flex items-center justify-center">
             <User className="w-12 h-12 text-white/20" />
@@ -222,9 +222,9 @@ export const ProfilePage = () => {
   const avatarUrl = profile.preferences?.avatar_url || '';
 
   return (
-    <div className="min-h-screen bg-[#0a0a0f]">
+    <div className="min-h-screen bg-[#0a0a0c]">
       {/* Header */}
-      <div className="sticky top-0 z-30 bg-[#0a0a0f]/80 backdrop-blur-xl border-b border-white/5">
+      <div className="sticky top-0 z-30 bg-[#0a0a0c]/80 backdrop-blur-xl border-b border-white/5">
         <div className="flex items-center justify-between px-4 py-3">
           <button onClick={() => navigate('/')} className="p-2 -ml-2">
             <ArrowLeft className="w-5 h-5 text-white/70" />

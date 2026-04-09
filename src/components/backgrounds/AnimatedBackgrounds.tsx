@@ -182,7 +182,7 @@ export const CustomBackdropSettings = ({ onClose }: CustomBackdropSettingsProps)
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
 
       <div
-        className="relative w-full max-w-md bg-[#0a0a0f]/95 backdrop-blur-xl rounded-t-3xl p-6 pb-10 border-t border-white/10 max-h-[80vh] overflow-y-auto animate-voyo-spring-in-bottom"
+        className="relative w-full max-w-md bg-[#111114]/95 backdrop-blur-xl rounded-t-3xl p-6 pb-10 border-t border-white/10 max-h-[80vh] overflow-y-auto animate-voyo-spring-in-bottom"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="w-12 h-1 bg-white/20 rounded-full mx-auto mb-6" />
@@ -306,7 +306,7 @@ export const BackgroundPicker = ({ current, onSelect, isOpen, onClose }: Backgro
         <div className="fixed inset-0 z-50 flex items-end justify-center animate-voyo-fade-in">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
 
-          <div className="relative w-full max-w-md bg-[#0a0a0f]/95 backdrop-blur-xl rounded-t-3xl p-6 pb-10 border-t border-white/10 animate-voyo-spring-in-bottom">
+          <div className="relative w-full max-w-md bg-[#111114]/95 backdrop-blur-xl rounded-t-3xl p-6 pb-10 border-t border-white/10 animate-voyo-spring-in-bottom">
             <div className="w-12 h-1 bg-white/20 rounded-full mx-auto mb-6" />
             <h3 className="text-lg font-bold text-white mb-4 text-center" style={{ fontFamily: "'Space Grotesk', system-ui, sans-serif" }}>
               Background

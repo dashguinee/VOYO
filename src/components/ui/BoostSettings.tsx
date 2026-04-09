@@ -69,7 +69,7 @@ export const BoostSettings = ({ isOpen, onClose }: BoostSettingsProps) => {
 
       {/* Panel */}
       <div
-        className="relative w-full max-w-md max-h-[75vh] bg-[#0a0a0f]/95 backdrop-blur-xl border-t border-white/10 rounded-t-3xl overflow-hidden flex flex-col animate-voyo-spring-in-bottom"
+        className="relative w-full max-w-md max-h-[75vh] bg-[#111114]/95 backdrop-blur-xl border-t border-white/10 rounded-t-3xl overflow-hidden flex flex-col animate-voyo-spring-in-bottom"
       >
         {/* Handle */}
         <div className="absolute top-3 left-1/2 -translate-x-1/2 w-12 h-1 bg-white/20 rounded-full z-10" />
@@ -116,7 +116,7 @@ export const BoostSettings = ({ isOpen, onClose }: BoostSettingsProps) => {
                 onClick={() => setBoostProfile('calm')}
                 className={`flex flex-col items-center gap-1 p-3 rounded-xl border transition-all voyo-tap-scale ${
                   boostProfile === 'calm'
-                    ? 'bg-gradient-to-br from-violet-500/20 to-purple-500/20 border-violet-500/30 text-violet-300'
+                    ? 'bg-gradient-to-br from-amber-500/20 to-yellow-500/20 border-amber-500/30 text-amber-300'
                     : 'bg-white/5 border-white/10 text-gray-400 hover:bg-white/10'
                 }`}
               >
@@ -129,19 +129,19 @@ export const BoostSettings = ({ isOpen, onClose }: BoostSettingsProps) => {
                 onClick={() => setBoostProfile('voyex')}
                 className={`flex flex-col items-center gap-1 p-3 rounded-xl border transition-all relative voyo-tap-scale ${
                   boostProfile === 'voyex'
-                    ? 'bg-gradient-to-br from-purple-500/20 to-violet-600/20 border-purple-500/30 text-purple-300'
+                    ? 'bg-gradient-to-br from-orange-500/20 to-pink-500/20 border-orange-500/30 text-orange-300'
                     : 'bg-white/5 border-white/10 text-gray-400 hover:bg-white/10'
                 }`}
               >
-                <Sliders size={22} className={boostProfile === 'voyex' ? 'text-purple-300' : ''} />
+                <Sliders size={22} className={boostProfile === 'voyex' ? 'text-orange-300' : ''} />
                 <span className="text-[11px] font-bold">VOYEX</span>
                 <span className="text-[9px] opacity-70">Studio</span>
               </button>
             </div>
             <div className="text-[10px] text-gray-500 mt-3 text-center">
               {boostProfile === 'boosted' && 'Warm bass boost with speaker protection'}
-              {boostProfile === 'calm' && 'Balanced listening'}
-              {boostProfile === 'voyex' && 'Studio'}
+              {boostProfile === 'calm' && 'Soft sunset — balanced warmth'}
+              {boostProfile === 'voyex' && 'Full sunset studio — purple to orange'}
             </div>
           </div>
 
@@ -157,12 +157,12 @@ export const BoostSettings = ({ isOpen, onClose }: BoostSettingsProps) => {
                   onChange={(e) => setVoyexSpatial(Number(e.target.value))}
                   className="w-full h-2 rounded-full appearance-none cursor-pointer"
                   style={{
-                    background: `linear-gradient(to right, #a78bfa, #7c3aed 45%, #5b21b6 50%, #6d28d9 55%, #8b5cf6)`,
+                    background: `linear-gradient(to right, #8b5cf6, #ec4899 45%, #f97316 70%, #fbbf24)`,
                   }}
                 />
                 <div className="flex justify-between mt-1.5">
                   <span className="text-[10px] text-purple-400/70 font-medium tracking-wider">DIV</span>
-                  <span className="text-[10px] text-violet-400/70 font-medium tracking-wider">IMM</span>
+                  <span className="text-[10px] text-[#f97316]/70 font-medium tracking-wider">IMM</span>
                 </div>
               </div>
             </div>
@@ -307,7 +307,7 @@ export const BoostSettings = ({ isOpen, onClose }: BoostSettingsProps) => {
         {/* Clear Confirm Dialog */}
         {showClearConfirm && (
           <div className="absolute inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-6 animate-voyo-fade-in">
-            <div className="bg-[#1a1a2e] rounded-2xl p-6 w-full max-w-xs animate-voyo-scale-in">
+            <div className="bg-[#1c1c22] rounded-2xl p-6 w-full max-w-xs animate-voyo-scale-in">
               <div className="text-center mb-6">
                 <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-red-500/20 flex items-center justify-center">
                   <Trash2 size={20} className="text-red-400" />

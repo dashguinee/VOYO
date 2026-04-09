@@ -85,7 +85,7 @@ const TunnelDrawer: React.FC<TunnelDrawerProps> = ({
 
           {/* Drawer */}
           <div
-            className="fixed inset-x-0 bottom-0 z-50 h-[85vh] rounded-t-[2rem] bg-[#0a0a0f]/95 backdrop-blur-xl border-t border-white/10 shadow-2xl overflow-hidden flex flex-col"
+            className="fixed inset-x-0 bottom-0 z-50 h-[85vh] rounded-t-[2rem] bg-[#111114]/95 backdrop-blur-xl border-t border-[#28282f] shadow-2xl overflow-hidden flex flex-col"
           >
             {/* Drag Handle */}
             <div className="flex justify-center py-3 cursor-grab active:cursor-grabbing">

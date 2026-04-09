@@ -555,7 +555,7 @@ export const Hub = ({ onOpenProfile, onSwitchToVOYO, onHome, onVoyoFeed, onLibra
       : displayMessages;
 
   return (
-    <div className="h-full bg-[#0a0a0f] overflow-y-auto pb-24">
+    <div className="h-full bg-[#0a0a0c] overflow-y-auto pb-24">
       {/* Story Viewer */}
       
         {selectedFriend && <StoryViewer friend={selectedFriend} onClose={() => setSelectedFriend(null)} />}
@@ -578,7 +578,7 @@ export const Hub = ({ onOpenProfile, onSwitchToVOYO, onHome, onVoyoFeed, onLibra
       <UniversePanel isOpen={isUniverseOpen} onClose={() => setIsUniverseOpen(false)} />
 
       {/* Header */}
-      <div className="sticky top-0 z-20 bg-[#0a0a0f]/95 backdrop-blur-xl border-b border-white/[0.05]">
+      <div className="sticky top-0 z-20 bg-[#0a0a0c]/95 backdrop-blur-xl border-b border-white/[0.05]">
         <div className="flex items-center justify-between px-6 py-5">
           <h1 className="text-xl font-bold text-white tracking-tight">DAHUB</h1>
           {/* Settings Button */}
@@ -887,7 +887,7 @@ export const Hub = ({ onOpenProfile, onSwitchToVOYO, onHome, onVoyoFeed, onLibra
                   <div className="px-4 py-2 rounded-2xl border-[1.5px] border-dashed border-white/[0.25] bg-white/[0.02]">
                     <Plus className="w-3.5 h-3.5 text-white/50" />
                   </div>
-                  <div className="absolute left-1/2 -translate-x-1/2 -bottom-[5px] w-2.5 h-2.5 rotate-45 border-r-[1.5px] border-b-[1.5px] border-dashed border-white/[0.25] bg-[#0a0a0f]" />
+                  <div className="absolute left-1/2 -translate-x-1/2 -bottom-[5px] w-2.5 h-2.5 rotate-45 border-r-[1.5px] border-b-[1.5px] border-dashed border-white/[0.25] bg-[#0a0a0c]" />
                 </div>
               )}
             </div>

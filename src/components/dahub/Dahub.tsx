@@ -1095,7 +1095,7 @@ export function Dahub({ userId: propsUserId, userName: propsUserName, userAvatar
   };
 
   return (
-    <div className="h-full bg-[#0a0a0f] flex flex-col overflow-hidden">
+    <div className="h-full bg-[#0a0a0c] flex flex-col overflow-hidden">
       {/* Header */}
       <div className="flex-shrink-0 pt-4 px-6 pb-2">
         <div className="flex items-center justify-between">

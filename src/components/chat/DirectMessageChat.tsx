@@ -183,7 +183,7 @@ export const DirectMessageChat = memo(({
 
   if (!isSupabaseConfigured) {
     return (
-      <div className="h-full flex items-center justify-center bg-[#0a0a0f]">
+      <div className="h-full flex items-center justify-center bg-[#0a0a0c]">
         <p className="text-white/50">Chat offline - Supabase not configured</p>
       </div>
     );
@@ -191,7 +191,7 @@ export const DirectMessageChat = memo(({
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-[#0a0a0f] flex flex-col animate-voyo-slide-in-right"
+      className="fixed inset-0 z-50 bg-[#0a0a0c] flex flex-col animate-voyo-slide-in-right"
     >
       {/* Header */}
       <div className="flex items-center gap-3 px-4 py-4 border-b border-white/10">
