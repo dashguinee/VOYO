@@ -11,13 +11,15 @@ export default defineConfig({
         manualChunks(id) {
           // Vendor splits
           if (id.includes('node_modules/react/') || id.includes('node_modules/react-dom/')) return 'vendor-react';
-          if (id.includes('node_modules/framer-motion/')) return 'vendor-motion';
           if (id.includes('node_modules/zustand/')) return 'vendor-zustand';
           if (id.includes('node_modules/@supabase/')) return 'vendor-supabase';
-          if (id.includes('node_modules/lottie-web/')) return 'vendor-lottie';
           if (id.includes('node_modules/lucide-react/')) return 'vendor-icons';
-          // App splits: brain + scouts (heavy init code)
+          // App splits
           if (id.includes('/brain/') || id.includes('/scouts/')) return 'app-brain';
+          if (id.includes('/services/') && !id.includes('audioEngine')) return 'app-services';
+          if (id.includes('/knowledge/')) return 'app-knowledge';
+          // Heavy data
+          if (id.includes('/data/tracks')) return 'data-tracks';
           // Stores: let Vite handle naturally (manual chunking causes circular init crash)
         },
       },

@@ -9,20 +9,21 @@
  * - Hub (DAHUB social hub)
  */
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, lazy, Suspense } from 'react';
 import { X, Send } from 'lucide-react';
 import { usePlayerStore } from '../../store/playerStore';
 import { DJMode, Track } from '../../types';
 
-// Import VOYO components
+// Lightweight — always loaded
 import { VoyoBottomNav } from './navigation/VoyoBottomNav';
-import { VoyoMoments, MomentTrackInfo } from './feed/VoyoMoments';
-// CreatorUpload hidden until backend ready
-// import { CreatorUpload } from './upload/CreatorUpload';
-import { VoyoPortraitPlayer } from './VoyoPortraitPlayer';
-import { Dahub } from '../dahub/Dahub';
 import { APP_CODES } from '../../lib/dahub/dahub-api';
-import { ArtistPage } from './ArtistPage';
+import type { MomentTrackInfo } from './feed/VoyoMoments';
+
+// Heavy components — lazy loaded for code splitting
+const VoyoMoments = lazy(() => import('./feed/VoyoMoments').then(m => ({ default: m.VoyoMoments })));
+const VoyoPortraitPlayer = lazy(() => import('./VoyoPortraitPlayer').then(m => ({ default: m.VoyoPortraitPlayer })));
+const Dahub = lazy(() => import('../dahub/Dahub').then(m => ({ default: m.Dahub })));
+const ArtistPage = lazy(() => import('./ArtistPage').then(m => ({ default: m.ArtistPage })));
 
 // Quick DJ Prompts
 const DJ_PROMPTS = [
@@ -243,12 +244,14 @@ export const PortraitVOYO = ({ onSearch, onDahub, onHome }: PortraitVOYOProps) =
             pointerEvents: voyoActiveTab === 'music' ? 'auto' : 'none',
           }}
         >
-          <VoyoPortraitPlayer
-            onVoyoFeed={() => setVoyoTab('feed')}
-            djMode={djMode === 'listening' || djMode === 'responding'}
-            onToggleDJMode={handleListenMode}
-            onSearch={onSearch}
-          />
+          <Suspense fallback={<div className="h-full bg-[#0a0a0c]" />}>
+            <VoyoPortraitPlayer
+              onVoyoFeed={() => setVoyoTab('feed')}
+              djMode={djMode === 'listening' || djMode === 'responding'}
+              onToggleDJMode={handleListenMode}
+              onSearch={onSearch}
+            />
+          </Suspense>
         </div>
 
         {/* LAYER 2: FEED MODE (Slide-in Overlay) */}
@@ -260,6 +263,7 @@ export const PortraitVOYO = ({ onSearch, onDahub, onHome }: PortraitVOYOProps) =
             pointerEvents: voyoActiveTab === 'feed' ? 'auto' : 'none',
           }}
         >
+          <Suspense fallback={<div className="h-full bg-[#0a0a0c]" />}>
           <VoyoMoments
             onPlayFullTrack={(trackInfo: MomentTrackInfo) => {
               const track: Track = {
@@ -278,6 +282,7 @@ export const PortraitVOYO = ({ onSearch, onDahub, onHome }: PortraitVOYOProps) =
             }}
             onArtistTap={(name) => setArtistPageName(name)}
           />
+          </Suspense>
         </div>
 
         {/* LAYER 3: CREATOR MODE — hidden until backend ready */}
@@ -291,7 +296,9 @@ export const PortraitVOYO = ({ onSearch, onDahub, onHome }: PortraitVOYOProps) =
             pointerEvents: voyoActiveTab === 'dahub' ? 'auto' : 'none',
           }}
         >
-          <Dahub appContext={APP_CODES.VOYO} />
+          <Suspense fallback={<div className="h-full bg-[#0a0a0c]" />}>
+            <Dahub appContext={APP_CODES.VOYO} />
+          </Suspense>
         </div>
 
         {/* LAYER 5: BOTTOM NAVIGATION (Hidden when Hub is shown - Hub has its own nav) */}
@@ -310,6 +317,7 @@ export const PortraitVOYO = ({ onSearch, onDahub, onHome }: PortraitVOYOProps) =
 
       {/* Artist Page Overlay */}
       {artistPageName && (
+        <Suspense fallback={<div className="fixed inset-0 bg-[#0a0a0c] z-50" />}>
         <ArtistPage
           artistName={artistPageName}
           onClose={() => setArtistPageName(null)}
@@ -328,6 +336,7 @@ export const PortraitVOYO = ({ onSearch, onDahub, onHome }: PortraitVOYOProps) =
             playTrack(track);
           }}
         />
+        </Suspense>
       )}
 
     </>
