@@ -20,12 +20,11 @@
   --glow-primary: rgba(139, 92, 246, 0.5);
   --glow-primary-intense: rgba(139, 92, 246, 0.8);
 
-  /* === ACCENT COLORS — VOYO Sunset Palette === */
-  /* Purple (core) + Sunset (orange→yellow) + Pamplo pink */
-  --voyo-accent: #a78bfa;          /* Violet-400 - light accent */
-  --voyo-accent-glow: rgba(139, 92, 246, 0.5);
-  --voyo-pink: #ec4899;            /* Pamplo pink */
-  --voyo-pink-glow: rgba(236, 72, 153, 0.4);
+  /* === ACCENT COLORS — Purple + African Gold Bronze === */
+  --voyo-accent: #D4A053;          /* African Gold Bronze — THE accent */
+  --voyo-accent-glow: rgba(212, 160, 83, 0.4);
+  --voyo-pink: #8b5cf6;            /* Was pamplo pink → now purple */
+  --voyo-pink-glow: rgba(139, 92, 246, 0.4);
   --glow-accent: rgba(139, 92, 246, 0.4);
 
   /* === FUNCTIONAL COLORS === */
@@ -34,15 +33,15 @@
   --voyo-red: #ef4444;             /* Red-500 - errors + live only */
   --voyo-red-glow: rgba(239, 68, 68, 0.4);
   --voyo-cyan: #818cf8;            /* Indigo-400 */
-  --voyo-gold: #fbbf24;            /* Sunset yellow - warm accent */
-  --voyo-neon-green: #a78bfa;      /* Keep purple for non-brand */
-  --voyo-amber: #f97316;           /* Sunset orange */
-  --voyo-success: #a78bfa;         /* Purple for success states */
+  --voyo-gold: #D4A053;            /* African Gold Bronze */
+  --voyo-neon-green: #8b5cf6;      /* → purple */
+  --voyo-amber: #D4A053;           /* African Gold Bronze */
+  --voyo-success: #8b5cf6;         /* → purple */
 
-  /* OYÉ Zone Colors — warm VOYO palette */
-  --oye-hot: #f97316;              /* Sunset orange */
-  --oye-ai: #8b5cf6;              /* Purple (core) */
-  --oye-discover: #fbbf24;        /* Sunset yellow */
+  /* OYÉ Zone Colors */
+  --oye-hot: #D4A053;              /* Bronze for hot */
+  --oye-ai: #8b5cf6;              /* Purple for AI */
+  --oye-discover: #D4A053;        /* Bronze for discover */
 
   /* === TEXT HIERARCHY === */
   --voyo-text: #ffffff;
@@ -107,11 +106,15 @@ body {
 }
 
 .glow-pink {
-  box-shadow: 0 0 20px rgba(236, 72, 153, 0.3), 0 0 40px rgba(236, 72, 153, 0.15);
+  box-shadow: 0 0 20px rgba(139, 92, 246, 0.3), 0 0 40px rgba(139, 92, 246, 0.15);
+}
+
+.glow-bronze {
+  box-shadow: 0 0 20px rgba(212, 160, 83, 0.3), 0 0 40px rgba(212, 160, 83, 0.15);
 }
 
 .glow-sunset {
-  box-shadow: 0 0 20px rgba(249, 115, 22, 0.3), 0 0 40px rgba(251, 191, 36, 0.15);
+  box-shadow: 0 0 20px rgba(212, 160, 83, 0.3), 0 0 40px rgba(212, 160, 83, 0.15);
 }
 
 /* Neon Text */
@@ -258,14 +261,14 @@ body {
 }
 
 .text-gradient {
-  background: linear-gradient(135deg, #ec4899 0%, #8b5cf6 50%, #f97316 100%);
+  background: linear-gradient(135deg, #8b5cf6 0%, #D4A053 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
 }
 
 .text-gradient-gold {
-  background: linear-gradient(135deg, #f97316 0%, #fbbf24 50%, #f97316 100%);
+  background: linear-gradient(135deg, #D4A053 0%, #C4943D 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;

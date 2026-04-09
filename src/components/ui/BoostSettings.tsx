@@ -116,7 +116,7 @@ export const BoostSettings = ({ isOpen, onClose }: BoostSettingsProps) => {
                 onClick={() => setBoostProfile('calm')}
                 className={`flex flex-col items-center gap-1 p-3 rounded-xl border transition-all voyo-tap-scale ${
                   boostProfile === 'calm'
-                    ? 'bg-gradient-to-br from-amber-500/20 to-yellow-500/20 border-amber-500/30 text-amber-300'
+                    ? 'bg-gradient-to-br from-[#D4A053]/20 to-[#C4943D]/20 border-[#D4A053]/30 text-[#D4A053]'
                     : 'bg-white/5 border-white/10 text-gray-400 hover:bg-white/10'
                 }`}
               >
@@ -129,19 +129,19 @@ export const BoostSettings = ({ isOpen, onClose }: BoostSettingsProps) => {
                 onClick={() => setBoostProfile('voyex')}
                 className={`flex flex-col items-center gap-1 p-3 rounded-xl border transition-all relative voyo-tap-scale ${
                   boostProfile === 'voyex'
-                    ? 'bg-gradient-to-br from-orange-500/20 to-pink-500/20 border-orange-500/30 text-orange-300'
+                    ? 'bg-gradient-to-br from-purple-500/20 to-violet-600/20 border-purple-500/30 text-purple-300'
                     : 'bg-white/5 border-white/10 text-gray-400 hover:bg-white/10'
                 }`}
               >
-                <Sliders size={22} className={boostProfile === 'voyex' ? 'text-orange-300' : ''} />
+                <Sliders size={22} className={boostProfile === 'voyex' ? 'text-purple-300' : ''} />
                 <span className="text-[11px] font-bold">VOYEX</span>
                 <span className="text-[9px] opacity-70">Studio</span>
               </button>
             </div>
             <div className="text-[10px] text-gray-500 mt-3 text-center">
               {boostProfile === 'boosted' && 'Warm bass boost with speaker protection'}
-              {boostProfile === 'calm' && 'Soft sunset — balanced warmth'}
-              {boostProfile === 'voyex' && 'Full sunset studio — purple to orange'}
+              {boostProfile === 'calm' && 'Soft bronze — balanced warmth'}
+              {boostProfile === 'voyex' && 'Studio energy — purple power'}
             </div>
           </div>
 
@@ -157,12 +157,12 @@ export const BoostSettings = ({ isOpen, onClose }: BoostSettingsProps) => {
                   onChange={(e) => setVoyexSpatial(Number(e.target.value))}
                   className="w-full h-2 rounded-full appearance-none cursor-pointer"
                   style={{
-                    background: `linear-gradient(to right, #8b5cf6, #ec4899 45%, #f97316 70%, #fbbf24)`,
+                    background: `linear-gradient(to right, #7c3aed, #8b5cf6 45%, #a78bfa 70%, #D4A053)`,
                   }}
                 />
                 <div className="flex justify-between mt-1.5">
                   <span className="text-[10px] text-purple-400/70 font-medium tracking-wider">DIV</span>
-                  <span className="text-[10px] text-[#f97316]/70 font-medium tracking-wider">IMM</span>
+                  <span className="text-[10px] text-[#D4A053]/70 font-medium tracking-wider">IMM</span>
                 </div>
               </div>
             </div>

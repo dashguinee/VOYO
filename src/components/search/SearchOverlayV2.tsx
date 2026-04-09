@@ -106,12 +106,12 @@ const TrackItem = memo(({
           <ListPlus className="w-4 h-4 text-purple-400" />
         </button>
         <button
-          className="p-2 rounded-full bg-[#f97316]/15 border border-[#f97316]/20 active:scale-90 transition-transform min-w-[44px] min-h-[44px] flex items-center justify-center"
+          className="p-2 rounded-full bg-[#D4A053]/15 border border-[#D4A053]/20 active:scale-90 transition-transform min-w-[44px] min-h-[44px] flex items-center justify-center"
           onClick={handleDiscoveryClick}
           aria-label="Discover similar tracks"
           title="Discover More Like This"
         >
-          <Compass className="w-4 h-4 text-[#f97316]" />
+          <Compass className="w-4 h-4 text-[#D4A053]" />
         </button>
       </div>
     </div>
@@ -605,7 +605,7 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap }: SearchOverlayP
                 style={{
                   background: toast.type === 'queue'
                     ? 'rgba(139,92,246,0.9)'
-                    : 'rgba(249,115,22,0.9)',
+                    : 'rgba(212,160,83,0.9)',
                   backdropFilter: 'blur(8px)',
                   }}
               >

@@ -126,12 +126,8 @@ interface ShelfProps {
 const Shelf = ({ title, onSeeAll, children }: ShelfProps) => {
   // Accent color per shelf title
   const accentColor = title.includes('Trending') || title.includes('Top 10')
-    ? '#f97316' // sunset orange
-    : title.includes('Made For You') || title.includes('Discover')
-      ? '#8b5cf6' // purple energy
-      : title.includes('New Releases')
-        ? '#ec4899' // pamplo pink
-        : '#8b5cf6'; // default purple
+    ? '#D4A053' // African Gold Bronze for trending/hot
+    : '#8b5cf6'; // purple for everything else
 
   return (
     <div className="mb-10">
@@ -240,8 +236,8 @@ const PulsingCircle = () => (
   <div
     className="w-4 h-4 rounded-full"
     style={{
-      background: 'linear-gradient(135deg, rgba(168, 85, 247, 0.8), rgba(236, 72, 153, 0.7))',
-      boxShadow: '0 0 12px rgba(168, 85, 247, 0.4)',
+      background: 'linear-gradient(135deg, rgba(139, 92, 246, 0.8), rgba(124, 58, 237, 0.7))',
+      boxShadow: '0 0 12px rgba(139, 92, 246, 0.4)',
     }}
   />
 );
@@ -429,7 +425,7 @@ const TrackCard = ({ track, onPlay }: TrackCardProps) => {
         <div
           className="absolute inset-0 pointer-events-none"
           style={{
-            background: 'linear-gradient(135deg, rgba(139,92,246,0.10) 0%, rgba(249,115,22,0.06) 100%)',
+            background: 'linear-gradient(135deg, rgba(139,92,246,0.10) 0%, rgba(139,92,246,0.04) 100%)',
           }}
         />
         {isHovered && (
@@ -441,7 +437,7 @@ const TrackCard = ({ track, onPlay }: TrackCardProps) => {
             </div>
           </div>
         )}
-        {/* OYE Button - Top Right — sunset gradient */}
+        {/* OYE Button - Top Right — African Gold Bronze */}
         <button
           className="absolute top-2 right-2 z-10"
           onClick={handleOye}
@@ -449,10 +445,8 @@ const TrackCard = ({ track, onPlay }: TrackCardProps) => {
           <div
             className="w-7 h-7 rounded-full flex items-center justify-center"
             style={{
-              background: oyeActive
-                ? 'linear-gradient(135deg, #fbbf24, #f97316)'
-                : 'linear-gradient(135deg, #f97316, #fbbf24)',
-              boxShadow: oyeActive ? '0 0 15px rgba(249, 115, 22, 0.6)' : '0 2px 8px rgba(0,0,0,0.3)',
+              background: 'linear-gradient(135deg, #D4A053, #C4943D)',
+              boxShadow: oyeActive ? '0 0 15px rgba(212, 160, 83, 0.6)' : '0 2px 8px rgba(0,0,0,0.3)',
             }}
           >
             <Zap className="w-4 h-4 text-white" style={{ fill: 'white' }} />
@@ -517,7 +511,7 @@ const WideTrackCard = ({ track, onPlay }: TrackCardProps) => {
             </div>
           </div>
         )}
-        {/* OYE Button - Top Right — sunset gradient */}
+        {/* OYE Button - Top Right — African Gold Bronze */}
         <button
           className="absolute top-2 right-2 z-10"
           onClick={handleOye}
@@ -525,10 +519,8 @@ const WideTrackCard = ({ track, onPlay }: TrackCardProps) => {
           <div
             className="w-7 h-7 rounded-full flex items-center justify-center"
             style={{
-              background: oyeActive
-                ? 'linear-gradient(135deg, #fbbf24, #f97316)'
-                : 'linear-gradient(135deg, #f97316, #fbbf24)',
-              boxShadow: oyeActive ? '0 0 15px rgba(249, 115, 22, 0.6)' : '0 2px 8px rgba(0,0,0,0.3)',
+              background: 'linear-gradient(135deg, #D4A053, #C4943D)',
+              boxShadow: oyeActive ? '0 0 15px rgba(212, 160, 83, 0.6)' : '0 2px 8px rgba(0,0,0,0.3)',
             }}
           >
             <Zap className="w-4 h-4 text-white" style={{ fill: 'white' }} />
@@ -653,13 +645,13 @@ const AfricanVibesVideoCard = memo(({
       style={{ width: '95px', height: '142px' }}
       onClick={onTrackPlay}
     >
-      {/* Golden glow - stronger for hero (idx 0) */}
+      {/* Bronze glow - stronger for hero (idx 0) */}
       <div
         className="absolute -inset-1 rounded-xl pointer-events-none"
         style={{
           background: idx === 0
-            ? 'linear-gradient(135deg, rgba(251, 191, 36, 0.4) 0%, rgba(251, 191, 36, 0.15) 20%, transparent 50%)'
-            : 'linear-gradient(135deg, rgba(251, 191, 36, 0.2) 0%, rgba(251, 191, 36, 0.08) 15%, transparent 40%)',
+            ? 'linear-gradient(135deg, rgba(212, 160, 83, 0.4) 0%, rgba(212, 160, 83, 0.15) 20%, transparent 50%)'
+            : 'linear-gradient(135deg, rgba(212, 160, 83, 0.2) 0%, rgba(212, 160, 83, 0.08) 15%, transparent 40%)',
           filter: 'blur(8px)',
         }}
       />
@@ -729,7 +721,7 @@ const AfricanVibesVideoCard = memo(({
           <p className="text-white text-[9px] font-bold truncate">{track.title}</p>
           <p className="text-white/60 text-[7px] truncate">{track.artist}</p>
           <div className="flex items-center gap-0.5 mt-0.5">
-            <span className="text-[6px] font-bold text-amber-400">
+            <span className="text-[6px] font-bold text-[#D4A053]">
               {track.oyeScore ? (track.oyeScore / 1000).toFixed(0) + 'K OYE' : ''}
             </span>
           </div>
@@ -1135,7 +1127,7 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
             <p
               className="text-[9px] font-medium tracking-wider uppercase"
               style={{
-                background: 'linear-gradient(90deg, #fbbf24 0%, #ea580c 100%)',
+                background: 'linear-gradient(90deg, #D4A053 0%, #C4943D 100%)',
                 WebkitBackgroundClip: 'text',
                 WebkitTextFillColor: 'transparent',
                 opacity: 0.85,
@@ -1145,7 +1137,7 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
             </p>
           </div>
           <button
-            className="px-3 py-1.5 rounded-full text-[10px] font-semibold text-amber-400 bg-transparent border border-amber-500/40"
+            className="px-3 py-1.5 rounded-full text-[10px] font-semibold text-[#D4A053] bg-transparent border border-[#D4A053]/40"
             onClick={() => usePlayerStore.getState().setVoyoTab('feed')}
           >
             Watch More →
@@ -1161,8 +1153,8 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
                 transform: 'rotate(180deg)',
                 letterSpacing: '0.15em',
                 color: 'transparent',
-                WebkitTextStroke: '0.5px rgba(251, 191, 36, 0.7)',
-                textShadow: '0 0 8px rgba(251, 191, 36, 0.15)',
+                WebkitTextStroke: '0.5px rgba(212, 160, 83, 0.7)',
+                textShadow: '0 0 8px rgba(212, 160, 83, 0.15)',
               }}
             >
               TRENDING
@@ -1218,7 +1210,7 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
 
       {/* Classics - Timeless African music (from poolCurator) → COMMUNAL */}
       {classicsTracks.length > 0 && (
-        <div className="mb-8 py-6" style={{ background: 'linear-gradient(180deg, rgba(218,165,32,0.08) 0%, transparent 100%)' }}>
+        <div className="mb-8 py-6" style={{ background: 'linear-gradient(180deg, rgba(212,160,83,0.08) 0%, transparent 100%)' }}>
           <div className="px-4 mb-4 flex items-center gap-2">
             <span className="text-xl">🎺</span>
             <h2 className="text-white font-semibold text-base">Classics</h2>
@@ -1227,7 +1219,7 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
               className="p-2 rounded-full bg-white/10 hover:bg-white/20"
               onClick={handleRefresh}
             >
-              <RefreshCw className={`w-4 h-4 text-amber-400 ${isRefreshing ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`w-4 h-4 text-[#D4A053] ${isRefreshing ? 'animate-spin' : ''}`} />
             </button>
           </div>
           <div className="flex gap-4 px-4 overflow-x-auto scrollbar-hide">
@@ -1363,7 +1355,7 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
       <div className="mb-12">
         <div className="px-4 mb-5 flex items-center gap-2">
           <h2 className="text-white font-semibold text-base">New Releases</h2>
-          <div className="h-[2px] w-6 rounded-full" style={{ background: '#ec4899', opacity: 0.6 }} />
+          <div className="h-[2px] w-6 rounded-full" style={{ background: '#8b5cf6', opacity: 0.6 }} />
         </div>
         <CenterFocusedCarousel tracks={newReleases} onPlay={(track) => onTrackPlay(track)} />
       </div>

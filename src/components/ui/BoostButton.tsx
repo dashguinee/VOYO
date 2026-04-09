@@ -46,24 +46,24 @@ const PRESET_COLORS = {
     text: 'text-purple-400',
   },
   calm: {
-    primary: '#fbbf24',    // Sunset yellow (warm calm)
-    secondary: '#f59e0b',
-    light: '#fde68a',
-    glow: 'rgba(251,191,36,0.6)',
-    bg: 'bg-amber-500/30',
-    border: 'border-amber-400/60',
-    shadow: 'shadow-amber-500/30',
-    text: 'text-amber-400',
+    primary: '#D4A053',    // Soft bronze (warm calm)
+    secondary: '#C4943D',
+    light: '#E0B86E',
+    glow: 'rgba(212,160,83,0.6)',
+    bg: 'bg-[#D4A053]/30',
+    border: 'border-[#D4A053]/60',
+    shadow: 'shadow-[#D4A053]/30',
+    text: 'text-[#D4A053]',
   },
   voyex: {
-    primary: '#f97316',    // Sunset orange (VOYEX = full sunset)
-    secondary: '#ec4899',
-    light: '#fb923c',
-    glow: 'rgba(249,115,22,0.6)',
-    bg: 'bg-orange-500/30',
-    border: 'border-orange-400/60',
-    shadow: 'shadow-orange-500/30',
-    text: 'text-orange-400',
+    primary: '#8b5cf6',    // Purple (VOYEX = premium energy)
+    secondary: '#7c3aed',
+    light: '#a78bfa',
+    glow: 'rgba(139,92,246,0.6)',
+    bg: 'bg-purple-500/30',
+    border: 'border-purple-400/60',
+    shadow: 'shadow-purple-500/30',
+    text: 'text-purple-400',
   },
 };
 

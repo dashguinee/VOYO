@@ -143,10 +143,10 @@ const ProgressBar = ({ isActive, trackId, onSeekToHotspot }: {
   const getHotspotColor = (type: string, intensity: number) => {
     const alpha = Math.max(0.3, intensity);
     switch (type) {
-      case 'fire': return `rgba(249, 115, 22, ${alpha})`; // Orange
-      case 'like': return `rgba(236, 72, 153, ${alpha})`; // Pink
+      case 'fire': return `rgba(212, 160, 83, ${alpha})`; // Bronze
+      case 'like': return `rgba(139, 92, 246, ${alpha})`; // Purple
       case 'oye':
-      default: return `rgba(251, 191, 36, ${alpha})`; // Yellow
+      default: return `rgba(212, 160, 83, ${alpha})`; // Bronze
     }
   };
 
@@ -167,10 +167,10 @@ const ProgressBar = ({ isActive, trackId, onSeekToHotspot }: {
             }}
           />
         ))}
-        {/* Progress overlay — sunset gradient (cool→hot = purple→orange→yellow) */}
+        {/* Progress overlay — purple to bronze gradient */}
         <div
           className="absolute top-0 bottom-0 left-0"
-          style={{ width: `${progress}%`, background: 'linear-gradient(90deg, #8b5cf6 0%, #f97316 60%, #fbbf24 100%)' }}
+          style={{ width: `${progress}%`, background: 'linear-gradient(90deg, #8b5cf6 0%, #a78bfa 40%, #D4A053 100%)' }}
         />
         {/* Hotspot glow indicators */}
         {hotspots.filter(h => h.intensity > 0.5).map((hotspot, i) => (
@@ -218,9 +218,9 @@ const ProgressBar = ({ isActive, trackId, onSeekToHotspot }: {
 // REACTION CONFIG
 // ============================================
 const REACTION_CONFIG = {
-  like: { icon: Heart, color: '#EC4899', activeColor: '#EC4899', label: 'Like' },
-  oye: { icon: Zap, color: '#FBBF24', activeColor: '#FBBF24', label: 'OYÉ' },
-  fire: { icon: Flame, color: '#F97316', activeColor: '#F97316', label: 'Fire' },
+  like: { icon: Heart, color: '#8b5cf6', activeColor: '#8b5cf6', label: 'Like' },
+  oye: { icon: Zap, color: '#D4A053', activeColor: '#D4A053', label: 'OYÉ' },
+  fire: { icon: Flame, color: '#D4A053', activeColor: '#D4A053', label: 'Fire' },
 };
 
 // ============================================
@@ -408,7 +408,7 @@ const CommentsSheet = ({
               />
               <button
                 onClick={handleSubmit}
-                className="px-4 py-2.5 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 text-white text-sm font-bold min-h-[44px] active:scale-95 transition-transform"
+                className="px-4 py-2.5 rounded-full bg-gradient-to-r from-purple-500 to-violet-600 text-white text-sm font-bold min-h-[44px] active:scale-95 transition-transform"
                 aria-label="Post comment"
               >
                 Post
@@ -668,9 +668,9 @@ const FeedCard = memo(({
               <Zap
                 className="w-24 h-24"
                 style={{
-                  color: '#fbbf24',
-                  fill: '#f97316',
-                  filter: 'drop-shadow(0 0 20px rgba(249, 115, 22, 0.6)) drop-shadow(0 0 40px rgba(251, 191, 36, 0.3))',
+                  color: '#D4A053',
+                  fill: '#D4A053',
+                  filter: 'drop-shadow(0 0 20px rgba(212, 160, 83, 0.6)) drop-shadow(0 0 40px rgba(212, 160, 83, 0.3))',
                 }}
               />
             </div>
@@ -701,7 +701,7 @@ const FeedCard = memo(({
             <div
               className="inline-flex items-center gap-1.5 px-3 py-1 mb-3 rounded-full"
               style={{
-                background: 'linear-gradient(90deg, rgba(249,115,22,0.9) 0%, rgba(251,191,36,0.7) 50%, rgba(249,115,22,0.3) 100%)',
+                background: 'linear-gradient(90deg, rgba(212,160,83,0.9) 0%, rgba(196,148,61,0.7) 50%, rgba(212,160,83,0.3) 100%)',
               }}
             >
               <Zap className="w-3 h-3 text-white" style={{ fill: 'white' }} />
@@ -754,7 +754,7 @@ const FeedCard = memo(({
 
       {/* Right Side Actions - Clean & Functional */}
       <div className="absolute right-4 bottom-32 z-20 flex flex-col items-center gap-5">
-        {/* OYE Button - Main Action — sunset gradient (orange → yellow) = VITALITY */}
+        {/* OYE Button - Main Action — African Gold Bronze */}
         <button
           className="flex flex-col items-center active:scale-95 transition-transform focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-500/50 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0a0a0c] rounded-full"
           aria-label="OYE this track"
@@ -768,22 +768,20 @@ const FeedCard = memo(({
           <div
             className="w-14 h-14 rounded-full flex items-center justify-center transition-all"
             style={{
-              background: userReactions.has('oye')
-                ? 'linear-gradient(135deg, #fbbf24, #f97316)'
-                : 'linear-gradient(135deg, #f97316, #fbbf24)',
+              background: 'linear-gradient(135deg, #D4A053, #C4943D)',
               boxShadow: userReactions.has('oye')
-                ? '0 0 18px rgba(249, 115, 22, 0.6), 0 0 40px rgba(251, 191, 36, 0.2)'
+                ? '0 0 18px rgba(212, 160, 83, 0.6), 0 0 40px rgba(212, 160, 83, 0.2)'
                 : '0 4px 15px rgba(0,0,0,0.3)',
             }}
           >
             <Zap className="w-7 h-7 text-white" style={{ fill: 'white' }} />
           </div>
           <span className={`text-[11px] font-bold mt-1.5 transition-colors ${
-            userReactions.has('oye') ? 'text-[#fbbf24]' : 'text-[#f97316]'
+            userReactions.has('oye') ? 'text-[#D4A053]' : 'text-[#D4A053]'
           }`}>OYE</span>
         </button>
 
-        {/* Like Button (Heart) — pamplo pink when active */}
+        {/* Like Button (Heart) — purple when active */}
         <button
           className="flex flex-col items-center min-w-[44px] min-h-[44px] active:scale-95 transition-transform focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-500/50 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0a0a0c] rounded-full"
           aria-label="Like this track"
@@ -796,17 +794,17 @@ const FeedCard = memo(({
           <div>
             <Heart
               className={`w-8 h-8 transition-colors ${
-                userReactions.has('like') ? 'text-[#ec4899]' : 'text-white/40'
+                userReactions.has('like') ? 'text-purple-400' : 'text-white/40'
               }`}
-              style={userReactions.has('like') ? { fill: '#ec4899' } : {}}
+              style={userReactions.has('like') ? { fill: '#8b5cf6' } : {}}
             />
           </div>
           <span className={`text-[11px] font-medium mt-1 ${
-            userReactions.has('like') ? 'text-[#ec4899]' : 'text-white/40'
+            userReactions.has('like') ? 'text-purple-400' : 'text-white/40'
           }`}>{reactionCounts.like || ''}</span>
         </button>
 
-        {/* Fire Button — sunset orange when active */}
+        {/* Fire Button — bronze when active */}
         <button
           className="flex flex-col items-center min-w-[44px] min-h-[44px] active:scale-95 transition-transform"
           aria-label="Fire reaction"
@@ -819,13 +817,13 @@ const FeedCard = memo(({
           <div>
             <Flame
               className={`w-8 h-8 transition-colors ${
-                userReactions.has('fire') ? 'text-[#f97316]' : 'text-white/40'
+                userReactions.has('fire') ? 'text-[#D4A053]' : 'text-white/40'
               }`}
-              style={userReactions.has('fire') ? { fill: '#f97316' } : {}}
+              style={userReactions.has('fire') ? { color: '#D4A053', fill: '#D4A053' } : {}}
             />
           </div>
           <span className={`text-[11px] font-medium mt-1 ${
-            userReactions.has('fire') ? 'text-[#f97316]' : 'text-white/40'
+            userReactions.has('fire') ? 'text-[#D4A053]' : 'text-white/40'
           }`}>{reactionCounts.fire || ''}</span>
         </button>
 
@@ -1464,7 +1462,7 @@ export const VoyoVerticalFeed = ({ isActive, onGoToPlayer }: VoyoVerticalFeedPro
         </p>
         {isFollowingEmpty && (
           <button
-            className="px-6 py-3 rounded-full bg-gradient-to-r from-pink-500 to-purple-500 text-white font-bold"
+            className="px-6 py-3 rounded-full bg-gradient-to-r from-purple-500 to-violet-600 text-white font-bold"
             onClick={() => setFeedMode('forYou')}
           >
             Discover Artists

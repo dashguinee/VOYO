@@ -61,7 +61,7 @@ export const ReactionCanvas = () => {
               '\u2728'
             )}
             {reaction.multiplier > 1 && (
-              <span className="text-lg ml-1 text-yellow-400 font-bold">
+              <span className="text-lg ml-1 text-[#D4A053] font-bold">
                 x{reaction.multiplier}
               </span>
             )}

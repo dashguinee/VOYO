@@ -203,12 +203,12 @@ const MiniPlayer = ({ onVOYOClick, onOpenFull }: { onVOYOClick: () => void; onOp
             className="h-full relative"
             style={{ width: `${progress}%` }}
           >
-            {/* VOYO sunset gradient fill (purple → orange) */}
-            <div className="absolute inset-0" style={{ background: 'linear-gradient(90deg, #8b5cf6 0%, #a855f7 40%, #f97316 100%)' }} />
+            {/* Purple progress fill */}
+            <div className="absolute inset-0" style={{ background: '#8b5cf6' }} />
             {/* Glowing edge effect */}
             <div
               className="absolute right-0 top-0 bottom-0 w-4"
-              style={{ background: 'linear-gradient(to left, rgba(249,115,22,0.6), transparent)' }}
+              style={{ background: 'linear-gradient(to left, rgba(139,92,246,0.6), transparent)' }}
             />
           </div>
         </div>
@@ -256,7 +256,7 @@ const MiniPlayer = ({ onVOYOClick, onOpenFull }: { onVOYOClick: () => void; onOp
             <Plus className="w-3.5 h-3.5 text-white" />
           </button>
 
-          {/* OYE Button — sunset gradient (orange → yellow) */}
+          {/* OYE Button — African Gold Bronze */}
           <button
             className="w-11 h-11 rounded-full flex items-center justify-center active:scale-95 transition-transform"
             aria-label="OYE this track"
@@ -265,8 +265,8 @@ const MiniPlayer = ({ onVOYOClick, onOpenFull }: { onVOYOClick: () => void; onOp
               handleOye();
             }}
             style={{
-              background: 'linear-gradient(135deg, #f97316, #fbbf24)',
-              boxShadow: '0 2px 8px rgba(249, 115, 22, 0.4)',
+              background: 'linear-gradient(135deg, #D4A053, #C4943D)',
+              boxShadow: '0 2px 8px rgba(212, 160, 83, 0.4)',
             }}
           >
             <Zap className="w-4 h-4 text-white" style={{ fill: 'white' }} />
@@ -412,7 +412,7 @@ const SettingsScreen = () => {
 
       {/* Profile Header */}
       <div className="flex items-center gap-4 p-4 rounded-2xl bg-[#1c1c22] border border-[#28282f] mb-6">
-        <div className="w-16 h-16 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-2xl font-bold text-white">
+        <div className="w-16 h-16 rounded-full bg-gradient-to-br from-purple-500 to-violet-600 flex items-center justify-center text-2xl font-bold text-white">
           D
         </div>
         <div>

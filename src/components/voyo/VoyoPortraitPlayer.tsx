@@ -1012,25 +1012,25 @@ const RightToolbar = memo(({ onSettingsClick }: { onSettingsClick: () => void })
     <div
       className="absolute right-6 top-[42%] -translate-y-1/2 z-50 flex flex-col gap-3"
     >
-      {/* Like Button — pamplo pink when active */}
+      {/* Like Button — purple when active */}
       <button
         onClick={handleLike}
         className={`w-11 h-11 rounded-full flex items-center justify-center backdrop-blur-md shadow-lg transition-all duration-300 active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-500/50 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0a0a0c] ${
           isLiked
-            ? 'border border-[#ec4899]/60'
+            ? 'border border-purple-500/60'
             : 'border border-[#28282f] hover:border-white/20'
         }`}
         style={{
-          background: isLiked ? 'rgba(236, 72, 153, 0.25)' : 'rgba(28, 28, 35, 0.65)',
+          background: isLiked ? 'rgba(139, 92, 246, 0.25)' : 'rgba(28, 28, 35, 0.65)',
         }}
         aria-label={isLiked ? 'Unlike this track' : 'Like this track'}
         title={isLiked ? 'Unlike' : 'Like'}
       >
-        <Heart size={16} className={isLiked ? 'text-[#ec4899] fill-[#ec4899]' : 'text-white/70'} />
+        <Heart size={16} className={isLiked ? 'text-purple-400 fill-purple-400' : 'text-white/70'} />
         {isLiked && (
           <div
             className="absolute inset-0 rounded-full blur-md -z-10"
-            style={{ background: 'rgba(236, 72, 153, 0.2)' }}
+            style={{ background: 'rgba(139, 92, 246, 0.2)' }}
           />
         )}
       </button>
@@ -1069,7 +1069,7 @@ const VoyoBrandTint = ({ isPlayed }: { isPlayed?: boolean }) => (
       isPlayed ? 'opacity-60' : 'opacity-40'
     }`}
     style={{
-      background: 'linear-gradient(135deg, rgba(147, 51, 234, 0.4) 0%, rgba(219, 39, 119, 0.3) 100%)',
+      background: 'linear-gradient(135deg, rgba(139, 92, 246, 0.4) 0%, rgba(212, 160, 83, 0.15) 100%)',
       mixBlendMode: 'overlay',
       }}
   />
@@ -1083,7 +1083,7 @@ const SmallCard = memo(({ track, onTap, isPlayed }: { track: Track; onTap: () =>
     className="flex flex-col gap-2 w-[70px] flex-shrink-0 group"
     onClick={onTap}
   >
-    <div className="w-[70px] h-[70px] rounded-2xl overflow-hidden relative border border-white/5 bg-gradient-to-br from-purple-900/30 to-pink-900/20">
+    <div className="w-[70px] h-[70px] rounded-2xl overflow-hidden relative border border-white/5 bg-gradient-to-br from-purple-900/30 to-violet-900/20">
       <SmartImage
         src={getTrackThumbnailUrl(track, 'medium')}
         alt={`${track.title} by ${track.artist}`}
@@ -1121,7 +1121,7 @@ const SmallCard = memo(({ track, onTap, isPlayed }: { track: Track; onTap: () =>
 const DashPlaceholder = memo(({ onClick, label }: { onClick?: () => void; label: string }) => (
   <button
     onClick={onClick}
-    className="w-[70px] h-[70px] rounded-2xl bg-gradient-to-br from-purple-900/30 to-pink-900/20 border border-purple-500/20 flex flex-col items-center justify-center gap-1 hover:border-purple-500/40 transition-colors"
+    className="w-[70px] h-[70px] rounded-2xl bg-gradient-to-br from-purple-900/30 to-violet-900/20 border border-purple-500/20 flex flex-col items-center justify-center gap-1 hover:border-purple-500/40 transition-colors"
   >
     <span className="text-[10px] font-black text-purple-400">
       DASH
@@ -1499,7 +1499,7 @@ const StreamCard = memo(({ track, onTap, isPlayed, onTeaser, modeColor, onQueueA
           <div
             className="absolute -top-6 left-1/2 -translate-x-1/2 z-50"
           >
-            <div className="bg-gradient-to-r from-purple-500 to-pink-500 text-white text-[8px] font-bold px-2 py-1 rounded-full shadow-lg whitespace-nowrap flex items-center gap-1">
+            <div className="bg-gradient-to-r from-purple-500 to-violet-600 text-white text-[8px] font-bold px-2 py-1 rounded-full shadow-lg whitespace-nowrap flex items-center gap-1">
               <svg className="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 20 20">
                 <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
               </svg>
@@ -1515,7 +1515,7 @@ const StreamCard = memo(({ track, onTap, isPlayed, onTeaser, modeColor, onQueueA
           <div
             className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none"
           >
-            <div className="w-14 h-14 rounded-xl bg-gradient-to-r from-purple-500/40 to-pink-500/40 blur-md" />
+            <div className="w-14 h-14 rounded-xl bg-gradient-to-r from-purple-500/40 to-violet-600/40 blur-md" />
           </div>
         )}
       
@@ -2240,9 +2240,9 @@ const ReactionBar = memo(({
   // REFINED PREMIUM COLORS - sophisticated, muted, elegant (not "kid style")
   const reactions = [
     { type: 'oyo', emoji: '👋', text: 'OYO', icon: Zap, gradient: 'from-purple-700/70 to-violet-900/60' },
-    { type: 'oye', emoji: '🎉', text: 'OYÉ', icon: Zap, gradient: 'from-orange-600/70 to-yellow-700/60', isGateway: true },
+    { type: 'oye', emoji: '🎉', text: 'OYÉ', icon: Zap, gradient: 'from-[#D4A053]/70 to-[#C4943D]/60', isGateway: true },
     { type: 'wazzguan', emoji: '🤙', text: 'Wazzguán', icon: null, gradient: 'from-stone-600/50 to-stone-700/40', isChat: true },
-    { type: 'fire', emoji: '🔥', text: 'Fireee', icon: Flame, gradient: 'from-orange-700/70 to-red-900/60' },
+    { type: 'fire', emoji: '🔥', text: 'Fireee', icon: Flame, gradient: 'from-[#D4A053]/70 to-[#C4943D]/60' },
   ];
 
   const handlePressStart = (type: string) => {
@@ -2397,11 +2397,11 @@ const ReactionBar = memo(({
                 }
                 ${isGateway
                   ? (isLit
-                    ? 'bg-gradient-to-r from-purple-700/70 to-fuchsia-900/60 border border-purple-400/30 text-white shadow-lg shadow-purple-900/30'
-                    : 'bg-purple-950/50 border border-purple-600/30 text-purple-300/80')
+                    ? 'bg-gradient-to-r from-[#D4A053]/70 to-[#C4943D]/60 border border-[#D4A053]/30 text-white shadow-lg shadow-[#D4A053]/30'
+                    : 'bg-[#D4A053]/20 border border-[#D4A053]/30 text-[#D4A053]/80')
                   : isChat
                     ? (buttonFlashing
-                      ? 'bg-gradient-to-r from-amber-500/70 to-orange-500/60 border border-amber-400/40 text-white shadow-lg shadow-orange-500/30'
+                      ? 'bg-gradient-to-r from-[#D4A053]/70 to-[#C4943D]/60 border border-[#D4A053]/40 text-white shadow-lg shadow-[#D4A053]/30'
                       : isLit
                         ? 'bg-gradient-to-r from-stone-600/50 to-stone-700/40 border border-stone-400/20 text-white shadow-lg'
                         : 'bg-stone-900/30 border border-stone-600/20 text-stone-300/50')
@@ -2434,7 +2434,7 @@ const ReactionBar = memo(({
               {/* Multiplier display */}
               {isCharging(r.type) && currentMultiplier > 1 && (
                 <span
-                  className="absolute -top-8 left-1/2 -translate-x-1/2 text-yellow-400 font-bold text-lg drop-shadow-lg"
+                  className="absolute -top-8 left-1/2 -translate-x-1/2 text-[#D4A053] font-bold text-lg drop-shadow-lg"
                 >
                   {currentMultiplier}x
                 </span>
@@ -3132,7 +3132,7 @@ const LyricsOverlay = memo(({ track, isOpen, onClose, currentTime }: LyricsOverl
             {currentSegment && (
               <div
                 key={currentSegment.startTime}
-                className="bg-gradient-to-r from-purple-500/20 to-pink-500/20 rounded-2xl p-6 border border-purple-500/30 animate-voyo-scale-in"
+                className="bg-gradient-to-r from-purple-500/20 to-violet-600/20 rounded-2xl p-6 border border-purple-500/30 animate-voyo-scale-in"
               >
                 <p className="text-white text-2xl font-bold text-center mb-3">
                   {renderTappableText(currentSegment.original, true)}
@@ -3669,10 +3669,10 @@ export const VoyoPortraitPlayer = ({
     const modeColors: Record<string, { r: number; g: number; b: number }> = {
       'afro-heat': { r: 239, g: 68, b: 68 },      // Red
       'chill-vibes': { r: 59, g: 130, b: 246 },   // Blue
-      'party-mode': { r: 236, g: 72, b: 153 },    // Pink
+      'party-mode': { r: 167, g: 139, b: 250 },   // Purple-light
       'late-night': { r: 139, g: 92, b: 246 },    // Purple
-      'workout': { r: 249, g: 115, b: 22 },       // Orange
-      'random-mixer': { r: 168, g: 85, b: 247 },  // Gradient purple (mix of all)
+      'workout': { r: 124, g: 58, b: 237 },       // Purple-dark
+      'random-mixer': { r: 139, g: 92, b: 246 },  // Purple (brand)
     };
 
     let totalWeight = 0;
@@ -3701,6 +3701,23 @@ export const VoyoPortraitPlayer = ({
   }, [modeBoosts]);
 
   const vibesColor = getVibesColor();
+
+  // HEADER SCROLL BEHAVIOR - fade out on scroll down, fade in on scroll up
+  const [headerVisible, setHeaderVisible] = useState(true);
+  const lastScrollY = useRef(0);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+
+  const handleHeaderScroll = useCallback(() => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+    const currentY = container.scrollTop;
+    if (currentY > lastScrollY.current + 10) {
+      setHeaderVisible(false); // scrolling down
+    } else if (currentY < lastScrollY.current - 10) {
+      setHeaderVisible(true); // scrolling up
+    }
+    lastScrollY.current = currentY;
+  }, []);
 
   // CLEAN STATE: Two levels of reveal
   // TAP: Quick controls only (shuffle, repeat, share)
@@ -4101,6 +4118,8 @@ export const VoyoPortraitPlayer = ({
 
   return (
     <div
+      ref={scrollContainerRef}
+      onScroll={handleHeaderScroll}
       className={`relative w-full h-full bg-[#020203] text-white font-sans flex flex-col ${
         oyeBarBehavior === 'fade' ? 'overflow-y-auto' : 'overflow-hidden'
       }`}
@@ -4193,8 +4212,17 @@ export const VoyoPortraitPlayer = ({
         )}
       
 
-      {/* --- TOP SECTION (History/Queue) --- */}
-      <div className="px-6 flex justify-between items-start z-20 h-[18%]" style={{ paddingTop: 'max(2rem, env(safe-area-inset-top))' }}>
+      {/* --- TOP SECTION (History/Queue) --- Fades on scroll down */}
+      <div
+        className="px-6 flex justify-between items-start z-20 h-[18%]"
+        style={{
+          paddingTop: 'max(2rem, env(safe-area-inset-top))',
+          opacity: headerVisible ? 1 : 0,
+          transform: headerVisible ? 'translateY(0)' : 'translateY(-10px)',
+          transition: 'opacity 0.3s ease, transform 0.3s ease',
+          pointerEvents: headerVisible ? 'auto' : 'none',
+        }}
+      >
 
         {/* Left: History (scrollable) */}
         <div className="relative max-w-[48%]">
@@ -4373,7 +4401,7 @@ export const VoyoPortraitPlayer = ({
                 <div className="flex flex-col items-center gap-1">
                   <span className="text-3xl">{reaction.emoji}</span>
                   {reaction.multiplier > 1 && (
-                    <span className={`font-bold ${reaction.multiplier >= 10 ? 'text-2xl text-yellow-300' : 'text-lg text-yellow-400'}`}>
+                    <span className={`font-bold ${reaction.multiplier >= 10 ? 'text-2xl text-[#D4A053]' : 'text-lg text-[#D4A053]'}`}>
                       {reaction.multiplier}x{reaction.multiplier >= 10 ? '!!!' : ''}
                     </span>
                   )}
@@ -4796,8 +4824,8 @@ export const VoyoPortraitPlayer = ({
             <NeonBillboardCard
               title="Party Mode"
               taglines={["Another One! 🎉", "We The Best!", "Ku Lo Sa!", "Turn Up! 🔊", "Major Vibes Only"]}
-              neon="#ec4899"
-              glow="rgba(236,72,153,0.5)"
+              neon="#a78bfa"
+              glow="rgba(167,139,250,0.5)"
               delay={2}
               mood="hype"
               textAnimation="scaleIn"
@@ -4836,8 +4864,8 @@ export const VoyoPortraitPlayer = ({
             <NeonBillboardCard
               title="Workout"
               taglines={["Beast Mode! 💪", "Pump It Up!", "No Pain No Gain", "Go Harder!", "Maximum Effort!"]}
-              neon="#f97316"
-              glow="rgba(249,115,22,0.5)"
+              neon="#7c3aed"
+              glow="rgba(124,58,237,0.5)"
               delay={4}
               mood="intense"
               textAnimation="bounce"
@@ -4946,8 +4974,8 @@ export const VoyoPortraitPlayer = ({
               className="relative w-full max-w-md mx-4 mb-8 rounded-2xl overflow-hidden"
               style={{
                 background: 'linear-gradient(180deg, rgba(20,20,30,0.98) 0%, rgba(10,10,15,0.99) 100%)',
-                boxShadow: `0 0 40px rgba(236,72,153,0.3), 0 0 80px rgba(168,85,247,0.2)`,
-                border: '1px solid rgba(236,72,153,0.3)',
+                boxShadow: `0 0 40px rgba(139,92,246,0.3), 0 0 80px rgba(139,92,246,0.2)`,
+                border: '1px solid rgba(139,92,246,0.3)',
                 }}
             >
               {/* Header */}
@@ -4960,14 +4988,14 @@ export const VoyoPortraitPlayer = ({
                     style={{
                       background: signalCategory === 'afro-heat' ? 'rgba(239,68,68,0.2)' :
                                  signalCategory === 'chill-vibes' ? 'rgba(59,130,246,0.2)' :
-                                 signalCategory === 'party-mode' ? 'rgba(236,72,153,0.2)' :
+                                 signalCategory === 'party-mode' ? 'rgba(167,139,250,0.2)' :
                                  signalCategory === 'late-night' ? 'rgba(139,92,246,0.2)' :
-                                 'rgba(249,115,22,0.2)',
+                                 'rgba(124,58,237,0.2)',
                       color: signalCategory === 'afro-heat' ? '#ef4444' :
                              signalCategory === 'chill-vibes' ? '#3b82f6' :
-                             signalCategory === 'party-mode' ? '#ec4899' :
+                             signalCategory === 'party-mode' ? '#a78bfa' :
                              signalCategory === 'late-night' ? '#8b5cf6' :
-                             '#f97316',
+                             '#7c3aed',
                              }}
                   >
                     {signalCategory.replace('-', ' ')}
