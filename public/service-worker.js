@@ -4,7 +4,7 @@
  * BACKGROUND PLAYBACK: Enhanced to cache audio streams
  */
 
-const CACHE_NAME = 'voyo-v5-20260409';
+const CACHE_NAME = 'voyo-v6';
 const AUDIO_CACHE_NAME = 'voyo-audio-v2';
 const STATIC_ASSETS = [
   '/',
@@ -99,29 +99,58 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Standard caching for static assets
+  // Navigation requests (HTML) — NETWORK FIRST (always get fresh index.html)
+  if (event.request.mode === 'navigate') {
+    event.respondWith(
+      fetch(event.request)
+        .then((response) => {
+          const clone = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+          return response;
+        })
+        .catch(() => {
+          return caches.match(event.request)
+            .then((cached) => cached || caches.match('/offline.html'));
+        })
+    );
+    return;
+  }
+
+  // Hashed assets (JS/CSS with content hash) — CACHE FIRST (hash = immutable)
+  // Non-hashed assets — NETWORK FIRST
+  const isHashedAsset = event.request.url.match(/\/assets\/.*-[a-zA-Z0-9]{8,}\.(js|css)$/);
+
+  if (isHashedAsset) {
+    event.respondWith(
+      caches.match(event.request).then((cached) => {
+        if (cached) return cached;
+        return fetch(event.request).then((response) => {
+          if (response.status === 200) {
+            const clone = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+          }
+          return response;
+        });
+      })
+    );
+    return;
+  }
+
+  // Other static assets (images, icons) — STALE WHILE REVALIDATE
   event.respondWith(
     caches.match(event.request).then((cached) => {
-      // Return cached version or fetch from network
-      return cached || fetch(event.request)
+      const fetchPromise = fetch(event.request)
         .then((response) => {
-          // Cache successful responses for static assets
-          if (response.status === 200 && event.request.url.match(/\.(js|css|svg|png|jpg|webp)$/)) {
-            const responseClone = response.clone();
-            caches.open(CACHE_NAME).then((cache) => {
-              cache.put(event.request, responseClone);
-            });
+          if (response.status === 200 && event.request.url.match(/\.(svg|png|jpg|webp|woff2?)$/)) {
+            const clone = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
           }
           return response;
         })
         .catch(() => {
-          // Network error - return cached version or offline page for navigation
-          if (cached) return cached;
-          if (event.request.mode === 'navigate') {
-            return caches.match('/offline.html');
-          }
-          return new Response('', { status: 408, statusText: 'Offline' });
+          return cached || new Response('', { status: 408, statusText: 'Offline' });
         });
+      return cached || fetchPromise;
     })
   );
 });
