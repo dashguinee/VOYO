@@ -18,8 +18,6 @@ export default defineConfig({
           if (id.includes('/brain/') || id.includes('/scouts/')) return 'app-brain';
           if (id.includes('/services/') && !id.includes('audioEngine')) return 'app-services';
           if (id.includes('/knowledge/')) return 'app-knowledge';
-          // Heavy data
-          if (id.includes('/data/tracks')) return 'data-tracks';
           // Stores: let Vite handle naturally (manual chunking causes circular init crash)
         },
       },
