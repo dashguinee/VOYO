@@ -786,7 +786,8 @@ const BackdropToggle = memo(({
       onMouseLeave={handlePressEnd}
       onTouchStart={handlePressStart}
       onTouchEnd={handlePressEnd}
-      className="absolute left-4 top-1/2 -translate-y-1/2 z-50 group"
+      className="absolute left-4 top-1/2 -translate-y-1/2 z-50 group min-w-[44px] min-h-[44px]"
+      aria-label={isEnabled ? 'Disable video backdrop' : 'Enable video backdrop'}
     >
       {/* Vertical pill container */}
       <div className={`
@@ -887,7 +888,8 @@ const BackdropLibrary = ({
           <h3 className="text-lg font-bold text-white">Backdrop Library</h3>
           <button
             onClick={onClose}
-            className="p-2 rounded-full bg-white/5 hover:bg-white/10 transition-colors"
+            className="p-2 rounded-full bg-white/5 hover:bg-white/10 transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center active:scale-95 transition-transform"
+            aria-label="Close backdrop library"
           >
             <Plus size={16} className="text-gray-400 rotate-45" />
           </button>
@@ -981,8 +983,9 @@ const BackdropLibrary = ({
 const ExpandVideoButton = memo(({ onClick }: { onClick: () => void }) => (
   <button
     onClick={onClick}
-    className="absolute top-3 right-3 z-30 px-3 py-1.5 rounded-full backdrop-blur-sm border border-[#28282f] text-white text-xs font-medium flex items-center gap-1.5 hover:border-purple-500/40 transition-all"
+    className="absolute top-3 right-3 z-30 px-3 py-1.5 rounded-full backdrop-blur-sm border border-[#28282f] text-white text-xs font-medium flex items-center gap-1.5 hover:border-purple-500/40 transition-all min-h-[44px] active:scale-95"
     style={{ background: 'rgba(28, 28, 35, 0.65)' }}
+    aria-label="Expand video"
   >
     <Play size={12} fill="currentColor" />
     <span>Video</span>
@@ -1012,7 +1015,7 @@ const RightToolbar = memo(({ onSettingsClick }: { onSettingsClick: () => void })
       {/* Like Button — pamplo pink when active */}
       <button
         onClick={handleLike}
-        className={`w-11 h-11 rounded-full flex items-center justify-center backdrop-blur-md shadow-lg transition-all duration-300 ${
+        className={`w-11 h-11 rounded-full flex items-center justify-center backdrop-blur-md shadow-lg transition-all duration-300 active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-500/50 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0a0a0c] ${
           isLiked
             ? 'border border-[#ec4899]/60'
             : 'border border-[#28282f] hover:border-white/20'
@@ -1020,6 +1023,7 @@ const RightToolbar = memo(({ onSettingsClick }: { onSettingsClick: () => void })
         style={{
           background: isLiked ? 'rgba(236, 72, 153, 0.25)' : 'rgba(28, 28, 35, 0.65)',
         }}
+        aria-label={isLiked ? 'Unlike this track' : 'Like this track'}
         title={isLiked ? 'Unlike' : 'Like'}
       >
         <Heart size={16} className={isLiked ? 'text-[#ec4899] fill-[#ec4899]' : 'text-white/70'} />
@@ -1037,8 +1041,9 @@ const RightToolbar = memo(({ onSettingsClick }: { onSettingsClick: () => void })
       {/* Settings Button — metallic grey */}
       <button
         onClick={onSettingsClick}
-        className="w-11 h-11 rounded-full backdrop-blur-md border border-[#28282f] flex items-center justify-center hover:border-white/20 shadow-lg transition-all duration-300"
+        className="w-11 h-11 rounded-full backdrop-blur-md border border-[#28282f] flex items-center justify-center hover:border-white/20 shadow-lg transition-all duration-300 active:scale-95"
         style={{ background: 'rgba(28, 28, 35, 0.65)' }}
+        aria-label="Audio settings"
         title="Audio settings"
       >
         <Settings size={16} className="text-white/70" />
@@ -1081,7 +1086,7 @@ const SmallCard = memo(({ track, onTap, isPlayed }: { track: Track; onTap: () =>
     <div className="w-[70px] h-[70px] rounded-2xl overflow-hidden relative border border-white/5 bg-gradient-to-br from-purple-900/30 to-pink-900/20">
       <SmartImage
         src={getTrackThumbnailUrl(track, 'medium')}
-        alt={track.title}
+        alt={`${track.title} by ${track.artist}`}
         className={`w-full h-full object-cover transition-all duration-300 ${
           isPlayed ? 'opacity-60' : 'opacity-90 group-hover:opacity-100 group-hover:scale-105'
         }`}
@@ -1541,7 +1546,7 @@ const StreamCard = memo(({ track, onTap, isPlayed, onTeaser, modeColor, onQueueA
         >
           <SmartImage
             src={getTrackThumbnailUrl(track, 'medium')}
-            alt={track.title}
+            alt={`${track.title} by ${track.artist}`}
             className={`w-full h-full object-cover transition-all duration-300 group-hover:scale-110 ${
               isPlayed ? 'opacity-60' : 'opacity-90 group-hover:opacity-100'
             }`}
@@ -1618,7 +1623,7 @@ const BigCenterCard = memo(({ track, onExpandVideo, onShowLyrics, hideThumb }: {
     >
       <SmartImage
         src={getTrackThumbnailUrl(track, 'high')}
-        alt={track.title}
+        alt={`${track.title} by ${track.artist}`}
         className="w-full h-full object-cover transition-transform duration-700 scale-110 group-hover:scale-125"
         trackId={track.trackId}
         artist={track.artist}
@@ -1756,7 +1761,8 @@ const PlayControls = memo(({
 
       {/* Prev - HOLD TO REWIND */}
       <button
-        className="absolute left-[20%] text-white/50 hover:text-white transition-colors"
+        className="absolute left-[20%] text-white/50 hover:text-white transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center active:scale-95 transition-transform"
+        aria-label="Previous track"
         onClick={() => {
           haptics.light();
           onPrev();
@@ -1783,7 +1789,8 @@ const PlayControls = memo(({
 
         {/* Spinning Vinyl Disk */}
         <button
-          className="absolute inset-0 rounded-full overflow-hidden border-2 border-white/20 shadow-lg"
+          className="absolute inset-0 rounded-full overflow-hidden border-2 border-white/20 shadow-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-500/50 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0a0a0c]"
+          aria-label={isPlaying ? 'Pause' : 'Play'}
           onClick={() => {
             haptics.medium();
             onToggle();
@@ -1816,7 +1823,7 @@ const PlayControls = memo(({
               >
                 <SmartImage
                   src={trackArt}
-                  alt="Now Playing"
+                  alt="Now playing album art"
                   className="w-full h-full object-cover"
                   lazy={false}
                 />
@@ -1841,7 +1848,8 @@ const PlayControls = memo(({
 
       {/* Next - HOLD TO FAST FORWARD */}
       <button
-        className="absolute right-[20%] text-white/50 hover:text-white transition-colors"
+        className="absolute right-[20%] text-white/50 hover:text-white transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center active:scale-95 transition-transform"
+        aria-label="Next track"
         onClick={() => {
           haptics.light();
           onNext();
@@ -2490,9 +2498,10 @@ const ReactionBar = memo(({
                 onPointerUp={handleMicHoldEnd}
                 onPointerLeave={handleMicHoldEnd}
                 onClick={!isVoiceMode && !isRecording ? handleMicTap : undefined}
-                className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 ${
+                className={`min-w-[44px] min-h-[44px] rounded-full flex items-center justify-center flex-shrink-0 active:scale-95 transition-transform ${
                   isRecording ? 'bg-red-500/80' : 'bg-purple-600/60'
                 }`}
+                aria-label={isRecording ? 'Stop recording' : 'Voice input'}
                 disabled={isProcessing && !isRecording}
               >
                 {isProcessing && !isRecording ? (
@@ -2507,7 +2516,8 @@ const ReactionBar = memo(({
               {/* Close button */}
               <button
                 onClick={handleChatClose}
-                className="w-5 h-5 rounded-full bg-white/10 flex items-center justify-center text-white/60 text-xs flex-shrink-0"
+                className="min-w-[44px] min-h-[44px] rounded-full bg-white/10 flex items-center justify-center text-white/60 text-xs flex-shrink-0 active:scale-95 transition-transform"
+                aria-label="Close chat"
               >
                 ×
               </button>
@@ -2560,7 +2570,7 @@ const FullscreenVideoPlayer = ({
       <div className="relative w-full h-full max-w-4xl mx-auto">
         <SmartImage
           src={getTrackThumbnailUrl(track, 'high')}
-          alt={track.title}
+          alt={`${track.title} by ${track.artist}`}
           className="w-full h-full object-contain"
           trackId={track.trackId}
           artist={track.artist}
@@ -2571,6 +2581,7 @@ const FullscreenVideoPlayer = ({
         <button
           onClick={onTogglePlay}
           className="absolute inset-0 flex items-center justify-center bg-black/30 hover:bg-black/40 transition-colors"
+          aria-label={isPlaying ? 'Pause video' : 'Play video'}
         >
           <div className="w-20 h-20 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center">
             {isPlaying ? (
@@ -2592,7 +2603,8 @@ const FullscreenVideoPlayer = ({
         </div>
         <button
           onClick={onClose}
-          className="ml-4 px-6 py-2 rounded-full bg-white/10 border border-white/20 text-white text-sm font-bold hover:bg-white/20 transition-colors"
+          className="ml-4 px-6 py-2 rounded-full bg-white/10 border border-white/20 text-white text-sm font-bold hover:bg-white/20 transition-colors min-h-[44px] active:scale-95 transition-transform"
+          aria-label="Close fullscreen video"
         >
           Close
         </button>
@@ -2867,11 +2879,12 @@ const LyricsActionButtons = memo(({ lyrics, track, onEditRequest }: LyricsAction
     <div className="flex justify-center gap-3 mt-4">
       {/* Copy button */}
       <button
-        className={`px-4 py-2 rounded-full text-xs font-medium flex items-center gap-2 ${
+        className={`px-4 py-2 rounded-full text-xs font-medium flex items-center gap-2 min-h-[44px] active:scale-95 transition-transform ${
           copied
             ? 'bg-purple-500 text-white'
             : 'bg-white/10 text-white/70 hover:bg-white/20'
         }`}
+        aria-label="Copy lyrics"
         onClick={handleCopy}
       >
         {copied ? '✓ Copied!' : '📋 Copy'}
@@ -2879,11 +2892,12 @@ const LyricsActionButtons = memo(({ lyrics, track, onEditRequest }: LyricsAction
 
       {/* Share button */}
       <button
-        className={`px-4 py-2 rounded-full text-xs font-medium flex items-center gap-2 ${
+        className={`px-4 py-2 rounded-full text-xs font-medium flex items-center gap-2 min-h-[44px] active:scale-95 transition-transform ${
           shared
             ? 'bg-purple-500 text-white'
             : 'bg-white/10 text-white/70 hover:bg-white/20'
         }`}
+        aria-label="Share lyrics"
         onClick={handleShare}
       >
         <Share2 size={14} />
@@ -2892,7 +2906,8 @@ const LyricsActionButtons = memo(({ lyrics, track, onEditRequest }: LyricsAction
 
       {/* Edit button */}
       <button
-        className="px-4 py-2 rounded-full text-xs font-medium flex items-center gap-2 bg-purple-500/20 text-purple-300 hover:bg-purple-500/30"
+        className="px-4 py-2 rounded-full text-xs font-medium flex items-center gap-2 bg-purple-500/20 text-purple-300 hover:bg-purple-500/30 min-h-[44px] active:scale-95 transition-transform"
+        aria-label="Edit lyrics"
         onClick={onEditRequest}
       >
         ✏️ Polish
@@ -3014,7 +3029,7 @@ const LyricsOverlay = memo(({ track, isOpen, onClose, currentTime }: LyricsOverl
     const loadLyrics = async () => {
       try {
         setError(null);
-        setProgress({ stage: 'fetching', progress: 0, message: 'Loading...' });
+        setProgress({ stage: 'fetching', progress: 0, message: 'Fetching audio...' });
 
         // Get audio URL for Whisper
         const audioUrl = await getVideoStreamUrl(track.trackId);

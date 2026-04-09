@@ -196,7 +196,8 @@ const ProgressBar = ({ isActive, trackId, onSeekToHotspot }: {
         <div className="absolute bottom-2 right-4 flex items-center gap-2">
           {hottestSpot && onSeekToHotspot && (
             <button
-              className="flex items-center gap-1 px-2 py-1 rounded-full bg-white/20 text-white text-[10px] font-bold backdrop-blur-sm"
+              className="flex items-center gap-1 px-2 py-1 rounded-full bg-white/20 text-white text-[10px] font-bold backdrop-blur-sm min-h-[44px] min-w-[44px] active:scale-95 transition-transform"
+              aria-label="Skip to hot part"
               onClick={() => onSeekToHotspot(hottestSpot.position)}
             >
               <Flame className="w-3 h-3" style={{ fill: 'white' }} />
@@ -346,7 +347,8 @@ const CommentsSheet = ({
               </div>
               <button
                 onClick={onClose}
-                className="p-2 rounded-full bg-white/10"
+                className="p-2 rounded-full bg-white/10 min-w-[44px] min-h-[44px] flex items-center justify-center active:scale-95 transition-transform"
+                aria-label="Close comments"
               >
                 <X className="w-5 h-5 text-white/70" />
               </button>
@@ -406,7 +408,8 @@ const CommentsSheet = ({
               />
               <button
                 onClick={handleSubmit}
-                className="px-4 py-2.5 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 text-white text-sm font-bold"
+                className="px-4 py-2.5 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 text-white text-sm font-bold min-h-[44px] active:scale-95 transition-transform"
+                aria-label="Post comment"
               >
                 Post
               </button>
@@ -716,7 +719,8 @@ const FeedCard = memo(({
         {/* Profile + Follow - smaller, centered to name */}
         {onFollowArtist && (
           <button
-            className="relative mt-4"
+            className="relative mt-4 min-w-[44px] min-h-[44px] flex items-center justify-center active:scale-95 transition-transform"
+            aria-label={isFollowingArtist ? `Unfollow ${trackArtist}` : `Follow ${trackArtist}`}
             onClick={(e) => {
               e.stopPropagation();
               onFollowArtist();
@@ -752,7 +756,8 @@ const FeedCard = memo(({
       <div className="absolute right-4 bottom-32 z-20 flex flex-col items-center gap-5">
         {/* OYE Button - Main Action — sunset gradient (orange → yellow) = VITALITY */}
         <button
-          className="flex flex-col items-center"
+          className="flex flex-col items-center active:scale-95 transition-transform focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-500/50 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0a0a0c] rounded-full"
+          aria-label="OYE this track"
           onClick={() => {
             handleReaction('oye');
             addFloatingReaction('oye');
@@ -780,7 +785,8 @@ const FeedCard = memo(({
 
         {/* Like Button (Heart) — pamplo pink when active */}
         <button
-          className="flex flex-col items-center"
+          className="flex flex-col items-center min-w-[44px] min-h-[44px] active:scale-95 transition-transform focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-500/50 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0a0a0c] rounded-full"
+          aria-label="Like this track"
           onClick={() => {
             handleReaction('like');
             addFloatingReaction('like');
@@ -802,7 +808,8 @@ const FeedCard = memo(({
 
         {/* Fire Button — sunset orange when active */}
         <button
-          className="flex flex-col items-center"
+          className="flex flex-col items-center min-w-[44px] min-h-[44px] active:scale-95 transition-transform"
+          aria-label="Fire reaction"
           onClick={() => {
             handleReaction('fire');
             addFloatingReaction('fire');
@@ -824,7 +831,8 @@ const FeedCard = memo(({
 
         {/* Comments */}
         <button
-          className="flex flex-col items-center"
+          className="flex flex-col items-center min-w-[44px] min-h-[44px] active:scale-95 transition-transform"
+          aria-label="Comments"
           onClick={() => setShowComments(true)}
         >
           <MessageCircle className="w-8 h-8 text-white/40" />
@@ -833,7 +841,8 @@ const FeedCard = memo(({
 
         {/* Add to Playlist */}
         <button
-          className="flex flex-col items-center"
+          className="flex flex-col items-center min-w-[44px] min-h-[44px] active:scale-95 transition-transform"
+          aria-label="Add to playlist"
           onClick={() => onAddToPlaylist?.()}
         >
           <Plus className="w-8 h-8 text-white/40" />
@@ -841,7 +850,8 @@ const FeedCard = memo(({
 
         {/* Share */}
         <button
-          className="flex flex-col items-center active:scale-90 transition-transform"
+          className="flex flex-col items-center min-w-[44px] min-h-[44px] active:scale-90 transition-transform"
+          aria-label="Share"
           onClick={onShare}
         >
           <Share2 className="w-8 h-8 text-white/40" />
@@ -1597,7 +1607,8 @@ export const VoyoVerticalFeed = ({ isActive, onGoToPlayer }: VoyoVerticalFeedPro
         {/* Mute button */}
         <div className="absolute right-4 top-0">
           <button
-            className="active:scale-90 transition-transform"
+            className="active:scale-90 transition-transform min-w-[44px] min-h-[44px] flex items-center justify-center"
+            aria-label={volume > 0 ? 'Mute' : 'Unmute'}
             onClick={() => setVolume(volume > 0 ? 0 : 80)}
           >
             {volume > 0 ? (

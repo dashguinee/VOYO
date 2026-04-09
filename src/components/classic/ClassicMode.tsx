@@ -133,11 +133,12 @@ const MiniPlayer = ({ onVOYOClick, onOpenFull }: { onVOYOClick: () => void; onOp
           >
             {/* Shuffle Bubble - exits after VOYO */}
             <button
-              className={`w-12 h-12 rounded-full backdrop-blur-xl flex items-center justify-center shadow-lg ${
+              className={`w-12 h-12 rounded-full backdrop-blur-xl flex items-center justify-center shadow-lg active:scale-95 transition-transform ${
                 shuffleMode
                   ? 'bg-purple-500/80 border-2 border-purple-400'
                   : 'bg-[#1c1c22] border border-[#28282f]'
               }`}
+              aria-label={shuffleMode ? 'Disable shuffle' : 'Enable shuffle'}
               onClick={(e) => {
                 e.stopPropagation();
                 toggleShuffle();
@@ -148,11 +149,12 @@ const MiniPlayer = ({ onVOYOClick, onOpenFull }: { onVOYOClick: () => void; onOp
 
             {/* Repeat/Loop Bubble - exits after VOYO */}
             <button
-              className={`w-12 h-12 rounded-full backdrop-blur-xl flex items-center justify-center shadow-lg ${
+              className={`w-12 h-12 rounded-full backdrop-blur-xl flex items-center justify-center shadow-lg active:scale-95 transition-transform ${
                 repeatMode !== 'off'
                   ? 'bg-purple-500/80 border-2 border-purple-400'
                   : 'bg-[#1c1c22] border border-[#28282f]'
               }`}
+              aria-label={repeatMode === 'off' ? 'Enable repeat' : repeatMode === 'one' ? 'Repeat one, click to change' : 'Repeat all, click to change'}
               onClick={(e) => {
                 e.stopPropagation();
                 cycleRepeat();
@@ -174,7 +176,8 @@ const MiniPlayer = ({ onVOYOClick, onOpenFull }: { onVOYOClick: () => void; onOp
 
             {/* VOYO Player Bubble - Video Experience - disappears first so user notices */}
             <button
-              className="w-12 h-12 rounded-full backdrop-blur-xl flex items-center justify-center shadow-lg bg-gradient-to-br from-purple-500/80 to-violet-600/80 border-2 border-purple-400"
+              className="w-12 h-12 rounded-full backdrop-blur-xl flex items-center justify-center shadow-lg bg-gradient-to-br from-purple-500/80 to-violet-600/80 border-2 border-purple-400 active:scale-95 transition-transform"
+              aria-label="Open VOYO player"
               onClick={(e) => {
                 e.stopPropagation();
                 onVOYOClick();
@@ -214,7 +217,7 @@ const MiniPlayer = ({ onVOYOClick, onOpenFull }: { onVOYOClick: () => void; onOp
         <div className="relative w-12 h-12 rounded-xl overflow-hidden flex-shrink-0">
           <SmartImage
             src={getYouTubeThumbnail(currentTrack.trackId, 'medium')}
-            alt={currentTrack.title}
+            alt={`${currentTrack.title} by ${currentTrack.artist}`}
             className="w-full h-full object-cover"
             trackId={currentTrack.trackId}
             artist={currentTrack.artist}
@@ -243,8 +246,8 @@ const MiniPlayer = ({ onVOYOClick, onOpenFull }: { onVOYOClick: () => void; onOp
         <div className="flex items-center gap-2 flex-shrink-0" style={{ marginRight: '4px' }}>
           {/* Add to playlist */}
           <button
-            className="rounded-full bg-white/10 flex items-center justify-center"
-            style={{ width: '30px', height: '30px' }}
+            className="rounded-full bg-white/10 flex items-center justify-center min-w-[44px] min-h-[44px] active:scale-95 transition-transform"
+            aria-label="Add to playlist"
             onClick={(e) => {
               e.stopPropagation();
               setShowPlaylistModal(true);
@@ -255,7 +258,8 @@ const MiniPlayer = ({ onVOYOClick, onOpenFull }: { onVOYOClick: () => void; onOp
 
           {/* OYE Button — sunset gradient (orange → yellow) */}
           <button
-            className="w-8 h-8 rounded-full flex items-center justify-center"
+            className="w-11 h-11 rounded-full flex items-center justify-center active:scale-95 transition-transform"
+            aria-label="OYE this track"
             onClick={(e) => {
               e.stopPropagation();
               handleOye();
@@ -270,7 +274,8 @@ const MiniPlayer = ({ onVOYOClick, onOpenFull }: { onVOYOClick: () => void; onOp
 
           {/* Play/Pause */}
           <button
-            className="w-10 h-10 rounded-full bg-white flex items-center justify-center"
+            className="w-11 h-11 rounded-full bg-white flex items-center justify-center active:scale-95 transition-transform focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-500/50 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0a0a0c]"
+            aria-label={isPlaying ? 'Pause' : 'Play'}
             onClick={(e) => {
               e.stopPropagation();
               togglePlay();
@@ -346,6 +351,7 @@ const BottomNav = ({
         {/* LEFT: DAHUB (when on Home) or Home (when elsewhere) */}
         <button
           className="relative flex items-center justify-center flex-1 h-full active:scale-95 transition-transform duration-75"
+          aria-label={leftTab === 'hub' ? 'DAHUB' : 'Home'}
           onClick={() => onTabChange(leftTab)}
         >
           <LeftIcon
@@ -362,6 +368,7 @@ const BottomNav = ({
         {/* CENTER: VOYO ORB — consistent with VoyoBottomNav */}
         <button
           className="relative flex items-center justify-center active:scale-95 transition-transform duration-75"
+          aria-label="Switch to VOYO mode"
           onClick={onVOYOClick}
           style={{ flex: '0 0 auto' }}
         >
@@ -379,6 +386,7 @@ const BottomNav = ({
         {/* RIGHT: Always Library */}
         <button
           className="relative flex items-center justify-center flex-1 h-full active:scale-95 transition-transform duration-75"
+          aria-label="Library"
           onClick={() => onTabChange('library')}
         >
           <LibraryIcon

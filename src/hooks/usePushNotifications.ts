@@ -85,8 +85,8 @@ export function usePushNotifications() {
       // Welcome notification -- direct from service worker (instant, this device only)
       registration.showNotification('Welcome to VOYO \uD83C\uDFB5', {
         body: 'Your music, your vibe.',
-        icon: '/icons/voyo-192.svg',
-        badge: '/icons/voyo-192.svg',
+        icon: '/icon-192.png',
+        badge: '/icon-192.png',
         tag: 'voyo-welcome',
       })
 

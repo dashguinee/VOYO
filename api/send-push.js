@@ -43,7 +43,7 @@ export default async function handler(req, res) {
     return res.status(200).json({ sent: 0, message: 'No subscribers found' })
   }
 
-  const payload = JSON.stringify({ title, body, url: url || '/', icon: icon || '/icons/voyo-192.svg' })
+  const payload = JSON.stringify({ title, body, url: url || '/', icon: icon || '/icon-192.png' })
 
   let sent = 0
   let failed = 0

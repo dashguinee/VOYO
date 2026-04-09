@@ -98,15 +98,17 @@ const TrackItem = memo(({
       {/* Action Buttons */}
       <div className="flex items-center gap-1.5">
         <button
-          className="p-2 rounded-full bg-purple-500/15 border border-purple-500/20 active:scale-90 transition-transform"
+          className="p-2 rounded-full bg-purple-500/15 border border-purple-500/20 active:scale-90 transition-transform min-w-[44px] min-h-[44px] flex items-center justify-center"
           onClick={handleQueueClick}
+          aria-label="Add to queue"
           title="Add to Queue"
         >
           <ListPlus className="w-4 h-4 text-purple-400" />
         </button>
         <button
-          className="p-2 rounded-full bg-[#f97316]/15 border border-[#f97316]/20 active:scale-90 transition-transform"
+          className="p-2 rounded-full bg-[#f97316]/15 border border-[#f97316]/20 active:scale-90 transition-transform min-w-[44px] min-h-[44px] flex items-center justify-center"
           onClick={handleDiscoveryClick}
+          aria-label="Discover similar tracks"
           title="Discover More Like This"
         >
           <Compass className="w-4 h-4 text-[#f97316]" />
@@ -379,7 +381,8 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap }: SearchOverlayP
 
           {/* Main Container - Full width, no portal zones */}
           <div
-            className="fixed inset-x-0 top-0 bottom-0 z-50 flex flex-col p-4 pb-0"
+            className="fixed inset-x-0 top-0 bottom-0 z-50 flex flex-col px-4 pb-0"
+            style={{ paddingTop: 'max(16px, env(safe-area-inset-top, 16px))' }}
           >
             {/* Search Header */}
             <div className="mb-3">
@@ -403,14 +406,15 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap }: SearchOverlayP
                   />
                   {isSearching && <Loader2 className="w-4 h-4 text-purple-400 animate-spin flex-shrink-0" />}
                   {query && !isSearching && (
-                    <button onClick={() => { setQuery(''); setResults([]); }} className="text-white/30">
+                    <button onClick={() => { setQuery(''); setResults([]); }} className="text-white/30 p-1" aria-label="Clear search">
                       <X className="w-4 h-4" />
                     </button>
                   )}
                 </div>
                 <button
-                  className="p-2.5 rounded-full bg-white/8 active:scale-90 transition-transform"
+                  className="p-2.5 rounded-full bg-white/8 active:scale-90 transition-transform min-w-[44px] min-h-[44px] flex items-center justify-center"
                   onClick={onClose}
+                  aria-label="Close search"
                 >
                   <X className="w-5 h-5 text-white/60" />
                 </button>
@@ -441,7 +445,7 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap }: SearchOverlayP
             </div>
 
             {/* Results - Full width scrollable area */}
-            <div className="flex-1 overflow-y-auto space-y-0.5 pb-4 overscroll-contain">
+            <div className="flex-1 overflow-y-auto space-y-0.5 overscroll-contain" style={{ paddingBottom: 'max(16px, env(safe-area-inset-bottom, 16px))' }}>
               {/* Artist Section */}
               {activeTab === 'artists' && (
                 <div className="space-y-1 px-1">
@@ -537,16 +541,22 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap }: SearchOverlayP
 
                   {/* Error */}
                   {error && (
-                    <div className="text-center py-8">
+                    <div className="text-center py-12">
+                      <div className="w-14 h-14 mx-auto mb-4 rounded-full bg-red-500/10 flex items-center justify-center">
+                        <Search className="w-7 h-7 text-red-400/40" />
+                      </div>
                       <p className="text-red-400/80 text-sm">{error}</p>
                     </div>
                   )}
 
                   {/* No results */}
                   {!isSearching && query.length >= 2 && results.length === 0 && !error && (
-                    <div className="text-center py-8">
-                      <p className="text-white/50 text-sm">No results for "{query}"</p>
-                      <p className="text-white/30 text-xs mt-1">Try different keywords</p>
+                    <div className="text-center py-12">
+                      <div className="w-14 h-14 mx-auto mb-4 rounded-full bg-white/5 flex items-center justify-center">
+                        <Music2 className="w-7 h-7 text-white/20" />
+                      </div>
+                      <p className="text-white/50 text-sm font-medium">No results for &ldquo;{query}&rdquo;</p>
+                      <p className="text-white/25 text-xs mt-1.5">Try different keywords or check the spelling</p>
                     </div>
                   )}
 
@@ -571,12 +581,12 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap }: SearchOverlayP
                         <div
                           key={i}
                           className="flex items-center gap-3 p-3 rounded-xl"
-                          style={{ background: 'rgba(255,255,255,0.02)' }}
+                          style={{ background: 'rgba(255,255,255,0.02)', animationDelay: `${i * 80}ms` }}
                         >
-                          <div className="w-12 h-12 rounded-lg bg-white/5 animate-pulse" />
+                          <div className="w-12 h-12 rounded-lg bg-white/5 voyo-skeleton-shimmer flex-shrink-0" />
                           <div className="flex-1">
-                            <div className="h-3 w-3/4 bg-white/5 rounded animate-pulse mb-2" />
-                            <div className="h-2 w-1/2 bg-white/5 rounded animate-pulse" />
+                            <div className="h-3 rounded bg-white/5 voyo-skeleton-shimmer mb-2" style={{ width: `${65 + (i * 5) % 25}%` }} />
+                            <div className="h-2 rounded bg-white/5 voyo-skeleton-shimmer" style={{ width: `${40 + (i * 7) % 20}%` }} />
                           </div>
                         </div>
                       ))}

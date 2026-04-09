@@ -86,16 +86,32 @@ class AppErrorBoundary extends Component<{ children: ReactNode }, ErrorBoundaryS
             flexDirection: 'column',
             alignItems: 'center',
             justifyContent: 'center',
-            background: '#020203',
+            background: 'linear-gradient(180deg, #0a0a12 0%, #0a0612 50%, #0a0a0f 100%)',
             color: 'white',
-            fontFamily: 'system-ui, sans-serif',
+            fontFamily: "'Inter', system-ui, sans-serif",
             padding: 24,
             textAlign: 'center',
           }}
         >
-          <div style={{ fontSize: 48, marginBottom: 16 }}>VOYO</div>
-          <div style={{ fontSize: 16, opacity: 0.7, marginBottom: 24 }}>
+          <div
+            style={{
+              fontSize: 48,
+              fontWeight: 900,
+              letterSpacing: '0.05em',
+              marginBottom: 12,
+              background: 'linear-gradient(135deg, #a78bfa, #8b5cf6)',
+              backgroundClip: 'text',
+              WebkitBackgroundClip: 'text',
+              color: 'transparent',
+            }}
+          >
+            VOYO
+          </div>
+          <div style={{ fontSize: 15, opacity: 0.5, marginBottom: 8, fontWeight: 500 }}>
             Something went wrong
+          </div>
+          <div style={{ fontSize: 12, opacity: 0.25, marginBottom: 32, maxWidth: 280, lineHeight: 1.5 }}>
+            The app encountered an unexpected error. Tap below to restart.
           </div>
           <button
             onClick={() => {
@@ -103,14 +119,15 @@ class AppErrorBoundary extends Component<{ children: ReactNode }, ErrorBoundaryS
               window.location.reload();
             }}
             style={{
-              padding: '12px 32px',
+              padding: '14px 40px',
               borderRadius: 999,
-              background: '#8b5cf6',
+              background: 'linear-gradient(135deg, #8b5cf6, #7c3aed)',
               color: 'white',
               border: 'none',
               fontSize: 14,
               fontWeight: 600,
               cursor: 'pointer',
+              boxShadow: '0 0 24px rgba(139, 92, 246, 0.3)',
             }}
           >
             Reload
@@ -1195,7 +1212,18 @@ function App() {
   return (
     <AppErrorBoundary>
     <AuthProvider>
-    <Suspense fallback={<div className="h-full w-full bg-[#0a0a0f]" />}>
+    <Suspense fallback={
+      <div className="h-full w-full bg-[#0a0a0f] flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <span className="text-3xl font-black tracking-wider" style={{ color: '#8b5cf6', opacity: 0.6 }}>VOYO</span>
+          <div className="flex items-center gap-1.5">
+            {[0, 1, 2].map(i => (
+              <div key={i} className="w-1.5 h-1.5 rounded-full bg-purple-500/50 animate-pulse" style={{ animationDelay: `${i * 150}ms` }} />
+            ))}
+          </div>
+        </div>
+      </div>
+    }>
     <div className="relative h-full w-full bg-[#0a0a0f] overflow-hidden">
       {/* VOYO Splash Screen - Premium water drop animation */}
       {showSplash && (

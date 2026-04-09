@@ -4,13 +4,15 @@
  * BACKGROUND PLAYBACK: Enhanced to cache audio streams
  */
 
-const CACHE_NAME = 'voyo-v4-20260409';
+const CACHE_NAME = 'voyo-v5-20260409';
 const AUDIO_CACHE_NAME = 'voyo-audio-v2';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
-  '/icons/voyo-192.svg',
-  '/icons/voyo-512.svg'
+  '/icon.svg',
+  '/icon-192.png',
+  '/icon-512.png',
+  '/offline.html'
 ];
 
 // Install event - cache static assets
@@ -113,8 +115,12 @@ self.addEventListener('fetch', (event) => {
           return response;
         })
         .catch(() => {
-          // Network error - return cached if available, otherwise fail silently
-          return cached || new Response('', { status: 408, statusText: 'Request timeout' });
+          // Network error - return cached version or offline page for navigation
+          if (cached) return cached;
+          if (event.request.mode === 'navigate') {
+            return caches.match('/offline.html');
+          }
+          return new Response('', { status: 408, statusText: 'Offline' });
         });
     })
   );
@@ -129,7 +135,7 @@ self.addEventListener('message', (event) => {
   if (event.data?.type === 'TEST_PUSH') {
     self.registration.showNotification('VOYO Test', {
       body: 'Push notifications are working.',
-      icon: '/icons/voyo-192.svg',
+      icon: '/icon-192.png',
     });
   }
 });
@@ -150,8 +156,8 @@ self.addEventListener('push', (event) => {
   event.waitUntil(
     self.registration.showNotification(data.title || 'VOYO', {
       body: data.body,
-      icon: data.icon || '/icons/voyo-192.svg',
-      badge: '/icons/voyo-192.svg',
+      icon: data.icon || '/icon-192.png',
+      badge: '/icon-192.png',
       data: { url: data.url || '/' },
       tag: 'voyo-notification',
     })

@@ -105,6 +105,7 @@ const TunnelDrawer: React.FC<TunnelDrawerProps> = ({
                 </div>
                 <button
                   onClick={onClose}
+                  aria-label="Close queue"
                   className="p-2 rounded-full bg-white/5 hover:bg-white/10 transition-colors"
                 >
                   <X className="w-5 h-5 text-white/70" />
@@ -125,7 +126,8 @@ const TunnelDrawer: React.FC<TunnelDrawerProps> = ({
                       <button
                         key={item.playedAt}
                         onClick={() => handleReplayTrack(item.track)}
-                        className="w-full flex items-center gap-3 p-3 rounded-xl bg-white/5 hover:bg-white/10 transition-colors opacity-60 hover:opacity-100"
+                        aria-label={`Replay ${item.track.title}`}
+                        className="w-full flex items-center gap-3 p-3 rounded-xl bg-white/5 hover:bg-white/10 active:scale-[0.98] transition-all opacity-60 hover:opacity-100"
                       >
                         <img
                           src={getThumbnailUrl(item.track.trackId, 'medium')}
@@ -202,6 +204,7 @@ const TunnelDrawer: React.FC<TunnelDrawerProps> = ({
                     </h3>
                     <button
                       onClick={clearQueue}
+                      aria-label="Clear queue"
                       className="text-xs text-red-400/70 hover:text-red-400 transition-colors flex items-center gap-1"
                     >
                       <Trash2 className="w-3 h-3" />
@@ -238,7 +241,8 @@ const TunnelDrawer: React.FC<TunnelDrawerProps> = ({
                           </span>
                           {/* Heart: tap to like, hold to add to playlist */}
                           <button
-                            className="p-1.5 rounded-full hover:bg-white/10"
+                            aria-label="Like track"
+                            className="p-2.5 -m-1 rounded-full hover:bg-white/10"
                             onClick={(e) => e.stopPropagation()}
                             onPointerDown={(e) => {
                               e.stopPropagation();
@@ -266,11 +270,11 @@ const TunnelDrawer: React.FC<TunnelDrawerProps> = ({
               {/* Empty Queue State */}
               {queue.length === 0 && (
                 <div className="text-center py-12">
-                  <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-white/5 flex items-center justify-center">
-                    <Music2 className="w-8 h-8 text-white/30" />
+                  <div className="w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center" style={{ background: 'linear-gradient(135deg, rgba(139,92,246,0.15), rgba(139,92,246,0.05))' }}>
+                    <Music2 className="w-8 h-8 text-purple-400/40" />
                   </div>
-                  <p className="text-white/50 text-sm mb-2">Your queue is empty</p>
-                  <p className="text-white/30 text-xs">
+                  <p className="text-white/50 text-sm font-medium mb-1.5">Your queue is empty</p>
+                  <p className="text-white/25 text-xs">
                     Add tracks to keep the vibes going
                   </p>
                 </div>
@@ -278,10 +282,11 @@ const TunnelDrawer: React.FC<TunnelDrawerProps> = ({
             </div>
 
             {/* Footer */}
-            <div className="px-6 py-4 border-t border-white/10 bg-black/20">
+            <div className="px-6 py-4 border-t border-white/10 bg-black/20" style={{ paddingBottom: 'max(16px, env(safe-area-inset-bottom, 16px))' }}>
               <button
                 onClick={onOpenSearch}
-                className="w-full py-4 rounded-xl bg-gradient-to-r from-purple-500 to-violet-600 text-white font-semibold flex items-center justify-center gap-2 hover:opacity-90 transition-opacity"
+                aria-label="Add more tracks to queue"
+                className="w-full py-4 rounded-xl bg-gradient-to-r from-purple-500 to-violet-600 text-white font-semibold flex items-center justify-center gap-2 active:scale-[0.98] transition-all"
               >
                 <Plus className="w-5 h-5" />
                 Add More Tracks

@@ -616,7 +616,7 @@ export const ArtistPage: React.FC<ArtistPageProps> = ({
             <div
               style={{ ...S.stats, animation: 'voyo-fade-in 0.3s ease both' }}
             >
-              Loading...
+              <div className="h-3 w-32 rounded bg-white/5 animate-pulse" />
             </div>
           )}
         </div>
@@ -626,15 +626,18 @@ export const ArtistPage: React.FC<ArtistPageProps> = ({
           <div style={S.errorText as React.CSSProperties}>{error}</div>
         )}
 
-        {/* LOADING STATE */}
+        {/* LOADING STATE — skeleton cards */}
         {isLoading && (
-          <div style={S.loadingContainer}>
-            <div className="animate-spin">
-              <Loader2 size={24} style={{ color: 'rgba(255,255,255,0.4)' }} />
-            </div>
-            <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: 13 }}>
-              Loading artist data...
-            </span>
+          <div style={{ padding: '0 16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {[0, 1, 2, 3, 4].map(i => (
+              <div key={i} className="flex items-center gap-3 p-3 rounded-xl" style={{ background: 'rgba(255,255,255,0.03)' }}>
+                <div className="w-12 h-12 rounded-lg bg-white/5 voyo-skeleton-shimmer flex-shrink-0" />
+                <div className="flex-1">
+                  <div className="h-3 w-3/4 bg-white/5 rounded voyo-skeleton-shimmer mb-2" />
+                  <div className="h-2 w-1/2 bg-white/5 rounded voyo-skeleton-shimmer" />
+                </div>
+              </div>
+            ))}
           </div>
         )}
 
