@@ -40,6 +40,7 @@ export interface AudioChainResult {
 }
 
 // Resume AudioContext when tab regains focus (iOS/Android suspend it)
+// Also resume on user interaction — iOS requires a gesture after lock/unlock
 if (typeof document !== 'undefined') {
   const resumeCtx = () => {
     if (_audioCtx && (_audioCtx.state === 'suspended' || (_audioCtx as any).state === 'interrupted')) {
@@ -48,6 +49,11 @@ if (typeof document !== 'undefined') {
   };
   document.addEventListener('visibilitychange', () => { if (!document.hidden) resumeCtx(); });
   window.addEventListener('focus', resumeCtx);
+  // iOS/Android: After phone lock/unlock, AudioContext goes to 'interrupted' state.
+  // A user gesture (touch/click) is required to resume it.
+  const resumeOnGesture = () => { resumeCtx(); };
+  document.addEventListener('touchstart', resumeOnGesture, { once: false, passive: true });
+  document.addEventListener('click', resumeOnGesture, { passive: true });
 }
 
 /**

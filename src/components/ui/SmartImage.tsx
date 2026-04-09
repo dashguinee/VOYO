@@ -11,8 +11,7 @@ import {
   preloadImage,
 } from '../../utils/imageUtils';
 import { getCachedThumbnail, cacheThumbnail } from '../../hooks/useThumbnailCache';
-import { verifyTrack } from '../../services/trackVerifier';
-import { devLog, devWarn } from '../../utils/logger';
+import { devWarn } from '../../utils/logger';
 
 export interface SmartImageProps {
   src: string;
@@ -25,7 +24,7 @@ export interface SmartImageProps {
   lazy?: boolean; // Enable lazy loading
   onLoad?: () => void;
   onError?: () => void;
-  // Self-healing: If thumbnail fails and we have artist+title, verify and fix
+  // Legacy props (kept for API compatibility, no longer used for self-healing)
   artist?: string;
   title?: string;
 }
@@ -167,61 +166,15 @@ const SmartImageInner: React.FC<SmartImageProps> = ({
         }
       }
 
-      // Step 5: Self-healing verification OR placeholder as last resort
+      // Step 5: All sources failed — show placeholder IMMEDIATELY (no self-healing delay)
       if (!cancelled) {
-        // SELF-HEALING: If we have artist+title, try verification FIRST
-        // Keep showing loading skeleton while we verify - NO PLACEHOLDER SHOWN
-        if (artist && title && trackId) {
-          devLog(`[SmartImage] Self-healing: ${artist} - ${title}`);
-          // Stay in loading state while we verify
-          setLoadState('loading');
-
-          verifyTrack(trackId, artist, title).then(async (newThumbnail) => {
-            if (cancelled) return;
-
-            if (newThumbnail) {
-              // Verification succeeded! Use the real thumbnail
-              devLog(`[SmartImage] Self-heal succeeded: ${artist} - ${title}`);
-              const success = await preloadImage(newThumbnail);
-              if (success && !cancelled) {
-                setCurrentSrc(newThumbnail);
-                setLoadState('loaded');
-                hasLoadedRef.current = true;
-                prevSrcRef.current = srcKey;
-                if (trackId) cacheThumbnail(trackId, newThumbnail);
-                onLoadRef.current?.();
-                return;
-              }
-            }
-
-            // Verification failed - NOW show placeholder as last resort
-            devWarn(`[SmartImage] Self-heal failed: ${artist} - ${title}`);
-            const placeholderSrc = generatePlaceholder(alt || 'Track', 400);
-            setCurrentSrc(placeholderSrc);
-            setLoadState('loaded');
-            hasLoadedRef.current = true;
-            prevSrcRef.current = srcKey;
-            onErrorRef.current?.();
-          }).catch(() => {
-            if (cancelled) return;
-            // Error during verification - show placeholder
-            const placeholderSrc = generatePlaceholder(alt || 'Track', 400);
-            setCurrentSrc(placeholderSrc);
-            setLoadState('loaded');
-            hasLoadedRef.current = true;
-            prevSrcRef.current = srcKey;
-            onErrorRef.current?.();
-          });
-        } else {
-          // No artist+title - can't self-heal, show placeholder immediately
-          devWarn(`[SmartImage] No artist/title for self-heal, trackId: ${trackId}, src: ${src?.slice(0, 50)}`);
-          const placeholderSrc = generatePlaceholder(alt || 'Track', 400);
-          setCurrentSrc(placeholderSrc);
-          setLoadState('loaded');
-          hasLoadedRef.current = true;
-          prevSrcRef.current = srcKey;
-          onErrorRef.current?.();
-        }
+        devWarn(`[SmartImage] All sources failed, showing placeholder. trackId: ${trackId}, src: ${src?.slice(0, 50)}`);
+        const placeholderSrc = generatePlaceholder(alt || 'Track', 400);
+        setCurrentSrc(placeholderSrc);
+        setLoadState('loaded');
+        hasLoadedRef.current = true;
+        prevSrcRef.current = srcKey;
+        onErrorRef.current?.();
       }
     };
 
@@ -230,7 +183,7 @@ const SmartImageInner: React.FC<SmartImageProps> = ({
     return () => {
       cancelled = true;
     };
-  }, [src, fallbackSrc, trackId, alt, isInView, currentSrc, artist, title]);
+  }, [src, fallbackSrc, trackId, alt, isInView, currentSrc]);
 
   return (
     <div ref={containerRef} className={`relative overflow-hidden ${className}`}>

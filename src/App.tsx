@@ -9,7 +9,8 @@
  * 4. Video Mode - Full immersion with floating reactions
  */
 
-import { useState, useEffect, useRef, useCallback, lazy, Suspense } from 'react';
+import { useState, useEffect, useRef, useCallback, lazy, Suspense, Component } from 'react';
+import type { ReactNode, ErrorInfo } from 'react';
 import { User, Search } from 'lucide-react';
 import { usePlayerStore } from './store/playerStore';
 import { getYouTubeThumbnail } from './data/tracks';
@@ -54,6 +55,72 @@ import { TRACKS } from './data/tracks';
 import { syncManyToDatabase } from './services/databaseSync';
 import { DashAuthBadge } from './lib/dash-auth';
 import { useUniverseStore } from './store/universeStore';
+
+// ============================================
+// ERROR BOUNDARY — catches render crashes, shows fallback instead of white screen
+// ============================================
+interface ErrorBoundaryState {
+  hasError: boolean;
+  error: Error | null;
+}
+
+class AppErrorBoundary extends Component<{ children: ReactNode }, ErrorBoundaryState> {
+  state: ErrorBoundaryState = { hasError: false, error: null };
+
+  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error('[VOYO] Render crash caught by ErrorBoundary:', error, info.componentStack);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div
+          style={{
+            height: '100%',
+            width: '100%',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: '#020203',
+            color: 'white',
+            fontFamily: 'system-ui, sans-serif',
+            padding: 24,
+            textAlign: 'center',
+          }}
+        >
+          <div style={{ fontSize: 48, marginBottom: 16 }}>VOYO</div>
+          <div style={{ fontSize: 16, opacity: 0.7, marginBottom: 24 }}>
+            Something went wrong
+          </div>
+          <button
+            onClick={() => {
+              this.setState({ hasError: false, error: null });
+              window.location.reload();
+            }}
+            style={{
+              padding: '12px 32px',
+              borderRadius: 999,
+              background: '#8b5cf6',
+              color: 'white',
+              border: 'none',
+              fontSize: 14,
+              fontWeight: 600,
+              cursor: 'pointer',
+            }}
+          >
+            Reload
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 // App modes
 type AppMode = 'classic' | 'voyo' | 'video';
@@ -1126,6 +1193,7 @@ function App() {
   const handleSwitchToClassic = () => setAppMode('classic');
 
   return (
+    <AppErrorBoundary>
     <AuthProvider>
     <Suspense fallback={<div className="h-full w-full bg-[#0a0a0f]" />}>
     <div className="relative h-full w-full bg-[#0a0a0f] overflow-hidden">
@@ -1307,6 +1375,7 @@ function App() {
     </div>
     </Suspense>
     </AuthProvider>
+    </AppErrorBoundary>
   );
 }
 

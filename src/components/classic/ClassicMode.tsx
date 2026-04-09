@@ -136,7 +136,7 @@ const MiniPlayer = ({ onVOYOClick, onOpenFull }: { onVOYOClick: () => void; onOp
               className={`w-12 h-12 rounded-full backdrop-blur-xl flex items-center justify-center shadow-lg ${
                 shuffleMode
                   ? 'bg-purple-500/80 border-2 border-purple-400'
-                  : 'bg-black/60 border border-white/20'
+                  : 'bg-[#1c1c22] border border-[#28282f]'
               }`}
               onClick={(e) => {
                 e.stopPropagation();
@@ -151,7 +151,7 @@ const MiniPlayer = ({ onVOYOClick, onOpenFull }: { onVOYOClick: () => void; onOp
               className={`w-12 h-12 rounded-full backdrop-blur-xl flex items-center justify-center shadow-lg ${
                 repeatMode !== 'off'
                   ? 'bg-purple-500/80 border-2 border-purple-400'
-                  : 'bg-black/60 border border-white/20'
+                  : 'bg-[#1c1c22] border border-[#28282f]'
               }`}
               onClick={(e) => {
                 e.stopPropagation();
@@ -187,7 +187,11 @@ const MiniPlayer = ({ onVOYOClick, onOpenFull }: { onVOYOClick: () => void; onOp
       
 
       <div
-        className="w-full flex items-center gap-2.5 p-2 pr-3 rounded-2xl bg-black/25 border border-white/10 backdrop-blur-xl shadow-2xl relative overflow-hidden cursor-pointer"
+        className="w-full flex items-center gap-2.5 p-2 pr-3 rounded-2xl border backdrop-blur-xl shadow-2xl relative overflow-hidden cursor-pointer"
+        style={{
+          background: 'rgba(28, 28, 35, 0.65)',
+          borderColor: 'rgba(139, 92, 246, 0.12)',
+        }}
         onClick={handleTap}
       >
         {/* Wave Progress Bar - VOYO gradient style */}
@@ -196,11 +200,12 @@ const MiniPlayer = ({ onVOYOClick, onOpenFull }: { onVOYOClick: () => void; onOp
             className="h-full relative"
             style={{ width: `${progress}%` }}
           >
-            {/* VOYO purple-pink gradient fill */}
-            <div className="absolute inset-0 bg-gradient-to-r from-purple-500 via-violet-500 to-purple-400" />
+            {/* VOYO sunset gradient fill (purple → orange) */}
+            <div className="absolute inset-0" style={{ background: 'linear-gradient(90deg, #8b5cf6 0%, #a855f7 40%, #f97316 100%)' }} />
             {/* Glowing edge effect */}
             <div
-              className="absolute right-0 top-0 bottom-0 w-4 bg-gradient-to-l from-purple-300 to-transparent"
+              className="absolute right-0 top-0 bottom-0 w-4"
+              style={{ background: 'linear-gradient(to left, rgba(249,115,22,0.6), transparent)' }}
             />
           </div>
         </div>
@@ -248,14 +253,17 @@ const MiniPlayer = ({ onVOYOClick, onOpenFull }: { onVOYOClick: () => void; onOp
             <Plus className="w-3.5 h-3.5 text-white" />
           </button>
 
-          {/* OYÉ Button - Orange circle with white Zap */}
+          {/* OYE Button — sunset gradient (orange → yellow) */}
           <button
-            className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-500 to-violet-600 flex items-center justify-center"
+            className="w-8 h-8 rounded-full flex items-center justify-center"
             onClick={(e) => {
               e.stopPropagation();
               handleOye();
             }}
-            style={{ boxShadow: '0 2px 8px rgba(139, 92, 246, 0.4)' }}
+            style={{
+              background: 'linear-gradient(135deg, #f97316, #fbbf24)',
+              boxShadow: '0 2px 8px rgba(249, 115, 22, 0.4)',
+            }}
           >
             <Zap className="w-4 h-4 text-white" style={{ fill: 'white' }} />
           </button>
@@ -395,7 +403,7 @@ const SettingsScreen = () => {
       <h1 className="text-2xl font-bold text-white mb-6">Profile</h1>
 
       {/* Profile Header */}
-      <div className="flex items-center gap-4 p-4 rounded-2xl bg-white/5 mb-6">
+      <div className="flex items-center gap-4 p-4 rounded-2xl bg-[#1c1c22] border border-[#28282f] mb-6">
         <div className="w-16 h-16 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-2xl font-bold text-white">
           D
         </div>
@@ -412,7 +420,7 @@ const SettingsScreen = () => {
           { label: 'Playlists', value: '8' },
           { label: 'OYÉ Given', value: '1.2K' },
         ].map((stat) => (
-          <div key={stat.label} className="p-4 rounded-xl bg-white/5 text-center">
+          <div key={stat.label} className="p-4 rounded-xl bg-[#1c1c22] border border-[#28282f] text-center">
             <p className="text-xl font-bold text-white">{stat.value}</p>
             <p className="text-white/50 text-xs">{stat.label}</p>
           </div>
@@ -430,7 +438,7 @@ const SettingsScreen = () => {
         ].map((item) => (
           <button
             key={item.label}
-            className="w-full flex items-center justify-between p-4 rounded-xl bg-white/5 hover:bg-white/10 transition-colors"
+            className="w-full flex items-center justify-between p-4 rounded-xl bg-[#1c1c22] border border-[#28282f] hover:bg-[#28282f] transition-colors"
           >
             <span className="text-white">{item.label}</span>
             <span className="text-white/50 text-sm">{item.value}</span>
@@ -476,7 +484,7 @@ export const ClassicMode = ({ onSwitchToVOYO, onSearch }: ClassicModeProps) => {
   };
 
   return (
-    <div className="relative h-full bg-[#0a0a0f]">
+    <div className="relative h-full bg-[#0a0a0c]">
       {/* Tab Content */}
       
         <div

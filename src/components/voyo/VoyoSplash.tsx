@@ -121,7 +121,7 @@ export const VoyoSplash = ({ onComplete, minDuration = 2800 }: VoyoSplashProps) 
         <div
           className="fixed inset-0 z-[9999] flex flex-col items-center justify-center overflow-hidden"
           style={{
-            background: 'linear-gradient(180deg, #0a0612 0%, #120a1a 40%, #1a0a20 70%, #0a0612 100%)',
+            background: 'linear-gradient(180deg, #0a0612 0%, #1a0a18 30%, #1a100a 60%, #0a0612 100%)',
           }}
         >
           {/* Ambient particles */}
@@ -129,7 +129,7 @@ export const VoyoSplash = ({ onComplete, minDuration = 2800 }: VoyoSplashProps) 
             {[...Array(20)].map((_, i) => (
               <div
                 key={i}
-                className="absolute w-1 h-1 rounded-full bg-purple-500/20"
+                className="absolute w-1 h-1 rounded-full bg-orange-400/15"
                 style={{
                   left: `${10 + (i * 4.5) % 80}%`,
                   top: `${20 + (i * 7) % 60}%`,
@@ -144,7 +144,7 @@ export const VoyoSplash = ({ onComplete, minDuration = 2800 }: VoyoSplashProps) 
           <div
             className="absolute w-96 h-96 rounded-full blur-3xl"
             style={{
-              background: 'radial-gradient(circle, rgba(139, 92, 246, 0.3) 0%, rgba(124, 58, 237, 0.15) 40%, transparent 70%)',
+              background: 'radial-gradient(circle, rgba(249, 115, 22, 0.2) 0%, rgba(139, 92, 246, 0.15) 40%, transparent 70%)',
             }}
           />
 

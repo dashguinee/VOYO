@@ -17,7 +17,8 @@ import { DJMode, Track } from '../../types';
 // Import VOYO components
 import { VoyoBottomNav } from './navigation/VoyoBottomNav';
 import { VoyoMoments, MomentTrackInfo } from './feed/VoyoMoments';
-import { CreatorUpload } from './upload/CreatorUpload';
+// CreatorUpload hidden until backend ready
+// import { CreatorUpload } from './upload/CreatorUpload';
 import { VoyoPortraitPlayer } from './VoyoPortraitPlayer';
 import { Dahub } from '../dahub/Dahub';
 import { APP_CODES } from '../../lib/dahub/dahub-api';
@@ -279,12 +280,7 @@ export const PortraitVOYO = ({ onSearch, onDahub, onHome }: PortraitVOYOProps) =
           />
         </div>
 
-        {/* LAYER 3: CREATOR MODE (Bottom Sheet Overlay) */}
-        <>
-          {voyoActiveTab === 'upload' && (
-            <CreatorUpload onClose={() => setVoyoTab('music')} />
-          )}
-        </>
+        {/* LAYER 3: CREATOR MODE — hidden until backend ready */}
 
         {/* LAYER 4: DAHUB MODE (Slide-in from Left) */}
         <div

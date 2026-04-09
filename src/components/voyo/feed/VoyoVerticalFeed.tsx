@@ -167,10 +167,10 @@ const ProgressBar = ({ isActive, trackId, onSeekToHotspot }: {
             }}
           />
         ))}
-        {/* Progress overlay */}
+        {/* Progress overlay — sunset gradient (cool→hot = purple→orange→yellow) */}
         <div
-          className="absolute top-0 bottom-0 left-0 bg-gradient-to-r from-purple-500 to-pink-500"
-          style={{ width: `${progress}%` }}
+          className="absolute top-0 bottom-0 left-0"
+          style={{ width: `${progress}%`, background: 'linear-gradient(90deg, #8b5cf6 0%, #f97316 60%, #fbbf24 100%)' }}
         />
         {/* Hotspot glow indicators */}
         {hotspots.filter(h => h.intensity > 0.5).map((hotspot, i) => (
@@ -335,7 +335,8 @@ const CommentsSheet = ({
 
           {/* Sheet */}
           <div
-            className="absolute bottom-0 left-0 right-0 bg-[#0f0f16] rounded-t-3xl max-h-[70vh] flex flex-col animate-voyo-spring-in-bottom"
+            className="absolute bottom-0 left-0 right-0 rounded-t-3xl max-h-[70vh] flex flex-col animate-voyo-spring-in-bottom border-t border-[#28282f]"
+            style={{ background: 'rgba(17, 17, 20, 0.95)', backdropFilter: 'blur(20px)' }}
           >
             {/* Header */}
             <div className="flex items-center justify-between p-4 border-b border-white/10">
@@ -629,7 +630,7 @@ const FeedCard = memo(({
         {/* Waveform effect overlay */}
         <WaveformVisualizer
           isPlaying={isPlaying && isThisTrack}
-          color="rgba(139, 92, 246, 0.4)"
+          color="rgba(236, 72, 153, 0.4)"
         />
 
         {/* Playing indicator pulse */}
@@ -696,7 +697,7 @@ const FeedCard = memo(({
             <div
               className="inline-flex items-center gap-1.5 px-3 py-1 mb-3 rounded-full"
               style={{
-                background: 'linear-gradient(90deg, rgba(139,92,246,0.9) 0%, rgba(167,139,250,0.7) 50%, rgba(139,92,246,0.3) 100%)',
+                background: 'linear-gradient(90deg, rgba(249,115,22,0.9) 0%, rgba(251,191,36,0.7) 50%, rgba(249,115,22,0.3) 100%)',
               }}
             >
               <Zap className="w-3 h-3 text-white" style={{ fill: 'white' }} />
@@ -748,39 +749,35 @@ const FeedCard = memo(({
 
       {/* Right Side Actions - Clean & Functional */}
       <div className="absolute right-4 bottom-32 z-20 flex flex-col items-center gap-5">
-        {/* OYÉ Button - Main Action (I vibe with this → adds to library + boosts) */}
+        {/* OYE Button - Main Action — sunset gradient (orange → yellow) = VITALITY */}
         <button
           className="flex flex-col items-center"
           onClick={() => {
             handleReaction('oye');
-            // Trigger floating reaction
             addFloatingReaction('oye');
-            // OYÉ = I vibe with this = Add to library + Boost
             onAddToLibrary?.();
-            // Haptic feedback
             if (navigator.vibrate) navigator.vibrate(30);
           }}
         >
           <div
-            className={`w-14 h-14 rounded-full flex items-center justify-center transition-colors ${
-              userReactions.has('oye')
-                ? 'bg-gradient-to-br from-purple-400 to-violet-500'
-                : 'bg-gradient-to-br from-purple-500 to-violet-600'
-            }`}
+            className="w-14 h-14 rounded-full flex items-center justify-center transition-all"
             style={{
+              background: userReactions.has('oye')
+                ? 'linear-gradient(135deg, #fbbf24, #f97316)'
+                : 'linear-gradient(135deg, #f97316, #fbbf24)',
               boxShadow: userReactions.has('oye')
-                ? '0 0 15px rgba(139, 92, 246, 0.6)'
+                ? '0 0 18px rgba(249, 115, 22, 0.6), 0 0 40px rgba(251, 191, 36, 0.2)'
                 : '0 4px 15px rgba(0,0,0,0.3)',
             }}
           >
             <Zap className="w-7 h-7 text-white" style={{ fill: 'white' }} />
           </div>
           <span className={`text-[11px] font-bold mt-1.5 transition-colors ${
-            userReactions.has('oye') ? 'text-purple-300' : 'text-purple-400'
-          }`}>OYÉ</span>
+            userReactions.has('oye') ? 'text-[#fbbf24]' : 'text-[#f97316]'
+          }`}>OYE</span>
         </button>
 
-        {/* Like Button (Heart) */}
+        {/* Like Button (Heart) — pamplo pink when active */}
         <button
           className="flex flex-col items-center"
           onClick={() => {
@@ -792,17 +789,17 @@ const FeedCard = memo(({
           <div>
             <Heart
               className={`w-8 h-8 transition-colors ${
-                userReactions.has('like') ? 'text-purple-400' : 'text-white'
+                userReactions.has('like') ? 'text-[#ec4899]' : 'text-white/40'
               }`}
-              style={userReactions.has('like') ? { fill: '#8b5cf6' } : {}}
+              style={userReactions.has('like') ? { fill: '#ec4899' } : {}}
             />
           </div>
           <span className={`text-[11px] font-medium mt-1 ${
-            userReactions.has('like') ? 'text-purple-400' : 'text-white'
+            userReactions.has('like') ? 'text-[#ec4899]' : 'text-white/40'
           }`}>{reactionCounts.like || ''}</span>
         </button>
 
-        {/* Fire Button */}
+        {/* Fire Button — sunset orange when active */}
         <button
           className="flex flex-col items-center"
           onClick={() => {
@@ -814,13 +811,13 @@ const FeedCard = memo(({
           <div>
             <Flame
               className={`w-8 h-8 transition-colors ${
-                userReactions.has('fire') ? 'text-white' : 'text-white/70'
+                userReactions.has('fire') ? 'text-[#f97316]' : 'text-white/40'
               }`}
-              style={userReactions.has('fire') ? { fill: 'rgba(255,255,255,0.85)' } : {}}
+              style={userReactions.has('fire') ? { fill: '#f97316' } : {}}
             />
           </div>
           <span className={`text-[11px] font-medium mt-1 ${
-            userReactions.has('fire') ? 'text-white' : 'text-white/70'
+            userReactions.has('fire') ? 'text-[#f97316]' : 'text-white/40'
           }`}>{reactionCounts.fire || ''}</span>
         </button>
 
@@ -829,8 +826,8 @@ const FeedCard = memo(({
           className="flex flex-col items-center"
           onClick={() => setShowComments(true)}
         >
-          <MessageCircle className="w-8 h-8 text-white" />
-          <span className="text-white text-[11px] font-medium mt-1">{reactionCounts.comments || ''}</span>
+          <MessageCircle className="w-8 h-8 text-white/40" />
+          <span className="text-white/40 text-[11px] font-medium mt-1">{reactionCounts.comments || ''}</span>
         </button>
 
         {/* Add to Playlist */}
@@ -838,7 +835,7 @@ const FeedCard = memo(({
           className="flex flex-col items-center"
           onClick={() => onAddToPlaylist?.()}
         >
-          <Plus className="w-8 h-8 text-white" />
+          <Plus className="w-8 h-8 text-white/40" />
         </button>
 
         {/* Share */}
@@ -846,7 +843,7 @@ const FeedCard = memo(({
           className="flex flex-col items-center active:scale-90 transition-transform"
           onClick={onShare}
         >
-          <Share2 className="w-8 h-8 text-white" />
+          <Share2 className="w-8 h-8 text-white/40" />
         </button>
       </div>
 
@@ -1101,18 +1098,16 @@ export const VoyoVerticalFeed = ({ isActive, onGoToPlayer }: VoyoVerticalFeedPro
       }
     });
 
-    // Build feed from POOL (dynamic) + TRACKS (seed fallback)
+    // Build feed from POOL (dynamic) — seed tracks only when pool is thin (<5 tracks)
     // Pool contains tracks user has searched/played, TRACKS is fallback for new users
     const poolTracks = hotPool.length > 0 ? hotPool : [];
-    const seedTracks = TRACKS;
 
-    // Merge: pool tracks first (sorted by poolScore), then seed tracks not in pool
-    const poolIds = new Set(poolTracks.map(t => t.id || t.trackId));
-    const seedFiltered = seedTracks.filter(t => !poolIds.has(t.id) && !poolIds.has(t.trackId));
-    const allTracks = [
-      ...poolTracks.sort((a, b) => (b.poolScore || 0) - (a.poolScore || 0)),
-      ...seedFiltered
-    ];
+    // Only mix in seed tracks if pool has fewer than 5 tracks
+    const allTracks = poolTracks.length >= 5
+      ? [...poolTracks].sort((a, b) => (b.poolScore || 0) - (a.poolScore || 0))
+      : poolTracks.length > 0
+        ? [...poolTracks.sort((a, b) => (b.poolScore || 0) - (a.poolScore || 0)), ...TRACKS.filter(t => !poolTracks.some(p => (p.trackId || p.id) === (t.trackId || t.id)))]
+        : [...TRACKS];
 
     // Track all IDs globally to prevent duplicates across entire feed
     const allTrackIds = new Set<string>();

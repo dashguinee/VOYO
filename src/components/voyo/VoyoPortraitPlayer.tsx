@@ -2225,10 +2225,10 @@ const ReactionBar = memo(({
   // All reactions in a row - OYÉ is the gateway (defined early for use in handlers)
   // REFINED PREMIUM COLORS - sophisticated, muted, elegant (not "kid style")
   const reactions = [
-    { type: 'oyo', emoji: '👋', text: 'OYO', icon: Zap, gradient: 'from-violet-800/70 to-purple-900/60' },
-    { type: 'oye', emoji: '🎉', text: 'OYÉ', icon: Zap, gradient: 'from-purple-700/70 to-fuchsia-900/60', isGateway: true },
+    { type: 'oyo', emoji: '👋', text: 'OYO', icon: Zap, gradient: 'from-purple-700/70 to-violet-900/60' },
+    { type: 'oye', emoji: '🎉', text: 'OYÉ', icon: Zap, gradient: 'from-orange-600/70 to-yellow-700/60', isGateway: true },
     { type: 'wazzguan', emoji: '🤙', text: 'Wazzguán', icon: null, gradient: 'from-stone-600/50 to-stone-700/40', isChat: true },
-    { type: 'fire', emoji: '🔥', text: 'Fireee', icon: Flame, gradient: 'from-rose-900/70 to-red-950/60' },
+    { type: 'fire', emoji: '🔥', text: 'Fireee', icon: Flame, gradient: 'from-orange-700/70 to-red-900/60' },
   ];
 
   const handlePressStart = (type: string) => {

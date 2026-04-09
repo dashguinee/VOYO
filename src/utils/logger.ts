@@ -1,21 +1,12 @@
 /**
  * Development-only logger
  * All logs are stripped in production builds (tree-shaken)
+ * Uses .bind() for proper stack traces and zero-overhead no-ops
  */
 
-const isDev = import.meta.env.DEV;
-
-export const devLog = isDev
-  ? (...args: unknown[]) => console.log(...args)
-  : () => {};
-
-export const devWarn = isDev
-  ? (...args: unknown[]) => console.warn(...args)
-  : () => {};
-
-export const devError = isDev
-  ? (...args: unknown[]) => console.error(...args)
-  : () => {};
+export const devLog = import.meta.env.DEV ? console.log.bind(console) : () => {};
+export const devWarn = import.meta.env.DEV ? console.warn.bind(console) : () => {};
+export const devError = import.meta.env.DEV ? console.error.bind(console) : () => {};
 
 // For critical errors that should always log
-export const criticalError = (...args: unknown[]) => console.error(...args);
+export const criticalError = console.error.bind(console);

@@ -873,7 +873,12 @@ export const AudioPlayer = () => {
       // STOP old audio immediately before loading new track
       // NOTE: Do NOT set src = '' — this can break MediaElementAudioSourceNode in some browsers.
       // The source node stays wired through src changes automatically (Web Audio API design).
+      // FIX: Clear dangling event handlers from previous loadTrack calls to prevent
+      // old callbacks from firing and interfering with the new track load.
       if (audioRef.current) {
+        audioRef.current.oncanplaythrough = null;
+        audioRef.current.oncanplay = null;
+        audioRef.current.onplay = null;
         audioRef.current.pause();
         audioRef.current.currentTime = 0;
       }
@@ -933,6 +938,9 @@ export const AudioPlayer = () => {
                   recordPlayEvent();
                   devLog('🔮 [VOYO] Preloaded playback started!');
                 }).catch(e => devWarn('🎵 [Playback] Preloaded play failed:', e.name));
+              } else {
+                // FIX: Restore volume even when paused so play/pause effect doesn't play silence
+                audioRef.current.volume = 1.0;
               }
             };
           }
@@ -1000,6 +1008,9 @@ export const AudioPlayer = () => {
                 }
                 devLog('🎵 [VOYO] Playback started (cached)');
               }).catch(e => devWarn('🎵 [Playback] Cached play failed:', e.name));
+            } else {
+              // FIX: Restore volume even when paused so play/pause effect doesn't play silence
+              audioRef.current.volume = 1.0;
             }
           };
         }
@@ -1061,6 +1072,9 @@ export const AudioPlayer = () => {
                   }
                   devLog('🎵 [VOYO] Playback started (R2)');
                 }).catch(e => devWarn('🎵 [Playback] R2 play failed:', e.name));
+              } else {
+                // FIX: Restore volume even when paused so play/pause effect doesn't play silence
+                audioRef.current.volume = 1.0;
               }
             };
           }
@@ -1119,6 +1133,9 @@ export const AudioPlayer = () => {
                     }
                     devLog('🎵 [VOYO] Playback started (YouTube direct stream)');
                   }).catch(e => devWarn('🎵 [Playback] Stream play failed:', e.name));
+                } else {
+                  // FIX: Restore volume even when paused so play/pause effect doesn't play silence
+                  audioRef.current.volume = 1.0;
                 }
               };
 
@@ -1233,6 +1250,9 @@ export const AudioPlayer = () => {
       const { boostProfile: profile } = usePlayerStore.getState();
       setupAudioEnhancement(profile);
 
+      // FIX: Clear dangling handlers before hot-swap to prevent old callbacks interfering
+      audioRef.current.oncanplaythrough = null;
+      audioRef.current.oncanplay = null;
       audioRef.current.volume = 0;
       audioRef.current.src = cachedUrl;
       audioRef.current.load();
@@ -1293,6 +1313,15 @@ export const AudioPlayer = () => {
 
     const audio = audioRef.current;
     if (isPlaying && audio.paused && audio.src && audio.readyState >= 1) {
+      // FIX: Restore volume before playing — it may be stuck at 0 from the loading phase
+      // (loadTrack sets volume=0 during load, and if shouldPlay was false when oncanplaythrough fired,
+      // volume was never restored. Now we fix it here when user presses play.)
+      if (audioEnhancedRef.current && gainNodeRef.current) {
+        audio.volume = 1.0; // Web Audio chain controls actual volume via gainNode
+        applyMasterGain();
+      } else {
+        audio.volume = volume / 100;
+      }
       // Resume AudioContext if suspended, then play
       if (audioContextRef.current?.state === 'suspended') {
         audioContextRef.current.resume();
@@ -1398,6 +1427,9 @@ export const AudioPlayer = () => {
             devLog('🔄 [VOYO] Emergency cache swap - switching to local cache');
             if (cachedUrlRef.current) URL.revokeObjectURL(cachedUrlRef.current);
             cachedUrlRef.current = cachedUrl;
+            // FIX: Clear dangling handlers before emergency swap
+            audioRef.current.oncanplaythrough = null;
+            audioRef.current.oncanplay = null;
             audioRef.current.src = cachedUrl;
             audioRef.current.load();
             audioRef.current.oncanplaythrough = () => {
@@ -1405,6 +1437,7 @@ export const AudioPlayer = () => {
               if (savedPos > 2) audioRef.current.currentTime = savedPos;
               isEdgeStreamRef.current = false;
               setPlaybackSource('cached');
+              audioRef.current.volume = 1.0; // FIX: Ensure volume is restored
               audioRef.current.play().catch(() => {});
               devLog('🔄 [VOYO] Emergency cache swap complete');
             };
@@ -1516,6 +1549,12 @@ export const AudioPlayer = () => {
 
     const savedPos = usePlayerStore.getState().currentTime;
 
+    // FIX: Clear dangling handlers before recovery to prevent old callbacks interfering
+    if (audioRef.current) {
+      audioRef.current.oncanplaythrough = null;
+      audioRef.current.oncanplay = null;
+    }
+
     // RECOVERY 1 (FASTEST): Check local cache IMMEDIATELY
     // With 3s auto-cache delay, cache should be ready for most tracks
     try {
@@ -1535,6 +1574,7 @@ export const AudioPlayer = () => {
           if (savedPos > 2) audioRef.current.currentTime = savedPos;
           isEdgeStreamRef.current = false;
           setPlaybackSource('cached');
+          audioRef.current.volume = 1.0; // FIX: Ensure volume is restored during recovery
           audioRef.current.play().then(() => {
             const elapsed = performance.now() - recoveryStart;
             devLog(`🔄 [VOYO] Cache recovery complete in ${elapsed.toFixed(0)}ms (swap: ${(performance.now() - swapStart).toFixed(0)}ms)`);
@@ -1557,6 +1597,7 @@ export const AudioPlayer = () => {
           if (savedPos > 2) audioRef.current.currentTime = savedPos;
           isEdgeStreamRef.current = false;
           setPlaybackSource('r2');
+          audioRef.current.volume = 1.0; // FIX: Ensure volume is restored during recovery
           audioRef.current.play().then(() => {
             const elapsed = performance.now() - recoveryStart;
             devLog(`🔄 [VOYO] R2 recovery complete in ${elapsed.toFixed(0)}ms`);
@@ -1585,6 +1626,7 @@ export const AudioPlayer = () => {
           audioRef.current.oncanplay = null;
           if (savedPos > 2) audioRef.current.currentTime = savedPos;
           isEdgeStreamRef.current = true;
+          audioRef.current.volume = 1.0; // FIX: Ensure volume is restored during recovery
           audioRef.current.play().then(() => {
             const elapsed = performance.now() - recoveryStart;
             devLog(`🔄 [VOYO] Stream re-extract recovery complete in ${elapsed.toFixed(0)}ms`);
@@ -1630,6 +1672,8 @@ export const AudioPlayer = () => {
         if (hasEnded) return;
         // Resume if should be playing (handles interruptions)
         if (shouldPlay && audio.src && audio.readyState >= 1) {
+          // FIX: Ensure volume is restored before resuming (may be stuck at 0 from loading phase)
+          if (audio.volume === 0) audio.volume = 1.0;
           audio.play().catch(e => devWarn('🎵 [Playback] Pause handler resume failed:', e.name));
         }
       }}

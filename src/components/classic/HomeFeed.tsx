@@ -123,27 +123,42 @@ interface ShelfProps {
   children: React.ReactNode;
 }
 
-const Shelf = ({ title, onSeeAll, children }: ShelfProps) => (
-  <div className="mb-10">
-    <div className="flex justify-between items-center px-4 mb-5">
-      <h2 className="text-white font-semibold text-base">{title}</h2>
-      {onSeeAll && (
-        <button
-          className="text-purple-400 text-sm font-medium"
-          onClick={onSeeAll}
-        >
-          See all
-        </button>
-      )}
+const Shelf = ({ title, onSeeAll, children }: ShelfProps) => {
+  // Accent color per shelf title
+  const accentColor = title.includes('Trending') || title.includes('Top 10')
+    ? '#f97316' // sunset orange
+    : title.includes('Made For You') || title.includes('Discover')
+      ? '#8b5cf6' // purple energy
+      : title.includes('New Releases')
+        ? '#ec4899' // pamplo pink
+        : '#8b5cf6'; // default purple
+
+  return (
+    <div className="mb-10">
+      <div className="flex justify-between items-center px-4 mb-5">
+        <div className="flex items-center gap-2">
+          <h2 className="text-white font-semibold text-base">{title}</h2>
+          <div className="h-[2px] w-6 rounded-full" style={{ background: accentColor, opacity: 0.6 }} />
+        </div>
+        {onSeeAll && (
+          <button
+            className="text-sm font-medium"
+            style={{ color: accentColor }}
+            onClick={onSeeAll}
+          >
+            See all
+          </button>
+        )}
+      </div>
+      <div
+        className="flex gap-4 px-4 overflow-x-auto scrollbar-hide"
+        style={{ scrollSnapType: 'x proximity', WebkitOverflowScrolling: 'touch' }}
+      >
+        {children}
+      </div>
     </div>
-    <div
-      className="flex gap-4 px-4 overflow-x-auto scrollbar-hide"
-      style={{ scrollSnapType: 'x proximity', WebkitOverflowScrolling: 'touch' }}
-    >
-      {children}
-    </div>
-  </div>
-);
+  );
+};
 
 // ============================================
 // SHELF WITH REFRESH COMPONENT
@@ -398,11 +413,11 @@ const TrackCard = ({ track, onPlay }: TrackCardProps) => {
 
   return (
     <button
-      className="flex-shrink-0 w-32 relative"
+      className="flex-shrink-0 w-32 relative group"
       onClick={onPlay}
       style={{ scrollSnapAlign: 'start' }}
     >
-      <div className="relative w-32 h-32 rounded-xl overflow-hidden mb-2 bg-white/5">
+      <div className="relative w-32 h-32 rounded-xl overflow-hidden mb-2 bg-[#1c1c22] border border-[#28282f]/50 group-active:border-[#8b5cf6]/30 transition-colors">
         <SmartImage
           src={getThumb(track.trackId)}
           alt={track.title}
@@ -414,7 +429,7 @@ const TrackCard = ({ track, onPlay }: TrackCardProps) => {
         <div
           className="absolute inset-0 pointer-events-none"
           style={{
-            background: 'linear-gradient(135deg, rgba(168,85,247,0.12) 0%, rgba(236,72,153,0.08) 100%)',
+            background: 'linear-gradient(135deg, rgba(139,92,246,0.10) 0%, rgba(249,115,22,0.06) 100%)',
           }}
         />
         {isHovered && (
@@ -426,7 +441,7 @@ const TrackCard = ({ track, onPlay }: TrackCardProps) => {
             </div>
           </div>
         )}
-        {/* OYE Button - Top Right */}
+        {/* OYE Button - Top Right — sunset gradient */}
         <button
           className="absolute top-2 right-2 z-10"
           onClick={handleOye}
@@ -435,9 +450,9 @@ const TrackCard = ({ track, onPlay }: TrackCardProps) => {
             className="w-7 h-7 rounded-full flex items-center justify-center"
             style={{
               background: oyeActive
-                ? 'linear-gradient(135deg, #FBBF24, #F97316)'
-                : 'rgba(251, 191, 36, 0.9)',
-              boxShadow: oyeActive ? '0 0 15px rgba(251, 191, 36, 0.6)' : '0 2px 8px rgba(0,0,0,0.3)',
+                ? 'linear-gradient(135deg, #fbbf24, #f97316)'
+                : 'linear-gradient(135deg, #f97316, #fbbf24)',
+              boxShadow: oyeActive ? '0 0 15px rgba(249, 115, 22, 0.6)' : '0 2px 8px rgba(0,0,0,0.3)',
             }}
           >
             <Zap className="w-4 h-4 text-white" style={{ fill: 'white' }} />
@@ -479,11 +494,11 @@ const WideTrackCard = ({ track, onPlay }: TrackCardProps) => {
 
   return (
     <div
-      className="flex-shrink-0 cursor-pointer"
+      className="flex-shrink-0 cursor-pointer group"
       onClick={onPlay}
       style={{ scrollSnapAlign: 'start', width: '180px' }}
     >
-      <div className="relative w-full rounded-xl overflow-hidden mb-2 bg-white/5" style={{ aspectRatio: '16/9' }}>
+      <div className="relative w-full rounded-xl overflow-hidden mb-2 bg-[#1c1c22] border border-[#28282f]/50 group-active:border-[#8b5cf6]/30 transition-colors" style={{ aspectRatio: '16/9' }}>
         <SmartImage
           src={thumbnailUrl}
           alt={track.title}
@@ -502,7 +517,7 @@ const WideTrackCard = ({ track, onPlay }: TrackCardProps) => {
             </div>
           </div>
         )}
-        {/* OYE Button - Top Right */}
+        {/* OYE Button - Top Right — sunset gradient */}
         <button
           className="absolute top-2 right-2 z-10"
           onClick={handleOye}
@@ -511,9 +526,9 @@ const WideTrackCard = ({ track, onPlay }: TrackCardProps) => {
             className="w-7 h-7 rounded-full flex items-center justify-center"
             style={{
               background: oyeActive
-                ? 'linear-gradient(135deg, #FBBF24, #F97316)'
-                : 'rgba(251, 191, 36, 0.9)',
-              boxShadow: oyeActive ? '0 0 15px rgba(251, 191, 36, 0.6)' : '0 2px 8px rgba(0,0,0,0.3)',
+                ? 'linear-gradient(135deg, #fbbf24, #f97316)'
+                : 'linear-gradient(135deg, #f97316, #fbbf24)',
+              boxShadow: oyeActive ? '0 0 15px rgba(249, 115, 22, 0.6)' : '0 2px 8px rgba(0,0,0,0.3)',
             }}
           >
             <Zap className="w-4 h-4 text-white" style={{ fill: 'white' }} />
@@ -1012,7 +1027,7 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
   return (
     <div className="flex flex-col h-full overflow-y-auto pb-52 scrollbar-hide">
       {/* Header */}
-      <header className="flex items-center justify-between px-4 py-3 sticky top-0 bg-[#0a0a0f]/95 backdrop-blur-lg z-10">
+      <header className="flex items-center justify-between px-4 py-3 sticky top-0 bg-[#0a0a0c]/95 backdrop-blur-lg z-10">
         <button
           className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-violet-600 flex items-center justify-center text-white font-bold"
           onClick={onDahub}
@@ -1160,7 +1175,10 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
       {/* Made For You - bold, sits on cards, no hesitation */}
       <div className="mb-10">
         <div className="flex justify-between items-center px-4 mb-1.5">
-          <h2 className="text-white font-semibold text-base">Made For You</h2>
+          <div className="flex items-center gap-2">
+            <h2 className="text-white font-semibold text-base">Made For You</h2>
+            <div className="h-[2px] w-6 rounded-full" style={{ background: '#8b5cf6', opacity: 0.6 }} />
+          </div>
           <button
             className="p-2 rounded-full bg-white/10 hover:bg-white/20"
             onClick={handleRefresh}
@@ -1299,7 +1317,7 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
                         background: 'radial-gradient(circle, transparent 28%, rgba(0,0,0,0.3) 48%, transparent 52%, rgba(0,0,0,0.2) 100%)',
                         boxShadow: 'inset 0 0 15px rgba(0,0,0,0.5)',
                       }} />
-                      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#0a0a0f]" style={{ width: '10px', height: '10px', boxShadow: '0 0 5px rgba(0,0,0,0.8)' }} />
+                      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#0a0a0c]" style={{ width: '10px', height: '10px', boxShadow: '0 0 5px rgba(0,0,0,0.8)' }} />
                     </div>
                   </div>
                   <div className="absolute text-center" style={{ width: '110px', left: '50%', transform: 'translateX(-50%)', bottom: '-52px' }}>
@@ -1343,8 +1361,9 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
 
       {/* New Releases - Center-focused carousel → PERSONAL (entry point to VOYO player) */}
       <div className="mb-12">
-        <div className="px-4 mb-5">
+        <div className="px-4 mb-5 flex items-center gap-2">
           <h2 className="text-white font-semibold text-base">New Releases</h2>
+          <div className="h-[2px] w-6 rounded-full" style={{ background: '#ec4899', opacity: 0.6 }} />
         </div>
         <CenterFocusedCarousel tracks={newReleases} onPlay={(track) => onTrackPlay(track)} />
       </div>

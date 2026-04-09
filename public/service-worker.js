@@ -4,8 +4,8 @@
  * BACKGROUND PLAYBACK: Enhanced to cache audio streams
  */
 
-const CACHE_NAME = 'voyo-v3';
-const AUDIO_CACHE_NAME = 'voyo-audio-v1';
+const CACHE_NAME = 'voyo-v4-20260409';
+const AUDIO_CACHE_NAME = 'voyo-audio-v2';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -29,7 +29,7 @@ self.addEventListener('activate', (event) => {
     caches.keys().then((cacheNames) => {
       return Promise.all(
         cacheNames
-          .filter((name) => name !== CACHE_NAME)
+          .filter((name) => name !== CACHE_NAME && name !== AUDIO_CACHE_NAME)
           .map((name) => caches.delete(name))
       );
     })
@@ -57,7 +57,7 @@ self.addEventListener('fetch', (event) => {
         return cache.match(event.request).then(cached => {
           // If cached, return it
           if (cached) {
-            console.log('[SW] Audio cache hit:', url.pathname);
+            // Audio cache hit
             return cached;
           }
 
@@ -67,14 +67,14 @@ self.addEventListener('fetch', (event) => {
             if (response.ok && response.status === 200) {
               // Clone before caching (response can only be read once)
               cache.put(event.request, response.clone());
-              console.log('[SW] Audio cached:', url.pathname);
+              // Audio cached
             }
             return response;
           }).catch(error => {
             // Network failed - check cache one more time
             return cache.match(event.request).then(cachedFallback => {
               if (cachedFallback) {
-                console.log('[SW] Audio network failed, using cache:', url.pathname);
+                // Audio network failed, using cache
                 return cachedFallback;
               }
               throw error;

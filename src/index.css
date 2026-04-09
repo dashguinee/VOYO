@@ -3,11 +3,11 @@
 /* VOYO Music Device - NEON AFRO-FUTURISM V2.0 */
 /* Deep Neon Void - Expensive. Cinematic. Glass. */
 :root {
-  /* === CORE BACKGROUNDS === */
-  --voyo-bg-void: #020203;         /* Deepest black - main bg */
-  --voyo-bg-deep: #050507;         /* Card backgrounds */
-  --voyo-bg-card: rgba(20, 20, 30, 0.6);
-  --voyo-bg-elevated: #1a1a24;     /* Elevated surfaces */
+  /* === CORE BACKGROUNDS — Metallic Grey System === */
+  --voyo-bg-void: #0a0a0c;         /* Deepest — main bg */
+  --voyo-bg-deep: #111114;         /* Card backgrounds — metallic dark */
+  --voyo-bg-card: rgba(28, 28, 35, 0.65);  /* Glass cards — metallic grey */
+  --voyo-bg-elevated: #1c1c22;     /* Elevated surfaces — brushed metal feel */
 
   /* === PRIMARY BRAND - PURPLE SYSTEM === */
   /* Use these 3 primary purples + 3 glow levels consistently */
@@ -20,28 +20,29 @@
   --glow-primary: rgba(139, 92, 246, 0.5);
   --glow-primary-intense: rgba(139, 92, 246, 0.8);
 
-  /* === ACCENT COLORS — Purple family only === */
+  /* === ACCENT COLORS — VOYO Sunset Palette === */
+  /* Purple (core) + Sunset (orange→yellow) + Pamplo pink */
   --voyo-accent: #a78bfa;          /* Violet-400 - light accent */
   --voyo-accent-glow: rgba(139, 92, 246, 0.5);
-  --voyo-pink: #a78bfa;            /* Mapped to purple-light */
-  --voyo-pink-glow: rgba(139, 92, 246, 0.4);
+  --voyo-pink: #ec4899;            /* Pamplo pink */
+  --voyo-pink-glow: rgba(236, 72, 153, 0.4);
   --glow-accent: rgba(139, 92, 246, 0.4);
 
   /* === FUNCTIONAL COLORS === */
-  --voyo-blue: #a78bfa;            /* Mapped to violet-400 */
-  --voyo-blue-glow: rgba(139, 92, 246, 0.4);
+  --voyo-blue: #818cf8;            /* Indigo-400 - cool accent */
+  --voyo-blue-glow: rgba(129, 140, 248, 0.4);
   --voyo-red: #ef4444;             /* Red-500 - errors + live only */
   --voyo-red-glow: rgba(239, 68, 68, 0.4);
-  --voyo-cyan: #a78bfa;            /* Mapped to violet-400 */
-  --voyo-gold: #a78bfa;            /* Mapped to violet-400 */
-  --voyo-neon-green: #a78bfa;      /* Mapped to violet-400 */
-  --voyo-amber: #a78bfa;           /* Mapped to violet-400 */
-  --voyo-success: #a78bfa;         /* Mapped to violet-400 */
+  --voyo-cyan: #818cf8;            /* Indigo-400 */
+  --voyo-gold: #fbbf24;            /* Sunset yellow - warm accent */
+  --voyo-neon-green: #a78bfa;      /* Keep purple for non-brand */
+  --voyo-amber: #f97316;           /* Sunset orange */
+  --voyo-success: #a78bfa;         /* Purple for success states */
 
-  /* OYÉ Zone Colors — toned down, white-based differentiation */
-  --oye-hot: rgba(255, 255, 255, 0.85);
-  --oye-ai: #8b5cf6;
-  --oye-discover: rgba(255, 255, 255, 0.6);
+  /* OYÉ Zone Colors — warm VOYO palette */
+  --oye-hot: #f97316;              /* Sunset orange */
+  --oye-ai: #8b5cf6;              /* Purple (core) */
+  --oye-discover: #fbbf24;        /* Sunset yellow */
 
   /* === TEXT HIERARCHY === */
   --voyo-text: #ffffff;
@@ -98,7 +99,7 @@ body {
 }
 
 .glow-blue {
-  box-shadow: 0 0 20px var(--glow-primary-soft), 0 0 40px var(--glow-primary-soft);
+  box-shadow: 0 0 20px rgba(129, 140, 248, 0.3), 0 0 40px rgba(129, 140, 248, 0.15);
 }
 
 .glow-red {
@@ -106,7 +107,11 @@ body {
 }
 
 .glow-pink {
-  box-shadow: 0 0 20px var(--glow-primary-soft), 0 0 40px var(--glow-primary-soft);
+  box-shadow: 0 0 20px rgba(236, 72, 153, 0.3), 0 0 40px rgba(236, 72, 153, 0.15);
+}
+
+.glow-sunset {
+  box-shadow: 0 0 20px rgba(249, 115, 22, 0.3), 0 0 40px rgba(251, 191, 36, 0.15);
 }
 
 /* Neon Text */
@@ -253,14 +258,14 @@ body {
 }
 
 .text-gradient {
-  background: linear-gradient(135deg, #a78bfa 0%, #8b5cf6 50%, #7c3aed 100%);
+  background: linear-gradient(135deg, #ec4899 0%, #8b5cf6 50%, #f97316 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
 }
 
 .text-gradient-gold {
-  background: linear-gradient(135deg, #a78bfa 0%, #8b5cf6 50%, #7c3aed 100%);
+  background: linear-gradient(135deg, #f97316 0%, #fbbf24 50%, #f97316 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
