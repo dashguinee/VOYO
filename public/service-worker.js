@@ -4,7 +4,7 @@
  * BACKGROUND PLAYBACK: Enhanced to cache audio streams
  */
 
-const CACHE_NAME = 'voyo-v7';
+const CACHE_NAME = 'voyo-v8';
 const AUDIO_CACHE_NAME = 'voyo-audio-v2';
 const STATIC_ASSETS = [
   '/',
@@ -25,15 +25,23 @@ self.addEventListener('install', (event) => {
   self.skipWaiting();
 });
 
-// Activate event - clean old caches
+// Activate event - clean old caches + signal open tabs that a new SW is ready
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((cacheNames) => {
-      return Promise.all(
-        cacheNames
-          .filter((name) => name !== CACHE_NAME && name !== AUDIO_CACHE_NAME)
-          .map((name) => caches.delete(name))
-      );
+      const oldCaches = cacheNames.filter((name) => name !== CACHE_NAME && name !== AUDIO_CACHE_NAME);
+      return Promise.all(oldCaches.map((name) => caches.delete(name))).then(() => {
+        // Auto-update broadcast (ported from Tivi+): when we activate AFTER
+        // replacing an old version, postMessage every open tab so they can
+        // surface an "Update available" prompt. Skipped on first install
+        // (no old caches to purge means there was nothing to update FROM).
+        if (oldCaches.length > 0) {
+          self.clients.matchAll({ type: 'window' }).then((tabs) => {
+            console.log('[SW] Signaling ' + tabs.length + ' tab(s) — new build ready');
+            tabs.forEach((tab) => tab.postMessage({ type: 'SW_UPDATED' }));
+          });
+        }
+      });
     })
   );
   self.clients.claim();

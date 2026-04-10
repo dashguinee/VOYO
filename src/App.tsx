@@ -21,6 +21,7 @@ import { YouTubeIframe } from './components/YouTubeIframe';
 import { InstallButton } from './components/ui/InstallButton';
 import { OfflineIndicator } from './components/ui/OfflineIndicator';
 import { VoyoSplash } from './components/voyo/VoyoSplash';
+import { usePullToRefresh } from './hooks/usePullToRefresh';
 
 // Lazy-loaded mode components (code splitting — only load active mode)
 const PortraitVOYO = lazy(() => import('./components/voyo/PortraitVOYO'));
@@ -941,6 +942,95 @@ const DynamicIsland = () => {
   );
 };
 
+// ── Auto-update button (ported from Tivi+) ──
+// Two-tier detection:
+//  1. SW message — when a new service worker activates with a fresh cache,
+//     it postMessages every tab. main.tsx translates that into the
+//     `voyo-update-available` window event we listen for here.
+//  2. Polled /version.json — every 2 minutes we cache-bust-fetch the
+//     version file. If it differs from the build-time stamp, we know a
+//     new build is live even if the SW hasn't updated yet. force=true
+//     auto-clears all caches and reloads (no user choice).
+function UpdateButton() {
+  const [available, setAvailable] = useState(false);
+  const [forceUpdate, setForceUpdate] = useState(false);
+
+  useEffect(() => {
+    const swHandler = () => setAvailable(true);
+    window.addEventListener('voyo-update-available', swHandler);
+
+    let active = true;
+    async function checkVersion() {
+      try {
+        const res = await fetch('/version.json?t=' + Date.now(), {
+          cache: 'no-store',
+          signal: AbortSignal.timeout(5000),
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.version && data.version !== __APP_VERSION__) {
+          if (data.force) {
+            setForceUpdate(true);
+            if ('caches' in window) {
+              const keys = await caches.keys();
+              await Promise.all(keys.map(k => caches.delete(k)));
+            }
+            window.location.reload();
+          } else {
+            setAvailable(true);
+          }
+        }
+      } catch { /* offline or timeout — skip */ }
+    }
+
+    checkVersion();
+    const interval = setInterval(() => { if (active) checkVersion(); }, 2 * 60 * 1000);
+    return () => {
+      active = false;
+      clearInterval(interval);
+      window.removeEventListener('voyo-update-available', swHandler);
+    };
+  }, []);
+
+  if (forceUpdate) {
+    return (
+      <div className="fixed inset-0 z-[9999] bg-[#050508] flex items-center justify-center">
+        <div className="text-center">
+          <h1 className="text-lg font-bold text-white mb-2" style={{ fontFamily: "'Outfit', sans-serif" }}>Updating VOYO</h1>
+          <div className="w-10 h-[2px] mx-auto rounded-full overflow-hidden bg-white/5">
+            <div className="h-full w-full rounded-full" style={{ background: 'rgba(139, 92, 246, 0.5)', animation: 'voyo-loading-bar 1.5s ease-in-out infinite' }} />
+          </div>
+        </div>
+        <style>{`@keyframes voyo-loading-bar { 0%, 100% { transform: translateX(-100%); } 50% { transform: translateX(100%); } }`}</style>
+      </div>
+    );
+  }
+
+  if (!available) return null;
+
+  return (
+    <button
+      onClick={async () => {
+        if ('caches' in window) {
+          const keys = await caches.keys();
+          await Promise.all(keys.map(k => caches.delete(k)));
+        }
+        window.location.reload();
+      }}
+      className="fixed bottom-24 right-4 z-[9998] flex items-center gap-2 px-4 py-2.5 rounded-full backdrop-blur-md transition-all duration-300"
+      style={{
+        background: 'rgba(139, 92, 246, 0.15)',
+        border: '1px solid rgba(139, 92, 246, 0.35)',
+        boxShadow: '0 10px 30px rgba(139, 92, 246, 0.25)',
+        fontFamily: "'Outfit', sans-serif",
+      }}
+    >
+      <span className="w-2 h-2 rounded-full animate-ping" style={{ background: '#a78bfa' }} />
+      <span className="text-xs font-semibold tracking-wide" style={{ color: '#a78bfa' }}>Update available</span>
+    </button>
+  );
+}
+
 function App() {
   // Battery fix: fine-grained selectors
   const currentTrack = usePlayerStore(s => s.currentTrack);
@@ -978,6 +1068,11 @@ function App() {
     sessionStorage.setItem('voyo-splash-v3', 'true');
     setShowSplash(false);
   }, []);
+
+  // Pull-to-refresh: pull down at the top of any view to reload the app.
+  // Especially useful while iterating on production fixes — the user can
+  // grab a new build without hunting for a refresh button.
+  const ptr = usePullToRefresh();
 
   // MOBILE FIX: Setup audio unlock on app mount
   useEffect(() => {
@@ -1273,12 +1368,46 @@ function App() {
         </div>
       </div>
     }>
-    <div className="relative h-full w-full bg-[#0a0a0f] overflow-hidden">
+    <div className="relative h-full w-full bg-[#050508] overflow-hidden">
       {/* VOYO Boot Loader — VOYO wordmark + 3 dots + boom-expand ring burst.
           minDuration is 900ms — just enough to see the boom rings expand once
           + the 220ms fade-out. Faster perceived boot, less standing around. */}
       {showSplash && (
         <VoyoSplash onComplete={handleSplashComplete} minDuration={900} />
+      )}
+
+      {/* Auto-update banner (Tivi+ pattern) */}
+      <UpdateButton />
+
+      {/* Pull-to-refresh indicator (Tivi+ pattern) — fades in as you pull
+          down at the top of any view, rotates with the pull distance, fires
+          window.location.reload() once threshold is crossed. */}
+      {ptr.pulling && (
+        <div
+          className="fixed left-1/2 -translate-x-1/2 z-[9998] flex items-center justify-center transition-opacity duration-200"
+          style={{
+            top: Math.max(0, ptr.pullY - 20),
+            opacity: ptr.pullY > 20 ? Math.min(1, ptr.pullY / 60) : 0,
+          }}
+        >
+          <div
+            className="w-9 h-9 rounded-full flex items-center justify-center backdrop-blur-md"
+            style={{
+              background: ptr.refreshing ? 'rgba(139, 92, 246, 0.2)' : 'rgba(0, 0, 0, 0.6)',
+              border: `1.5px solid ${ptr.pullY > 40 ? 'rgba(139, 92, 246, 0.55)' : 'rgba(255, 255, 255, 0.18)'}`,
+              transform: `rotate(${ptr.pullY * 3}deg)`,
+              transition: 'background 0.2s, border-color 0.2s',
+            }}
+          >
+            {ptr.refreshing ? (
+              <div className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />
+            ) : (
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" className="text-white/60">
+                <path d="M12 5v14M5 12l7 7 7-7" />
+              </svg>
+            )}
+          </div>
+        </div>
       )}
 
       {/* Dynamic Background based on current track (only for VOYO modes) */}

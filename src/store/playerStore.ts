@@ -1226,7 +1226,12 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       }
     });
 
-    // Pool fallback: Also merge, don't replace
+    // Pool fallback: Also merge, don't replace.
+    // This is the SYNCHRONOUS path that runs even if databaseDiscovery is
+    // slow or fails — it pulls from the in-memory pool curator. Crucially
+    // this is also where the autoplay seed needs to fire: if database is
+    // slow on first load, the database branch never reaches the seed and
+    // the user sees no music. Seed here too as the safety net.
     const poolHot = getPoolAwareHotTracks(10);
     if (poolHot.length > 0) {
       const currentState = get();
@@ -1234,9 +1239,26 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       const newPoolHot = poolHot.filter(t => !existingIds.has(t.id));
 
       if (newPoolHot.length > 0) {
-        set({
-          hotTracks: [...currentState.hotTracks, ...newPoolHot].slice(0, MAX_HOT_POOL),
-        });
+        const merged = [...currentState.hotTracks, ...newPoolHot].slice(0, MAX_HOT_POOL);
+        set({ hotTracks: merged });
+
+        // ── VOYO SPIRIT: AUTOPLAY SAFETY NET ──
+        // If the async database branch hasn't seeded a track yet AND we
+        // have hot tracks from the pool fallback, seed now. Same guard as
+        // the database branch (currentTrack === null) so we never override
+        // an existing playback.
+        const stateAfterMerge = get();
+        if (!stateAfterMerge.currentTrack && merged.length > 0) {
+          const seedTrack = merged[0];
+          devLog(`[VOYO] 🎵 Autoplay seed (pool fallback): ${seedTrack.artist} — ${seedTrack.title}`);
+          set({
+            currentTrack: seedTrack,
+            isPlaying: true,
+            progress: 0,
+            currentTime: 0,
+            seekPosition: null,
+          });
+        }
       }
     }
   },
