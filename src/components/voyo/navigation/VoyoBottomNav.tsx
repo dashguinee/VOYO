@@ -157,13 +157,13 @@ export const VoyoBottomNav = ({ onDahub, onHome }: VoyoBottomNavProps) => {
     return () => clearTimeout(showPromptTimer);
   }, [isPlaying, isOnFeed, promptCount]);
 
+  // VOYO center button always lands on the player. The feed entry point lives
+  // inside VoyoPortraitPlayer (the dedicated "onVoyoFeed" button), not here.
+  // Dash's call: tapping VOYO from anywhere — music, feed, dahub — should
+  // bring the player up. No more flip-flop.
   const handleVoyoToggle = () => {
     wakeNav();
-    if (voyoActiveTab === 'feed') {
-      setVoyoTab('music');
-    } else {
-      setVoyoTab('feed');
-    }
+    setVoyoTab('music');
   };
 
   const handleHome = () => {

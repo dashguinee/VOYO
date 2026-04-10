@@ -653,8 +653,16 @@ export const AudioPlayer = () => {
     const ctx = audioContextRef.current;
     if (ctx) {
       const now = ctx.currentTime;
-      gainNodeRef.current.gain.cancelScheduledValues(now);
-      gainNodeRef.current.gain.setTargetAtTime(target, now, 0.02);
+      const param = gainNodeRef.current.gain;
+      // Textbook click-free param write: cancel any pending automation,
+      // anchor at the current value, then linearly ramp to the target
+      // over 25ms. linearRampToValueAtTime guarantees we hit the target
+      // exactly at the specified time (setTargetAtTime never reaches it,
+      // it asymptotes — this is the difference between "reduces clicks"
+      // and "eliminates clicks").
+      param.cancelScheduledValues(now);
+      param.setValueAtTime(param.value, now);
+      param.linearRampToValueAtTime(target, now + 0.025);
     } else {
       gainNodeRef.current.gain.value = target;
     }
@@ -699,24 +707,28 @@ export const AudioPlayer = () => {
 
   // Update preset dynamically — unified chain, all refs always exist
   //
-  // CRITICAL: every AudioParam write below uses setTargetAtTime (20ms ramp)
-  // instead of direct `.value = X` assignment. Direct assignment to a running
-  // AudioParam causes audible clicks/pops because it discontinuously jumps the
-  // signal. This was the root cause of the "speaker crashes on interaction"
-  // bug Dash reported — every state update that re-fired this useEffect
-  // produced a click on the speakers.
+  // CRITICAL: every AudioParam write below uses the textbook click-free
+  // pattern (cancelScheduledValues → setValueAtTime anchor →
+  // linearRampToValueAtTime). This is a stricter upgrade from the prior
+  // setTargetAtTime approach because:
+  //   - setTargetAtTime is exponential and asymptotic (never reaches target)
+  //   - linearRampToValueAtTime hits the target exactly at the specified time
+  //   - the explicit setValueAtTime anchor at param.value prevents the param
+  //     from jumping if there was pending automation
+  // This is what real DAWs and pro audio software do for parameter automation.
   const updateBoostPreset = useCallback((preset: BoostPreset) => {
     if (!audioEnhancedRef.current) return;
     currentProfileRef.current = preset;
 
     const ctx = audioContextRef.current;
     const now = ctx ? ctx.currentTime : 0;
-    const RAMP = 0.02; // 20ms — fast enough to feel instant, smooth enough to never click
+    const RAMP_MS = 25; // 25ms — fast enough to feel instant, slow enough to be perfectly smooth
 
     const ramp = (param: AudioParam | undefined | null, value: number) => {
       if (!param || !ctx) return;
       param.cancelScheduledValues(now);
-      param.setTargetAtTime(value, now, RAMP);
+      param.setValueAtTime(param.value, now);
+      param.linearRampToValueAtTime(value, now + RAMP_MS / 1000);
     };
 
     const setMultibandTransparent = () => {
@@ -790,11 +802,7 @@ export const AudioPlayer = () => {
   }, []);
 
   // VOYEX INTENSITY SLIDER — full mastering + spatial control
-  // Center = clean VOYEX baseline. Extremes = full experience.
-  //
-  // Every AudioParam write is a setTargetAtTime ramp (20ms) so the slider can
-  // be dragged smoothly without speaker clicks. Direct `.value =` was causing
-  // pops on every drag step — gone now.
+  // Same textbook click-free pattern as updateBoostPreset.
   const updateVoyexSpatial = useCallback((value: number) => {
     if (!spatialEnhancedRef.current) return;
     const v = Math.max(-100, Math.min(100, value));
@@ -802,11 +810,12 @@ export const AudioPlayer = () => {
 
     const ctx = audioContextRef.current;
     const now = ctx ? ctx.currentTime : 0;
-    const RAMP = 0.02;
+    const RAMP_MS = 25;
     const ramp = (param: AudioParam | undefined | null, value: number) => {
       if (!param || !ctx) return;
       param.cancelScheduledValues(now);
-      param.setTargetAtTime(value, now, RAMP);
+      param.setValueAtTime(param.value, now);
+      param.linearRampToValueAtTime(value, now + RAMP_MS / 1000);
     };
 
     // ══════════════════════════════════════════════════════
@@ -1361,21 +1370,25 @@ export const AudioPlayer = () => {
 
   // Handle play/pause (only when using audio element: cached or r2)
   // Also suspend AudioContext when paused to save battery
+  //
+  // CRITICAL: `playbackSource` is intentionally NOT in the deps. Previously
+  // this effect re-fired on every cdn↔r2↔cached transition during normal
+  // playback (hot-swap, edge resolution, cache promotion) — even though
+  // `isPlaying` hadn't changed. Each re-fire called audio.play() or
+  // audio.pause() unprompted, which felt like "skip pause play" glitching to
+  // the user. Now it only fires on actual play/pause user intent.
   useEffect(() => {
     if ((playbackSource !== 'cached' && playbackSource !== 'r2') || !audioRef.current) return;
 
     const audio = audioRef.current;
     if (isPlaying && audio.paused && audio.src && audio.readyState >= 1) {
       // FIX: Restore volume before playing — it may be stuck at 0 from the loading phase
-      // (loadTrack sets volume=0 during load, and if shouldPlay was false when oncanplaythrough fired,
-      // volume was never restored. Now we fix it here when user presses play.)
       if (audioEnhancedRef.current && gainNodeRef.current) {
-        audio.volume = 1.0; // Web Audio chain controls actual volume via gainNode
+        audio.volume = 1.0;
         applyMasterGain();
       } else {
         audio.volume = volume / 100;
       }
-      // Resume AudioContext if suspended, then play
       if (audioContextRef.current?.state === 'suspended') {
         audioContextRef.current.resume();
       }
@@ -1383,7 +1396,8 @@ export const AudioPlayer = () => {
     } else if (!isPlaying && !audio.paused) {
       audio.pause();
     }
-  }, [isPlaying, playbackSource]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isPlaying]);
 
   // Suspend AudioContext when paused + hidden (delayed to allow quick resume)
   const suspendTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1414,6 +1428,8 @@ export const AudioPlayer = () => {
   }, [isPlaying, playbackSource]);
 
   // Handle volume (only when using audio element: cached or r2)
+  // playbackSource omitted from deps for the same reason as the play/pause
+  // effect above — it shouldn't re-apply volume on every source flip.
   useEffect(() => {
     if ((playbackSource !== 'cached' && playbackSource !== 'r2') || !audioRef.current) return;
 
@@ -1423,7 +1439,8 @@ export const AudioPlayer = () => {
     } else {
       audioRef.current.volume = volume / 100;
     }
-  }, [volume, playbackSource]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [volume]);
 
   // Handle seek (only when using audio element: cached or r2)
   useEffect(() => {
@@ -1439,23 +1456,33 @@ export const AudioPlayer = () => {
   }, [playbackRate, playbackSource]);
 
   // Handle boost preset changes (only when using audio element: cached or r2)
+  //
+  // NOTE: `playbackSource` is intentionally NOT in the deps. Previously this
+  // effect re-fired on every cdn↔r2↔cached transition during normal playback,
+  // which produced ~30 AudioParam writes per flip. Even with the new ramping
+  // helpers, the redundant re-fires were the architectural source of pops.
+  // Now this only re-fires when boostProfile actually changes (the user
+  // switches preset). The check inside still uses live `playbackSource` via
+  // closure capture, so the guard still works, but we don't re-trigger.
   useEffect(() => {
     if ((playbackSource === 'cached' || playbackSource === 'r2') && audioEnhancedRef.current) {
       updateBoostPreset(boostProfile as BoostPreset);
     }
-  }, [boostProfile, playbackSource, updateBoostPreset]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [boostProfile, updateBoostPreset]);
 
-  // VOYEX Spatial slider: apply when slider changes or preset changes
+  // VOYEX Spatial slider: apply when slider changes or preset changes.
+  // Same dep-cleanup logic — playbackSource intentionally omitted.
   useEffect(() => {
     if ((playbackSource === 'cached' || playbackSource === 'r2') && spatialEnhancedRef.current) {
       if (boostProfile === 'voyex') {
         updateVoyexSpatial(voyexSpatial);
       } else {
-        // Not VOYEX - mute spatial (true bypass)
         updateVoyexSpatial(0);
       }
     }
-  }, [voyexSpatial, boostProfile, playbackSource, updateVoyexSpatial]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [voyexSpatial, boostProfile, updateVoyexSpatial]);
 
   // BUFFER HEALTH MONITORING: Active monitoring every 2s during playback
   // Emergency (<3s buffer): immediately try local cache fallback
