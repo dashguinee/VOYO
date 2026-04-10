@@ -781,13 +781,16 @@ The branches the product owner imagined as "6 surfaces of experience" are **actu
 - **`playerStore.refreshRecommendations`** now reads `oyoDJ.getInsights().favoriteArtists` and stable-sorts the merged hot belt with favourites first. New users (empty list) see no behaviour change. Returning users see their reaction history bubble to the top of every surface that reads `hotTracks` (Portrait MUSIC, Landscape, Dahub previews).
 - **No tracks are removed**, only reordered. The MAX_HOT_POOL cap (50) is unchanged. Discovery is intentionally NOT OYO-sorted (it's the diversity channel).
 
-### Still open (the OYO promotion roadmap)
+### Done in commit `2e4c277`
 
-1. **Route `HomeFeed` through `playerStore.hotTracks`** so Classic Mode inherits the OYO sort instead of bypassing the store. Medium effort.
-2. **Wire `oyoDJ.onTrackSkip`** from skip buttons in `VoyoPortraitPlayer` and `NowPlaying`. Currently skip events bypass OYO so the `dislikedArtists` learning never happens.
-3. **Surface OYO voice in the UI** — `OyoIsland` displays `getProfile()` but doesn't render `speak()` output. Add a small subtitle/toast that shows the latest DJ utterance.
-4. **Promote OYO from sort-only to merge-source** — the next step beyond sorting is having OYO actually CONTRIBUTE tracks to the hot pool from its `favoriteArtists` (e.g., fetch the user's top 5 favourites' latest releases and inject them).
-5. **Wire Brain outputs into OYO** — `sessionExecutor.getHotBelt()` produces a curated belt that nothing reads. Either consume it (and Brain becomes load-bearing) or delete the Brain subsystem entirely (it's currently lazy-loaded for ~38 KB). Decide which.
+1. ✅ **Route `HomeFeed` Made-For-You through OYO** — turned out HomeFeed already read `playerStore.hotTracks` but then re-sorted by `calculateBehaviorScore`, destroying the OYO sort. Fixed with a two-tier stable sort: favourites first (by behavior within), non-favourites second (also by behavior within). Preserves both signals. Empty favourites list (new user) → no behavior change.
+2. ✅ **Wire `onTrackSkip` at the `playerStore.nextTrack` boundary** — every surface that skips (Portrait MUSIC, Landscape, Classic Mode NowPlaying, queue advance, hotkey) goes through `nextTrack()`, so wiring `oyoOnTrackSkip` at the same place where skip-vs-completion is already detected gives universal coverage. After 3 skips of the same artist, OYO appends to `dislikedArtists`.
+
+### Still open
+
+1. **Surface OYO voice in the UI** — `OyoIsland` displays `getProfile()` but doesn't render `speak()` output. Add a small subtitle/toast that shows the latest DJ utterance.
+2. **Promote OYO from sort-only to merge-source** — the next step beyond sorting is having OYO actually CONTRIBUTE tracks to the hot pool from its `favoriteArtists` (e.g., fetch the user's top 5 favourites' latest releases and inject them).
+3. **Wire Brain outputs into OYO** — `sessionExecutor.getHotBelt()` produces a curated belt that nothing reads. Either consume it (and Brain becomes load-bearing) or delete the Brain subsystem entirely (it's currently lazy-loaded for ~38 KB). Decide which.
 
 ## Lessons from the April 2026 cleanup
 
