@@ -1262,13 +1262,13 @@ const PortalBelt = memo(({ tracks, onTap, onTeaser, onQueueAdd, playedTrackIds, 
         };
       }
     } else {
-      // DISCOVERY: Cards enter from RIGHT, add blue glow fade-in
+      // DISCOVERY: Cards enter from RIGHT, add bronze glow fade-in
       const entranceZone = containerWidth - cardWidth * 1.5;
       if (x > entranceZone) {
         const progress = Math.max(0, (containerWidth - x) / (cardWidth * 1.5));
         return {
           opacity: 0.4 + progress * 0.6,
-          filter: `drop-shadow(0 0 ${(1 - progress) * 8}px rgba(59, 130, 246, 0.6))`,
+          filter: `drop-shadow(0 0 ${(1 - progress) * 8}px rgba(212, 160, 83, 0.6))`,
         };
       }
     }
@@ -4529,22 +4529,22 @@ export const VoyoPortraitPlayer = ({
             )}
           </button>
 
-          {/* DISCOVERY Label - Cyan Neon */}
+          {/* DISCOVERY Label — African Gold Bronze */}
           <button
             onClick={handleToggleDiscoveryBelt}
             className="flex items-center gap-1.5 px-2 py-1 rounded relative overflow-hidden"
             style={{
-              background: 'rgba(6,182,212,0.1)',
+              background: 'rgba(212,160,83,0.1)',
               boxShadow: isDiscoveryBeltActive
-                ? '0 0 15px rgba(6,182,212,0.4), inset 0 0 10px rgba(6,182,212,0.2)'
-                : '0 0 8px rgba(6,182,212,0.2)'
+                ? '0 0 15px rgba(212,160,83,0.4), inset 0 0 10px rgba(212,160,83,0.2)'
+                : '0 0 8px rgba(212,160,83,0.2)'
                 }}
           >
             <span
               className="text-[11px] font-black tracking-[0.15em] uppercase"
               style={{
-                color: '#06b6d4',
-                textShadow: '0 0 8px rgba(6,182,212,0.8), 0 0 16px rgba(6,182,212,0.5)'
+                color: '#D4A053',
+                textShadow: '0 0 8px rgba(212,160,83,0.8), 0 0 16px rgba(212,160,83,0.5)'
                 }}
             >
               DISCOVER
@@ -4552,7 +4552,7 @@ export const VoyoPortraitPlayer = ({
             {isDiscoveryBeltActive && (
               <span
                 className="text-[6px] font-bold ml-0.5"
-                style={{ color: '#67e8f9' }}
+                style={{ color: '#E6B865' }}
               >
                 ●
               </span>
@@ -4719,7 +4719,7 @@ export const VoyoPortraitPlayer = ({
               scrollOutwardTrigger={discoveryScrollTrigger}
             />
 
-            {/* Blue Portal Line (right edge of DISCOVERY zone) - CLICKABLE SCROLL CONTROL */}
+            {/* Bronze Portal Line (right edge of DISCOVERY zone) - CLICKABLE SCROLL CONTROL */}
             <button
               onClick={() => {
                 setDiscoveryScrollTrigger(prev => prev + 1);
@@ -4731,23 +4731,24 @@ export const VoyoPortraitPlayer = ({
               className="flex-shrink-0 w-5 h-20 relative z-20 mr-1 touch-manipulation"
               aria-label="Scroll DISCOVERY belt outward"
             >
-              {/* Portal line */}
+              {/* Portal line — African Gold Bronze */}
               <div
                 className="h-full w-1.5 mx-auto rounded-full"
                 style={{
                   background: discoveryPortalGlow
-                    ? 'linear-gradient(180deg, #60a5fa, #3b82f6, #60a5fa)'
-                    : 'linear-gradient(180deg, rgba(59,130,246,0.3), rgb(59,130,246), rgba(59,130,246,0.3))',
-                  boxShadow: discoveryPortalGlow ? '0 0 30px #3b82f6' : '0 0 10px #3b82f6',
+                    ? 'linear-gradient(180deg, #E6B865, #D4A053, #E6B865)'
+                    : 'linear-gradient(180deg, rgba(212,160,83,0.3), rgb(212,160,83), rgba(212,160,83,0.3))',
+                  boxShadow: discoveryPortalGlow ? '0 0 30px #D4A053' : '0 0 10px #D4A053',
                 }}
               />
               {/* Ambient glow - always visible */}
-              <div className={`absolute inset-0 bg-blue-500 blur-lg transition-opacity duration-300 ${discoveryPortalGlow ? 'opacity-100' : 'opacity-40'}`} />
+              <div className={`absolute inset-0 blur-lg transition-opacity duration-300 ${discoveryPortalGlow ? 'opacity-100' : 'opacity-40'}`} style={{ background: '#D4A053' }} />
               {/* Pulse ring on glow */}
-              
+
                 {discoveryPortalGlow && (
                   <div
-                    className="absolute inset-0 rounded-full border-2 border-blue-400"
+                    className="absolute inset-0 rounded-full border-2"
+                    style={{ borderColor: '#E6B865' }}
                   />
                 )}
               

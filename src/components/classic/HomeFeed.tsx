@@ -9,7 +9,8 @@
  */
 
 import { useState, useMemo, useEffect, useRef, memo, useCallback } from 'react';
-import { Search, Bell, Play, RefreshCw, Zap } from 'lucide-react';
+import { Search, Bell, Play, Zap } from 'lucide-react';
+import { AfricaIcon } from '../ui/AfricaIcon';
 import { getThumb } from '../../utils/thumbnail';
 import { SmartImage } from '../ui/SmartImage';
 import { VIBES, Vibe } from '../../data/tracks';
@@ -163,32 +164,26 @@ const Shelf = ({ title, onSeeAll, children }: ShelfProps) => {
 
 interface ShelfWithRefreshProps {
   title: string;
-  onRefresh: () => void;
+  /** Unused — legacy prop for compat. Refresh happens via subtle end-of-scroll sentinel. */
+  onRefresh?: () => void;
+  /** Unused — legacy prop for compat. */
   isRefreshing?: boolean;
   onSeeAll?: () => void;
   children: React.ReactNode;
 }
 
-const ShelfWithRefresh = ({ title, onRefresh, isRefreshing = false, onSeeAll, children }: ShelfWithRefreshProps) => (
+const ShelfWithRefresh = ({ title, onSeeAll, children }: ShelfWithRefreshProps) => (
   <div className="mb-10">
     <div className="flex justify-between items-center px-4 mb-5">
       <h2 className="text-white font-semibold text-base">{title}</h2>
-      <div className="flex items-center gap-2">
+      {onSeeAll && (
         <button
-          className="p-2 rounded-full bg-white/10 hover:bg-white/20"
-          onClick={onRefresh}
+          className="text-purple-400 text-sm font-medium"
+          onClick={onSeeAll}
         >
-          <RefreshCw className={`w-4 h-4 text-purple-400 ${isRefreshing ? 'animate-spin' : ''}`} />
+          See all
         </button>
-        {onSeeAll && (
-          <button
-            className="text-purple-400 text-sm font-medium"
-            onClick={onSeeAll}
-          >
-            See all
-          </button>
-        )}
-      </div>
+      )}
     </div>
     <div
       className="flex gap-4 px-4 overflow-x-auto scrollbar-hide"
@@ -384,9 +379,11 @@ const CenterFocusedCarousel = ({ tracks, onPlay }: CenterCarouselProps) => {
 interface TrackCardProps {
   track: Track;
   onPlay: () => void;
+  /** Show the bronze OYÉ boost badge — only for Continue Listening + Discover More */
+  showBoostBadge?: boolean;
 }
 
-const TrackCard = ({ track, onPlay }: TrackCardProps) => {
+const TrackCard = ({ track, onPlay, showBoostBadge = false }: TrackCardProps) => {
   const [isHovered, setIsHovered] = useState(false);
   const [oyeActive, setOyeActive] = useState(false);
   const { createReaction } = useReactionStore();
@@ -438,21 +435,24 @@ const TrackCard = ({ track, onPlay }: TrackCardProps) => {
             </div>
           </div>
         )}
-        {/* OYE Button - Top Right — African Gold Bronze */}
-        <button
-          className="absolute top-2 right-2 z-10"
-          onClick={handleOye}
-        >
-          <div
-            className="w-7 h-7 rounded-full flex items-center justify-center"
-            style={{
-              background: 'linear-gradient(135deg, #D4A053, #C4943D)',
-              boxShadow: oyeActive ? '0 0 15px rgba(212, 160, 83, 0.6)' : '0 2px 8px rgba(0,0,0,0.3)',
-            }}
+        {/* OYÉ Boost Badge — only shown on auto-boosted shelves (Continue, Discover More) */}
+        {showBoostBadge && (
+          <button
+            className="absolute top-2 right-2 z-10"
+            onClick={handleOye}
+            aria-label="OYÉ this track"
           >
-            <Zap className="w-4 h-4 text-white" style={{ fill: 'white' }} />
-          </div>
-        </button>
+            <div
+              className="w-7 h-7 rounded-full flex items-center justify-center"
+              style={{
+                background: 'linear-gradient(135deg, #D4A053, #C4943D)',
+                boxShadow: oyeActive ? '0 0 15px rgba(212, 160, 83, 0.6)' : '0 2px 8px rgba(0,0,0,0.3)',
+              }}
+            >
+              <Zap className="w-4 h-4 text-white" style={{ fill: 'white' }} />
+            </div>
+          </button>
+        )}
       </div>
       <p className="text-white text-sm font-medium truncate">{track.title}</p>
       <p className="text-white/50 text-[11px] truncate">{track.artist}</p>
@@ -1332,14 +1332,8 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
       {/* Heavy Rotation - circles, only first one rotates gently */}
       {hasPreferences && (
         <div className="mb-10">
-          <div className="px-4 mb-4 flex justify-between items-center">
+          <div className="px-4 mb-4">
             <h2 className="text-white font-semibold text-base">Heavy Rotation</h2>
-            <button
-              className="p-2 rounded-full bg-white/10 hover:bg-white/20"
-              onClick={handleRefresh}
-            >
-              <RefreshCw className={`w-4 h-4 text-purple-400 ${isRefreshing ? 'animate-spin' : ''}`} />
-            </button>
           </div>
           <div className="flex gap-5 px-4 overflow-x-auto scrollbar-hide">
             {heavyRotation.slice(0, 12).map((track, index) => {
@@ -1379,8 +1373,8 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
           end of the carousel after scrolling, with a golden-beam reveal and a
           purple Open VOYO morph. Header stays clean, CTA earns the scroll. */}
       <div className="mb-6">
-        <div className="px-4 mb-5 flex items-center gap-2">
-          <span className="text-xl">🌍</span>
+        <div className="px-4 mb-5 flex items-center gap-3">
+          <AfricaIcon size={32} />
           <div className="flex-1">
             <h2 className="text-white font-semibold text-base">African Vibes</h2>
             <p
@@ -1433,17 +1427,9 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
 
       {/* Made For You - bold, sits on cards, no hesitation */}
       <div className="mb-10">
-        <div className="flex justify-between items-center px-4 mb-1.5">
-          <div className="flex items-center gap-2">
-            <h2 className="text-white font-semibold text-base">Made For You</h2>
-            <div className="h-[2px] w-6 rounded-full" style={{ background: '#8b5cf6', opacity: 0.6 }} />
-          </div>
-          <button
-            className="p-2 rounded-full bg-white/10 hover:bg-white/20"
-            onClick={handleRefresh}
-          >
-            <RefreshCw className={`w-4 h-4 text-purple-400 ${isRefreshing ? 'animate-spin' : ''}`} />
-          </button>
+        <div className="flex items-center gap-2 px-4 mb-1.5">
+          <h2 className="text-white font-semibold text-base">Made For You</h2>
+          <div className="h-[2px] w-6 rounded-full" style={{ background: '#8b5cf6', opacity: 0.6 }} />
         </div>
         <div className="flex gap-3 px-4 overflow-x-auto scrollbar-hide">
           {madeForYou.slice(0, 12).map((track) => (
@@ -1466,11 +1452,11 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
         </div>
       )}
 
-      {/* Discover More - LLM curated expansion beyond comfort zone → COMMUNAL */}
+      {/* Discover More - LLM curated expansion beyond comfort zone → COMMUNAL (auto-boosted, keeps OYÉ badge) */}
       {hasDiscoverMore && (
         <ShelfWithRefresh title="Discover More" onRefresh={handleRefresh} isRefreshing={isRefreshing}>
           {discoverMoreTracks.slice(0, 12).map((track) => (
-            <TrackCard key={track.id} track={track} onPlay={() => onTrackPlay(track, { openFull: true })} />
+            <TrackCard key={track.id} track={track} onPlay={() => onTrackPlay(track, { openFull: true })} showBoostBadge />
           ))}
         </ShelfWithRefresh>
       )}
@@ -1479,15 +1465,17 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
       {classicsTracks.length > 0 && (
         <div className="mb-8 py-6" style={{ background: 'linear-gradient(180deg, rgba(212,160,83,0.08) 0%, transparent 100%)' }}>
           <div className="px-4 mb-4 flex items-center gap-2">
-            <span className="text-xl">🎺</span>
-            <h2 className="text-white font-semibold text-base">Classics</h2>
-            <span className="text-xs text-white/40 flex-1 text-right mr-2">Timeless African sounds</span>
-            <button
-              className="p-2 rounded-full bg-white/10 hover:bg-white/20"
-              onClick={handleRefresh}
+            <h2
+              className="font-semibold text-base tracking-wide"
+              style={{
+                background: 'linear-gradient(135deg, #D4A053 0%, #C4943D 100%)',
+                WebkitBackgroundClip: 'text',
+                WebkitTextFillColor: 'transparent',
+              }}
             >
-              <RefreshCw className={`w-4 h-4 text-[#D4A053] ${isRefreshing ? 'animate-spin' : ''}`} />
-            </button>
+              Classics
+            </h2>
+            <span className="text-xs text-white/40 flex-1 text-right">Timeless African sounds</span>
           </div>
           <div className="flex gap-4 px-4 overflow-x-auto scrollbar-hide">
             {classicsTracks.slice(0, 12).map((track) => (
@@ -1504,15 +1492,8 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
           <div className="absolute top-0 left-0 right-0 h-8 bg-gradient-to-b from-[#060609] to-transparent pointer-events-none z-10" />
           {/* Bottom edge fade — purple-tinted */}
           <div className="absolute bottom-0 left-0 right-0 h-10 pointer-events-none z-10" style={{ background: 'linear-gradient(to bottom, transparent, rgba(139,92,246,0.15))' }} />
-          <div className="px-4 mb-6 flex items-center gap-2">
-            <span className="text-purple-400 text-xl">⭐</span>
-            <h2 className="text-white font-semibold text-base flex-1">Top 10 on VOYO</h2>
-            <button
-              className="p-2 rounded-full bg-white/10 hover:bg-white/20"
-              onClick={handleRefresh}
-            >
-              <RefreshCw className={`w-4 h-4 text-purple-400 ${isRefreshing ? 'animate-spin' : ''}`} />
-            </button>
+          <div className="px-4 mb-6">
+            <h2 className="text-white font-semibold text-base">Top 10 on VOYO</h2>
           </div>
           <style>{`
             @keyframes top10-marquee {
