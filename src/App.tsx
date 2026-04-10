@@ -38,13 +38,23 @@ import { AuthProvider } from './providers/AuthProvider';
 import './utils/debugIntent';
 
 // BRAIN: Initialize the intelligent DJ system
-import { initializeBrainIntegration, cleanupBrainIntegration, getBrainStats } from './brain';
+// Brain subsystem is lazy-loaded inside the boot useEffect via dynamic import.
+// This pulls the ~110 KB app-brain chunk out of the initial bundle — Brain
+// isn't on the playback hot path yet (the playback flow reads from
+// playerStore.hotTracks/discoverTracks fed by databaseDiscovery, not from
+// sessionExecutor.getHotBelt()), so deferring it to requestIdleCallback
+// reclaims initial-load time with zero UX regression.
 
-// SCOUTS: Hungry agents that feed knowledge to the Brain
-import { startScoutPatrol, stopScoutPatrol, getScoutStats, getKnowledgeStats } from './scouts';
-
-// DATABASE FEEDER: Populate collective brain with African music (exposes window.feedDatabase)
-import './scouts/DatabaseFeeder';
+// SCOUTS: Hungry agents that feed knowledge to the Brain.
+// The scout patrol useEffect is currently disabled (see commented block below
+// near line 1083 — 64 YouTube API calls per session was too much). The
+// startScoutPatrol/getScoutStats imports were dead but kept the entire
+// /scouts/ tree in the eager bundle. When the patrol re-enables, these become
+// dynamic imports inside the useEffect — same pattern as the Brain lazy-load.
+//
+// DATABASE FEEDER side-effect import (window.feedDatabase debug global) also
+// removed for the same reason; re-add via dynamic import behind a debug flag
+// when needed.
 
 // TRACK POOL: Start pool maintenance for dynamic track management
 import { startPoolMaintenance } from './store/trackPoolStore';
@@ -1023,17 +1033,49 @@ function App() {
     detectNetworkQuality();
   }, []);
 
-  // BRAIN: Initialize intelligent DJ signal capture
+  // BRAIN: Lazy-load the intelligent DJ signal capture once the browser is
+  // idle. Defers ~110 KB out of the initial bundle. Cleanup is wired through
+  // the closure so unmount-during-load is safe.
   useEffect(() => {
-    devLog('[Brain] Initializing VOYO Brain integration...');
-    initializeBrainIntegration();
+    let cleanup: (() => void) | null = null;
+    let cancelled = false;
 
-    // Expose brain stats for debugging
-    (window as any).brainStats = getBrainStats;
+    const scheduleIdle = (cb: () => void): (() => void) => {
+      const w = window as unknown as {
+        requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number;
+        cancelIdleCallback?: (id: number) => void;
+      };
+      if (typeof w.requestIdleCallback === 'function') {
+        const id = w.requestIdleCallback(cb, { timeout: 3000 });
+        return () => w.cancelIdleCallback?.(id);
+      }
+      // Safari etc. — fall back to a 1.5s timeout (after first paint)
+      const id = window.setTimeout(cb, 1500);
+      return () => window.clearTimeout(id);
+    };
+
+    const cancelIdle = scheduleIdle(async () => {
+      if (cancelled) return;
+      try {
+        devLog('[Brain] Lazy-loading VOYO Brain integration...');
+        const brain = await import('./brain');
+        if (cancelled) return;
+        brain.initializeBrainIntegration();
+        (window as unknown as { brainStats: typeof brain.getBrainStats }).brainStats = brain.getBrainStats;
+        cleanup = brain.cleanupBrainIntegration;
+        devLog('[Brain] ready');
+      } catch (err) {
+        devWarn('[Brain] Failed to lazy-load:', err);
+      }
+    });
 
     return () => {
-      devLog('[Brain] Cleaning up VOYO Brain integration');
-      cleanupBrainIntegration();
+      cancelled = true;
+      cancelIdle();
+      if (cleanup) {
+        devLog('[Brain] Cleaning up VOYO Brain integration');
+        cleanup();
+      }
     };
   }, []);
 
