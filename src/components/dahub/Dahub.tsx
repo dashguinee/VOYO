@@ -1119,7 +1119,7 @@ export function Dahub({ userId: propsUserId, userName: propsUserName, userAvatar
       {/* Header — Tivi+ pattern (April 2026): muted title, softer weight,
           transparent bg, thin bottom divider. No more in-your-face 2xl bold. */}
       <div
-        className="flex-shrink-0 pt-3 px-5 pb-2 border-b border-white/[0.04]"
+        className="flex-shrink-0 pt-3 px-5 pb-2"
         style={{
           paddingTop: 'max(0.75rem, env(safe-area-inset-top))',
         }}

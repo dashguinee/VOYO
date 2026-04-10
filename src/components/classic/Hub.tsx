@@ -578,7 +578,7 @@ export const Hub = ({ onOpenProfile, onSwitchToVOYO, onHome, onVoyoFeed, onLibra
       <UniversePanel isOpen={isUniverseOpen} onClose={() => setIsUniverseOpen(false)} />
 
       {/* Header */}
-      <div className="sticky top-0 z-20 bg-[#0a0a0c]/95 backdrop-blur-xl border-b border-white/[0.05]">
+      <div className="sticky top-0 z-20 bg-transparent">
         <div className="flex items-center justify-between px-6 py-5">
           <h1 className="text-xl font-bold text-white tracking-tight">DAHUB</h1>
           {/* Settings Button */}
