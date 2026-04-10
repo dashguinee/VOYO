@@ -608,7 +608,7 @@ Every load-bearing weirdness future contributors must internalize:
 
 5. **`Dahub.loadData` must use `Promise.allSettled` + `try/finally`.** Commit `eebe619` replaced `Promise.all` + no catch, which would lock `isLoading = true` forever if any one of the 4 backend calls threw. Keep it `allSettled`; per-call `.status === 'fulfilled'` checks; `setIsLoading(false)` in `finally`. See `components/dahub/Dahub.tsx:1058-1093`.
 
-6. **Service worker cache must be bumped on deploy.** Currently at `voyo-v6` + `voyo-audio-v2`. When you ship a new entry bundle (any change to `index-*.js`), bump `CACHE_NAME` in `public/service-worker.js` and redeploy. Otherwise returning users get a stale HTML referencing deleted hashed assets and see a white screen.
+6. **Service worker cache must be bumped on deploy.** Currently at `voyo-v7` + `voyo-audio-v2`. When you ship a new entry bundle (any change to `index-*.js`), bump `CACHE_NAME` in `public/service-worker.js` and redeploy. Otherwise returning users get a stale HTML referencing deleted hashed assets and see a white screen.
 
 7. **`universeStore` is deprecated — don't add new code that touches it.** It remains because `App.tsx` still handles the legacy DASH callback through it (`handleDashCallback()` on line 979) and `playerStore`/`preferenceStore` still import it for migration glue. Any new auth/profile/friend work goes through `useAuth()` and `voyo-api.ts`.
 
@@ -624,81 +624,139 @@ Every load-bearing weirdness future contributors must internalize:
 
 13. **Splash screen is gated on a `sessionStorage` key (`voyo-splash-v3`)**, not localStorage. Intentional — shows once per tab session, not once ever. Don't "fix" it to localStorage.
 
-## Cleanup roadmap (post-eebe619)
+## Cleanup roadmap (post April 2026 sweep)
 
-Ranked by leverage × effort ratio. None of these are blocking; they're technical debt to pay down before the codebase gets bigger.
+Status of items the audits surfaced. **Don't trust audit reports without
+reading the actual code first** — about half of the candidates that came
+back from automated audits were false positives (see Lessons section).
 
-1. **Deprecate `universeStore` entirely.** Medium effort. Steps: (a) move `handleDashCallback()` out of universeStore into `lib/dash-auth.tsx`, (b) remove the `universeAPI` references in `playerStore`/`preferenceStore` (migrate any remaining reads to `voyo-api.ts`), (c) delete `universeStore.ts` and the `universes` Supabase table reads, (d) also delete `components/universe/UniversePanel.tsx` if unused elsewhere. Unlocks a cleaner auth story.
+### ✅ Done in April 2026
+1. ✅ **Lazy-load the Brain subsystem.** `a4c2503` — `initializeBrainIntegration` is now dynamic-imported via `requestIdleCallback` in `App.tsx`. Removed the `manualChunks(/brain/) → 'app-brain'` rule from `vite.config.ts` so Vite can split it as a real lazy chunk. Initial bundle dropped ~52 KB, total bundle dropped ~15 KB after dedupe. The dead `./scouts` static imports were also removed (only used in commented-out useEffect).
+2. ✅ **Archive stale root markdown.** `d97c005` — 71 → 29 root files. 43 docs moved to `docs/archive/`. Animation guides, Neon research, session notes, plans, duplicates all archived.
+3. ✅ **Audio crash root cause.** `eebe619` — `preloadManager.ts:191` was missing `signal:` on the Edge Worker fetch. Stale fetches drained the per-host connection pool on rapid skips, causing ~60s recovery (the "stabilizes after rest" symptom). Round 2 (`5c51a76`) added `AbortSignal.any([signal, AbortSignal.timeout(5000)])` so a slow Edge Worker can't hang.
+4. ✅ **dahub login freeze.** `eebe619` — `Dahub.loadData()` had `Promise.all` + no try/catch. Replaced with `Promise.allSettled` + `try/finally` so a single failing backend can't lock the spinner.
+5. ✅ **AudioPlayer loadTrack race condition.** `b4044d3` — `useEffect` had 10+ await points with no cancellation guard. Added `loadAttemptRef` monotonic counter + `isStale()` checks at every await boundary so a slow R2/Edge fetch for an old track can't clobber `audio.src` after a skip.
+6. ✅ **Console noise.** `b4044d3` — 459 → 0 raw `console.log/warn` calls in `src/`. Mass-converted to the existing `devLog`/`devWarn` utility (which `import.meta.env.DEV`-gates and tree-shakes in production). ~14 KB shaved from production bundle.
+7. ✅ **Dead code.** `eebe619` — `voyoDJ.ts` (19 KB) and `geminiCurator.ts` (16 KB) deleted, both 0 imports anywhere.
+8. ✅ **Service worker error caching.** `5c51a76` — navigation request handler now requires `response.ok && response.status === 200` before caching. Was caching 4xx/5xx responses → bricking the app on origin hiccups.
+9. ✅ **UniversePanel handlers.** `5c51a76` — added try/catch/finally + idempotency guards to `handleSaveProfile` and `handleTogglePortal`.
+10. ✅ **Production audit round 2 polish.** `5c51a76` — `lyricsEngine` swallowed-catch fixed, `BoostButton` setTimeout cleanups, `audioEngine` two production logs gated.
 
-2. **Consolidate DJ engines into `centralDJ`.** Merge:
-   - `intelligentDJ.ts` → fold `recordPlay` into `centralDJ.signals.play`.
-   - `oyoDJ.ts` → fold DJ profile into `preferenceStore`, fold track callbacks into `centralDJ`.
-   - `feedAlgorithm.ts` → inline `applyTreatment`/`getStartTime`/`getDuration` into `VoyoVerticalFeed` or move to `momentsService`.
-   - Result: one DJ service, one `signals` interface, ~2000 fewer lines, no more "which DJ am I looking at" confusion.
+### 🟡 Verified false positives — DO NOT touch
+These came back from audits as "delete this" or "fix this" but turned out to already be correct on inspection. Documented here so the next audit doesn't waste time re-flagging them:
 
-3. **Consolidate `syncedLyricsService` into `lyricsEngine`.** 1 caller, 126 lines. Trivial.
+- `databaseDiscovery.ts` — flagged as 0-callers. Actually lazy-imported via `playerStore.ts::getDatabaseDiscovery` (line 35) and called from the discovery refresh flow. **Load-bearing.** Deleting it crashes the discovery feed.
+- `syncedLyricsService.ts` — flagged as dead. Actually imported by `lyricsEngine.ts:24` and called at line 339 (`fetchByYoutubeId`). **Load-bearing.**
+- `universeStore.ts` — flagged as deprecated. Has 6 lazy imports in `playerStore.ts` (`isPortalOpen`, `updateNowPlaying`, `isLoggedIn`, `syncToCloud`) plus DASH auth callback in `App.tsx:979`. **Load-bearing.** The "deprecated" label is aspirational, not actual.
+- `useThumbnailCache.ts` JSON.parse — flagged as needing try/catch. Already wrapped at lines 22-40, returns `{}` on error.
+- `mediaCache.ts` `audioElements` Map — flagged as unbounded. Already LRU-bounded at `MAX_CACHE_SIZE = 15` with proper eviction at line 365.
+- `playerStore.ts` `connection.addEventListener('change')` — flagged as accumulating leak. Already guarded by `listenerAttached` flag at line 1398, store is a singleton.
 
-4. **Lazy-load the Brain subsystem.** Currently eagerly imported in `App.tsx` (`initializeBrainIntegration`). Moving to dynamic import would shave ~60 KB off the initial bundle (the whole `app-brain-*.js` chunk is 116 KB). The Brain is experimental and not load-bearing for Day 1 UX. Wrap its init in a `setTimeout` or `requestIdleCallback` after first user interaction.
+### 🔴 Still open (real, not yet fixed — ranked by leverage)
 
-5. **Archive stale markdown files.** ~25 out of 65 root markdown files are pre-migration notes or one-off session logs (see "Loose docs at root" below). Move to `/docs/archive/YYYY-MM/`.
+1. **Wire surfaces back to OYO DJ.** This is the architectural North Star: one brain (`oyoDJ`), N branches (UI surfaces). Currently `oyoDJ.ts` (879 lines) has only **2 callers** in the codebase: `AudioPlayer.tsx` (uses `onTrackPlay`/`onTrackComplete`) and `OyoIsland.tsx` (uses `getProfile` read-only). The other event hooks (`onTrackSkip`, `onTrackReaction`), the speech (`speak`, `say`, `introduce`, `vibeCheck`), the insights, the social — all dormant. Each tab / surface should route events through `oyoDJ` so it learns, AND display its voice/personality output. See the OYO DJ section.
 
-Other nice-to-haves (lower priority):
-- Break `App.tsx` (1,410 lines) into `App.tsx` + `AppModeRouter.tsx` + `AppSideEffects.tsx` + `DynamicIsland.tsx`.
-- Break `playerStore.ts` (1,410 lines) into slices (playback / queue / discovery / reactions / streaming config).
-- Break `Dahub.tsx` (1,285 lines) into `DahubShell` + tab content files.
-- Start a smoke test for the audio pipeline (rapid skip → verify no connection pool exhaustion). Prevents regressions of gotcha #4.
+2. **Deprecate `universeStore` (medium effort)** — for real this time. Steps: (a) move `handleDashCallback()` out of universeStore into `lib/dash-auth.tsx`, (b) migrate the 6 `playerStore` lazy-imports to a thinner Hub-side API or to `dash-auth.tsx`, (c) only THEN can the file go away. Don't rip it out without the migration or playback breaks.
 
-## Loose docs at root
+3. **Consolidate DJ engines into `centralDJ` (or `oyoDJ`).** `centralDJ` (canonical, 5 callers), `intelligentDJ` (1 caller), `oyoDJ` (2 callers, dormant), `feedAlgorithm` (1 caller). The product owner's vision treats `oyoDJ` as the central brain — the simplest collapse is to merge `centralDJ`'s curation logic INTO `oyoDJ` so there's one service that does both curation AND personality.
 
-65 markdown files live at `/home/dash/voyo-music/` root. Most are one-shot research notes or stale plans. Grouped by topic, with keep/archive recommendations:
+4. **Consolidate `syncedLyricsService` into `lyricsEngine`.** Trivial (1 caller, 126 lines, same domain).
 
-### Keep (canonical / current)
-- `ARCHITECTURE.md` (this file)
-- `README.md`
-- `DAHUB_ARCHITECTURE.md` (if still matches current dahub code — verify before keeping)
-- `MIGRATION_NORTHSTAR.md`
-- `NORTH_STAR_WEEK_JAN22_2026.md`
-- `whats-next.md`
+5. **`VoyoPortraitPlayer.tsx` is 5072 lines.** Single biggest hot-spot in the codebase. Split into smaller pieces — at minimum extract the MixBoard, the lyrics drawer, and the reaction layer.
 
-### Archive — Animation research (6 files, one project)
-- `ANIMATION_DOCS_INDEX.md`, `ANIMATION_IMPLEMENTATION_GUIDE.md`, `ANIMATION_PATTERNS_RESEARCH.md`, `ANIMATION_QUICK_REFERENCE.md`, `ANIMATION_START_HERE.txt`, `README_ANIMATIONS.md`
+### Other nice-to-haves (lower priority)
+- Break `App.tsx` (~1,410 lines) into `App.tsx` + `AppModeRouter.tsx` + `AppSideEffects.tsx` + `DynamicIsland.tsx`.
+- Break `playerStore.ts` into slices (playback / queue / discovery / reactions / streaming config).
+- Break `Dahub.tsx` into `DahubShell` + tab content files.
+- Smoke test for the audio pipeline (rapid skip → verify no connection pool exhaustion). Prevents regressions of gotcha #4.
 
-### Archive — Framer Motion research (5 files, redundant with above)
-- `FRAMER_MOTION_ADVANCED_GUIDE.md`, `FRAMER_MOTION_ADVANCED_TECHNIQUES.md`, `FRAMER_MOTION_CHEAT_SHEET.md`, `FRAMER_MOTION_RESEARCH_INDEX.md`
+## Lessons from the April 2026 cleanup
 
-### Archive — Neon effects research (7 files, one project)
-- `NEON_ADVANCED_PATTERNS.md`, `NEON_CHEAT_SHEET.txt`, `NEON_INDEX.md`, `NEON_MANIFEST.txt`, `NEON_QUICK_REFERENCE.md`, `NEON_RESEARCH.md`, `README_NEON.md`
+These are the rules that got beaten into the codebase across 4 production
+commits. Every one corresponds to a real bug we paid for. Read them before
+touching anything in `services/`, `store/`, or the audio path.
 
-### Archive — Old architecture / plans
-- `ARCHITECTURE_INTENT_ENGINE.md`, `ARCHITECTURE_LLM_DJ.md` (now covered in this file)
-- `AUDIO_CONQUEST_SAUCE.md`, `AUDIO_PIPELINE.md`, `AUDIO_UPLOAD_RESUME.md` (audio pipeline now documented here)
-- `CONTENT_STRATEGY.md`, `CHANGES.md`, `DEPLOYMENT_CHECKLIST.md`
-- `DYNAMICISLAND-NOTIFICATIONS.md`
-- `ENRICHMENT_STRATEGY.md`
-- `EXECUTION_PLAN.md`, `PLAN.md`
-- `IMPLEMENTATION-SUMMARY.md`, `IMPLEMENTATION_SUMMARY.md`, `INTEGRATION_GUIDE.md`
-- `MULTI_ACCOUNT_SETUP.md`
-- `NEXT-SESSION-CONTEXT.md`
-- `OFFLINE_MODE.md` (covered here)
-- `OPTIMIZATION_WIRING_REPORT.md`, `PRODUCTION_OPTIMIZATIONS.md`
-- `PIPED_ALBUMS_INTEGRATION.md`
-- `PLAYBACK_CONTROLS.md`, `PLAYBACK_FEATURES_SUMMARY.txt`
-- `PREFERENCE_ENGINE_README.md` (covered here)
-- `PREMIUM_APP_COMPARISON.md`
-- `QUICK-START.md`, `QUICK_START.md` (duplicates)
-- `RECOVERY_CHECKPOINT.md`, `RESCUE.md`, `RESUME.md`, `SSO_RESUME.md`
-- `ROADMAP-DJ-LLM.md`, `ROADMAP-RELEASE.md`
-- `SCALING_STRATEGY.md`
-- `SEARCH_OPTIMIZATION_REPORT.md`
-- `START_HERE.md`, `START_HERE.txt`
-- `STEALTH-MODE.md`, `STEALTH-VERIFICATION.txt`
-- `TEAM_DEPLOYMENT.md`
-- `TEST_DYNAMIC_SEARCH.md`, `TEST_PREFERENCES.md`
-- `VOYO-VISION.md`, `VOYO_VISION.md` (duplicates)
-- `VOYO_GAME_PLAN.md`, `VOYO_VIBES_PLAN.md`
-- `ZION_CHAT.md`, `ZION_COORDINATION.md`
+### 1. Never trust an audit without reading the actual code
 
-Destination: `/home/dash/voyo-music/docs/archive/2026-04/`. Do not delete — some contain the only written trail of why things are the way they are. Archive = git-preserved demotion.
+**~50% of automated audit findings were false positives.** Three rounds of
+audits flagged "delete this dead service" or "fix this missing try/catch",
+and roughly half turned out to be already-handled (try/catch already there,
+LRU bound already enforced) or simply wrong about who-imports-what (lazy
+imports invisible to static grep).
+
+**The protocol:** when an audit (human OR AI) flags a fix, the FIRST step
+is `Read` the file at the cited line and verify the bug exists. The second
+step is verify the surrounding context. Only the third step is shipping a
+fix. Document false positives in commit messages so the next audit doesn't
+re-flag the same things.
+
+### 2. Every fetch in the track lifecycle MUST pass an AbortSignal
+
+Voyo had a missing `signal:` on the Edge Worker stream fetch in
+`preloadManager.ts`. Symptom (which Dash reported verbatim): *"sound
+crashes, stabilizes after rest."* Cause: rapid skips left zombie fetches
+draining the per-host connection pool. Recovery only happened after ~60s
+of GC + TCP timeout.
+
+**The rule:** every `fetch()` in the player path takes the per-track signal.
+For services that aren't track-scoped, use `AbortSignal.timeout(N)` standalone.
+For paths that need both (track skip OR slow upstream), combine via
+`AbortSignal.any([signal, AbortSignal.timeout(5000)])`. The audit comment
+at `services/preloadManager.ts:191-205` is load-bearing documentation.
+
+### 3. `Promise.all` without try/catch in loading flows = guaranteed freeze
+
+`Dahub.loadData()` had `Promise.all` over 4 backend calls with no try/catch.
+A single failing call left `setIsLoading(true)` permanently set — UI froze
+on the spinner forever, looked like the app crashed. Fix: `Promise.allSettled`
++ per-call `if (status === 'fulfilled')` + `try/finally` so `setIsLoading(false)`
+always runs.
+
+**The rule:** anywhere you fan out backend calls to render a screen, use
+`Promise.allSettled`. `Dahub.tsx:1058-1093` is the canonical pattern.
+
+### 4. `console.log` ships to production unless it's `devLog`
+
+The `src/utils/logger.ts` utility has existed for a while, but only 4 files
+were using it. The other 50+ files dumped 459 raw `console.log/warn` calls
+straight into the production bundle. After `b4044d3` the count is **zero**
+at line-start.
+
+**The rule:** new code uses `devLog` / `devWarn` (tree-shaken in prod) for
+diagnostics. `console.error` is preserved for actual errors that should
+reach production logs. If you mass-add files, run this and the answer
+should stay 0:
+
+```bash
+grep -rE "^\s*console\.(log|warn)" src/ --include="*.ts" --include="*.tsx" | wc -l
+```
+
+### 5. Manual chunking is a footgun for dynamic imports
+
+Vite's `manualChunks` rule pulls files into a named chunk regardless of
+how they're imported. If you also `await import('./brain')`, Vite still
+preloads the named chunk via `<link rel="modulepreload">` because the
+chunk exists in the entry's module graph. Result: you THINK Brain is
+lazy, the network panel says it's eager.
+
+**The rule:** for code paths you want to be truly lazy, drop the
+`manualChunks` rule for that path AND use `await import()`. Only force-chunk
+pure vendors (`vendor-react`, `vendor-supabase`, `vendor-icons`,
+`vendor-zustand`). Stores stay un-chunked because they have circular
+runtime imports — `manualChunks(/store/)` caused commit `53b0b9c`'s
+"circular dep killed app" crash.
+
+### 6. Whisper truncation is a category, not a one-off
+
+Documented in Meetel Flow but applies anywhere we send audio to a Whisper
+model. Whisper's decoder treats trailing silence as the no-speech region
+and eats the last syllable. Fix: pad audio with zero samples on both
+ends before encoding. ~25 KB extra per dictation, fixes the "missing
+last word" complaint that plagues every Whisper-based dictation tool.
+
+(Voyo's `whisperService.ts` is for hum-to-search, not dictation, so
+the same padding isn't required — but if you ever build a feature that
+sends a whole utterance to Whisper, remember the rule.)
 
 ## Roadmap notes
 
