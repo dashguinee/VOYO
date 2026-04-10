@@ -1341,7 +1341,13 @@ function App() {
 
   // Handle mode switching
   const handleSwitchToVOYO = (tab?: 'music' | 'feed' | 'upload' | 'dahub') => {
-    setVoyoTab(tab || 'music'); // Use specified tab or default to player view
+    // DEFENSIVE: onClick handlers pass the MouseEvent as the first arg which
+    // would otherwise set voyoActiveTab to an event object. Only accept strings.
+    const VALID_TABS = ['music', 'feed', 'upload', 'dahub'] as const;
+    const validTab = (typeof tab === 'string' && (VALID_TABS as readonly string[]).includes(tab))
+      ? tab as typeof VALID_TABS[number]
+      : 'music';
+    setVoyoTab(validTab);
     setAppMode('voyo');
   };
   const handleSwitchToClassic = () => setAppMode('classic');
@@ -1468,20 +1474,24 @@ function App() {
             key="voyo"
             className="relative z-10 h-full flex flex-col"
           >
-            {/* Top Bar - VOYO Logo & Navigation */}
-            <header className="relative flex items-center justify-between px-4 py-3 flex-shrink-0">
-              {/* Left: VOYO Logo */}
-              <div
-                className="flex items-center gap-2"
-              >
-                <div className="relative">
-                  <span className="text-2xl font-black bg-gradient-to-r from-purple-400 via-pink-500 to-purple-600 bg-clip-text text-transparent">
-                    VOYO
-                  </span>
-                  <span className="absolute -top-1 -right-8 text-[10px] font-bold text-yellow-400">
-                    OYÉ
-                  </span>
-                </div>
+            {/* Top Bar - VOYO Logo & Navigation — fully transparent, ghost buttons */}
+            <header
+              className="relative flex items-center justify-between px-4 py-3 flex-shrink-0 bg-transparent"
+              style={{ paddingTop: 'max(0.75rem, env(safe-area-inset-top))' }}
+            >
+              {/* Left: VOYO Logo — purple → bronze (brand colors, no pink, no yellow) */}
+              <div className="flex items-center">
+                <span
+                  className="text-2xl font-black tracking-tight"
+                  style={{
+                    background: 'linear-gradient(135deg, #a78bfa 0%, #8b5cf6 50%, #D4A053 100%)',
+                    WebkitBackgroundClip: 'text',
+                    WebkitTextFillColor: 'transparent',
+                    filter: 'drop-shadow(0 0 12px rgba(139,92,246,0.3))',
+                  }}
+                >
+                  VOYO
+                </span>
               </div>
 
               {/* Center: Dynamic Island Notifications */}
@@ -1489,25 +1499,27 @@ function App() {
                 <DynamicIsland />
               </div>
 
-              {/* Right: Navigation Buttons - Search + Profile */}
-              <div className="flex items-center gap-2">
+              {/* Right: Ghost icon buttons — no pill backgrounds */}
+              <div className="flex items-center gap-1">
                 {/* Search */}
                 <button
-                  className="p-2 rounded-full bg-white/10 hover:bg-white/20 transition-colors"
+                  className="p-2 rounded-full active:scale-95 transition-transform"
+                  aria-label="Search"
                   onClick={() => setIsSearchOpen(true)}
                 >
-                  <Search className="w-5 h-5 text-white/70" />
+                  <Search className="w-5 h-5 text-white/60" strokeWidth={1.8} />
                 </button>
 
                 {/* DASH Citizen ID */}
                 <DashAuthBadge productCode="V" />
 
-                {/* Profile → Voyo Universe (login/profile portal) */}
+                {/* Profile → Voyo Universe */}
                 <button
-                  className="p-2 rounded-full bg-white/10 hover:bg-white/20 transition-colors"
+                  className="p-2 rounded-full active:scale-95 transition-transform"
+                  aria-label="Profile"
                   onClick={() => setIsProfileOpen(true)}
                 >
-                  <User className="w-5 h-5 text-white/70" />
+                  <User className="w-5 h-5 text-white/60" strokeWidth={1.8} />
                 </button>
               </div>
             </header>

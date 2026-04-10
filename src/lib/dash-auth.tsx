@@ -235,20 +235,20 @@ export function DashAuthBadge({
     return () => window.removeEventListener('storage', handleStorage);
   }, [productCode]);
 
-  // Not logged in - show login prompt
+  // Not logged in - ghost button, no background chrome
   if (!citizen) {
     return (
       <button
         onClick={() => window.location.href = `https://hub.dasuperhub.com?returnUrl=${window.location.origin}&app=V`}
         className={`
-          px-3 py-1.5 rounded-full text-xs font-medium
-          bg-white/5 hover:bg-white/10 border border-white/10
-          transition-all cursor-pointer flex items-center gap-2
+          px-2.5 py-1 rounded-full text-[11px] font-medium
+          transition-all cursor-pointer flex items-center gap-1.5
+          active:scale-95
           ${className}
         `}
-        style={{ color: product.color }}
+        style={{ color: `${product.color}CC` }}
       >
-        <span className="w-1.5 h-1.5 rounded-full bg-white/30" />
+        <span className="w-1 h-1 rounded-full" style={{ background: `${product.color}80` }} />
         <span>Sign in</span>
       </button>
     );

@@ -1209,10 +1209,11 @@ export const Hub = ({ onOpenProfile, onSwitchToVOYO, onHome, onVoyoFeed, onLibra
               <Home style={{ width: 20, height: 20, color: 'rgba(255,255,255,0.4)', strokeWidth: 1.8 }} />
             </button>
 
-            {/* CENTER: VOYO ORB — consistent across all nav surfaces */}
+            {/* CENTER: VOYO ORB — goes straight to PLAYER (onSwitchToVOYO), not feed */}
             <button
               className="relative flex items-center justify-center active:scale-95 transition-transform duration-75"
-              onClick={onVoyoFeed}
+              aria-label="Open VOYO player"
+              onClick={() => onSwitchToVOYO?.()}
               style={{ flex: '0 0 auto' }}
             >
               <div
