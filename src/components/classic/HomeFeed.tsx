@@ -1463,20 +1463,100 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
 
       {/* Classics - Timeless African music (from poolCurator) → COMMUNAL */}
       {classicsTracks.length > 0 && (
-        <div className="mb-8 py-6" style={{ background: 'linear-gradient(180deg, rgba(212,160,83,0.08) 0%, transparent 100%)' }}>
-          <div className="px-4 mb-4 flex items-center gap-2">
-            <h2
-              className="font-semibold text-base tracking-wide"
+        <div
+          className="mb-10 pt-14 pb-10 relative overflow-hidden"
+          style={{
+            background:
+              'radial-gradient(ellipse 120% 80% at 30% 0%, rgba(212,160,83,0.16) 0%, rgba(212,160,83,0.06) 40%, transparent 75%)',
+          }}
+        >
+          {/* Top thin gold foil line */}
+          <div
+            className="absolute top-0 left-8 right-8 h-px"
+            style={{
+              background:
+                'linear-gradient(90deg, transparent, rgba(212,160,83,0.4), rgba(230,184,101,0.75), rgba(212,160,83,0.4), transparent)',
+            }}
+          />
+          {/* Bottom thin gold foil line */}
+          <div
+            className="absolute bottom-0 left-8 right-8 h-px"
+            style={{
+              background:
+                'linear-gradient(90deg, transparent, rgba(212,160,83,0.25), rgba(230,184,101,0.5), rgba(212,160,83,0.25), transparent)',
+            }}
+          />
+
+          {/* Vertical contour label — mirrors African Vibes "TRENDING" style */}
+          <div
+            className="absolute right-1 top-16 bottom-16 flex items-center pointer-events-none"
+            style={{ width: '22px' }}
+          >
+            <span
+              className="text-[8px] font-black tracking-[0.3em]"
               style={{
-                background: 'linear-gradient(135deg, #D4A053 0%, #C4943D 100%)',
+                writingMode: 'vertical-rl',
+                color: 'transparent',
+                WebkitTextStroke: '0.5px rgba(212, 160, 83, 0.65)',
+                textShadow: '0 0 8px rgba(212, 160, 83, 0.15)',
+              }}
+            >
+              TIMELESS
+            </span>
+          </div>
+
+          {/* Header — proper premium hierarchy: eyebrow → script → flourish → subtitle */}
+          <div className="px-6 mb-8 relative">
+            {/* Eyebrow label */}
+            <div
+              className="text-[9px] font-bold tracking-[0.3em] uppercase mb-1"
+              style={{ color: 'rgba(212, 160, 83, 0.75)' }}
+            >
+              Collection
+            </div>
+
+            {/* Italianno script — the heart */}
+            <h2
+              className="leading-none"
+              style={{
+                fontFamily: "'Italianno', cursive",
+                fontSize: 'clamp(72px, 22vw, 96px)',
+                fontWeight: 400,
+                margin: '0 0 4px 0',
+                background:
+                  'linear-gradient(135deg, #FFF3D6 0%, #F4D999 15%, #E6B865 35%, #D4A053 55%, #C4943D 75%, #8B6228 100%)',
                 WebkitBackgroundClip: 'text',
                 WebkitTextFillColor: 'transparent',
+                filter:
+                  'drop-shadow(0 2px 6px rgba(0,0,0,0.7)) drop-shadow(0 0 24px rgba(212,160,83,0.3))',
+                letterSpacing: '0.005em',
               }}
             >
               Classics
             </h2>
-            <span className="text-xs text-white/40 flex-1 text-right">Timeless African sounds</span>
+
+            {/* Signature flourish — longer, curved feel */}
+            <div className="flex items-center gap-2 ml-1">
+              <div
+                className="h-[1px]"
+                style={{
+                  width: '120px',
+                  background:
+                    'linear-gradient(90deg, rgba(230,184,101,1) 0%, rgba(212,160,83,0.7) 40%, rgba(212,160,83,0.2) 80%, transparent)',
+                }}
+              />
+              <div
+                className="w-1 h-1 rounded-full"
+                style={{ background: '#D4A053', boxShadow: '0 0 6px rgba(212,160,83,0.7)' }}
+              />
+            </div>
+
+            {/* Subtitle — below, breathing */}
+            <p className="text-[10px] font-medium tracking-[0.25em] uppercase text-white/35 mt-3 ml-1">
+              Timeless African Sounds
+            </p>
           </div>
+
           <div className="flex gap-4 px-4 overflow-x-auto scrollbar-hide">
             {classicsTracks.slice(0, 12).map((track) => (
               <TrackCard key={track.id} track={track} onPlay={() => onTrackPlay(track, { openFull: true })} />
