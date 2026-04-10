@@ -70,47 +70,50 @@ export interface Vibe {
   description: string;  // Short description
 }
 
+// Premium palette (April 2026): Heating Up RN is the ONLY non-purple —
+// luxury bronze-orange close to the OYÉ button. Everything else lives in
+// purple fades (light → mid → deep) so the shelf reads as one canvas with
+// one hot moment. Only Heating Up RN keeps a lottie (fire); the rest drop
+// their icons in favour of the faded big-title-over-artwork treatment.
 export const VIBES: Vibe[] = [
   {
     id: 'afro-heat',
-    name: 'AFRO HEAT',
+    name: 'HEATING UP RN',
     icon: '🔥',
-    color: '#f97316',
-    gradient: 'from-orange-500 via-red-500 to-amber-600',
+    color: '#F4A23E',
+    gradient: 'from-amber-500 via-orange-500 to-amber-700',
     description: 'Afrobeats • Amapiano',
   },
   {
     id: 'chill-vibes',
     name: 'CHILL',
     icon: '💜',
-    color: '#8b5cf6',
-    gradient: 'from-violet-500 via-purple-600 to-purple-700',
+    color: '#c4b5fd',
+    gradient: 'from-violet-300 via-violet-400 to-purple-500',
     description: 'Relax & Be',
   },
   {
     id: 'party-mode',
     name: 'PARTY',
     icon: '🪩',
-    lottie: 'https://assets10.lottiefiles.com/packages/lf20_obhph3sh.json', // Party/confetti animation
-    color: '#ec4899',
-    gradient: 'from-pink-500 via-rose-500 to-orange-400',
+    color: '#a78bfa',
+    gradient: 'from-violet-400 via-purple-500 to-purple-600',
     description: 'Get on Da Dance Floor',
   },
   {
     id: 'late-night',
     name: 'LATE NIGHT',
     icon: '🌙',
-    lottie: '/lottie/night-mist.json',
-    color: '#1e3a8a',
-    gradient: 'from-blue-950 via-indigo-900 to-slate-900',
+    color: '#8b5cf6',
+    gradient: 'from-purple-500 via-purple-700 to-violet-900',
     description: 'City Lights • Vibes',
   },
   {
     id: 'workout',
     name: 'WORKOUT',
     icon: '⚡',
-    color: '#f97316',
-    gradient: 'from-orange-400 via-orange-500 to-amber-500',
+    color: '#7c3aed',
+    gradient: 'from-violet-600 via-purple-700 to-purple-900',
     description: 'Pump it UP',
   },
 ];

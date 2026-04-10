@@ -437,6 +437,19 @@ body {
   animation: fade-in 0.15s ease-out forwards;
 }
 
+/* Golden beam sweep — used by the African Vibes end-of-scroll sentinel.
+   Welcomes a new video loading with a diagonal bronze light pass. */
+@keyframes golden-beam-sweep {
+  0%   { background-position: 120% 0; opacity: 0; }
+  10%  { opacity: 1; }
+  90%  { opacity: 1; }
+  100% { background-position: -120% 0; opacity: 0; }
+}
+
+.golden-beam-sweep {
+  animation: golden-beam-sweep 0.9s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
 /* Spinning vinyl - CSS instead of JS */
 @keyframes spin-vinyl {
   from { transform: rotate(0deg); }

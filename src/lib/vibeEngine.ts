@@ -198,7 +198,7 @@ export const VIBES: Record<string, Vibe> = {
 
   'afro-heat': {
     id: 'afro-heat',
-    name: 'Afro Heat',
+    name: 'Heating Up RN',
     description: 'High energy African bangers',
     category: 'mood',
     energy_level: 5,

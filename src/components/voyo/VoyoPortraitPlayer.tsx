@@ -150,12 +150,18 @@ const textAnimationVariants: Record<TextAnimation, { initial: AnimationConfig; a
 };
 
 // DEFAULT MIX MODES - The preset mixing board
+//
+// Premium palette (April 2026): Afro Heat is the ONLY non-purple — vibrant
+// luxury orange close to the OYÉ button bronze. Everything else lives in
+// purple fades (light → mid → deep) so the page reads as one calm canvas
+// with one hot moment. The Random Mix slot is repurposed as OYO DJ — the
+// interactive widget that asks the brain for a curated playlist.
 const DEFAULT_MIX_MODES: MixMode[] = [
   {
     id: 'afro-heat',
-    title: 'Afro Heat',
-    neon: '#ef4444',
-    glow: 'rgba(239,68,68,0.5)',
+    title: 'Heating Up RN',
+    neon: '#F4A23E',
+    glow: 'rgba(244,162,62,0.5)',
     taglines: ["Asambe! 🔥", "Lagos to Accra!", "E Choke! 💥", "Fire on Fire!", "No Wahala!"],
     mood: 'energetic',
     textAnimation: 'bounce',
@@ -164,8 +170,8 @@ const DEFAULT_MIX_MODES: MixMode[] = [
   {
     id: 'chill-vibes',
     title: 'Chill Vibes',
-    neon: '#3b82f6',
-    glow: 'rgba(59,130,246,0.5)',
+    neon: '#c4b5fd',
+    glow: 'rgba(196,181,253,0.4)',
     taglines: ["It's Your Eazi...", "Slow Wine Time", "Easy Does It", "Float Away~", "Pon Di Ting"],
     mood: 'chill',
     textAnimation: 'slideUp',
@@ -175,7 +181,7 @@ const DEFAULT_MIX_MODES: MixMode[] = [
     id: 'party-mode',
     title: 'Party Mode',
     neon: '#a78bfa',
-    glow: 'rgba(167,139,250,0.5)',
+    glow: 'rgba(167,139,250,0.45)',
     taglines: ["Another One! 🎉", "We The Best!", "Ku Lo Sa!", "Turn Up! 🔊", "Major Vibes Only"],
     mood: 'hype',
     textAnimation: 'scaleIn',
@@ -195,7 +201,7 @@ const DEFAULT_MIX_MODES: MixMode[] = [
     id: 'workout',
     title: 'Workout',
     neon: '#7c3aed',
-    glow: 'rgba(124,58,237,0.5)',
+    glow: 'rgba(124,58,237,0.55)',
     taglines: ["Beast Mode! 💪", "Pump It Up!", "No Pain No Gain", "Go Harder!", "Maximum Effort!"],
     mood: 'intense',
     textAnimation: 'bounce',
@@ -4215,15 +4221,21 @@ export const VoyoPortraitPlayer = ({
         )}
       
 
-      {/* --- TOP SECTION (History/Queue) --- Fades on scroll down */}
+      {/* --- TOP SECTION (History/Queue) --- Tivi+ pattern: full opacity at
+           top of page (nothing dimmed on first impression), then a fast fade
+           + slide-up when scroll begins so HOT/DISCOVERY breathe freely.
+           Shrunk from 18% to 14% so the hero gets more real estate. */}
       <div
-        className="px-6 flex justify-between items-start z-20 h-[18%]"
+        className="px-6 flex justify-between items-start z-20 h-[14%]"
         style={{
-          paddingTop: 'max(2rem, env(safe-area-inset-top))',
+          paddingTop: 'max(1.25rem, env(safe-area-inset-top))',
           opacity: headerVisible ? 1 : 0,
-          transform: headerVisible ? 'translateY(0)' : 'translateY(-10px)',
-          transition: 'opacity 0.3s ease, transform 0.3s ease',
+          transform: headerVisible ? 'translateY(0)' : 'translateY(-100%)',
+          transition: headerVisible
+            ? 'opacity 0.35s ease-out, transform 0.35s ease-out'
+            : 'opacity 0.45s cubic-bezier(0.16, 1, 0.3, 1), transform 0.45s cubic-bezier(0.16, 1, 0.3, 1)',
           pointerEvents: headerVisible ? 'auto' : 'none',
+          willChange: 'transform, opacity',
         }}
       >
 
@@ -4783,12 +4795,12 @@ export const VoyoPortraitPlayer = ({
           </div>
           <div className="overflow-x-auto no-scrollbar flex gap-3 pb-1 -mb-2">
             {/* ====== MIX BOARD PRESETS - Tap to boost, Double-tap to react, Click punch to discover ====== */}
-            {/* Afro Heat - ENERGETIC mood */}
+            {/* Heating Up RN - ENERGETIC mood (only non-purple, luxury bronze-orange) */}
             <NeonBillboardCard
-              title="Afro Heat"
+              title="Heating Up RN"
               taglines={["Asambe! 🔥", "Lagos to Accra!", "E Choke! 💥", "Fire on Fire!", "No Wahala!"]}
-              neon="#ef4444"
-              glow="rgba(239,68,68,0.5)"
+              neon="#F4A23E"
+              glow="rgba(244,162,62,0.5)"
               delay={0}
               mood="energetic"
               textAnimation="bounce"
@@ -4803,12 +4815,12 @@ export const VoyoPortraitPlayer = ({
               communityPunches={afroHeatPunches}
               onPunchClick={handlePunchClick}
             />
-            {/* Chill Vibes - CHILL mood */}
+            {/* Chill Vibes - CHILL mood (light purple fade) */}
             <NeonBillboardCard
               title="Chill Vibes"
               taglines={["It's Your Eazi...", "Slow Wine Time", "Easy Does It", "Float Away~", "Pon Di Ting"]}
-              neon="#3b82f6"
-              glow="rgba(59,130,246,0.5)"
+              neon="#c4b5fd"
+              glow="rgba(196,181,253,0.4)"
               delay={1}
               mood="chill"
               textAnimation="slideUp"
@@ -4823,12 +4835,12 @@ export const VoyoPortraitPlayer = ({
               communityPunches={chillVibesPunches}
               onPunchClick={handlePunchClick}
             />
-            {/* Party Mode - HYPE mood */}
+            {/* Party Mode - HYPE mood (mid purple fade) */}
             <NeonBillboardCard
               title="Party Mode"
               taglines={["Another One! 🎉", "We The Best!", "Ku Lo Sa!", "Turn Up! 🔊", "Major Vibes Only"]}
               neon="#a78bfa"
-              glow="rgba(167,139,250,0.5)"
+              glow="rgba(167,139,250,0.45)"
               delay={2}
               mood="hype"
               textAnimation="scaleIn"
@@ -4863,12 +4875,12 @@ export const VoyoPortraitPlayer = ({
               communityPunches={lateNightPunches}
               onPunchClick={handlePunchClick}
             />
-            {/* Workout - INTENSE mood */}
+            {/* Workout - INTENSE mood (deep purple fade) */}
             <NeonBillboardCard
               title="Workout"
               taglines={["Beast Mode! 💪", "Pump It Up!", "No Pain No Gain", "Go Harder!", "Maximum Effort!"]}
               neon="#7c3aed"
-              glow="rgba(124,58,237,0.5)"
+              glow="rgba(124,58,237,0.55)"
               delay={4}
               mood="intense"
               textAnimation="bounce"
@@ -4884,16 +4896,21 @@ export const VoyoPortraitPlayer = ({
               onPunchClick={handlePunchClick}
             />
 
-            {/* RANDOM MIXER - Spotify-style discovery recommendations */}
+            {/* OYO DJ - The interactive curation widget. Tap to wake OYO Island
+                and ask the brain for a curated playlist. Distinct deep-violet
+                shade keeps it visually different from the 4 purple presets. */}
             <NeonBillboardCard
-              title="Random Mix"
-              taglines={["Surprise Me! 🎲", "Discovery Mode", "Mix It Up!", "Fresh Finds 🔮", "Vibe Check!"]}
-              neon="#a855f7"
-              glow="rgba(168,85,247,0.5)"
+              title="Ask OYO DJ"
+              taglines={["What's the vibe?", "Spin me something...", "Curate for me 🔮", "Read the room", "Build my playlist"]}
+              neon="#b388ff"
+              glow="rgba(179,136,255,0.55)"
               delay={5}
               mood="mysterious"
               textAnimation="scaleIn"
-              onClick={() => handleModeBoost('random-mixer')}
+              onClick={() => {
+                handleModeBoost('random-mixer');
+                setShowOyoIsland(true);
+              }}
               onDragToQueue={() => handleModeToQueueWithIntent('random-mixer')}
               isActive={isModeActive('random-mixer')}
               boostLevel={modeBoosts['random-mixer'] || 0}

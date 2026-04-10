@@ -8,7 +8,7 @@
  * - Mobile-first, touch-friendly design
  */
 
-import { useState, useMemo, useEffect, useRef, memo } from 'react';
+import { useState, useMemo, useEffect, useRef, memo, useCallback } from 'react';
 import { Search, Bell, Play, RefreshCw, Zap } from 'lucide-react';
 import { getThumb } from '../../utils/thumbnail';
 import { SmartImage } from '../ui/SmartImage';
@@ -736,10 +736,32 @@ const AfricanVibesVideoCard = memo(({
 // AFRICAN VIBES CAROUSEL
 // ============================================
 
-const AfricanVibesCarousel = ({ tracks, onTrackPlay }: { tracks: Track[]; onTrackPlay: (track: Track) => void }) => {
+// END-SCROLL SENTINEL states:
+// - 'hidden'  : not yet scrolled to the end, nothing rendered
+// - 'cta'     : scrolled to end, shows golden "Watch More" button
+// - 'loading' : user tapped — golden beam sweep welcomes the next video
+// - 'loaded'  : new video preview + purple "Open VOYO" button
+type EndSentinelState = 'hidden' | 'cta' | 'loading' | 'loaded';
+
+const AfricanVibesCarousel = ({
+  tracks,
+  onTrackPlay,
+  onOpenVoyo,
+}: {
+  tracks: Track[];
+  onTrackPlay: (track: Track) => void;
+  onOpenVoyo: (track: Track | null) => void;
+}) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [activeIdx, setActiveIdx] = useState<number>(0);
   const [isInView, setIsInView] = useState(false);
+  const [sentinelState, setSentinelState] = useState<EndSentinelState>('hidden');
+  const lastWatchedRef = useRef<Track | null>(null);
+
+  // Track what the user was last looking at so Open VOYO can pick up there.
+  useEffect(() => {
+    if (tracks[activeIdx]) lastWatchedRef.current = tracks[activeIdx];
+  }, [activeIdx, tracks]);
 
   useEffect(() => {
     const observer = new IntersectionObserver(
@@ -750,12 +772,43 @@ const AfricanVibesCarousel = ({ tracks, onTrackPlay }: { tracks: Track[]; onTrac
     return () => observer.disconnect();
   }, []);
 
+  // End-of-scroll detector — reveal the sentinel once the user has scrolled
+  // past the last real card. Threshold of 48px = "almost at the end", which
+  // feels natural (the CTA is already coming into view as you approach).
+  const handleScroll = useCallback(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const atEnd = el.scrollLeft + el.clientWidth >= el.scrollWidth - 48;
+    if (atEnd && sentinelState === 'hidden') {
+      setSentinelState('cta');
+    }
+  }, [sentinelState]);
+
+  // The "new video" the beam welcomes after Watch More: pick something the
+  // user hasn't seen yet from the tail of the pool, fall back to the first
+  // track if the pool is small.
+  const nextVideo: Track | null = useMemo(() => {
+    if (tracks.length > 12) return tracks[12];
+    return tracks[0] || null;
+  }, [tracks]);
+
+  const handleWatchMore = useCallback(() => {
+    setSentinelState('loading');
+    // Golden beam sweep duration: 900ms feels premium, not rushed.
+    setTimeout(() => setSentinelState('loaded'), 900);
+  }, []);
+
+  const handleOpenVoyo = useCallback(() => {
+    onOpenVoyo(lastWatchedRef.current);
+  }, [onOpenVoyo]);
+
   return (
     <div
       ref={containerRef}
       className="flex gap-4 overflow-x-auto scrollbar-hide py-3 pr-4"
       style={{ paddingLeft: '28px' }}
       onMouseLeave={() => setActiveIdx(0)}
+      onScroll={handleScroll}
     >
       {tracks.slice(0, 12).map((track, idx) => (
         <div key={track.id} onMouseEnter={() => setActiveIdx(idx)}>
@@ -767,9 +820,162 @@ const AfricanVibesCarousel = ({ tracks, onTrackPlay }: { tracks: Track[]; onTrac
           />
         </div>
       ))}
+
+      {/* END-SCROLL SENTINEL — only visible after the user reaches the end */}
+      {sentinelState !== 'hidden' && (
+        <AfricanVibesEndSentinel
+          state={sentinelState}
+          nextVideo={nextVideo}
+          onWatchMore={handleWatchMore}
+          onOpenVoyo={handleOpenVoyo}
+        />
+      )}
     </div>
   );
 };
+
+// ============================================
+// END-SCROLL SENTINEL — Watch More → golden beam → Open VOYO morph
+// ============================================
+const AfricanVibesEndSentinel = memo(({
+  state,
+  nextVideo,
+  onWatchMore,
+  onOpenVoyo,
+}: {
+  state: EndSentinelState;
+  nextVideo: Track | null;
+  onWatchMore: () => void;
+  onOpenVoyo: () => void;
+}) => {
+  return (
+    <div
+      className="flex-shrink-0 relative rounded-xl overflow-hidden"
+      style={{ width: '95px', height: '142px' }}
+    >
+      {/* Bronze ambient glow — matches the rest of the African Vibes cards */}
+      <div
+        className="absolute -inset-1 rounded-xl pointer-events-none"
+        style={{
+          background:
+            'linear-gradient(135deg, rgba(212, 160, 83, 0.35) 0%, rgba(212, 160, 83, 0.12) 30%, transparent 60%)',
+          filter: 'blur(8px)',
+        }}
+      />
+
+      {/* STATE: 'cta' — golden "Watch More" button */}
+      {state === 'cta' && (
+        <button
+          onClick={onWatchMore}
+          className="relative w-full h-full rounded-xl overflow-hidden flex flex-col items-center justify-center"
+          style={{
+            background:
+              'linear-gradient(180deg, rgba(212,160,83,0.18) 0%, rgba(196,148,61,0.10) 50%, rgba(10,10,12,0.95) 100%)',
+            border: '1px solid rgba(212,160,83,0.35)',
+          }}
+        >
+          <div
+            className="w-10 h-10 rounded-full flex items-center justify-center mb-2"
+            style={{
+              background:
+                'linear-gradient(135deg, #D4A053 0%, #C4943D 100%)',
+              boxShadow: '0 0 16px rgba(212,160,83,0.5)',
+            }}
+          >
+            <span className="text-black text-lg font-black">→</span>
+          </div>
+          <span className="text-[8px] font-bold uppercase tracking-wider text-[#D4A053]">
+            Watch More
+          </span>
+          <span className="text-[7px] text-white/50 mt-0.5">from the continent</span>
+        </button>
+      )}
+
+      {/* STATE: 'loading' — golden beam sweep welcomes the next video */}
+      {state === 'loading' && (
+        <div
+          className="relative w-full h-full rounded-xl overflow-hidden"
+          style={{ background: 'rgba(10,10,12,0.95)' }}
+        >
+          {/* Ambient bronze backdrop */}
+          <div
+            className="absolute inset-0"
+            style={{
+              background:
+                'linear-gradient(135deg, rgba(212,160,83,0.15) 0%, rgba(10,10,12,0) 60%)',
+            }}
+          />
+          {/* Golden beam sweep — traverses the tile diagonally */}
+          <div
+            className="absolute inset-0 golden-beam-sweep"
+            style={{
+              background:
+                'linear-gradient(110deg, transparent 20%, rgba(212,160,83,0.15) 35%, rgba(244,204,130,0.9) 48%, rgba(255,230,170,1) 50%, rgba(244,204,130,0.9) 52%, rgba(212,160,83,0.15) 65%, transparent 80%)',
+              backgroundSize: '220% 100%',
+              mixBlendMode: 'screen',
+            }}
+          />
+          {/* Subtle "loading" label */}
+          <div className="absolute inset-0 flex items-end justify-center pb-3 pointer-events-none">
+            <span className="text-[8px] font-semibold uppercase tracking-wider text-[#D4A053]/80">
+              Loading...
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* STATE: 'loaded' — new video thumbnail + purple Open VOYO CTA */}
+      {state === 'loaded' && nextVideo && (
+        <div
+          className="relative w-full h-full rounded-xl overflow-hidden"
+          style={{ background: 'rgba(10,10,12,0.95)' }}
+        >
+          <SmartImage
+            src={getThumb(nextVideo.trackId, 'medium')}
+            trackId={nextVideo.trackId}
+            alt={nextVideo.title}
+            artist={nextVideo.artist}
+            title={nextVideo.title}
+            className="absolute inset-0 w-full h-full object-cover"
+            style={{ transform: 'scale(1.6)' }}
+            lazy={false}
+          />
+          {/* Purple wash — signature VOYO brand */}
+          <div
+            className="absolute inset-0 pointer-events-none"
+            style={{
+              background:
+                'linear-gradient(180deg, rgba(139,92,246,0.25) 0%, rgba(10,10,12,0.55) 55%, rgba(10,10,12,0.95) 100%)',
+            }}
+          />
+          {/* Title */}
+          <div className="absolute top-1.5 left-1.5 right-1.5 z-10">
+            <p className="text-white text-[9px] font-bold truncate drop-shadow-sm">
+              {nextVideo.title}
+            </p>
+          </div>
+          {/* Open VOYO soft-premium button */}
+          <button
+            onClick={onOpenVoyo}
+            className="absolute bottom-2 left-2 right-2 z-10 rounded-full py-1.5 flex items-center justify-center gap-1"
+            style={{
+              background:
+                'linear-gradient(135deg, rgba(167,139,250,0.95) 0%, rgba(139,92,246,0.95) 50%, rgba(124,58,237,0.95) 100%)',
+              boxShadow:
+                '0 4px 12px rgba(139,92,246,0.4), inset 0 1px 0 rgba(255,255,255,0.25)',
+              border: '1px solid rgba(196,181,253,0.4)',
+            }}
+          >
+            <span className="text-white text-[8px] font-bold uppercase tracking-wider">
+              Open VOYO
+            </span>
+            <span className="text-white text-[9px]">→</span>
+          </button>
+        </div>
+      )}
+    </div>
+  );
+});
 
 // ============================================
 // VIBE CARD COMPONENT
@@ -778,54 +984,91 @@ const AfricanVibesCarousel = ({ tracks, onTrackPlay }: { tracks: Track[]; onTrac
 interface VibeCardProps {
   vibe: Vibe;
   onSelect: () => void;
-  index: number;
 }
 
-const VibeCard = memo(({ vibe, onSelect, index }: VibeCardProps) => (
-  <button
-    className="flex-shrink-0 relative group"
-    onClick={onSelect}
-    style={{ width: '120px' }}
-  >
-    <div
-      className="absolute -inset-[3px] rounded-[24px]"
-      style={{
-        background: `conic-gradient(from 0deg, ${vibe.color}, ${vibe.color}44, ${vibe.color})`,
-        filter: 'blur(8px)',
-      }}
-    />
-    <div
-      className="relative rounded-[22px] overflow-hidden"
-      style={{
-        aspectRatio: '0.9',
-        background: `linear-gradient(135deg, ${vibe.color} 0%, ${vibe.color}dd 50%, ${vibe.color}bb 100%)`,
-        boxShadow: `0 6px 24px ${vibe.color}50`,
-      }}
+// Premium vibe card (April 2026): Heating Up RN is the only card that
+// keeps a lottie (fire) and the luxury bronze shade. Every other card
+// drops its icon for a big, fat, deep-purple-on-purple title that reads
+// as embossed artwork — matching shades, low contrast, premium.
+const VibeCard = memo(({ vibe, onSelect }: VibeCardProps) => {
+  const isHero = vibe.id === 'afro-heat';
+
+  // Darker shade of the vibe color for the embossed title. For the hero
+  // card we go deeper into the bronze; for the purple cards we drop into
+  // a near-black violet so the title reads as "faded dark bold fat".
+  const titleShade = isHero ? '#7a3a00' : '#1a0f2e';
+  const titleGlow = isHero ? 'rgba(244,162,62,0.35)' : 'rgba(0,0,0,0.35)';
+
+  return (
+    <button
+      className="flex-shrink-0 relative group"
+      onClick={onSelect}
+      style={{ width: '120px' }}
     >
-      <div className="absolute inset-0 opacity-[0.15]" style={{
-        backgroundImage: `radial-gradient(circle at 50% 50%, rgba(255,255,255,0.6) 0.5px, transparent 1px)`,
-        backgroundSize: '6px 6px',
-      }} />
-      <div className="absolute inset-0" style={{
-        background: 'linear-gradient(130deg, rgba(255,255,255,0.3) 0%, transparent 30%, transparent 70%, rgba(0,0,0,0.15) 100%)',
-      }} />
-      <div className="relative h-full flex flex-col items-center justify-center p-3">
-        <div className="mb-2 drop-shadow-lg text-4xl flex items-center justify-center">
-          {vibe.id === 'afro-heat' && <LottieIcon lottieUrl="/lottie/fire.json" fallbackEmoji="🔥" size={48} loop={true} />}
-          {vibe.id === 'chill-vibes' && <div>💜</div>}
-          {vibe.id === 'party-mode' && <LottieIcon lottieUrl={vibe.lottie} fallbackEmoji="🪩" size={44} />}
-          {vibe.id === 'late-night' && <LottieIcon lottieUrl="/lottie/night-clear.json" fallbackEmoji="🌙" size={48} loop={true} speed={0.6} />}
-          {vibe.id === 'workout' && <div>⚡</div>}
+      <div
+        className="absolute -inset-[3px] rounded-[24px]"
+        style={{
+          background: `conic-gradient(from 0deg, ${vibe.color}, ${vibe.color}44, ${vibe.color})`,
+          filter: 'blur(8px)',
+          opacity: isHero ? 1 : 0.55,
+        }}
+      />
+      <div
+        className="relative rounded-[22px] overflow-hidden"
+        style={{
+          aspectRatio: '0.9',
+          background: `linear-gradient(135deg, ${vibe.color} 0%, ${vibe.color}dd 50%, ${vibe.color}bb 100%)`,
+          boxShadow: `0 6px 24px ${vibe.color}50`,
+        }}
+      >
+        {/* Subtle grain */}
+        <div className="absolute inset-0 opacity-[0.15]" style={{
+          backgroundImage: `radial-gradient(circle at 50% 50%, rgba(255,255,255,0.6) 0.5px, transparent 1px)`,
+          backgroundSize: '6px 6px',
+        }} />
+        {/* Soft top-left highlight */}
+        <div className="absolute inset-0" style={{
+          background: 'linear-gradient(130deg, rgba(255,255,255,0.3) 0%, transparent 30%, transparent 70%, rgba(0,0,0,0.15) 100%)',
+        }} />
+
+        {/* Embossed big title (shared by all cards, including hero) */}
+        <div
+          className="absolute inset-0 flex items-center justify-center px-2 pointer-events-none select-none"
+        >
+          <h3
+            className="font-black text-center leading-[0.85] tracking-tight"
+            style={{
+              fontSize: vibe.name.length > 8 ? '22px' : '28px',
+              color: titleShade,
+              textShadow: `0 1px 0 ${titleGlow}, 0 2px 8px rgba(0,0,0,0.25)`,
+              opacity: 0.55,
+              letterSpacing: '-0.02em',
+            }}
+          >
+            {vibe.name}
+          </h3>
         </div>
-        <h3 className="text-white font-black text-xs tracking-wide text-center drop-shadow-md">{vibe.name}</h3>
-        <p className="text-white/80 text-[9px] mt-1 text-center font-medium">{vibe.description}</p>
+
+        {/* Hero-only: fire lottie floats in the top-right as a premium accent */}
+        {isHero && (
+          <div className="absolute top-2 right-2 drop-shadow-lg pointer-events-none">
+            <LottieIcon lottieUrl="/lottie/fire.json" fallbackEmoji="🔥" size={36} loop={true} />
+          </div>
+        )}
+
+        {/* Description at the bottom, muted */}
+        <div className="absolute left-0 right-0 bottom-2 text-center px-2">
+          <p className="text-white/75 text-[9px] font-medium drop-shadow-sm">{vibe.description}</p>
+        </div>
+
+        {/* Bottom highlight line */}
+        <div className="absolute bottom-0 left-0 right-0 h-[3px]" style={{
+          background: 'linear-gradient(90deg, transparent 5%, rgba(255,255,255,0.5) 50%, transparent 95%)',
+        }} />
       </div>
-      <div className="absolute bottom-0 left-0 right-0 h-[3px]" style={{
-        background: 'linear-gradient(90deg, transparent 5%, rgba(255,255,255,0.5) 50%, transparent 95%)',
-      }} />
-    </div>
-  </button>
-));
+    </button>
+  );
+});
 
 // ============================================
 // HOME FEED COMPONENT
@@ -1031,8 +1274,8 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
 
   return (
     <div className="flex flex-col h-full overflow-y-auto pb-52 scrollbar-hide">
-      {/* Header */}
-      <header className="flex items-center justify-between px-4 py-3 sticky top-0 bg-[#0a0a0c]/95 backdrop-blur-lg z-10">
+      {/* Header — fully transparent, floats over the continuous canvas (April 2026) */}
+      <header className="flex items-center justify-between px-4 py-3 sticky top-0 bg-transparent z-10">
         <button
           className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-violet-600 flex items-center justify-center text-white font-bold"
           onClick={onDahub}
@@ -1131,7 +1374,10 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
         </div>
       )}
 
-      {/* 🌍 African Vibes - cultural pillar, holds its ground */}
+      {/* 🌍 African Vibes - cultural pillar, holds its ground.
+          Watch More moved OFF the header (Apr 2026): it now only appears at the
+          end of the carousel after scrolling, with a golden-beam reveal and a
+          purple Open VOYO morph. Header stays clean, CTA earns the scroll. */}
       <div className="mb-6">
         <div className="px-4 mb-5 flex items-center gap-2">
           <span className="text-xl">🌍</span>
@@ -1149,12 +1395,6 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
               From Lagos to Johannesburg
             </p>
           </div>
-          <button
-            className="px-3 py-1.5 rounded-full text-[10px] font-semibold text-[#D4A053] bg-transparent border border-[#D4A053]/40"
-            onClick={() => usePlayerStore.getState().setVoyoTab('feed')}
-          >
-            Watch More →
-          </button>
         </div>
         <div className="relative">
           {/* TRENDING - Contour style */}
@@ -1173,7 +1413,21 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
               TRENDING
             </span>
           </div>
-          <AfricanVibesCarousel tracks={africanVibes.slice(0, 15)} onTrackPlay={(track) => onTrackPlay(track, { openFull: true })} />
+          <AfricanVibesCarousel
+            tracks={africanVibes.slice(0, 15)}
+            onTrackPlay={(track) => onTrackPlay(track, { openFull: true })}
+            onOpenVoyo={(lastWatched) => {
+              // Stash the last-watched video ID so VoyoMoments can pick
+              // up on it (future hook-in; for now we just switch tabs).
+              if (lastWatched?.trackId) {
+                try {
+                  sessionStorage.setItem('voyo-moments-start-video', lastWatched.trackId);
+                } catch {}
+              }
+              usePlayerStore.getState().setVoyoTab('feed');
+              onSwitchToVOYO?.();
+            }}
+          />
         </div>
       </div>
 
@@ -1356,8 +1610,8 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
           <h2 className="text-white font-semibold text-base">Vibes</h2>
         </div>
         <div className="flex gap-4 px-4 overflow-x-auto scrollbar-hide py-4">
-          {vibes.map((vibe, index) => (
-            <VibeCard key={vibe.id} vibe={vibe} index={index} onSelect={() => handleVibeSelect(vibe)} />
+          {vibes.map((vibe) => (
+            <VibeCard key={vibe.id} vibe={vibe} onSelect={() => handleVibeSelect(vibe)} />
           ))}
         </div>
       </div>

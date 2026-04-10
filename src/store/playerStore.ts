@@ -1212,22 +1212,23 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
             discoverTracks: mergedDiscover,
           });
 
-          // ── VOYO SPIRIT: AUTOPLAY ON FIRST LOAD ──────────────────────
-          // If we just populated hotTracks AND nothing is currently playing
-          // (cold start, no localStorage, OYO sees no history), pick the
-          // first OYO-sorted hot track and start playing. This is the
-          // "open the app, music starts" behaviour Dash explicitly asked
-          // for — it's part of the original Voyo spirit.
+          // ── VOYO SPIRIT: STAGE TRACK ON FIRST LOAD ───────────────────
+          // Pick the first OYO-sorted hot track and stage it so the player
+          // is immediately loaded, artwork visible, ready to go on first
+          // tap. We DO NOT flip isPlaying here — browsers block autoplay
+          // without a user gesture on the very first visit, and chasing
+          // that policy caused a "playing but silent" flash. Compromise
+          // per Dash (Apr 2026): seed the track, user taps once, we're in.
           //
           // Guarded by `currentTrack === null` so we never interrupt an
           // existing playback. Fires exactly once on cold start.
           const stateAfterMerge = get();
           if (!stateAfterMerge.currentTrack && mergedHot.length > 0) {
             const seedTrack = mergedHot[0];
-            devLog(`[VOYO] 🎵 Autoplay seed: ${seedTrack.artist} — ${seedTrack.title}`);
+            devLog(`[VOYO] 🎵 Stage seed (no autoplay): ${seedTrack.artist} — ${seedTrack.title}`);
             set({
               currentTrack: seedTrack,
-              isPlaying: true,
+              isPlaying: false,
               progress: 0,
               currentTime: 0,
               seekPosition: null,
@@ -1262,18 +1263,19 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
         const merged = [...currentState.hotTracks, ...newPoolHot].slice(0, MAX_HOT_POOL);
         set({ hotTracks: merged });
 
-        // ── VOYO SPIRIT: AUTOPLAY SAFETY NET ──
+        // ── VOYO SPIRIT: STAGE SEED SAFETY NET ──
         // If the async database branch hasn't seeded a track yet AND we
-        // have hot tracks from the pool fallback, seed now. Same guard as
-        // the database branch (currentTrack === null) so we never override
-        // an existing playback.
+        // have hot tracks from the pool fallback, stage now. Same guard
+        // as the database branch (currentTrack === null) and same rule:
+        // stage only, no isPlaying flip — first-visit browsers block
+        // autoplay so we let the user tap play once.
         const stateAfterMerge = get();
         if (!stateAfterMerge.currentTrack && merged.length > 0) {
           const seedTrack = merged[0];
-          devLog(`[VOYO] 🎵 Autoplay seed (pool fallback): ${seedTrack.artist} — ${seedTrack.title}`);
+          devLog(`[VOYO] 🎵 Stage seed (pool fallback, no autoplay): ${seedTrack.artist} — ${seedTrack.title}`);
           set({
             currentTrack: seedTrack,
-            isPlaying: true,
+            isPlaying: false,
             progress: 0,
             currentTime: 0,
             seekPosition: null,

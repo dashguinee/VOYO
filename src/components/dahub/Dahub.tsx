@@ -1116,20 +1116,31 @@ export function Dahub({ userId: propsUserId, userName: propsUserName, userAvatar
 
   return (
     <div className="h-full bg-[#0a0a0c] flex flex-col overflow-hidden">
-      {/* Header */}
-      <div className="flex-shrink-0 pt-4 px-6 pb-2">
+      {/* Header — Tivi+ pattern (April 2026): muted title, softer weight,
+          transparent bg, thin bottom divider. No more in-your-face 2xl bold. */}
+      <div
+        className="flex-shrink-0 pt-3 px-5 pb-2 border-b border-white/[0.04]"
+        style={{
+          paddingTop: 'max(0.75rem, env(safe-area-inset-top))',
+        }}
+      >
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold text-white tracking-tight">DaHub</h1>
+            <h1
+              className="font-semibold text-white/85 tracking-wide"
+              style={{ fontSize: '15px', letterSpacing: '0.02em' }}
+            >
+              DaHub
+            </h1>
             {isMasterView && (
-              <span className="px-2 py-1 rounded-lg bg-purple-500/15 border border-purple-500/20 text-purple-400 text-[10px] font-semibold uppercase tracking-wider">
+              <span className="px-2 py-0.5 rounded-md bg-purple-500/10 border border-purple-500/15 text-purple-300/80 text-[9px] font-medium uppercase tracking-wider">
                 All Apps
               </span>
             )}
           </div>
           {onClose && (
-            <button onClick={onClose} className="p-2.5 rounded-xl hover:bg-white/[0.06] text-white/50" >
-              <X size={20} />
+            <button onClick={onClose} className="p-2 rounded-lg hover:bg-white/[0.05] text-white/40" >
+              <X size={18} />
             </button>
           )}
         </div>

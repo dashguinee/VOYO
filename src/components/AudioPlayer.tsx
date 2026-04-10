@@ -606,7 +606,10 @@ export const AudioPlayer = () => {
       stDelayL.connect(stMerger, 0, 0); stDelayR.connect(stMerger, 0, 1);
 
       // ── MASTER GAIN ──
-      const masterGain = ctx.createGain(); masterGain.gain.value = 1.0;
+      // Start at silence (0.0001 to avoid log/exp issues in any downstream
+      // automation). First track load will schedule a fade-in on the
+      // canplaythrough handler, eliminating the cold-start speaker pop.
+      const masterGain = ctx.createGain(); masterGain.gain.value = 0.0001;
       gainNodeRef.current = masterGain;
       stMerger.connect(masterGain);
 
@@ -624,8 +627,17 @@ export const AudioPlayer = () => {
 
       audioEnhancedRef.current = true;
 
-      // Apply initial preset parameters
+      // Apply initial preset parameters. updateBoostPreset calls
+      // applyMasterGain which will ramp masterGain to the preset target —
+      // but we want the chain to stay silent until canplaythrough fires a
+      // proper fade-in against real audio samples. Re-mute right after.
       updateBoostPreset(preset);
+      if (gainNodeRef.current && audioContextRef.current) {
+        const now = audioContextRef.current.currentTime;
+        const p = gainNodeRef.current.gain;
+        p.cancelScheduledValues(now);
+        p.setValueAtTime(0.0001, now);
+      }
 
       devLog('🎛️ [VOYO] Unified chain: multiband → EQ → stereo → master → comp → limiter → spatial');
     } catch (e) {
@@ -633,12 +645,10 @@ export const AudioPlayer = () => {
     }
   }, []);
 
-  // Compute master gain: preset × spatial compensation × volume
-  // Single source of truth — called from updateBoostPreset, updateVoyexSpatial,
-  // and volume effect. Ramped to avoid speaker pops on every preset/volume
-  // change. The 20ms ramp is short enough to feel instant.
-  const applyMasterGain = () => {
-    if (!gainNodeRef.current) return;
+  // Compute target master gain from current preset/spatial/volume state.
+  // Pure getter — no side effects. Used by applyMasterGain and by the
+  // track-load fade helpers below.
+  const computeMasterTarget = () => {
     const preset = currentProfileRef.current;
     const baseGain = preset === 'off' ? 1.0 : BOOST_PRESETS[preset].gain;
     const vol = usePlayerStore.getState().volume / 100;
@@ -649,7 +659,16 @@ export const AudioPlayer = () => {
       if (voyexSpatial < 0 && si > 0) comp = 1 - si * 0.18;
       else if (voyexSpatial > 0 && si > 0) comp = 1 - si * 0.12;
     }
-    const target = baseGain * comp * vol;
+    return baseGain * comp * vol;
+  };
+
+  // Apply master gain: preset × spatial compensation × volume.
+  // Single source of truth — called from updateBoostPreset, updateVoyexSpatial,
+  // and volume effect. Ramped to avoid speaker pops on every preset/volume
+  // change. The 25ms ramp is short enough to feel instant.
+  const applyMasterGain = () => {
+    if (!gainNodeRef.current) return;
+    const target = computeMasterTarget();
     const ctx = audioContextRef.current;
     if (ctx) {
       const now = ctx.currentTime;
@@ -666,6 +685,42 @@ export const AudioPlayer = () => {
     } else {
       gainNodeRef.current.gain.value = target;
     }
+  };
+
+  // ── TRACK-CHANGE FADE HELPERS ─────────────────────────────────────────
+  // Replaces the old `audio.volume = 0` / `audio.volume = 1.0` mute pattern.
+  // That pattern worked but was a digital jump at the media element level,
+  // which leaks into the MediaElementAudioSourceNode as a click. Now all
+  // loudness transitions go through masterGain inside the Web Audio chain
+  // using scheduled linear ramps — pro DAW-grade click-free behaviour.
+  // `audio.volume` stays pinned at 1.0 whenever the chain is wired.
+
+  // Instant mute — schedule gain to near-zero immediately. Used right
+  // before audio.pause() on a track swap so the old track fades silent
+  // cleanly and the new track doesn't hit a hot chain at full volume.
+  const muteMasterGainInstantly = () => {
+    if (!gainNodeRef.current || !audioContextRef.current) return;
+    const ctx = audioContextRef.current;
+    const now = ctx.currentTime;
+    const param = gainNodeRef.current.gain;
+    param.cancelScheduledValues(now);
+    param.setValueAtTime(param.value, now);
+    param.linearRampToValueAtTime(0.0001, now + 0.015); // 15ms fade out
+  };
+
+  // Short fade-in ramp from silence → target. Called from canplaythrough
+  // handlers right before audio.play() so the first audible samples of a
+  // new track enter under a ramp, not a step. 80ms is long enough to bury
+  // any transient click but short enough to feel instant.
+  const fadeInMasterGain = (durationMs: number = 80) => {
+    if (!gainNodeRef.current || !audioContextRef.current) return;
+    const ctx = audioContextRef.current;
+    const now = ctx.currentTime;
+    const param = gainNodeRef.current.gain;
+    const target = computeMasterTarget();
+    param.cancelScheduledValues(now);
+    param.setValueAtTime(0.0001, now);
+    param.linearRampToValueAtTime(target, now + durationMs / 1000);
   };
 
   // Smooth volume fade-in for auto-resume (1.2s from silence to target)
@@ -923,12 +978,16 @@ export const AudioPlayer = () => {
       // Skip if same track
       if (lastTrackIdRef.current === trackId) return;
 
-      // STOP old audio immediately before loading new track
+      // STOP old audio immediately before loading new track.
       // NOTE: Do NOT set src = '' — this can break MediaElementAudioSourceNode in some browsers.
       // The source node stays wired through src changes automatically (Web Audio API design).
       // FIX: Clear dangling event handlers from previous loadTrack calls to prevent
       // old callbacks from firing and interfering with the new track load.
+      // FADE: Ramp masterGain to silence (15ms) BEFORE pause so the outgoing
+      // track fades out cleanly and the chain is silent while the new src
+      // decodes. Prevents the speaker pop on every track skip.
       if (audioRef.current) {
+        muteMasterGainInstantly();
         audioRef.current.oncanplaythrough = null;
         audioRef.current.oncanplay = null;
         audioRef.current.onplay = null;
@@ -975,7 +1034,7 @@ export const AudioPlayer = () => {
           cachedUrlRef.current = preloaded.url;
 
           if (audioRef.current && preloaded.url) {
-            audioRef.current.volume = 0;
+            audioRef.current.volume = 1.0; // Pinned — all loudness via masterGain
             audioRef.current.src = preloaded.url;
             audioRef.current.load();
 
@@ -986,15 +1045,16 @@ export const AudioPlayer = () => {
               const { isPlaying: shouldPlay } = usePlayerStore.getState();
               if (shouldPlay && audioRef.current.paused) {
                 audioContextRef.current?.state === 'suspended' && audioContextRef.current.resume();
+                // Schedule the fade-in BEFORE play() so the ramp is already
+                // queued when the first sample lands.
+                fadeInMasterGain(80);
                 audioRef.current.play().then(() => {
-                  audioRef.current!.volume = 1.0;
                   recordPlayEvent();
                   devLog('🔮 [VOYO] Preloaded playback started!');
                 }).catch(e => devWarn('🎵 [Playback] Preloaded play failed:', e.name));
-              } else {
-                // FIX: Restore volume even when paused so play/pause effect doesn't play silence
-                audioRef.current.volume = 1.0;
               }
+              // Paused state: masterGain stays muted. When user taps play,
+              // the play/pause effect's applyMasterGain() ramps it back up.
             };
           }
 
@@ -1024,7 +1084,7 @@ export const AudioPlayer = () => {
         setupAudioEnhancement(profile);
 
         if (audioRef.current) {
-          audioRef.current.volume = 0;
+          audioRef.current.volume = 1.0; // Pinned — all loudness via masterGain
           audioRef.current.src = cachedUrl;
           audioRef.current.load();
 
@@ -1049,12 +1109,15 @@ export const AudioPlayer = () => {
 
             if ((shouldPlay || shouldAutoResume) && audioRef.current.paused) {
               audioContextRef.current?.state === 'suspended' && audioContextRef.current.resume();
+              // Session resume uses the longer 1.2s fade; normal playback
+              // gets a short 80ms click-kill fade. Both scheduled BEFORE
+              // play() so the ramp is queued when the first sample lands.
+              if (shouldAutoResume) {
+                fadeInVolume(1200);
+              } else {
+                fadeInMasterGain(80);
+              }
               audioRef.current.play().then(() => {
-                if (shouldAutoResume) {
-                  fadeInVolume(1200); // Smooth fade-in on session resume
-                } else {
-                  audioRef.current!.volume = 1.0;
-                }
                 recordPlayEvent();
                 // Update store to reflect playing state if we auto-resumed
                 if (shouldAutoResume && !shouldPlay) {
@@ -1062,10 +1125,9 @@ export const AudioPlayer = () => {
                 }
                 devLog('🎵 [VOYO] Playback started (cached)');
               }).catch(e => devWarn('🎵 [Playback] Cached play failed:', e.name));
-            } else {
-              // FIX: Restore volume even when paused so play/pause effect doesn't play silence
-              audioRef.current.volume = 1.0;
             }
+            // Paused state: masterGain stays muted; play/pause effect will
+            // ramp it up via applyMasterGain() when the user taps play.
           };
         }
       } else {
@@ -1091,7 +1153,7 @@ export const AudioPlayer = () => {
           setupAudioEnhancement(profile);
 
           if (audioRef.current) {
-            audioRef.current.volume = 0;
+            audioRef.current.volume = 1.0; // Pinned — loudness via masterGain
             audioRef.current.src = r2Result.url;
             audioRef.current.load();
 
@@ -1114,22 +1176,18 @@ export const AudioPlayer = () => {
 
               if ((shouldPlay || shouldAutoResume) && audioRef.current.paused) {
                 audioContextRef.current?.state === 'suspended' && audioContextRef.current.resume();
+                if (shouldAutoResume) {
+                  fadeInVolume(1200);
+                } else {
+                  fadeInMasterGain(80);
+                }
                 audioRef.current.play().then(() => {
-                  if (shouldAutoResume) {
-                    fadeInVolume(1200); // Smooth fade-in on session resume
-                  } else {
-                    audioRef.current!.volume = 1.0;
-                  }
                   recordPlayEvent();
-                  // Update store to reflect playing state if we auto-resumed
                   if (shouldAutoResume && !shouldPlay) {
                     usePlayerStore.getState().togglePlay();
                   }
                   devLog('🎵 [VOYO] Playback started (R2)');
                 }).catch(e => devWarn('🎵 [Playback] R2 play failed:', e.name));
-              } else {
-                // FIX: Restore volume even when paused so play/pause effect doesn't play silence
-                audioRef.current.volume = 1.0;
               }
             };
           }
@@ -1163,7 +1221,7 @@ export const AudioPlayer = () => {
             setupAudioEnhancement(profile);
 
             if (audioRef.current) {
-              audioRef.current.volume = 0;
+              audioRef.current.volume = 1.0; // Pinned — loudness via masterGain
               audioRef.current.src = streamData.url; // Browser fetches directly from YouTube CDN
               audioRef.current.load();
 
@@ -1183,21 +1241,18 @@ export const AudioPlayer = () => {
 
                 if ((shouldPlay || shouldAutoResume) && audioRef.current.paused) {
                   audioContextRef.current?.state === 'suspended' && audioContextRef.current.resume();
+                  if (shouldAutoResume) {
+                    fadeInVolume(1200);
+                  } else {
+                    fadeInMasterGain(80);
+                  }
                   audioRef.current.play().then(() => {
-                    if (shouldAutoResume) {
-                      fadeInVolume(1200); // Smooth fade-in on session resume
-                    } else {
-                      audioRef.current!.volume = 1.0;
-                    }
                     recordPlayEvent();
                     if (shouldAutoResume && !shouldPlay) {
                       usePlayerStore.getState().togglePlay();
                     }
                     devLog('🎵 [VOYO] Playback started (YouTube direct stream)');
                   }).catch(e => devWarn('🎵 [Playback] Stream play failed:', e.name));
-                } else {
-                  // FIX: Restore volume even when paused so play/pause effect doesn't play silence
-                  audioRef.current.volume = 1.0;
                 }
               };
 

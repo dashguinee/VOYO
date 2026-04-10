@@ -1,6 +1,12 @@
 /**
  * VOYO Music - Haptic Feedback System
- * TikTok/Instagram-level haptic feedback for mobile interactions
+ * Premium iOS-style haptic feedback for mobile interactions.
+ *
+ * April 2026 tuning: global 120ms cooldown between fires + softer
+ * durations across the board. The old TikTok-level frequency was "too
+ * much" per Dash — premium apps space out haptics so each tap feels
+ * intentional, not noisy. Call sites stay unchanged; the throttle is
+ * enforced here so one edit tones the whole app down.
  */
 
 type HapticPattern = number | number[];
@@ -10,9 +16,18 @@ const canVibrate = (): boolean => {
   return typeof navigator !== 'undefined' && 'vibrate' in navigator;
 };
 
-// Core vibration function with safety checks
+// Global throttle — prevents rapid-fire haptics from multiple handlers
+// colliding on the same gesture (e.g., pointerdown + click + double-tap).
+const HAPTIC_COOLDOWN_MS = 120;
+let lastHapticAt = 0;
+
+// Core vibration function with safety checks + cooldown
 const vibrate = (pattern: HapticPattern): boolean => {
   if (!canVibrate()) return false;
+
+  const now = Date.now();
+  if (now - lastHapticAt < HAPTIC_COOLDOWN_MS) return false;
+  lastHapticAt = now;
 
   try {
     return navigator.vibrate(pattern);
@@ -27,21 +42,21 @@ const vibrate = (pattern: HapticPattern): boolean => {
 export const haptics = {
   /**
    * Light tap - for button presses, selections
-   * Duration: 10ms
+   * Duration: 6ms (April 2026 — softened from 10ms)
    */
-  light: (): boolean => vibrate(10),
+  light: (): boolean => vibrate(6),
 
   /**
    * Medium tap - for play/pause, navigation
-   * Duration: 20ms
+   * Duration: 12ms (April 2026 — softened from 20ms)
    */
-  medium: (): boolean => vibrate(20),
+  medium: (): boolean => vibrate(12),
 
   /**
    * Heavy tap - for significant actions like boost, add to queue
-   * Duration: 30ms
+   * Duration: 20ms (April 2026 — softened from 30ms)
    */
-  heavy: (): boolean => vibrate(30),
+  heavy: (): boolean => vibrate(20),
 
   /**
    * Success pattern - double pulse for successful actions
