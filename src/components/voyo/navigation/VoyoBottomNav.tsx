@@ -12,7 +12,7 @@
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Home, MessageCircle } from 'lucide-react';
+import { House, ChatCircle } from '@phosphor-icons/react';
 import { usePlayerStore } from '../../../store/playerStore';
 import { useAuth } from '../../../hooks/useAuth';
 import { messagesAPI } from '../../../lib/voyo-api';
@@ -219,14 +219,11 @@ export const VoyoBottomNav = ({ onDahub, onHome }: VoyoBottomNavProps) => {
               transition: 'transform 80ms ease-out',
             }}
           >
-            <Home
-              style={{
-                width: 20,
-                height: 20,
-                color: 'rgba(255, 255, 255, 0.4)',
-                strokeWidth: 1.8,
-                transition: 'color 0.15s ease',
-              }}
+            <House
+              size={20}
+              weight="duotone"
+              color="rgba(255, 255, 255, 0.4)"
+              style={{ transition: 'color 0.15s ease' }}
             />
           </div>
         </button>
@@ -319,14 +316,11 @@ export const VoyoBottomNav = ({ onDahub, onHome }: VoyoBottomNavProps) => {
             }}
           >
             <div className="relative">
-              <MessageCircle
-                style={{
-                  width: 20,
-                  height: 20,
-                  color: 'rgba(255, 255, 255, 0.4)',
-                  strokeWidth: 1.8,
-                  transition: 'color 0.15s ease',
-                }}
+              <ChatCircle
+                size={20}
+                weight="duotone"
+                color="rgba(255, 255, 255, 0.4)"
+                style={{ transition: 'color 0.15s ease' }}
               />
               {/* Unread DM badge: simple red dot */}
               {unreadDMs > 0 && (

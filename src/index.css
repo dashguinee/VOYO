@@ -1,13 +1,23 @@
 @import "tailwindcss";
 
-/* VOYO Music Device - NEON AFRO-FUTURISM V2.0 */
-/* Deep Neon Void - Expensive. Cinematic. Glass. */
+/* VOYO Music — Mature Premium System (April 2026 redesign)
+ *
+ * Philosophy: ONE continuous canvas, restrained palette, confident
+ * typography. Mature with attitude. White hierarchy for text + a single
+ * bronze accent for OYÉ moments. No more multi-colour text rainbow.
+ *
+ * Font: Outfit (matches Tivi+ — DASH ecosystem shares one font)
+ * Background: single canvas at #050508 with subtle radial ambient
+ * Icons: Phosphor (cooler than Lucide, duotone variants)
+ */
 :root {
-  /* === CORE BACKGROUNDS — Metallic Grey System === */
-  --voyo-bg-void: #0a0a0c;         /* Deepest — main bg */
-  --voyo-bg-deep: #111114;         /* Card backgrounds — metallic dark */
-  --voyo-bg-card: rgba(28, 28, 35, 0.65);  /* Glass cards — metallic grey */
-  --voyo-bg-elevated: #1c1c22;     /* Elevated surfaces — brushed metal feel */
+  /* === CORE BACKGROUNDS — Single Dark Canvas === */
+  --voyo-bg-void: #050508;         /* The ONE canvas — matches Tivi+ */
+  --voyo-bg-deep: #0a0a0e;         /* Section base if we need depth */
+  --voyo-bg-card: rgba(255, 255, 255, 0.03);  /* Glass cards — translucent white over the canvas */
+  --voyo-bg-elevated: rgba(255, 255, 255, 0.05); /* Elevated cards (hover, focus) */
+  --voyo-border: rgba(255, 255, 255, 0.06);
+  --voyo-border-strong: rgba(255, 255, 255, 0.12);
 
   /* === PRIMARY BRAND - PURPLE SYSTEM === */
   /* Use these 3 primary purples + 3 glow levels consistently */
@@ -43,14 +53,25 @@
   --oye-ai: #8b5cf6;              /* Purple for AI */
   --oye-discover: #D4A053;        /* Bronze for discover */
 
-  /* === TEXT HIERARCHY === */
-  --voyo-text: #ffffff;
-  --voyo-text-secondary: rgba(255, 255, 255, 0.7);
-  --voyo-text-muted: rgba(255, 255, 255, 0.4);
-  --voyo-text-hint: rgba(255, 255, 255, 0.25);
+  /* === TEXT HIERARCHY (Premium White-Grey System) ===
+   * USE THESE for all text. No multi-colour rainbow.
+   * Bronze (--voyo-accent) is RESERVED for OYÉ moments + brand only.
+   */
+  --voyo-text: rgba(255, 255, 255, 1);             /* Primary — headings, current track */
+  --voyo-text-secondary: rgba(255, 255, 255, 0.6); /* Secondary — labels, descriptions */
+  --voyo-text-muted: rgba(255, 255, 255, 0.4);     /* Tertiary — meta, timestamps */
+  --voyo-text-hint: rgba(255, 255, 255, 0.2);      /* Borders, dividers, hints */
 
   /* === VIEWPORT FIX === */
   --vh: 1vh; /* Updated by JS for iOS browser chrome fix */
+}
+
+/* === Tailwind v4 theme tokens (bridges CSS vars into utility classes) === */
+@theme {
+  --font-sans: 'Outfit', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-display: 'Space Grotesk', system-ui, sans-serif;
+  --color-canvas: #050508;
+  --color-bronze: #D4A053;
 }
 
 @layer base {
@@ -68,8 +89,15 @@ html, body, #root {
 }
 
 body {
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  background: var(--voyo-bg-deep);
+  font-family: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  /* Single continuous canvas with a barely-there sunset ambient. The
+     gradient is fixed (not scrolling) so sections inherit the same
+     atmosphere instead of cutting against their own colour blocks. */
+  background:
+    radial-gradient(ellipse 1200px 600px at 20% -10%, rgba(139, 92, 246, 0.06), transparent 60%),
+    radial-gradient(ellipse 900px 500px at 100% 100%, rgba(212, 160, 83, 0.04), transparent 60%),
+    var(--voyo-bg-void);
+  background-attachment: fixed;
   color: var(--voyo-text);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;

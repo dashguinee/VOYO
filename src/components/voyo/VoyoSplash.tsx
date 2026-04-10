@@ -122,11 +122,12 @@ export const VoyoSplash = ({ onComplete, minDuration = 1500 }: VoyoSplashProps) 
 
   return (
     <div
-      className="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-[#0a0a0f] overflow-hidden"
+      className="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-[#050508] overflow-hidden"
       style={{
         opacity: hidden ? 0 : 1,
         transition: 'opacity 220ms ease-out',
         pointerEvents: hidden ? 'none' : 'auto',
+        fontFamily: "'Outfit', system-ui, sans-serif",
       }}
     >
       {/* ── Boom expand: rings + particles, one-shot at mount ── */}

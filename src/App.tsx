@@ -1262,7 +1262,7 @@ function App() {
       stitch into a single screen.
     */}
     <Suspense fallback={
-      <div className="h-full w-full bg-[#0a0a0f] flex items-center justify-center">
+      <div className="h-full w-full bg-[#050508] flex items-center justify-center">
         <div className="flex flex-col items-center gap-3">
           <span className="text-3xl font-black tracking-wider" style={{ color: '#8b5cf6', opacity: 0.6 }}>VOYO</span>
           <div className="flex items-center gap-1.5">

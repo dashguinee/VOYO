@@ -1815,20 +1815,23 @@ const PlayControls = memo(({
               }}
           />
 
-          {/* Album art - only visible when playing/scrubbing */}
-          
-            {(isPlaying || isScrubbing) && trackArt && (
-              <div
-                className="absolute inset-2 w-[calc(100%-16px)] h-[calc(100%-16px)] rounded-full overflow-hidden"
-              >
-                <SmartImage
-                  src={trackArt}
-                  alt="Now playing album art"
-                  className="w-full h-full object-cover"
-                  lazy={false}
-                />
-              </div>
-            )}
+          {/* Album art — always visible when there's a track. Was previously
+              gated behind (isPlaying || isScrubbing) which left the disc empty
+              on first app load (user hasn't pressed play yet → looks broken).
+              Vinyl background + center play/pause icon already convey play
+              state visually; the art doesn't need to gate on it. */}
+          {trackArt && (
+            <div
+              className="absolute inset-2 w-[calc(100%-16px)] h-[calc(100%-16px)] rounded-full overflow-hidden"
+            >
+              <SmartImage
+                src={trackArt}
+                alt="Now playing album art"
+                className="w-full h-full object-cover"
+                lazy={false}
+              />
+            </div>
+          )}
           
 
           {/* Center hole (vinyl style) */}
