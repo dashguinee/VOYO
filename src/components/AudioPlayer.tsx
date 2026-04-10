@@ -1392,7 +1392,13 @@ export const AudioPlayer = () => {
       if (audioContextRef.current?.state === 'suspended') {
         audioContextRef.current.resume();
       }
-      audio.play().catch(e => devWarn('🎵 [Playback] Resume play failed:', e.name));
+      audio.play().catch(e => {
+        devWarn('🎵 [Playback] Resume play failed:', e.name);
+        // Browser blocked the play (autoplay policy, no user gesture yet).
+        // Sync the store back to false so the UI button matches reality.
+        // The user will then tap play (a real gesture) and that's allowed.
+        usePlayerStore.getState().setIsPlaying(false);
+      });
     } else if (!isPlaying && !audio.paused) {
       audio.pause();
     }
@@ -1740,22 +1746,28 @@ export const AudioPlayer = () => {
       onEnded={handleEnded}
       onProgress={handleProgress}
       onError={handleAudioError}
+      // ── SOURCE OF TRUTH SYNC ────────────────────────────────────────
+      // The audio element is the source of truth for play/pause state.
+      // Whatever it's actually doing, the store mirrors it. The button UI
+      // reads from the store, so it always matches what the speakers are
+      // doing — no more "shows playing but no sound" lies.
+      //
+      // Previously the onPause handler tried to FORCE-RESUME if the store
+      // said `isPlaying: true`, which created a fight (store says play,
+      // audio is paused, handler resumes, autoplay-blocked, audio paused
+      // again, repeat). That's gone. The audio element gets to be the
+      // truth; the store is the reflection.
+      onPlay={() => {
+        if (playbackSource === 'cached' || playbackSource === 'r2') {
+          setBufferHealth(100, 'healthy');
+        }
+        usePlayerStore.getState().setIsPlaying(true);
+      }}
       onPlaying={() => (playbackSource === 'cached' || playbackSource === 'r2') && setBufferHealth(100, 'healthy')}
       onWaiting={() => (playbackSource === 'cached' || playbackSource === 'r2') && setBufferHealth(50, 'warning')}
       onPause={() => {
-        if (playbackSource !== 'cached' && playbackSource !== 'r2') return;
-        const { isPlaying: shouldPlay } = usePlayerStore.getState();
-        const audio = audioRef.current;
-        if (!audio) return;
-        // Don't resume if track ended (prevents brief replay before next track)
-        const hasEnded = audio.duration > 0 && audio.currentTime >= audio.duration - 0.5;
-        if (hasEnded) return;
-        // Resume if should be playing (handles interruptions)
-        if (shouldPlay && audio.src && audio.readyState >= 1) {
-          // FIX: Ensure volume is restored before resuming (may be stuck at 0 from loading phase)
-          if (audio.volume === 0) audio.volume = 1.0;
-          audio.play().catch(e => devWarn('🎵 [Playback] Pause handler resume failed:', e.name));
-        }
+        // Sync the store to the actual audio state. No more force-resume.
+        usePlayerStore.getState().setIsPlaying(false);
       }}
       style={{ display: 'none' }}
     />

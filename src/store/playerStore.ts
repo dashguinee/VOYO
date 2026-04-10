@@ -269,6 +269,12 @@ interface PlayerStore {
   setCurrentTrack: (track: Track) => void;
   playTrack: (track: Track) => void; // CONSOLIDATED: Sets track AND starts playing in one atomic update
   togglePlay: () => void;
+  // Direct setter for the audio element to sync its actual state back to the
+  // store. UI buttons should NOT call this — they call togglePlay. This is
+  // for the audio element's native play/pause/ended events ONLY, so the
+  // store always reflects what the audio is actually doing (vs what we WANT
+  // it to do, which is the togglePlay path).
+  setIsPlaying: (value: boolean) => void;
   setProgress: (progress: number) => void;
   setCurrentTime: (time: number) => void;
   setDuration: (duration: number) => void;
@@ -527,6 +533,20 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     if (typeof navigator !== 'undefined' && 'mediaSession' in navigator) {
       navigator.mediaSession.playbackState = 'playing';
     }
+  },
+
+  // Direct sync from audio element. Skips the toggle logic — used by the
+  // native play/pause/ended event listeners in AudioPlayer.tsx so the store
+  // always matches what the audio element is actually doing. Idempotent: if
+  // the value already matches, no state churn.
+  setIsPlaying: (value: boolean) => {
+    set((state) => {
+      if (state.isPlaying === value) return state;
+      if (typeof navigator !== 'undefined' && 'mediaSession' in navigator) {
+        navigator.mediaSession.playbackState = value ? 'playing' : 'paused';
+      }
+      return { isPlaying: value };
+    });
   },
 
   togglePlay: () => {
