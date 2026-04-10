@@ -16,13 +16,13 @@ import { DJMode, Track } from '../../types';
 
 // Lightweight — always loaded
 import { VoyoBottomNav } from './navigation/VoyoBottomNav';
-import { APP_CODES } from '../../lib/dahub/dahub-api';
 import type { MomentTrackInfo } from './feed/VoyoMoments';
 
 // Heavy components — lazy loaded for code splitting
 const VoyoMoments = lazy(() => import('./feed/VoyoMoments').then(m => ({ default: m.VoyoMoments })));
 const VoyoPortraitPlayer = lazy(() => import('./VoyoPortraitPlayer').then(m => ({ default: m.VoyoPortraitPlayer })));
-const Dahub = lazy(() => import('../dahub/Dahub').then(m => ({ default: m.Dahub })));
+// OFFICIAL DaHub from Hub.tsx (Classic Mode) — single source of truth, Command Center wired, has own nav
+const Hub = lazy(() => import('../classic/Hub').then(m => ({ default: m.Hub })));
 const ArtistPage = lazy(() => import('./ArtistPage').then(m => ({ default: m.ArtistPage })));
 
 // Quick DJ Prompts
@@ -297,7 +297,11 @@ export const PortraitVOYO = ({ onSearch, onDahub, onHome }: PortraitVOYOProps) =
           }}
         >
           <Suspense fallback={<div className="h-full bg-[#0a0a0c]" />}>
-            <Dahub appContext={APP_CODES.VOYO} />
+            <Hub
+              onHome={onHome}
+              onSwitchToVOYO={() => setVoyoTab('music')}
+              onVoyoFeed={() => setVoyoTab('feed')}
+            />
           </Suspense>
         </div>
 
