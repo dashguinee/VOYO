@@ -1254,6 +1254,13 @@ function App() {
   return (
     <AppErrorBoundary>
     <AuthProvider>
+    {/*
+      Suspense fallback shares the same VOYO wordmark + 3-dots aesthetic as
+      the BootLoader (formerly VoyoSplash) so the user sees ONE continuous
+      loader. The fallback is the static shell — VoyoSplash mounts on top
+      with the boom-expand burst + the actual data preload. Visually they
+      stitch into a single screen.
+    */}
     <Suspense fallback={
       <div className="h-full w-full bg-[#0a0a0f] flex items-center justify-center">
         <div className="flex flex-col items-center gap-3">
@@ -1267,9 +1274,9 @@ function App() {
       </div>
     }>
     <div className="relative h-full w-full bg-[#0a0a0f] overflow-hidden">
-      {/* VOYO Splash Screen - Premium water drop animation */}
+      {/* VOYO Boot Loader — VOYO wordmark + 3 dots + boom-expand ring burst */}
       {showSplash && (
-        <VoyoSplash onComplete={handleSplashComplete} minDuration={2500} />
+        <VoyoSplash onComplete={handleSplashComplete} minDuration={1500} />
       )}
 
       {/* Dynamic Background based on current track (only for VOYO modes) */}
