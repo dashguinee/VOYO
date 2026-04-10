@@ -19,6 +19,7 @@
  */
 
 import { mediaCache } from './mediaCache';
+import { devLog } from '../utils/logger';
 
 export type BitrateLevel = 'low' | 'medium' | 'high';
 export type BufferStatus = 'healthy' | 'warning' | 'emergency';
@@ -584,14 +585,14 @@ class AudioEngine {
     // 1. Check MediaCache (from feed pre-caching)
     const mediaCached = mediaCache.get(trackId);
     if (mediaCached?.audioUrl) {
-      console.log(`[AudioEngine] Using MediaCache blob for ${trackId}`);
+      devLog(`[AudioEngine] Using MediaCache blob for ${trackId}`);
       return { url: mediaCached.audioUrl, cached: true, source: 'mediaCache' };
     }
 
     // 2. Check AudioEngine's own preload cache
     const engineCached = this.preloadCache.get(trackId);
     if (engineCached) {
-      console.log(`[AudioEngine] Using AudioEngine blob for ${trackId}`);
+      devLog(`[AudioEngine] Using AudioEngine blob for ${trackId}`);
       return { url: engineCached, cached: true, source: 'audioEngine' };
     }
 

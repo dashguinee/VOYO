@@ -193,9 +193,19 @@ export async function preloadNextTrack(
       // Without this, ~5-10 rapid skips fill the browser's per-host connection
       // limit and playback halts entirely until GC + TCP timeouts recover
       // (~60s of "rest" — exactly the symptom we were chasing).
+      //
+      // Also wrap with a 5s hard timeout: if the Edge Worker is slow/down, the
+      // fetch could hang indefinitely otherwise (the abort signal only fires
+      // when the user skips tracks). Combine our per-track signal with a
+      // timeout signal so either path cancels.
+      // AbortSignal.any combines our per-track abort with a 5s timeout — either
+      // one fires and the fetch unwinds. AbortSignal.any is supported in Chrome
+      // 116+, Firefox 124+, Safari 17.4+ (same baseline as AbortSignal.timeout
+      // already used by api.ts).
+      const combinedSignal = AbortSignal.any([signal, AbortSignal.timeout(5000)]);
       const streamResponse = await fetch(
         `${EDGE_WORKER_URL}/stream?v=${normalizedId}`,
-        { signal },
+        { signal: combinedSignal },
       );
 
       if (signal.aborted) return null;

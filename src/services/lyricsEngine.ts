@@ -378,7 +378,12 @@ export async function generateLyrics(
           verified_by: 'lrclib',
         }).then(saved => {
           if (saved) console.log(`[LyricsEngine] ✅ Cached LRCLIB lyrics to Supabase: ${track.title}`);
-        }).catch(() => {});  // Don't block on cache save
+        }).catch((err) => {
+          // Don't block playback on a cache failure, but log the actual error
+          // so we can spot when Supabase writes start failing instead of
+          // silently swallowing them.
+          console.warn(`[LyricsEngine] Failed to cache LRCLIB lyrics: ${err?.message ?? err}`);
+        });
       }
 
       return enriched;

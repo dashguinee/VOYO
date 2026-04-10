@@ -307,10 +307,11 @@ export const BoostButton = ({ variant = 'toolbar', className = '' }: BoostButton
     if (isMatch) {
       setShowBurst(true);
       setShowSparks(true);
-      setTimeout(() => {
+      const t = setTimeout(() => {
         setIsCached(true);
         setShowSparks(false);
       }, 800);
+      return () => clearTimeout(t);
     }
   }, [lastBoostCompletion, currentTrack?.trackId]);
 
@@ -320,10 +321,11 @@ export const BoostButton = ({ variant = 'toolbar', className = '' }: BoostButton
     if (status?.status === 'complete') {
       setShowBurst(true);
       setShowSparks(true);
-      setTimeout(() => {
+      const t = setTimeout(() => {
         setIsCached(true);
         setShowSparks(false);
       }, 800);
+      return () => clearTimeout(t);
     }
   }, [downloads, currentTrack?.trackId]);
 

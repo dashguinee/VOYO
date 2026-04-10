@@ -100,12 +100,17 @@ self.addEventListener('fetch', (event) => {
   }
 
   // Navigation requests (HTML) — NETWORK FIRST (always get fresh index.html)
+  // Only cache 200 OK responses. Without this guard a 500/404/503 from origin
+  // becomes the permanently-cached "version" of index.html until manual cache
+  // clear — silent data corruption that brick the app for the user.
   if (event.request.mode === 'navigate') {
     event.respondWith(
       fetch(event.request)
         .then((response) => {
-          const clone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+          if (response.ok && response.status === 200) {
+            const clone = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+          }
           return response;
         })
         .catch(() => {

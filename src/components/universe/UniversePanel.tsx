@@ -119,20 +119,24 @@ export const UniversePanel = ({ isOpen, onClose }: UniversePanelProps) => {
 
   // Handle save profile
   const handleSaveProfile = async () => {
-    if (!dashId) return;
-
+    if (!dashId || isSavingProfile) return; // idempotency guard
     setIsSavingProfile(true);
-    const success = await profileAPI.updatePreferences(dashId, {
-      display_name: editDisplayName,
-      bio: editBio,
-      avatar_url: editAvatarUrl || null,
-    } as any);
-    setIsSavingProfile(false);
-
-    if (success) {
-      setMessage({ type: 'success', text: 'Profile updated!' });
-    } else {
-      setMessage({ type: 'error', text: 'Failed to save profile' });
+    try {
+      const success = await profileAPI.updatePreferences(dashId, {
+        display_name: editDisplayName,
+        bio: editBio,
+        avatar_url: editAvatarUrl || null,
+      } as any);
+      if (success) {
+        setMessage({ type: 'success', text: 'Profile updated!' });
+      } else {
+        setMessage({ type: 'error', text: 'Failed to save profile' });
+      }
+    } catch (err) {
+      console.error('[UniversePanel] save profile threw:', err);
+      setMessage({ type: 'error', text: 'Could not save — try again' });
+    } finally {
+      setIsSavingProfile(false);
     }
   };
 
@@ -149,9 +153,13 @@ export const UniversePanel = ({ isOpen, onClose }: UniversePanelProps) => {
     if (!dashId) return;
 
     const newState = !isPortalOpen;
-    const success = await profileAPI.setPortalOpen(dashId, newState);
-
-    if (success) {
+    try {
+      const success = await profileAPI.setPortalOpen(dashId, newState);
+      if (!success) {
+        // Don't claim success when the backend rejected the toggle.
+        setMessage({ type: 'error', text: 'Could not update portal state' });
+        return;
+      }
       setIsPortalOpen(newState);
       if (newState) {
         setPortalUrl(`${window.location.origin}/${dashId}`);
@@ -160,6 +168,9 @@ export const UniversePanel = ({ isOpen, onClose }: UniversePanelProps) => {
         setPortalUrl('');
         setMessage({ type: 'success', text: 'Portal closed' });
       }
+    } catch (err) {
+      console.error('[UniversePanel] toggle portal threw:', err);
+      setMessage({ type: 'error', text: 'Network error — try again' });
     }
   };
 
