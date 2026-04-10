@@ -1274,9 +1274,11 @@ function App() {
       </div>
     }>
     <div className="relative h-full w-full bg-[#0a0a0f] overflow-hidden">
-      {/* VOYO Boot Loader — VOYO wordmark + 3 dots + boom-expand ring burst */}
+      {/* VOYO Boot Loader — VOYO wordmark + 3 dots + boom-expand ring burst.
+          minDuration is 900ms — just enough to see the boom rings expand once
+          + the 220ms fade-out. Faster perceived boot, less standing around. */}
       {showSplash && (
-        <VoyoSplash onComplete={handleSplashComplete} minDuration={1500} />
+        <VoyoSplash onComplete={handleSplashComplete} minDuration={900} />
       )}
 
       {/* Dynamic Background based on current track (only for VOYO modes) */}

@@ -1192,6 +1192,28 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
             discoverTracks: mergedDiscover,
           });
 
+          // ── VOYO SPIRIT: AUTOPLAY ON FIRST LOAD ──────────────────────
+          // If we just populated hotTracks AND nothing is currently playing
+          // (cold start, no localStorage, OYO sees no history), pick the
+          // first OYO-sorted hot track and start playing. This is the
+          // "open the app, music starts" behaviour Dash explicitly asked
+          // for — it's part of the original Voyo spirit.
+          //
+          // Guarded by `currentTrack === null` so we never interrupt an
+          // existing playback. Fires exactly once on cold start.
+          const stateAfterMerge = get();
+          if (!stateAfterMerge.currentTrack && mergedHot.length > 0) {
+            const seedTrack = mergedHot[0];
+            devLog(`[VOYO] 🎵 Autoplay seed: ${seedTrack.artist} — ${seedTrack.title}`);
+            set({
+              currentTrack: seedTrack,
+              isPlaying: true,
+              progress: 0,
+              currentTime: 0,
+              seekPosition: null,
+            });
+          }
+
           const hotAdded = newHot.length;
           const discoverAdded = newDiscover.length;
           if (hotAdded > 0 || discoverAdded > 0) {

@@ -634,7 +634,9 @@ export const AudioPlayer = () => {
   }, []);
 
   // Compute master gain: preset × spatial compensation × volume
-  // Single source of truth — called from updateBoostPreset, updateVoyexSpatial, and volume effect
+  // Single source of truth — called from updateBoostPreset, updateVoyexSpatial,
+  // and volume effect. Ramped to avoid speaker pops on every preset/volume
+  // change. The 20ms ramp is short enough to feel instant.
   const applyMasterGain = () => {
     if (!gainNodeRef.current) return;
     const preset = currentProfileRef.current;
@@ -647,7 +649,15 @@ export const AudioPlayer = () => {
       if (voyexSpatial < 0 && si > 0) comp = 1 - si * 0.18;
       else if (voyexSpatial > 0 && si > 0) comp = 1 - si * 0.12;
     }
-    gainNodeRef.current.gain.value = baseGain * comp * vol;
+    const target = baseGain * comp * vol;
+    const ctx = audioContextRef.current;
+    if (ctx) {
+      const now = ctx.currentTime;
+      gainNodeRef.current.gain.cancelScheduledValues(now);
+      gainNodeRef.current.gain.setTargetAtTime(target, now, 0.02);
+    } else {
+      gainNodeRef.current.gain.value = target;
+    }
   };
 
   // Smooth volume fade-in for auto-resume (1.2s from silence to target)
@@ -688,25 +698,42 @@ export const AudioPlayer = () => {
   }, []);
 
   // Update preset dynamically — unified chain, all refs always exist
+  //
+  // CRITICAL: every AudioParam write below uses setTargetAtTime (20ms ramp)
+  // instead of direct `.value = X` assignment. Direct assignment to a running
+  // AudioParam causes audible clicks/pops because it discontinuously jumps the
+  // signal. This was the root cause of the "speaker crashes on interaction"
+  // bug Dash reported — every state update that re-fired this useEffect
+  // produced a click on the speakers.
   const updateBoostPreset = useCallback((preset: BoostPreset) => {
     if (!audioEnhancedRef.current) return;
     currentProfileRef.current = preset;
 
+    const ctx = audioContextRef.current;
+    const now = ctx ? ctx.currentTime : 0;
+    const RAMP = 0.02; // 20ms — fast enough to feel instant, smooth enough to never click
+
+    const ramp = (param: AudioParam | undefined | null, value: number) => {
+      if (!param || !ctx) return;
+      param.cancelScheduledValues(now);
+      param.setTargetAtTime(value, now, RAMP);
+    };
+
     const setMultibandTransparent = () => {
-      multibandLowGainRef.current && (multibandLowGainRef.current.gain.value = 1.0);
-      multibandMidGainRef.current && (multibandMidGainRef.current.gain.value = 1.0);
-      multibandHighGainRef.current && (multibandHighGainRef.current.gain.value = 1.0);
-      if (multibandLowCompRef.current) { multibandLowCompRef.current.threshold.value = 0; multibandLowCompRef.current.ratio.value = 1; }
-      if (multibandMidCompRef.current) { multibandMidCompRef.current.threshold.value = 0; multibandMidCompRef.current.ratio.value = 1; }
-      if (multibandHighCompRef.current) { multibandHighCompRef.current.threshold.value = 0; multibandHighCompRef.current.ratio.value = 1; }
+      ramp(multibandLowGainRef.current?.gain, 1.0);
+      ramp(multibandMidGainRef.current?.gain, 1.0);
+      ramp(multibandHighGainRef.current?.gain, 1.0);
+      if (multibandLowCompRef.current) { ramp(multibandLowCompRef.current.threshold, 0); ramp(multibandLowCompRef.current.ratio, 1); }
+      if (multibandMidCompRef.current) { ramp(multibandMidCompRef.current.threshold, 0); ramp(multibandMidCompRef.current.ratio, 1); }
+      if (multibandHighCompRef.current) { ramp(multibandHighCompRef.current.threshold, 0); ramp(multibandHighCompRef.current.ratio, 1); }
     };
 
     const setStandardEqNeutral = () => {
-      subBassFilterRef.current && (subBassFilterRef.current.gain.value = 0);
-      bassFilterRef.current && (bassFilterRef.current.gain.value = 0);
-      warmthFilterRef.current && (warmthFilterRef.current.gain.value = 0);
-      presenceFilterRef.current && (presenceFilterRef.current.gain.value = 0);
-      airFilterRef.current && (airFilterRef.current.gain.value = 0);
+      ramp(subBassFilterRef.current?.gain, 0);
+      ramp(bassFilterRef.current?.gain, 0);
+      ramp(warmthFilterRef.current?.gain, 0);
+      ramp(presenceFilterRef.current?.gain, 0);
+      ramp(airFilterRef.current?.gain, 0);
     };
 
     // 'off' = RAW AUDIO - everything transparent
@@ -714,8 +741,8 @@ export const AudioPlayer = () => {
       setMultibandTransparent();
       setStandardEqNeutral();
       harmonicExciterRef.current && (harmonicExciterRef.current.curve = null);
-      if (compressorRef.current) { compressorRef.current.threshold.value = 0; compressorRef.current.ratio.value = 1; }
-      stereoDelayRef.current && (stereoDelayRef.current.delayTime.value = 0);
+      if (compressorRef.current) { ramp(compressorRef.current.threshold, 0); ramp(compressorRef.current.ratio, 1); }
+      ramp(stereoDelayRef.current?.delayTime, 0);
       applyMasterGain();
       devLog('🎵 [VOYO] RAW mode - all processing bypassed');
       return;
@@ -725,30 +752,37 @@ export const AudioPlayer = () => {
 
     if (s.multiband) {
       // ── VOYEX: Multiband active, standard EQ neutral ──
-      multibandLowGainRef.current && (multibandLowGainRef.current.gain.value = s.low.gain);
-      multibandMidGainRef.current && (multibandMidGainRef.current.gain.value = s.mid.gain);
-      multibandHighGainRef.current && (multibandHighGainRef.current.gain.value = s.high.gain);
-      if (multibandLowCompRef.current) { multibandLowCompRef.current.threshold.value = s.low.threshold; multibandLowCompRef.current.ratio.value = s.low.ratio; }
-      if (multibandMidCompRef.current) { multibandMidCompRef.current.threshold.value = s.mid.threshold; multibandMidCompRef.current.ratio.value = s.mid.ratio; }
-      if (multibandHighCompRef.current) { multibandHighCompRef.current.threshold.value = s.high.threshold; multibandHighCompRef.current.ratio.value = s.high.ratio; }
+      ramp(multibandLowGainRef.current?.gain, s.low.gain);
+      ramp(multibandMidGainRef.current?.gain, s.mid.gain);
+      ramp(multibandHighGainRef.current?.gain, s.high.gain);
+      if (multibandLowCompRef.current) { ramp(multibandLowCompRef.current.threshold, s.low.threshold); ramp(multibandLowCompRef.current.ratio, s.low.ratio); }
+      if (multibandMidCompRef.current) { ramp(multibandMidCompRef.current.threshold, s.mid.threshold); ramp(multibandMidCompRef.current.ratio, s.mid.ratio); }
+      if (multibandHighCompRef.current) { ramp(multibandHighCompRef.current.threshold, s.high.threshold); ramp(multibandHighCompRef.current.ratio, s.high.ratio); }
       if (harmonicExciterRef.current) { harmonicExciterRef.current.curve = s.harmonicAmount > 0 ? makeHarmonicCurve(s.harmonicAmount) : null; }
       setStandardEqNeutral();
-      if (compressorRef.current) { compressorRef.current.threshold.value = 0; compressorRef.current.ratio.value = 1; } // Multiband handles compression
-      stereoDelayRef.current && (stereoDelayRef.current.delayTime.value = s.stereoWidth || 0);
+      if (compressorRef.current) { ramp(compressorRef.current.threshold, 0); ramp(compressorRef.current.ratio, 1); } // Multiband handles compression
+      ramp(stereoDelayRef.current?.delayTime, s.stereoWidth || 0);
     } else {
       // ── Standard presets: Multiband transparent, standard EQ active ──
       setMultibandTransparent();
       harmonicExciterRef.current && (harmonicExciterRef.current.curve = s.harmonicAmount > 0 ? makeHarmonicCurve(s.harmonicAmount) : null);
-      subBassFilterRef.current && (subBassFilterRef.current.frequency.value = s.subBassFreq); subBassFilterRef.current && (subBassFilterRef.current.gain.value = s.subBassGain);
-      bassFilterRef.current && (bassFilterRef.current.frequency.value = s.bassFreq); bassFilterRef.current && (bassFilterRef.current.gain.value = s.bassGain);
-      warmthFilterRef.current && (warmthFilterRef.current.frequency.value = s.warmthFreq); warmthFilterRef.current && (warmthFilterRef.current.gain.value = s.warmthGain);
-      presenceFilterRef.current && (presenceFilterRef.current.frequency.value = s.presenceFreq); presenceFilterRef.current && (presenceFilterRef.current.gain.value = s.presenceGain);
-      airFilterRef.current && (airFilterRef.current.frequency.value = s.airFreq); airFilterRef.current && (airFilterRef.current.gain.value = s.airGain);
+      // Frequency changes are NOT ramped — they're center-frequency tuning,
+      // not amplitude. Direct assignment is fine and avoids the brief gain
+      // dip that ramp would cause on filter retuning.
+      subBassFilterRef.current && (subBassFilterRef.current.frequency.value = s.subBassFreq); ramp(subBassFilterRef.current?.gain, s.subBassGain);
+      bassFilterRef.current && (bassFilterRef.current.frequency.value = s.bassFreq); ramp(bassFilterRef.current?.gain, s.bassGain);
+      warmthFilterRef.current && (warmthFilterRef.current.frequency.value = s.warmthFreq); ramp(warmthFilterRef.current?.gain, s.warmthGain);
+      presenceFilterRef.current && (presenceFilterRef.current.frequency.value = s.presenceFreq); ramp(presenceFilterRef.current?.gain, s.presenceGain);
+      airFilterRef.current && (airFilterRef.current.frequency.value = s.airFreq); ramp(airFilterRef.current?.gain, s.airGain);
       if (compressorRef.current) {
-        compressorRef.current.threshold.value = s.compressor.threshold; compressorRef.current.ratio.value = s.compressor.ratio;
-        compressorRef.current.knee.value = s.compressor.knee; compressorRef.current.attack.value = s.compressor.attack; compressorRef.current.release.value = s.compressor.release;
+        ramp(compressorRef.current.threshold, s.compressor.threshold);
+        ramp(compressorRef.current.ratio, s.compressor.ratio);
+        // knee/attack/release: structural, set once via direct assign (rare change)
+        compressorRef.current.knee.value = s.compressor.knee;
+        compressorRef.current.attack.value = s.compressor.attack;
+        compressorRef.current.release.value = s.compressor.release;
       }
-      stereoDelayRef.current && (stereoDelayRef.current.delayTime.value = s.stereoWidth || 0);
+      ramp(stereoDelayRef.current?.delayTime, s.stereoWidth || 0);
     }
 
     applyMasterGain();
@@ -757,46 +791,52 @@ export const AudioPlayer = () => {
 
   // VOYEX INTENSITY SLIDER — full mastering + spatial control
   // Center = clean VOYEX baseline. Extremes = full experience.
-  // No caps. No protection. The slider IS the user's control.
+  //
+  // Every AudioParam write is a setTargetAtTime ramp (20ms) so the slider can
+  // be dragged smoothly without speaker clicks. Direct `.value =` was causing
+  // pops on every drag step — gone now.
   const updateVoyexSpatial = useCallback((value: number) => {
     if (!spatialEnhancedRef.current) return;
     const v = Math.max(-100, Math.min(100, value));
     const i = Math.abs(v) / 100; // 0→1 intensity
 
+    const ctx = audioContextRef.current;
+    const now = ctx ? ctx.currentTime : 0;
+    const RAMP = 0.02;
+    const ramp = (param: AudioParam | undefined | null, value: number) => {
+      if (!param || !ctx) return;
+      param.cancelScheduledValues(now);
+      param.setTargetAtTime(value, now, RAMP);
+    };
+
     // ══════════════════════════════════════════════════════
     // LAYER 1: MULTIBAND MASTERING CHARACTER
-    // The actual music changes tone — not just the room
     // ══════════════════════════════════════════════════════
-    if (multibandLowGainRef.current && multibandMidGainRef.current && multibandHighGainRef.current) {
-      if (v < 0) {
-        // DIVE mastering: massive warm bass, scooped mids, rolled highs
-        multibandLowGainRef.current.gain.value = 1.3 + (i * 0.35);  // 1.3 → 1.65
-        multibandMidGainRef.current.gain.value = 1.1 - (i * 0.05);  // 1.1 → 1.05 (slight scoop)
-        multibandHighGainRef.current.gain.value = 1.25 - (i * 0.3); // 1.25 → 0.95
-      } else if (v > 0) {
-        // IMMERSE mastering: crystal highs, present vocals, solid bass
-        multibandLowGainRef.current.gain.value = 1.3;                // anchor
-        multibandMidGainRef.current.gain.value = 1.1 + (i * 0.2);   // 1.1 → 1.3
-        multibandHighGainRef.current.gain.value = 1.25 + (i * 0.3); // 1.25 → 1.55
-      } else {
-        multibandLowGainRef.current.gain.value = 1.3;
-        multibandMidGainRef.current.gain.value = 1.1;
-        multibandHighGainRef.current.gain.value = 1.25;
-      }
+    if (v < 0) {
+      // DIVE mastering: massive warm bass, scooped mids, rolled highs
+      ramp(multibandLowGainRef.current?.gain, 1.3 + (i * 0.35));  // 1.3 → 1.65
+      ramp(multibandMidGainRef.current?.gain, 1.1 - (i * 0.05));  // 1.1 → 1.05
+      ramp(multibandHighGainRef.current?.gain, 1.25 - (i * 0.3)); // 1.25 → 0.95
+    } else if (v > 0) {
+      // IMMERSE mastering: crystal highs, present vocals, solid bass
+      ramp(multibandLowGainRef.current?.gain, 1.3);
+      ramp(multibandMidGainRef.current?.gain, 1.1 + (i * 0.2));
+      ramp(multibandHighGainRef.current?.gain, 1.25 + (i * 0.3));
+    } else {
+      ramp(multibandLowGainRef.current?.gain, 1.3);
+      ramp(multibandMidGainRef.current?.gain, 1.1);
+      ramp(multibandHighGainRef.current?.gain, 1.25);
     }
 
     // ══════════════════════════════════════════════════════
-    // LAYER 2: STEREO FIELD
-    // DIV narrows (intimate), IMM widens (open)
+    // LAYER 2: STEREO FIELD (DIV narrows / IMM widens)
     // ══════════════════════════════════════════════════════
-    if (stereoDelayRef.current) {
-      if (v < 0) {
-        stereoDelayRef.current.delayTime.value = 0.015 - (i * 0.012); // 15ms → 3ms (intimate)
-      } else if (v > 0) {
-        stereoDelayRef.current.delayTime.value = 0.015 + (i * 0.015); // 15ms → 30ms (wide open)
-      } else {
-        stereoDelayRef.current.delayTime.value = 0.015; // VOYEX default
-      }
+    if (v < 0) {
+      ramp(stereoDelayRef.current?.delayTime, 0.015 - (i * 0.012)); // 15ms → 3ms
+    } else if (v > 0) {
+      ramp(stereoDelayRef.current?.delayTime, 0.015 + (i * 0.015)); // 15ms → 30ms
+    } else {
+      ramp(stereoDelayRef.current?.delayTime, 0.015);
     }
 
     // ══════════════════════════════════════════════════════
@@ -804,65 +844,55 @@ export const AudioPlayer = () => {
     // ══════════════════════════════════════════════════════
     if (v === 0) {
       // Center = clean VOYEX baseline, spatial bypass
-      crossfeedLeftGainRef.current && (crossfeedLeftGainRef.current.gain.value = 0);
-      crossfeedRightGainRef.current && (crossfeedRightGainRef.current.gain.value = 0);
-      panDepthGainRef.current && (panDepthGainRef.current.gain.value = 0);
-      haasDelayRef.current && (haasDelayRef.current.delayTime.value = 0);
+      ramp(crossfeedLeftGainRef.current?.gain, 0);
+      ramp(crossfeedRightGainRef.current?.gain, 0);
+      ramp(panDepthGainRef.current?.gain, 0);
+      ramp(haasDelayRef.current?.delayTime, 0);
+      // Frequency change = no audible click on filters, can stay direct
       diveLowPassRef.current && (diveLowPassRef.current.frequency.value = 20000);
-      diveReverbWetRef.current && (diveReverbWetRef.current.gain.value = 0);
-      immerseReverbWetRef.current && (immerseReverbWetRef.current.gain.value = 0);
-      subHarmonicGainRef.current && (subHarmonicGainRef.current.gain.value = 0);
-      applyMasterGain(); // Restore baseline with volume
+      ramp(diveReverbWetRef.current?.gain, 0);
+      ramp(immerseReverbWetRef.current?.gain, 0);
+      ramp(subHarmonicGainRef.current?.gain, 0);
+      applyMasterGain();
       devLog('🎛️ [VOYO] INTENSITY: CENTER (baseline)');
       return;
     }
 
     if (v < 0) {
       // ── DIVE: swallowed by sound ──
-      // Full crossfeed blend, dark lush reverb, physical sub-bass, warm rolloff
-      crossfeedLeftGainRef.current && (crossfeedLeftGainRef.current.gain.value = i * 0.45);
-      crossfeedRightGainRef.current && (crossfeedRightGainRef.current.gain.value = i * 0.45);
-      // Low-pass: 20kHz → 7kHz (warm dark, vocals still clear)
+      ramp(crossfeedLeftGainRef.current?.gain, i * 0.45);
+      ramp(crossfeedRightGainRef.current?.gain, i * 0.45);
       diveLowPassRef.current && (diveLowPassRef.current.frequency.value = 20000 - (i * 13000));
-      // Dark convolver reverb (natural room, not metallic)
-      diveReverbWetRef.current && (diveReverbWetRef.current.gain.value = i * 0.38);
-      immerseReverbWetRef.current && (immerseReverbWetRef.current.gain.value = 0);
-      // Physical sub-bass weight
-      subHarmonicGainRef.current && (subHarmonicGainRef.current.gain.value = i * 0.25);
-      // IMMERSE spatial off
-      panDepthGainRef.current && (panDepthGainRef.current.gain.value = 0);
-      haasDelayRef.current && (haasDelayRef.current.delayTime.value = 0);
-      applyMasterGain(); // Factors in compensation + volume
+      ramp(diveReverbWetRef.current?.gain, i * 0.38);
+      ramp(immerseReverbWetRef.current?.gain, 0);
+      ramp(subHarmonicGainRef.current?.gain, i * 0.25);
+      ramp(panDepthGainRef.current?.gain, 0);
+      ramp(haasDelayRef.current?.delayTime, 0);
+      applyMasterGain();
       devLog(`🎛️ [VOYO] DIVE ${Math.round(i * 100)}%`);
     } else {
       // ── IMMERSE: music all around you ──
       // 0-80%: crisp, wide, present. 80-100%: surround opens up.
-      // Continuous curve — no discontinuity, no clicks.
-
       let panDepth: number;
       let haas: number;
       if (i <= 0.8) {
-        panDepth = i * 0.3125;            // 0 → 0.25 (gentle movement from ~30%)
-        haas = i * 0.003;                 // 0 → 2.4ms
+        panDepth = i * 0.3125;
+        haas = i * 0.003;
       } else {
-        // Surround zone — smooth ramp, same value at boundary
-        const s = (i - 0.8) / 0.2;       // 0→1 in last 20%
-        panDepth = 0.25 + (s * 0.15);     // 0.25 → 0.40
-        haas = 0.0024 + (s * 0.002);      // 2.4ms → 4.4ms
+        const s = (i - 0.8) / 0.2;
+        panDepth = 0.25 + (s * 0.15);
+        haas = 0.0024 + (s * 0.002);
       }
 
-      panDepthGainRef.current && (panDepthGainRef.current.gain.value = panDepth);
-      haasDelayRef.current && (haasDelayRef.current.delayTime.value = haas);
+      ramp(panDepthGainRef.current?.gain, panDepth);
+      ramp(haasDelayRef.current?.delayTime, haas);
       diveLowPassRef.current && (diveLowPassRef.current.frequency.value = 20000);
-      // Bright convolver reverb (airy, expansive)
-      immerseReverbWetRef.current && (immerseReverbWetRef.current.gain.value = i * 0.30);
-      diveReverbWetRef.current && (diveReverbWetRef.current.gain.value = 0);
-      // Bass presence
-      subHarmonicGainRef.current && (subHarmonicGainRef.current.gain.value = i * 0.15);
-      // DIVE off
-      crossfeedLeftGainRef.current && (crossfeedLeftGainRef.current.gain.value = 0);
-      crossfeedRightGainRef.current && (crossfeedRightGainRef.current.gain.value = 0);
-      applyMasterGain(); // Factors in compensation + volume
+      ramp(immerseReverbWetRef.current?.gain, i * 0.30);
+      ramp(diveReverbWetRef.current?.gain, 0);
+      ramp(subHarmonicGainRef.current?.gain, i * 0.15);
+      ramp(crossfeedLeftGainRef.current?.gain, 0);
+      ramp(crossfeedRightGainRef.current?.gain, 0);
+      applyMasterGain();
       devLog(`🎛️ [VOYO] IMMERSE ${Math.round(i * 100)}%${i > 0.8 ? ' [SURROUND]' : ''}`);
     }
   }, []);
