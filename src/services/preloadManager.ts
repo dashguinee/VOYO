@@ -188,7 +188,15 @@ export async function preloadNextTrack(
     devLog('🔮 [Preload] Not in cache/R2, getting YouTube stream URL');
 
     try {
-      const streamResponse = await fetch(`${EDGE_WORKER_URL}/stream?v=${normalizedId}`);
+      // Pass the AbortSignal so rapid track-skips actually CANCEL the in-flight
+      // fetch instead of leaving zombie requests draining the connection pool.
+      // Without this, ~5-10 rapid skips fill the browser's per-host connection
+      // limit and playback halts entirely until GC + TCP timeouts recover
+      // (~60s of "rest" — exactly the symptom we were chasing).
+      const streamResponse = await fetch(
+        `${EDGE_WORKER_URL}/stream?v=${normalizedId}`,
+        { signal },
+      );
 
       if (signal.aborted) return null;
 

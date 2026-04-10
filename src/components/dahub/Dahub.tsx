@@ -1058,17 +1058,36 @@ export function Dahub({ userId: propsUserId, userName: propsUserName, userAvatar
 
   const loadData = useCallback(async () => {
     setIsLoading(true);
-    const [friendsData, sharedData, conversationsData, unread] = await Promise.all([
-      friendsAPI.getFriends(userId),
-      friendsAPI.getSharedAccountMembers(userId),
-      messagesAPI.getConversations(userId),
-      messagesAPI.getUnreadCount(userId)
-    ]);
-    setFriends(friendsData);
-    setSharedMembers(sharedData);
-    setConversations(conversationsData);
-    setUnreadCount(unread);
-    setIsLoading(false);
+    try {
+      // Promise.allSettled — if one of the four backends is down (e.g. the
+      // Command Center DB that powers getSharedAccountMembers), the other
+      // three still hydrate and the user lands on a working dahub. Previously
+      // this was Promise.all + no try/catch, which left the page frozen on a
+      // spinner forever the moment any one call threw.
+      const [friendsRes, sharedRes, conversationsRes, unreadRes] = await Promise.allSettled([
+        friendsAPI.getFriends(userId),
+        friendsAPI.getSharedAccountMembers(userId),
+        messagesAPI.getConversations(userId),
+        messagesAPI.getUnreadCount(userId),
+      ]);
+
+      if (friendsRes.status === 'fulfilled') setFriends(friendsRes.value);
+      else console.warn('[dahub] getFriends failed:', friendsRes.reason);
+
+      if (sharedRes.status === 'fulfilled') setSharedMembers(sharedRes.value);
+      else console.warn('[dahub] getSharedAccountMembers failed:', sharedRes.reason);
+
+      if (conversationsRes.status === 'fulfilled') setConversations(conversationsRes.value);
+      else console.warn('[dahub] getConversations failed:', conversationsRes.reason);
+
+      if (unreadRes.status === 'fulfilled') setUnreadCount(unreadRes.value);
+      else console.warn('[dahub] getUnreadCount failed:', unreadRes.reason);
+    } catch (err) {
+      // allSettled never throws, but defensive in case React batching surprises us.
+      console.error('[dahub] loadData unexpected:', err);
+    } finally {
+      setIsLoading(false);
+    }
   }, [userId]);
 
   useEffect(() => {
