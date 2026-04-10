@@ -14,6 +14,7 @@
  */
 
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { devLog, devWarn } from '../utils/logger';
 
 // ============================================
 // TYPES
@@ -63,7 +64,7 @@ class FeedContentService {
   private pendingUpdates: Set<string> = new Set();
 
   constructor() {
-    console.log('[FeedContentService] Initialized');
+    devLog('[FeedContentService] Initialized');
   }
 
   /**
@@ -108,7 +109,7 @@ class FeedContentService {
    */
   async cacheFeedContent(content: FeedContent): Promise<boolean> {
     if (!supabase || !isSupabaseConfigured) {
-      console.log('[FeedContentService] Supabase not configured, skipping cache');
+      devLog('[FeedContentService] Supabase not configured, skipping cache');
       return false;
     }
 
@@ -146,7 +147,7 @@ class FeedContentService {
         this.localCache.set(content.track_id, data as FeedContentRow);
       }
 
-      console.log(`[FeedContentService] Cached: ${content.track_id} (${content.title})`);
+      devLog(`[FeedContentService] Cached: ${content.track_id} (${content.title})`);
       return true;
     } catch (err) {
       console.error('[FeedContentService] Cache error:', err);
@@ -187,7 +188,7 @@ class FeedContentService {
           track_id_param: trackId,
         });
       } catch (err) {
-        console.warn('[FeedContentService] Access update error:', err);
+        devWarn('[FeedContentService] Access update error:', err);
       }
     }, 1000); // 1 second debounce
   }
@@ -280,7 +281,7 @@ class FeedContentService {
         }
       }
 
-      console.log(`[FeedContentService] Batch cached ${count || data?.length || 0} items`);
+      devLog(`[FeedContentService] Batch cached ${count || data?.length || 0} items`);
       return count || data?.length || 0;
     } catch (err) {
       console.error('[FeedContentService] Batch cache error:', err);
@@ -385,7 +386,7 @@ class FeedContentService {
    */
   clearLocalCache(): void {
     this.localCache.clear();
-    console.log('[FeedContentService] Local cache cleared');
+    devLog('[FeedContentService] Local cache cleared');
   }
 
   /**

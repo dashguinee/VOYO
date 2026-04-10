@@ -34,6 +34,7 @@ import {
   VIBE_PROFILES,
   getCompatibleMoods
 } from '../knowledge/MoodTags';
+import { devLog, devWarn } from '../utils/logger';
 
 // ============================================
 // CONFIGURATION
@@ -128,7 +129,7 @@ class VoyoBrain {
   private isProcessing: boolean = false;
 
   constructor() {
-    console.log('[Brain] VoyoBrain initialized');
+    devLog('[Brain] VoyoBrain initialized');
     this.registerWithBuffer();
   }
 
@@ -142,17 +143,17 @@ class VoyoBrain {
 
   async curate(summary: SignalSummary): Promise<BrainOutput | null> {
     if (this.isProcessing) {
-      console.log('[Brain] Already processing, skipping');
+      devLog('[Brain] Already processing, skipping');
       return this.lastOutput;
     }
 
     if (!GEMINI_API_KEY) {
-      console.warn('[Brain] No Gemini API key, using fallback');
+      devWarn('[Brain] No Gemini API key, using fallback');
       return this.fallbackCuration(summary);
     }
 
     this.isProcessing = true;
-    console.log('[Brain] Starting curation with', summary.signalCount, 'signals');
+    devLog('[Brain] Starting curation with', summary.signalCount, 'signals');
 
     try {
       // Build context from signals and stores
@@ -165,7 +166,7 @@ class VoyoBrain {
       const validated = await this.validateOutput(output);
 
       this.lastOutput = validated;
-      console.log('[Brain] Curation complete:', validated.sessionName);
+      devLog('[Brain] Curation complete:', validated.sessionName);
 
       return validated;
     } catch (err) {
@@ -496,7 +497,7 @@ CRITICAL RULES:
   private async validateOutput(output: BrainOutput): Promise<BrainOutput> {
     // Ensure all required fields exist
     if (!output.mainQueue?.tracks || output.mainQueue.tracks.length === 0) {
-      console.warn('[Brain] Empty main queue, adding fallback');
+      devWarn('[Brain] Empty main queue, adding fallback');
       output.mainQueue = {
         tracks: await this.getFallbackTracks(MAIN_QUEUE_SIZE),
         strategy: 'Fallback curation'
@@ -505,7 +506,7 @@ CRITICAL RULES:
 
     // Ensure shadows exist
     if (!output.shadows || output.shadows.length < 5) {
-      console.warn('[Brain] Missing shadows, filling with fallbacks');
+      devWarn('[Brain] Missing shadows, filling with fallbacks');
       output.shadows = await this.getFallbackShadows();
     }
 
@@ -551,7 +552,7 @@ CRITICAL RULES:
   // ============================================
 
   private async fallbackCuration(summary: SignalSummary): Promise<BrainOutput> {
-    console.log('[Brain] Using fallback curation');
+    devLog('[Brain] Using fallback curation');
 
     const mainTracks = await this.getFallbackTracks(MAIN_QUEUE_SIZE);
     const shadows = await this.getFallbackShadows();
@@ -610,7 +611,7 @@ CRITICAL RULES:
       });
 
       if (tracks.length >= count) {
-        console.log('[Brain] Fallback using Knowledge Store:', tracks.length, 'tracks');
+        devLog('[Brain] Fallback using Knowledge Store:', tracks.length, 'tracks');
         return tracks;
       }
     } catch {

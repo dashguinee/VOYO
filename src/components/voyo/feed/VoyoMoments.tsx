@@ -17,6 +17,7 @@ import { useMoments, CategoryAxis, NavAction, CATEGORY_PRESETS } from '../../../
 import type { Moment } from '../../../services/momentsService';
 import { AnimatedArtCard } from './AnimatedArtCard';
 import { DynamicVignette } from './DynamicVignette';
+import { devWarn } from '../../../utils/logger';
 
 // ============================================
 // CONSTANTS & HELPERS
@@ -388,7 +389,7 @@ const MomentCard = memo(({ moment, isOyed, onOye, isActive, isMuted, onToggleMut
 
   const handleVideoError = useCallback(() => {
     setVideoError(true);
-    console.warn(`[MomentCard] Video load failed for ${moment.source_id}, falling back`);
+    devWarn(`[MomentCard] Video load failed for ${moment.source_id}, falling back`);
   }, [moment.source_id]);
 
   return (

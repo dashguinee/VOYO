@@ -24,6 +24,7 @@ import { useIntentStore, VibeMode } from '../store/intentStore';
 import { usePreferenceStore } from '../store/preferenceStore';
 import { useReactionStore } from '../store/reactionStore';
 import { Track } from '../types';
+import { devLog } from '../utils/logger';
 
 // ============================================
 // TYPES
@@ -81,7 +82,7 @@ function getTrackInfo(track: Track | null): { trackId: string; videoId: string; 
 // ============================================
 
 function setupPlayerStoreIntegration(): () => void {
-  console.log('[Brain] Setting up PlayerStore integration');
+  devLog('[Brain] Setting up PlayerStore integration');
 
   return usePlayerStore.subscribe((newState, prevState) => {
     const newTrack = newState.currentTrack;
@@ -194,7 +195,7 @@ function setupPlayerStoreIntegration(): () => void {
 // ============================================
 
 function setupIntentStoreIntegration(): () => void {
-  console.log('[Brain] Setting up IntentStore integration');
+  devLog('[Brain] Setting up IntentStore integration');
 
   // Initialize last mode settings
   const modes: VibeMode[] = ['afro-heat', 'chill-vibes', 'party-mode', 'late-night', 'workout', 'random-mixer'];
@@ -235,7 +236,7 @@ function setupIntentStoreIntegration(): () => void {
 // ============================================
 
 function setupPreferenceStoreIntegration(): () => void {
-  console.log('[Brain] Setting up PreferenceStore integration');
+  devLog('[Brain] Setting up PreferenceStore integration');
 
   return usePreferenceStore.subscribe((newState, prevState) => {
     // Detect explicit likes
@@ -259,7 +260,7 @@ function setupPreferenceStoreIntegration(): () => void {
 // ============================================
 
 function setupReactionStoreIntegration(): () => void {
-  console.log('[Brain] Setting up ReactionStore integration');
+  devLog('[Brain] Setting up ReactionStore integration');
 
   return useReactionStore.subscribe((newState, prevState) => {
     // Detect new reactions using Map
@@ -306,7 +307,7 @@ function setupReactionStoreIntegration(): () => void {
 // ============================================
 
 function setupContextTracking(): () => void {
-  console.log('[Brain] Setting up context tracking');
+  devLog('[Brain] Setting up context tracking');
 
   // Track time of day
   const updateTimeContext = () => {
@@ -335,17 +336,17 @@ function setupContextTracking(): () => void {
 // ============================================
 
 function setupBrainOutputHandler(): void {
-  console.log('[Brain] Setting up Brain output handler');
+  devLog('[Brain] Setting up Brain output handler');
 
   // When Brain produces output, load it into executor
   signalBuffer.onBrainTrigger(async (summary) => {
-    console.log('[Brain] Triggering curation with', summary.signalCount, 'signals');
+    devLog('[Brain] Triggering curation with', summary.signalCount, 'signals');
 
     try {
       const output = await voyoBrain.forceCurate();
       if (output) {
         sessionExecutor.loadBrainOutput(output);
-        console.log('[Brain] Loaded session:', output.sessionName);
+        devLog('[Brain] Loaded session:', output.sessionName);
       }
     } catch (err) {
       console.error('[Brain] Curation failed:', err);
@@ -364,11 +365,11 @@ let unsubscribers: Array<() => void> = [];
  */
 export function initializeBrainIntegration(): void {
   if (state.initialized) {
-    console.log('[Brain] Already initialized');
+    devLog('[Brain] Already initialized');
     return;
   }
 
-  console.log('[Brain] Initializing integration...');
+  devLog('[Brain] Initializing integration...');
 
   // Setup all integrations
   unsubscribers.push(setupPlayerStoreIntegration());
@@ -385,14 +386,14 @@ export function initializeBrainIntegration(): void {
   state.sessionStartTime = Date.now();
   state.initialized = true;
 
-  console.log('[Brain] Integration complete, session:', signals.getSessionId());
+  devLog('[Brain] Integration complete, session:', signals.getSessionId());
 }
 
 /**
  * Cleanup Brain integration
  */
 export function cleanupBrainIntegration(): void {
-  console.log('[Brain] Cleaning up integration');
+  devLog('[Brain] Cleaning up integration');
 
   // Unsubscribe from all stores
   unsubscribers.forEach(unsub => unsub());

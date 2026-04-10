@@ -14,6 +14,7 @@
 import { useRef, useCallback, useEffect } from 'react';
 import { usePlayerStore } from '../store/playerStore';
 import { getYouTubeThumbnail } from '../data/tracks';
+import { devLog, devWarn } from '../utils/logger';
 
 // PiP window size (card-like ratio)
 const PIP_SIZE = 320;
@@ -53,10 +54,10 @@ export function useMiniPiP() {
     // Handle PiP window close
     video.addEventListener('leavepictureinpicture', () => {
       isActiveRef.current = false;
-      console.log('[VOYO PiP] Mini player closed');
+      devLog('[VOYO PiP] Mini player closed');
     });
 
-    console.log('[VOYO PiP] Initialized');
+    devLog('[VOYO PiP] Initialized');
   }, []);
 
   // Draw VOYO card on canvas (album art + gradient overlay + title/artist)
@@ -150,18 +151,18 @@ export function useMiniPiP() {
     ctx.textBaseline = 'middle';
     ctx.fillText('VOYO', 12 + badgeWidth / 2, 12 + badgeHeight / 2);
 
-    console.log('[VOYO PiP] Card updated:', trackTitle);
+    devLog('[VOYO PiP] Card updated:', trackTitle);
   }, [currentTrack]);
 
   // Enter PiP mode
   const enterPiP = useCallback(async () => {
     if (!isSupported()) {
-      console.log('[VOYO PiP] Not supported');
+      devLog('[VOYO PiP] Not supported');
       return false;
     }
 
     if (isActiveRef.current) {
-      console.log('[VOYO PiP] Already active');
+      devLog('[VOYO PiP] Already active');
       return true;
     }
 
@@ -180,10 +181,10 @@ export function useMiniPiP() {
       await videoRef.current.requestPictureInPicture();
       isActiveRef.current = true;
 
-      console.log('[VOYO PiP] Entered mini player mode');
+      devLog('[VOYO PiP] Entered mini player mode');
       return true;
     } catch (err) {
-      console.warn('[VOYO PiP] Failed to enter:', err);
+      devWarn('[VOYO PiP] Failed to enter:', err);
       return false;
     }
   }, [isSupported, initElements, drawAlbumArt, currentTrack]);
@@ -197,7 +198,7 @@ export function useMiniPiP() {
         await document.exitPictureInPicture();
       }
       isActiveRef.current = false;
-      console.log('[VOYO PiP] Exited mini player mode');
+      devLog('[VOYO PiP] Exited mini player mode');
     } catch (err) {
       // Ignore errors
     }

@@ -7,6 +7,8 @@
  * This is the PRIMARY lyrics source - best coverage for African music.
  */
 
+import { devLog, devWarn } from '../utils/logger';
+
 const LYRICS_API_URL = import.meta.env.VITE_LYRICS_API_URL || 'http://localhost:3099';
 
 export interface SyncedLine {
@@ -48,7 +50,7 @@ export async function fetchByYoutubeId(
 
     return await response.json();
   } catch (error) {
-    console.warn('[SyncedLyrics] Backend not available, using fallback');
+    devWarn('[SyncedLyrics] Backend not available, using fallback');
     return {
       found: false,
       youtube_id: youtubeId,
@@ -79,7 +81,7 @@ export async function searchLyrics(query: string): Promise<SyncedLyricsResult> {
 
     return await response.json();
   } catch (error) {
-    console.warn('[SyncedLyrics] Search failed:', error);
+    devWarn('[SyncedLyrics] Search failed:', error);
     return {
       found: false,
       youtube_id: '',
@@ -123,4 +125,4 @@ export function toLRC(result: SyncedLyricsResult): string {
     .join('\n');
 }
 
-console.log('[SyncedLyrics] Service loaded - Community lyrics via syncedlyrics');
+devLog('[SyncedLyrics] Service loaded - Community lyrics via syncedlyrics');

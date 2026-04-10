@@ -13,6 +13,7 @@ import { searchMusic, SearchResult } from './api';
 import { useTrackPoolStore } from '../store/trackPoolStore';
 import { getThumb } from '../utils/thumbnail';
 import { safeAddToPool } from './trackVerifier';
+import { devLog, devWarn } from '../utils/logger';
 
 // Curator Configuration
 const CURATOR_TRIGGER_TRACKS = 5;  // Curate after every 5 tracks
@@ -114,7 +115,7 @@ const BOOTSTRAP_QUERIES = [
 export function clearStalePool(): void {
   // Clear the persisted pool in localStorage
   localStorage.removeItem('voyo-track-pool');
-  console.log('[Pool Curator] 🗑️ Cleared stale pool data');
+  devLog('[Pool Curator] 🗑️ Cleared stale pool data');
 }
 
 /**
@@ -126,7 +127,7 @@ export async function seedPool(): Promise<number> {
   const { TRACKS } = await import('../data/tracks');
   const poolStore = useTrackPoolStore.getState();
 
-  console.log('[Pool Curator] 🌱 Seeding pool from static data...');
+  devLog('[Pool Curator] 🌱 Seeding pool from static data...');
 
   let added = 0;
   for (const track of TRACKS) {
@@ -151,7 +152,7 @@ export async function seedPool(): Promise<number> {
     added++;
   }
 
-  console.log(`[Pool Curator] 🌱 Seeded ${added} tracks from static data`);
+  devLog(`[Pool Curator] 🌱 Seeded ${added} tracks from static data`);
   triggerRecommendationRefresh();
 
   return added;
@@ -162,7 +163,7 @@ export async function seedPool(): Promise<number> {
  */
 export async function bootstrapPool(forceFresh: boolean = false): Promise<number> {
   if (isBootstrapped && !forceFresh) {
-    console.log('[Pool Curator] Already bootstrapped');
+    devLog('[Pool Curator] Already bootstrapped');
     return 0;
   }
 
@@ -171,7 +172,7 @@ export async function bootstrapPool(forceFresh: boolean = false): Promise<number
     clearStalePool();
   }
 
-  console.log('[Pool Curator] 🚀 Bootstrapping pool with fresh tracks...');
+  devLog('[Pool Curator] 🚀 Bootstrapping pool with fresh tracks...');
 
   const poolStore = useTrackPoolStore.getState();
   let totalAdded = 0;
@@ -192,17 +193,17 @@ export async function bootstrapPool(forceFresh: boolean = false): Promise<number
       }
 
       totalAdded += addedFromQuery;
-      console.log(`[Pool Curator] ✅ "${query}" → ${addedFromQuery}/${tracks.length} tracks (validated)`);
+      devLog(`[Pool Curator] ✅ "${query}" → ${addedFromQuery}/${tracks.length} tracks (validated)`);
 
       // Small delay to avoid hammering the API
       await new Promise(r => setTimeout(r, 200));
     } catch (error) {
-      console.warn(`[Pool Curator] Query failed: "${query}"`, error);
+      devWarn(`[Pool Curator] Query failed: "${query}"`, error);
     }
   }
 
   isBootstrapped = true;
-  console.log(`[Pool Curator] 🎉 Bootstrap complete: ${totalAdded} fresh tracks in pool`);
+  devLog(`[Pool Curator] 🎉 Bootstrap complete: ${totalAdded} fresh tracks in pool`);
 
   // Trigger recommendation refresh
   triggerRecommendationRefresh();
@@ -304,7 +305,7 @@ export function recordTrackInSession(
     currentSession.tracks = currentSession.tracks.slice(-10);
   }
 
-  console.log(`[Pool Curator] Session: ${currentSession.tracks.length} tracks`);
+  devLog(`[Pool Curator] Session: ${currentSession.tracks.length} tracks`);
 
   // Check if we should expand the pool
   checkCurationTrigger();
@@ -335,7 +336,7 @@ export async function expandPool(): Promise<number> {
   // Build smart queries based on recent tracks
   const queries = buildSmartQueries();
 
-  console.log('[Pool Curator] 🔄 Expanding pool with:', queries);
+  devLog('[Pool Curator] 🔄 Expanding pool with:', queries);
 
   const poolStore = useTrackPoolStore.getState();
   let totalAdded = 0;
@@ -351,11 +352,11 @@ export async function expandPool(): Promise<number> {
         if (added) totalAdded++;
       }
     } catch (error) {
-      console.warn(`[Pool Curator] Expansion query failed: "${query}"`);
+      devWarn(`[Pool Curator] Expansion query failed: "${query}"`);
     }
   }
 
-  console.log(`[Pool Curator] ✅ Expanded pool with ${totalAdded} validated tracks`);
+  devLog(`[Pool Curator] ✅ Expanded pool with ${totalAdded} validated tracks`);
 
   triggerRecommendationRefresh();
 
@@ -430,7 +431,7 @@ export async function curateSection(section: 'west-african' | 'classics' | 'tren
     : section === 'classics' ? 'classic'
     : 'trending';
 
-  console.log(`[Pool Curator] 🎯 Curating "${section}" section...`);
+  devLog(`[Pool Curator] 🎯 Curating "${section}" section...`);
 
   let totalAdded = 0;
 
@@ -447,14 +448,14 @@ export async function curateSection(section: 'west-african' | 'classics' | 'tren
         if (added) totalAdded++;
       }
 
-      console.log(`[Pool Curator] ✅ "${query}" → added tracks`);
+      devLog(`[Pool Curator] ✅ "${query}" → added tracks`);
       await new Promise(r => setTimeout(r, 300));
     } catch (error) {
-      console.warn(`[Pool Curator] Section query failed: "${query}"`);
+      devWarn(`[Pool Curator] Section query failed: "${query}"`);
     }
   }
 
-  console.log(`[Pool Curator] 🎉 "${section}" section: ${totalAdded} fresh tracks`);
+  devLog(`[Pool Curator] 🎉 "${section}" section: ${totalAdded} fresh tracks`);
   triggerRecommendationRefresh();
 
   return totalAdded;
@@ -464,13 +465,13 @@ export async function curateSection(section: 'west-african' | 'classics' | 'tren
  * Curate ALL sections (called on app load for fresh content)
  */
 export async function curateAllSections(): Promise<void> {
-  console.log('[Pool Curator] 🚀 Curating all sections...');
+  devLog('[Pool Curator] 🚀 Curating all sections...');
 
   await curateSection('west-african');
   await curateSection('classics');
   await curateSection('trending');
 
-  console.log('[Pool Curator] ✅ All sections curated');
+  devLog('[Pool Curator] ✅ All sections curated');
 }
 
 /**
@@ -509,17 +510,17 @@ setTimeout(async () => {
 
   // If pool is empty or very small, seed it first
   if (stats.hot < 10) {
-    console.log(`[Pool Curator] Pool empty/small (${stats.hot}), seeding...`);
+    devLog(`[Pool Curator] Pool empty/small (${stats.hot}), seeding...`);
     await seedPool();
   }
 
   // Check again after seed
   const newStats = poolStore.getPoolStats();
   if (newStats.hot < 30) {
-    console.log(`[Pool Curator] Pool has ${newStats.hot} tracks, expanding with searches...`);
+    devLog(`[Pool Curator] Pool has ${newStats.hot} tracks, expanding with searches...`);
     bootstrapPool(); // This does API searches to add more variety
   } else {
-    console.log(`[Pool Curator] Pool has ${newStats.hot} tracks, ready`);
+    devLog(`[Pool Curator] Pool has ${newStats.hot} tracks, ready`);
     isBootstrapped = true;
   }
 }, 1500);
@@ -543,7 +544,7 @@ if (typeof window !== 'undefined') {
     curateTrending: () => curateSection('trending'),
     curateAll: curateAllSections,
   };
-  console.log('🎵 [Pool Curator] Debug: voyoPool.seed() / .curateAll() / .curateClassics()');
+  devLog('🎵 [Pool Curator] Debug: voyoPool.seed() / .curateAll() / .curateClassics()');
 }
 
 export default {

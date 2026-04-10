@@ -28,6 +28,7 @@ import centralDJ, {
   VibeProfile,
 } from './centralDJ';
 import { useReactionStore } from '../store/reactionStore';
+import { devLog, devWarn } from '../utils/logger';
 
 // Gemini Configuration
 const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY || '';
@@ -172,7 +173,7 @@ function buildContext(): ListeningContext {
       isHot: pulse[p.category]?.isHot || false,
     }));
   } catch (e) {
-    console.warn('[DJ] Could not load category preferences');
+    devWarn('[DJ] Could not load category preferences');
   }
 
   // Get queued and replayed tracks from pool
@@ -192,7 +193,7 @@ function buildContext(): ListeningContext {
       .filter(t => t.playCount >= 2 && t.completionRate > 80)
       .map(t => `${t.artist} - ${t.title}`);
   } catch (e) {
-    console.warn('[DJ] Could not load pool data');
+    devWarn('[DJ] Could not load pool data');
   }
 
   // Detect taste shift - compare early vs recent reactions
@@ -322,7 +323,7 @@ CRITICAL - FINDING REAL URLS:
  */
 async function callGeminiDJ(prompt: string): Promise<DJResponse | null> {
   if (!GEMINI_API_KEY) {
-    console.warn('[Intelligent DJ] No API key configured');
+    devWarn('[Intelligent DJ] No API key configured');
     return null;
   }
 
@@ -372,7 +373,7 @@ async function callGeminiDJ(prompt: string): Promise<DJResponse | null> {
     }
 
     const result: DJResponse = JSON.parse(jsonStr);
-    console.log(`[Intelligent DJ] 🎧 Vibe: "${result.vibe}"`);
+    devLog(`[Intelligent DJ] 🎧 Vibe: "${result.vibe}"`);
 
     return result;
 
@@ -456,21 +457,21 @@ async function processSuggestions(suggestions: DJSuggestion[], dominantMode?: Mi
           // THE FLYWHEEL: Save to Central DB!
           saveVerifiedTrack(track, undefined, 'gemini').then(saved => {
             if (saved) {
-              console.log(`[Intelligent DJ] 💾 Saved to Central DB for future users!`);
+              devLog(`[Intelligent DJ] 💾 Saved to Central DB for future users!`);
             }
           }).catch(() => {});
 
-          console.log(`[Intelligent DJ] ✅ VERIFIED: ${suggestion.artist} - ${suggestion.title}`);
+          devLog(`[Intelligent DJ] ✅ VERIFIED: ${suggestion.artist} - ${suggestion.title}`);
         } else {
-          console.warn(`[Intelligent DJ] ❌ Thumbnail validation failed: ${suggestion.artist} - ${suggestion.title}`);
+          devWarn(`[Intelligent DJ] ❌ Thumbnail validation failed: ${suggestion.artist} - ${suggestion.title}`);
         }
       } else {
         // NO fallback to unverified Gemini IDs - we only accept verified tracks
-        console.warn(`[Intelligent DJ] ❌ Could not verify: ${suggestion.artist} - ${suggestion.title}`);
+        devWarn(`[Intelligent DJ] ❌ Could not verify: ${suggestion.artist} - ${suggestion.title}`);
       }
     } catch (error) {
       // Search failed - DO NOT use unverified Gemini IDs
-      console.warn(`[Intelligent DJ] ❌ Search failed for: ${suggestion.artist} - ${suggestion.title}`);
+      devWarn(`[Intelligent DJ] ❌ Search failed for: ${suggestion.artist} - ${suggestion.title}`);
     }
 
     // Small delay between searches to avoid hammering the API
@@ -530,7 +531,7 @@ async function checkDJTrigger(): Promise<void> {
 export async function runDJ(): Promise<number> {
   lastDJRun = Date.now();
 
-  console.log('[Intelligent DJ] 🎧 DJ is finding tracks for you...');
+  devLog('[Intelligent DJ] 🎧 DJ is finding tracks for you...');
 
   // Build context
   const context = buildContext();
@@ -539,13 +540,13 @@ export async function runDJ(): Promise<number> {
   // STEP 1: Check Central DB first (THE FLYWHEEL!)
   // ============================================
   const dominantMode = getDominantMode(context);
-  console.log(`[Intelligent DJ] 🎯 Dominant vibe: ${dominantMode}`);
+  devLog(`[Intelligent DJ] 🎯 Dominant vibe: ${dominantMode}`);
 
   const centralTracks = await getTracksByMode(dominantMode, MAX_VIDEOS_PER_RUN);
 
   if (centralTracks.length >= MAX_VIDEOS_PER_RUN / 2) {
     // We have enough tracks in Central DB - use them!
-    console.log(`[Intelligent DJ] ✨ Using ${centralTracks.length} tracks from Central DB (no Gemini call!)`);
+    devLog(`[Intelligent DJ] ✨ Using ${centralTracks.length} tracks from Central DB (no Gemini call!)`);
 
     const tracks = centralToTracks(centralTracks);
     let addedCount = 0;
@@ -556,7 +557,7 @@ export async function runDJ(): Promise<number> {
       if (wasAdded) addedCount++;
     }
 
-    console.log(`[Intelligent DJ] ✨ Added ${addedCount}/${tracks.length} validated tracks from Central DB`);
+    devLog(`[Intelligent DJ] ✨ Added ${addedCount}/${tracks.length} validated tracks from Central DB`);
 
     // Trigger recommendation refresh
     import('../store/playerStore').then(({ usePlayerStore }) => {
@@ -569,20 +570,20 @@ export async function runDJ(): Promise<number> {
   // ============================================
   // STEP 2: Not enough in Central DB - ask Gemini
   // ============================================
-  console.log(`[Intelligent DJ] 🔍 Central DB has ${centralTracks.length} tracks, need more - calling Gemini...`);
+  devLog(`[Intelligent DJ] 🔍 Central DB has ${centralTracks.length} tracks, need more - calling Gemini...`);
 
   const prompt = buildDJPrompt(context);
   const response = await callGeminiDJ(prompt);
 
   if (!response || !response.suggestions || response.suggestions.length === 0) {
-    console.log('[Intelligent DJ] No suggestions, falling back to search');
+    devLog('[Intelligent DJ] No suggestions, falling back to search');
     return await fallbackToSearch(context);
   }
 
   // Process suggestions and save to Central DB
   const added = await processSuggestions(response.suggestions, dominantMode);
 
-  console.log(`[Intelligent DJ] 🎉 Added ${added} tracks to your queue (and Central DB!)`);
+  devLog(`[Intelligent DJ] 🎉 Added ${added} tracks to your queue (and Central DB!)`);
 
   // Trigger recommendation refresh
   import('../store/playerStore').then(({ usePlayerStore }) => {
@@ -625,7 +626,7 @@ async function fallbackToSearch(context: ListeningContext): Promise<number> {
     ? `${context.favoriteArtists[0]} ${context.currentMood === 'vibing' ? 'hits' : 'songs'}`
     : 'afrobeats trending 2024';
 
-  console.log(`[Intelligent DJ] Fallback search: "${query}"`);
+  devLog(`[Intelligent DJ] Fallback search: "${query}"`);
 
   try {
     const results = await searchMusic(query, 10);
@@ -663,7 +664,7 @@ async function fallbackToSearch(context: ListeningContext): Promise<number> {
  * Force DJ to run now (for testing)
  */
 export async function forceDJ(): Promise<number> {
-  console.log('[Intelligent DJ] 🎧 Force running DJ...');
+  devLog('[Intelligent DJ] 🎧 Force running DJ...');
   return await runDJ();
 }
 
@@ -672,7 +673,7 @@ export async function forceDJ(): Promise<number> {
  */
 export function setDJEnabled(enabled: boolean): void {
   djEnabled = enabled;
-  console.log(`[Intelligent DJ] DJ ${enabled ? 'enabled' : 'disabled'}`);
+  devLog(`[Intelligent DJ] DJ ${enabled ? 'enabled' : 'disabled'}`);
 }
 
 /**
@@ -693,7 +694,7 @@ export function getDJStatus() {
 export function resetDJ(): void {
   listeningHistory = [];
   lastDJRun = 0;
-  console.log('[Intelligent DJ] DJ reset');
+  devLog('[Intelligent DJ] DJ reset');
 }
 
 /**
@@ -717,7 +718,7 @@ export async function testConnection(): Promise<boolean> {
 
     const data = await response.json();
     const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-    console.log('[Intelligent DJ] Connection test:', text);
+    devLog('[Intelligent DJ] Connection test:', text);
     return text?.toLowerCase().includes('voyo') || text?.toLowerCase().includes('ready');
   } catch (error) {
     console.error('[Intelligent DJ] Connection test error:', error);
@@ -738,7 +739,7 @@ if (typeof window !== 'undefined') {
     enable: () => setDJEnabled(true),
     disable: () => setDJEnabled(false),
   };
-  console.log('🎧 [Intelligent DJ] Debug: window.voyoDJ.run() / .test() / .status()');
+  devLog('🎧 [Intelligent DJ] Debug: window.voyoDJ.run() / .test() / .status()');
 }
 
 export default {

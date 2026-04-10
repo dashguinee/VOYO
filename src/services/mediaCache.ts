@@ -13,6 +13,8 @@
  * - Video metadata: YouTube embed readiness
  */
 
+import { devLog, devWarn } from '../utils/logger';
+
 // Simplified - always use high quality for modern connections
 type ThumbnailQuality = 'default' | 'medium' | 'high' | 'max';
 
@@ -62,7 +64,7 @@ class MediaCacheService {
   constructor() {
     // Start cleanup interval
     this.startCleanup();
-    console.log('[MediaCache] Service initialized');
+    devLog('[MediaCache] Service initialized');
   }
 
   // =====================================
@@ -83,7 +85,7 @@ class MediaCacheService {
 
     const toPrecache = trackIds.slice(startIdx, endIdx);
 
-    console.log(`[MediaCache] Pre-caching ${toPrecache.length} tracks ahead (${startIdx}-${endIdx})`);
+    devLog(`[MediaCache] Pre-caching ${toPrecache.length} tracks ahead (${startIdx}-${endIdx})`);
 
     // Stagger precache requests
     for (let i = 0; i < toPrecache.length; i++) {
@@ -130,9 +132,9 @@ class MediaCacheService {
     if (options.audio) {
       try {
         cached.audioUrl = await this.fetchAudioBlob(trackId);
-        console.log(`[MediaCache] ✅ Audio cached: ${trackId}`);
+        devLog(`[MediaCache] ✅ Audio cached: ${trackId}`);
       } catch (e) {
-        console.warn(`[MediaCache] Audio cache failed: ${trackId}`, e);
+        devWarn(`[MediaCache] Audio cache failed: ${trackId}`, e);
       }
     }
 
@@ -140,9 +142,9 @@ class MediaCacheService {
     if (options.thumbnail) {
       try {
         cached.thumbnailUrl = await this.fetchThumbnailBlob(trackId);
-        console.log(`[MediaCache] ✅ Thumbnail cached: ${trackId}`);
+        devLog(`[MediaCache] ✅ Thumbnail cached: ${trackId}`);
       } catch (e) {
-        console.warn(`[MediaCache] Thumbnail cache failed: ${trackId}`, e);
+        devWarn(`[MediaCache] Thumbnail cache failed: ${trackId}`, e);
       }
     }
 
@@ -220,7 +222,7 @@ class MediaCacheService {
 
     const urls = qualityMap[quality] || qualityMap['high'];
 
-    console.log(`[MediaCache] Loading thumbnail at ${quality} quality for ${trackId}`);
+    devLog(`[MediaCache] Loading thumbnail at ${quality} quality for ${trackId}`);
 
     for (const url of urls) {
       try {
@@ -366,7 +368,7 @@ class MediaCacheService {
     }
 
     this.cache.delete(trackId);
-    console.log(`[MediaCache] Evicted: ${trackId}`);
+    devLog(`[MediaCache] Evicted: ${trackId}`);
   }
 
   /**
@@ -390,7 +392,7 @@ class MediaCacheService {
     }
 
     if (expired.length > 0) {
-      console.log(`[MediaCache] Cleaned up ${expired.length} expired entries`);
+      devLog(`[MediaCache] Cleaned up ${expired.length} expired entries`);
     }
   }
 
@@ -418,7 +420,7 @@ class MediaCacheService {
       this.evict(trackId, cached);
     }
 
-    console.log('[MediaCache] Service destroyed');
+    devLog('[MediaCache] Service destroyed');
   }
 
   // =====================================

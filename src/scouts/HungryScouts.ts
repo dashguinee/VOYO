@@ -26,6 +26,7 @@ import {
   TrackKnowledge,
   ArtistKnowledge
 } from '../knowledge/KnowledgeStore';
+import { devLog, devWarn } from '../utils/logger';
 
 // ============================================
 // SCOUT CONFIGURATION
@@ -477,7 +478,7 @@ export class HungryScout {
     this.lastRun = Date.now();
     const discoveredTracks: TrackKnowledge[] = [];
 
-    console.log(`[Scout:${this.config.name}] Starting hunt...`);
+    devLog(`[Scout:${this.config.name}] Starting hunt...`);
 
     try {
       // For each search query, fetch results
@@ -490,7 +491,7 @@ export class HungryScout {
       }
 
       this.tracksFound += discoveredTracks.length;
-      console.log(`[Scout:${this.config.name}] Found ${discoveredTracks.length} tracks`);
+      devLog(`[Scout:${this.config.name}] Found ${discoveredTracks.length} tracks`);
 
       // Feed to knowledge store
       const store = useKnowledgeStore.getState();
@@ -545,7 +546,7 @@ export class HungryScout {
         }
       }
     } catch (error) {
-      console.warn(`[Scout:${this.config.name}] Search failed for "${query}":`, error);
+      devWarn(`[Scout:${this.config.name}] Search failed for "${query}":`, error);
     }
 
     return tracks;
@@ -589,7 +590,7 @@ class ScoutManager {
   async runAllScouts(): Promise<TrackKnowledge[]> {
     const allTracks: TrackKnowledge[] = [];
 
-    console.log('[ScoutManager] Releasing ALL hungry scouts...');
+    devLog('[ScoutManager] Releasing ALL hungry scouts...');
 
     // Run in parallel batches (to not overload)
     const batchSize = 3;
@@ -601,7 +602,7 @@ class ScoutManager {
       results.forEach(tracks => allTracks.push(...tracks));
     }
 
-    console.log(`[ScoutManager] Total tracks discovered: ${allTracks.length}`);
+    devLog(`[ScoutManager] Total tracks discovered: ${allTracks.length}`);
     return allTracks;
   }
 
@@ -612,7 +613,7 @@ class ScoutManager {
     const priorityScouts = Array.from(this.scouts.values())
       .filter(s => s.config.priority >= minPriority);
 
-    console.log(`[ScoutManager] Running ${priorityScouts.length} priority scouts...`);
+    devLog(`[ScoutManager] Running ${priorityScouts.length} priority scouts...`);
 
     const results = await Promise.all(priorityScouts.map(s => s.hunt()));
     results.forEach(tracks => allTracks.push(...tracks));
@@ -625,7 +626,7 @@ class ScoutManager {
     if (this.isRunning) return;
 
     this.isRunning = true;
-    console.log(`[ScoutManager] Starting continuous scouting every ${intervalMinutes} minutes`);
+    devLog(`[ScoutManager] Starting continuous scouting every ${intervalMinutes} minutes`);
 
     // Run immediately
     this.runPriorityScouts();
@@ -643,7 +644,7 @@ class ScoutManager {
       this.intervalId = null;
     }
     this.isRunning = false;
-    console.log('[ScoutManager] Stopped continuous scouting');
+    devLog('[ScoutManager] Stopped continuous scouting');
   }
 
   // Get stats

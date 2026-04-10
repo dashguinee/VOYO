@@ -16,6 +16,7 @@ import { getVibeEssence, getEssenceForQuery, type VibeEssence } from './essenceE
 import { searchMusic as searchYouTube } from './api';
 import { TRACKS } from '../data/tracks';
 import type { Track } from '../types';
+import { devLog, devWarn } from '../utils/logger';
 
 // Helper to get supabase client with null check (TypeScript guard)
 function getSupabase() {
@@ -149,7 +150,7 @@ function getPlayedTrackIds(): string[] {
  */
 export async function getHotTracks(limit: number = 30): Promise<Track[]> {
   if (!supabaseConfigured) {
-    console.log('[Discovery] Supabase not configured, using fallback');
+    devLog('[Discovery] Supabase not configured, using fallback');
     return getFallbackTracks('hot', limit);
   }
 
@@ -175,7 +176,7 @@ export async function getHotTracks(limit: number = 30): Promise<Track[]> {
     // Filter out non-music content (news, podcasts, etc.)
     const tracks = (data || []) as DiscoveryTrack[];
     const musicOnly = filterMusicOnly(tracks);
-    console.log(`[Discovery] HOT: ${musicOnly.length} tracks from 324K database (filtered ${tracks.length - musicOnly.length} non-music)`);
+    devLog(`[Discovery] HOT: ${musicOnly.length} tracks from 324K database (filtered ${tracks.length - musicOnly.length} non-music)`);
     return musicOnly.map(toTrack);
   } catch (err) {
     console.error('[Discovery] Hot tracks exception:', err);
@@ -194,7 +195,7 @@ export async function getHotTracks(limit: number = 30): Promise<Track[]> {
  */
 export async function getDiscoveryTracks(limit: number = 30): Promise<Track[]> {
   if (!supabaseConfigured) {
-    console.log('[Discovery] Supabase not configured, using fallback');
+    devLog('[Discovery] Supabase not configured, using fallback');
     return getFallbackTracks('discovery', limit);
   }
 
@@ -222,7 +223,7 @@ export async function getDiscoveryTracks(limit: number = 30): Promise<Track[]> {
     // Filter out non-music content (news, podcasts, etc.)
     const tracks = (data || []) as DiscoveryTrack[];
     const musicOnly = filterMusicOnly(tracks);
-    console.log(`[Discovery] DISCOVERY: ${musicOnly.length} tracks (filtered ${tracks.length - musicOnly.length} non-music)`);
+    devLog(`[Discovery] DISCOVERY: ${musicOnly.length} tracks (filtered ${tracks.length - musicOnly.length} non-music)`);
     return musicOnly.map(toTrack);
   } catch (err) {
     console.error('[Discovery] Discovery tracks exception:', err);
@@ -305,12 +306,12 @@ export async function searchTracks(query: string, limit: number = 20): Promise<T
           p_limit: limit,
         });
         if (!error && data && data.length > 0) {
-          console.log(`[Discovery] DB: ${data.length} results for "${query}"`);
+          devLog(`[Discovery] DB: ${data.length} results for "${query}"`);
           return data.map(toTrack);
         }
         return [];
       } catch (err) {
-        console.warn('[Discovery] DB search error:', err);
+        devWarn('[Discovery] DB search error:', err);
         return [];
       }
     })() : Promise.resolve([]),
@@ -320,7 +321,7 @@ export async function searchTracks(query: string, limit: number = 20): Promise<T
       try {
         const results = await searchYouTube(query, Math.ceil(limit / 2));
         if (results.length > 0) {
-          console.log(`[Discovery] YT: ${results.length} results for "${query}"`);
+          devLog(`[Discovery] YT: ${results.length} results for "${query}"`);
           return results.map(r => ({
             id: r.voyoId,
             trackId: r.voyoId,
@@ -335,7 +336,7 @@ export async function searchTracks(query: string, limit: number = 20): Promise<T
         }
         return [];
       } catch (err) {
-        console.warn('[Discovery] YT search error:', err);
+        devWarn('[Discovery] YT search error:', err);
         return [];
       }
     })(),
@@ -361,7 +362,7 @@ export async function searchTracks(query: string, limit: number = 20): Promise<T
     }
   }
 
-  console.log(`[Discovery] Merged: ${merged.length} total (${dbResults.length} DB + ${ytResults.length - (merged.length - dbResults.length)} new from YT)`);
+  devLog(`[Discovery] Merged: ${merged.length} total (${dbResults.length} DB + ${ytResults.length - (merged.length - dbResults.length)} new from YT)`);
 
   return merged.slice(0, limit);
 }
@@ -481,7 +482,7 @@ export function debugDiscovery(): void {
   const essence = getVibeEssence();
   const playedIds = getPlayedTrackIds();
 
-  console.log('[VOYO Discovery Debug]', {
+  devLog('[VOYO Discovery Debug]', {
     essence: {
       dominantVibes: essence.dominantVibes,
       confidence: `${(essence.confidence * 100).toFixed(0)}%`,

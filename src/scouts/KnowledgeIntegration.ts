@@ -23,6 +23,7 @@ import {
 } from '../knowledge/MoodTags';
 import { Track } from '../types';
 import { useTrackPoolStore } from '../store/trackPoolStore';
+import { devLog } from '../utils/logger';
 
 // ============================================
 // BRAIN INTEGRATION
@@ -171,7 +172,7 @@ export function syncKnowledgeToPool() {
     }
   }
 
-  console.log(`[KnowledgeIntegration] Enriched ${enrichedCount}/${hotPool.length} pool tracks`);
+  devLog(`[KnowledgeIntegration] Enriched ${enrichedCount}/${hotPool.length} pool tracks`);
   return enrichedCount;
 }
 

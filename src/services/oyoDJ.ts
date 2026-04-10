@@ -17,6 +17,7 @@
  */
 
 import { Track } from '../types';
+import { devLog, devWarn } from '../utils/logger';
 
 // ============================================
 // CONFIGURATION
@@ -211,7 +212,7 @@ function saveProfile(): void {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(djProfile));
   } catch (e) {
-    console.warn('[OYO] Failed to save profile:', e);
+    devWarn('[OYO] Failed to save profile:', e);
   }
 }
 
@@ -224,10 +225,10 @@ function loadProfile(): void {
     if (saved) {
       const parsed = JSON.parse(saved);
       djProfile = { ...DEFAULT_DJ_PROFILE, ...parsed };
-      console.log(`[OYO] Profile loaded: ${djProfile.name}`);
+      devLog(`[OYO] Profile loaded: ${djProfile.name}`);
     }
   } catch (e) {
-    console.warn('[OYO] Failed to load profile:', e);
+    devWarn('[OYO] Failed to load profile:', e);
   }
 }
 
@@ -249,7 +250,7 @@ export function initOYO(): void {
       selectedVoice = voices.find(v =>
         djProfile.voice.preferredVoice && v.name.includes(djProfile.voice.preferredVoice)
       ) || voices.find(v => v.lang.startsWith('en')) || voices[0];
-      console.log(`[OYO] Voice: ${selectedVoice?.name}`);
+      devLog(`[OYO] Voice: ${selectedVoice?.name}`);
     };
 
     if (speechSynth.getVoices().length > 0) {
@@ -264,7 +265,7 @@ export function initOYO(): void {
   djProfile.lastInteractionAt = new Date().toISOString();
   saveProfile();
 
-  console.log(`[OYO] 🎙️ ${djProfile.name} is ready!`);
+  devLog(`[OYO] 🎙️ ${djProfile.name} is ready!`);
 }
 
 // ============================================
@@ -284,7 +285,7 @@ export function getProfile(): DJProfile {
 export function setDJName(name: string): void {
   djProfile.name = name;
   saveProfile();
-  console.log(`[OYO] DJ renamed to: ${name}`);
+  devLog(`[OYO] DJ renamed to: ${name}`);
 }
 
 /**
@@ -337,7 +338,7 @@ export function updateVoiceSettings(settings: Partial<DJVoiceSettings>): void {
 export function resetDJ(): void {
   djProfile = { ...DEFAULT_DJ_PROFILE, createdAt: new Date().toISOString() };
   saveProfile();
-  console.log('[OYO] DJ reset to defaults');
+  devLog('[OYO] DJ reset to defaults');
 }
 
 // ============================================
@@ -608,7 +609,7 @@ RESPOND WITH JSON ONLY:
  * Speak an announcement
  */
 export async function speak(text: string): Promise<void> {
-  console.log(`[OYO] 🎙️ "${text}"`);
+  devLog(`[OYO] 🎙️ "${text}"`);
 
   if (!speechSynth || !selectedVoice || !djProfile.voice.enabled) {
     return;
@@ -767,7 +768,7 @@ export function shareMoment(
   }
 
   saveProfile();
-  console.log(`[OYO] Shared to DAHUB: "${content.slice(0, 50)}..."`);
+  devLog(`[OYO] Shared to DAHUB: "${content.slice(0, 50)}..."`);
 
   return moment;
 }

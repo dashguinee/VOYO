@@ -14,6 +14,7 @@
 import { create } from 'zustand';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { useTrackPoolStore } from './trackPoolStore';
+import { devLog, devWarn } from '../utils/logger';
 
 // ============================================
 // TYPES
@@ -191,7 +192,7 @@ export const useReactionStore = create<ReactionStore>((set, get) => ({
     trackPosition,
   }) => {
     if (!isSupabaseConfigured || !supabase) {
-      console.warn('[Reactions] Supabase not configured, using local only');
+      devWarn('[Reactions] Supabase not configured, using local only');
       // Create local reaction for offline mode
       const localReaction: Reaction = {
         id: `local_${Date.now()}`,
@@ -217,7 +218,7 @@ export const useReactionStore = create<ReactionStore>((set, get) => ({
       }
       // BOOST TRACK SCORE IN POOL - Reactions are strong engagement signals!
       useTrackPoolStore.getState().recordReaction(trackId);
-      console.log(`[Reactions] Boosted pool score for ${trackId}`);
+      devLog(`[Reactions] Boosted pool score for ${trackId}`);
       return true;
     }
 
@@ -250,7 +251,7 @@ export const useReactionStore = create<ReactionStore>((set, get) => ({
       }
       // BOOST TRACK SCORE IN POOL - Reactions are strong engagement signals!
       useTrackPoolStore.getState().recordReaction(trackId);
-      console.log(`[Reactions] Boosted pool score for ${trackId}`);
+      devLog(`[Reactions] Boosted pool score for ${trackId}`);
       return true;
     } catch (err) {
       console.error('[Reactions] Error:', err);
@@ -373,7 +374,7 @@ export const useReactionStore = create<ReactionStore>((set, get) => ({
   subscribeToReactions: () => {
     if (!isSupabaseConfigured || !supabase || get().isSubscribed) return;
 
-    console.log('[Reactions] Subscribing to realtime updates...');
+    devLog('[Reactions] Subscribing to realtime updates...');
 
     const channel = supabase
       .channel('reactions-realtime')
@@ -386,7 +387,7 @@ export const useReactionStore = create<ReactionStore>((set, get) => ({
         },
         (payload) => {
           const newReaction = payload.new as Reaction;
-          console.log('[Reactions] New reaction received:', newReaction);
+          devLog('[Reactions] New reaction received:', newReaction);
 
           // Add to recent reactions
           set((state) => ({
@@ -537,7 +538,7 @@ export const useReactionStore = create<ReactionStore>((set, get) => ({
       return { trackHotspots: newMap };
     });
 
-    console.log(`[Hotspots] Computed ${hotspots.length} hotspots for track ${trackId}`);
+    devLog(`[Hotspots] Computed ${hotspots.length} hotspots for track ${trackId}`);
   },
 
   // ============================================
@@ -557,7 +558,7 @@ export const useReactionStore = create<ReactionStore>((set, get) => ({
         score: Math.min(100, 50 + (current.reactionCount + 1) * 5),
       };
 
-      console.log(`[ForYou] Updated ${category} preference: score ${updated.score}`);
+      devLog(`[ForYou] Updated ${category} preference: score ${updated.score}`);
 
       return {
         userCategoryPreferences: {

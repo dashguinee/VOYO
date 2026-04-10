@@ -17,6 +17,7 @@
 import { useIntentStore, type VibeMode } from '../store/intentStore';
 import { usePreferenceStore } from '../store/preferenceStore';
 import { useReactionStore, type ReactionCategory } from '../store/reactionStore';
+import { devLog } from '../utils/logger';
 
 // ============================================
 // TYPES
@@ -401,7 +402,7 @@ export function getEssenceForQuery(): {
  */
 export function debugEssence(): void {
   const essence = getVibeEssence();
-  console.log('[VOYO Essence]', {
+  devLog('[VOYO Essence]', {
     vibes: {
       afro_heat: `${(essence.afro_heat * 100).toFixed(1)}%`,
       chill: `${(essence.chill * 100).toFixed(1)}%`,

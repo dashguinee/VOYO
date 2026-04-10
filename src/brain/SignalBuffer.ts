@@ -15,6 +15,7 @@
  */
 
 import { signals, SignalPayload, SignalType } from './SignalEmitter';
+import { devLog, devWarn } from '../utils/logger';
 
 // ============================================
 // TYPES
@@ -135,7 +136,7 @@ class SignalBuffer {
   constructor() {
     this.initializeTriggers();
     this.subscribeToSignals();
-    console.log('[Brain] SignalBuffer initialized');
+    devLog('[Brain] SignalBuffer initialized');
   }
 
   private initializeTriggers(): void {
@@ -254,7 +255,7 @@ class SignalBuffer {
     // Check each trigger
     for (const [type, trigger] of this.triggers) {
       if (trigger.currentCount >= trigger.threshold) {
-        console.log(`[Brain] Trigger activated: ${type} (count: ${trigger.currentCount})`);
+        devLog(`[Brain] Trigger activated: ${type} (count: ${trigger.currentCount})`);
         this.fireBrain(type);
         return; // Only fire once per check
       }
@@ -263,7 +264,7 @@ class SignalBuffer {
 
   private fireBrain(triggerType: TriggerCondition['type']): void {
     if (!this.brainCallback) {
-      console.warn('[Brain] No callback registered, skipping Brain call');
+      devWarn('[Brain] No callback registered, skipping Brain call');
       return;
     }
 
@@ -281,7 +282,7 @@ class SignalBuffer {
 
     // Build summary and call Brain
     const summary = this.buildSummary();
-    console.log(`[Brain] Firing Brain with ${summary.signalCount} signals, trigger: ${triggerType}`);
+    devLog(`[Brain] Firing Brain with ${summary.signalCount} signals, trigger: ${triggerType}`);
 
     try {
       this.brainCallback(summary);

@@ -5,6 +5,8 @@
  * Piped is a privacy-focused YouTube frontend with a public API.
  */
 
+import { devWarn } from '../utils/logger';
+
 const PIPED_API = 'https://pipedapi.kavin.rocks';
 
 // Fallback Piped instances (in case primary is down)
@@ -79,7 +81,7 @@ export async function getVideoStreamInfo(videoId: string): Promise<VideoStreamIn
         hls: data.hls || undefined,
       };
     } catch (error) {
-      console.warn(`Piped instance ${instance} failed:`, error);
+      devWarn(`Piped instance ${instance} failed:`, error);
       continue;
     }
   }

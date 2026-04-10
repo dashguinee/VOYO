@@ -13,6 +13,8 @@
  * Cost: $0.006/minute = basically free for our use case
  */
 
+import { devLog } from '../utils/logger';
+
 // Configuration - set via environment or directly
 let OPENAI_API_KEY = import.meta.env.VITE_OPENAI_API_KEY || '';
 
@@ -76,7 +78,7 @@ export interface LyricSegment {
 
 export function setOpenAIKey(key: string): void {
   OPENAI_API_KEY = key;
-  console.log('[Whisper] API key configured');
+  devLog('[Whisper] API key configured');
 }
 
 export function isConfigured(): boolean {
@@ -132,7 +134,7 @@ export async function transcribeAudio(
     formData.append('timestamp_granularities[]', 'segment');
   }
 
-  console.log('[Whisper] Transcribing audio...');
+  devLog('[Whisper] Transcribing audio...');
   const startTime = Date.now();
 
   const response = await fetch(WHISPER_API_URL, {
@@ -151,9 +153,9 @@ export async function transcribeAudio(
   const result = await response.json();
   const duration = (Date.now() - startTime) / 1000;
 
-  console.log(`[Whisper] Transcription complete in ${duration.toFixed(2)}s`);
-  console.log(`[Whisper] Detected language: ${result.language}`);
-  console.log(`[Whisper] Text: "${result.text?.substring(0, 100)}..."`);
+  devLog(`[Whisper] Transcription complete in ${duration.toFixed(2)}s`);
+  devLog(`[Whisper] Detected language: ${result.language}`);
+  devLog(`[Whisper] Text: "${result.text?.substring(0, 100)}..."`);
 
   return {
     text: result.text,
@@ -182,7 +184,7 @@ export async function transcribeAudio(
  * Record audio from microphone
  */
 export async function recordFromMicrophone(durationMs: number = 10000): Promise<Blob> {
-  console.log(`[Whisper] Recording for ${durationMs / 1000}s...`);
+  devLog(`[Whisper] Recording for ${durationMs / 1000}s...`);
 
   const stream = await navigator.mediaDevices.getUserMedia({
     audio: {
@@ -210,7 +212,7 @@ export async function recordFromMicrophone(durationMs: number = 10000): Promise<
       stream.getTracks().forEach(track => track.stop());
 
       const blob = new Blob(chunks, { type: 'audio/webm' });
-      console.log(`[Whisper] Recorded ${(blob.size / 1024).toFixed(1)}KB`);
+      devLog(`[Whisper] Recorded ${(blob.size / 1024).toFixed(1)}KB`);
       resolve(blob);
     };
 
@@ -326,7 +328,7 @@ export async function generatePhoneticLyrics(
   audioUrl: string,
   trackTitle?: string
 ): Promise<PhoneticLyrics> {
-  console.log(`[Whisper] Generating phonetic lyrics for: ${trackTitle || trackId}`);
+  devLog(`[Whisper] Generating phonetic lyrics for: ${trackTitle || trackId}`);
 
   // Fetch audio from URL
   const response = await fetch(audioUrl);
@@ -416,7 +418,7 @@ export function saveLyrics(lyrics: PhoneticLyrics): void {
   const stored = getLyricsStore();
   stored[lyrics.trackId] = lyrics;
   localStorage.setItem(LYRICS_STORAGE_KEY, JSON.stringify(stored));
-  console.log(`[Whisper] Saved lyrics for ${lyrics.trackId}`);
+  devLog(`[Whisper] Saved lyrics for ${lyrics.trackId}`);
 }
 
 /**
@@ -469,7 +471,7 @@ export function polishLyrics(
   }
 
   saveLyrics(lyrics);
-  console.log(`[Whisper] Lyrics polished by ${editorId}`);
+  devLog(`[Whisper] Lyrics polished by ${editorId}`);
   return true;
 }
 
@@ -492,4 +494,4 @@ export function getWhisperStats(): {
   };
 }
 
-console.log('[Whisper] Service loaded. Call setOpenAIKey() to enable.');
+devLog('[Whisper] Service loaded. Call setOpenAIKey() to enable.');

@@ -38,6 +38,7 @@ import { signals as centralSignals } from '../services/centralDJ';
 
 // DATABASE SYNC: Everything that enters the pool goes to collective brain
 import { syncToDatabase } from '../services/databaseSync';
+import { devLog } from '../utils/logger';
 
 // ============================================
 // TYPES
@@ -211,7 +212,7 @@ export const useTrackPoolStore = create<TrackPoolStore>()(
         ];
         const combined = `${track.title} ${track.artist || ''}`.toLowerCase();
         if (NON_MUSIC_KEYWORDS.some(kw => combined.includes(kw))) {
-          console.log(`[Pool] Blocked non-music: ${track.title}`);
+          devLog(`[Pool] Blocked non-music: ${track.title}`);
           return; // Don't add non-music to pool
         }
 
@@ -350,7 +351,7 @@ export const useTrackPoolStore = create<TrackPoolStore>()(
           // TRIGGER PLAYER REFRESH: After rescoring, update player recommendations
           import('./playerStore').then(({ usePlayerStore }) => {
             usePlayerStore.getState().refreshRecommendations();
-            console.log('[VOYO Pool] Rescored all tracks, refreshed recommendations');
+            devLog('[VOYO Pool] Rescored all tracks, refreshed recommendations');
           }).catch(() => {});
         });
       },
@@ -392,7 +393,7 @@ export const useTrackPoolStore = create<TrackPoolStore>()(
           const newColdPool = state.coldPool.filter((t) => !matchingIds.has(t.id));
           const recovered = matching.map((t) => ({ ...t, isHot: true, isCold: false, poolScore: 50 }));
 
-          console.log(`[VOYO Pool] Recovered ${recovered.length} tracks from cold pool`);
+          devLog(`[VOYO Pool] Recovered ${recovered.length} tracks from cold pool`);
 
           return {
             hotPool: [...state.hotPool, ...recovered],
@@ -412,7 +413,7 @@ export const useTrackPoolStore = create<TrackPoolStore>()(
 
           if (filtered.length < state.hotPool.length) {
             const removed = state.hotPool.length - filtered.length;
-            console.log(`[VOYO Pool] Removed ${removed} disliked tracks from recovered batch`);
+            devLog(`[VOYO Pool] Removed ${removed} disliked tracks from recovered batch`);
 
             set({
               hotPool: filtered,
@@ -550,13 +551,13 @@ export function startPoolMaintenance(): void {
     store.ageOutStale();
   }, 5 * 60 * 1000); // 5 minutes
 
-  console.log('[VOYO Track Pool] Maintenance started');
+  devLog('[VOYO Track Pool] Maintenance started');
 }
 
 export function stopPoolMaintenance(): void {
   if (maintenanceInterval) {
     clearInterval(maintenanceInterval);
     maintenanceInterval = null;
-    console.log('[VOYO Track Pool] Maintenance stopped');
+    devLog('[VOYO Track Pool] Maintenance stopped');
   }
 }

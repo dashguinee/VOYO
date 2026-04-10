@@ -13,6 +13,7 @@ import { profileAPI, friendsAPI, VoyoProfile } from '../lib/voyo-api';
 import { usePlayerStore } from '../store/playerStore';
 import { usePreferenceStore } from '../store/preferenceStore';
 import { getDashSession, DashSession } from '../lib/dash-auth';
+import { devLog } from '../utils/logger';
 
 // ============================================
 // TYPES
@@ -73,12 +74,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const loadOrCreateProfile = useCallback(async (dashId: string) => {
     setIsProfileLoading(true);
     try {
-      console.log('[VOYO Auth] Loading/creating profile for:', dashId);
+      devLog('[VOYO Auth] Loading/creating profile for:', dashId);
       const voyoProfile = await profileAPI.getOrCreate(dashId);
 
       if (voyoProfile) {
         setProfile(voyoProfile);
-        console.log('[VOYO Auth] Profile loaded:', {
+        devLog('[VOYO Auth] Profile loaded:', {
           dashId: voyoProfile.dash_id,
           totalListens: voyoProfile.total_listens,
           totalMinutes: voyoProfile.total_minutes,
@@ -91,7 +92,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
           // Only restore if local is empty
           if (Object.keys(prefStore.trackPreferences).length === 0) {
-            console.log('[VOYO Auth] Restoring preferences from cloud');
+            devLog('[VOYO Auth] Restoring preferences from cloud');
             // Preferences will be restored on next session
           }
         }
@@ -191,7 +192,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       // Update profile
       await profileAPI.updatePreferences(dashId, preferences);
 
-      console.log('[VOYO Auth] Synced to cloud:', { totalListens, totalMinutes });
+      devLog('[VOYO Auth] Synced to cloud:', { totalListens, totalMinutes });
     } catch (err) {
       console.error('[VOYO Auth] Sync error:', err);
     }
@@ -232,13 +233,13 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
         // User just logged in
         if (!wasLoggedIn && isNowLoggedIn && newSession?.user.core_id) {
-          console.log('[VOYO Auth] User logged in:', newSession.user.core_id);
+          devLog('[VOYO Auth] User logged in:', newSession.user.core_id);
           loadOrCreateProfile(newSession.user.core_id);
         }
 
         // User logged out
         if (wasLoggedIn && !isNowLoggedIn) {
-          console.log('[VOYO Auth] User logged out');
+          devLog('[VOYO Auth] User logged out');
           setProfile(null);
         }
         } catch (err) {

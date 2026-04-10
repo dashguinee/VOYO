@@ -6,6 +6,8 @@
  * Returns both plain lyrics and synced LRC format with timestamps.
  */
 
+import { devLog, devWarn } from '../utils/logger';
+
 const LRCLIB_BASE = 'https://lrclib.net/api';
 
 // ============================================
@@ -91,7 +93,7 @@ export async function getLyrics(
       source: 'lrclib',
     };
   } catch (error) {
-    console.warn('[LRCLIB] Get failed:', error);
+    devWarn('[LRCLIB] Get failed:', error);
     return { found: false, source: 'lrclib' };
   }
 }
@@ -122,7 +124,7 @@ export async function searchLyrics(
     const results: LRCLibTrack[] = await response.json();
     return results.slice(0, limit);
   } catch (error) {
-    console.warn('[LRCLIB] Search failed:', error);
+    devWarn('[LRCLIB] Search failed:', error);
     return [];
   }
 }
@@ -139,12 +141,12 @@ export async function fetchLyrics(
   const cleanTrack = cleanTrackName(trackName);
   const cleanArtist = cleanArtistName(artistName);
 
-  console.log(`[LRCLIB] Fetching: "${cleanTrack}" by ${cleanArtist}`);
+  devLog(`[LRCLIB] Fetching: "${cleanTrack}" by ${cleanArtist}`);
 
   // 1. Try exact match first
   let result = await getLyrics(cleanTrack, cleanArtist, duration);
   if (result.found) {
-    console.log('[LRCLIB] ✅ Found via exact match');
+    devLog('[LRCLIB] ✅ Found via exact match');
     return result;
   }
 
@@ -166,7 +168,7 @@ export async function fetchLyrics(
     if (bestMatch.plainLyrics || bestMatch.syncedLyrics) {
       const lines = bestMatch.syncedLyrics ? parseLRC(bestMatch.syncedLyrics) : undefined;
 
-      console.log('[LRCLIB] ✅ Found via search');
+      devLog('[LRCLIB] ✅ Found via search');
       return {
         found: true,
         track: bestMatch,
@@ -178,7 +180,7 @@ export async function fetchLyrics(
     }
   }
 
-  console.log('[LRCLIB] ❌ Not found');
+  devLog('[LRCLIB] ❌ Not found');
   return { found: false, source: 'lrclib' };
 }
 
@@ -350,7 +352,7 @@ export async function getLyricsWithCache(
   // Check cache first
   const cached = getCachedLyrics(trackName, artistName);
   if (cached) {
-    console.log('[LRCLIB] ✅ Cache hit');
+    devLog('[LRCLIB] ✅ Cache hit');
     return cached;
   }
 
@@ -363,4 +365,4 @@ export async function getLyricsWithCache(
   return result;
 }
 
-console.log('[LRCLIB] Service loaded - Free lyrics for everyone! 🎵');
+devLog('[LRCLIB] Service loaded - Free lyrics for everyone! 🎵');

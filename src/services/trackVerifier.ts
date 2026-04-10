@@ -23,6 +23,7 @@ import { useTrackPoolStore, PooledTrack } from '../store/trackPoolStore';
 // import { usePlayerStore } from '../store/playerStore';
 import { getThumb } from '../utils/thumbnail';
 import { Track } from '../types';
+import { devLog, devWarn } from '../utils/logger';
 
 /**
  * Decode VOYO ID (vyo_...) to raw YouTube ID
@@ -76,7 +77,7 @@ export async function verifyTrack(
   // Check permanent failure cache first (video deleted/private)
   const permFailure = permanentFailures.get(originalTrackId);
   if (permFailure && (now - permFailure.failedAt) < PERMANENT_FAILURE_TTL) {
-    console.log(`[TrackVerifier] ⛔ Permanent failure (${permFailure.reason}): ${artist} - ${title}`);
+    devLog(`[TrackVerifier] ⛔ Permanent failure (${permFailure.reason}): ${artist} - ${title}`);
     return null;
   }
 
@@ -85,7 +86,7 @@ export async function verifyTrack(
   if (retryInfo) {
     const timeSinceLastAttempt = now - retryInfo.lastAttempt;
     if (retryInfo.count >= MAX_RETRIES && timeSinceLastAttempt < RETRY_COOLDOWN) {
-      console.log(`[TrackVerifier] 🛑 Max retries (${MAX_RETRIES}) reached, cooling down: ${artist} - ${title}`);
+      devLog(`[TrackVerifier] 🛑 Max retries (${MAX_RETRIES}) reached, cooling down: ${artist} - ${title}`);
       return null;
     }
     // Reset retry count if cooldown has passed
@@ -98,11 +99,11 @@ export async function verifyTrack(
   const cached = verificationResults.get(cacheKey);
   if (cached !== undefined) {
     if (cached === null) {
-      console.log(`[TrackVerifier] ❌ Already failed: ${artist} - ${title}`);
+      devLog(`[TrackVerifier] ❌ Already failed: ${artist} - ${title}`);
       return null;
     }
     if (now < cached.expiresAt) {
-      console.log(`[TrackVerifier] ✅ Cache hit: ${artist} - ${title}`);
+      devLog(`[TrackVerifier] ✅ Cache hit: ${artist} - ${title}`);
       return cached.thumbnail;
     }
     // Cache expired, remove it
@@ -112,7 +113,7 @@ export async function verifyTrack(
   // Check if already in progress
   const pending = pendingVerifications.get(cacheKey);
   if (pending) {
-    console.log(`[TrackVerifier] ⏳ Already verifying: ${artist} - ${title}`);
+    devLog(`[TrackVerifier] ⏳ Already verifying: ${artist} - ${title}`);
     return pending;
   }
 
@@ -137,7 +138,7 @@ async function doVerification(
   title: string,
   cacheKey: string
 ): Promise<string | null> {
-  console.log(`[TrackVerifier] 🔍 Verifying: ${artist} - ${title}`);
+  devLog(`[TrackVerifier] 🔍 Verifying: ${artist} - ${title}`);
 
   try {
     // Clean up search query - remove duplicate artist from title
@@ -161,11 +162,11 @@ async function doVerification(
     }
 
     const searchQuery = cleanTitle ? `${artist} ${cleanTitle}` : artist;
-    console.log(`[TrackVerifier] 🔍 Search query: ${searchQuery}`);
+    devLog(`[TrackVerifier] 🔍 Search query: ${searchQuery}`);
     const results = await searchMusic(searchQuery, 3);
 
     if (results.length === 0) {
-      console.log(`[TrackVerifier] ❌ No results for: ${searchQuery}`);
+      devLog(`[TrackVerifier] ❌ No results for: ${searchQuery}`);
       verificationResults.set(cacheKey, null);
 
       // Clear cache after TTL
@@ -177,9 +178,9 @@ async function doVerification(
     const verified = results[0];
     const newThumbnail = verified.thumbnail || getThumb(verified.voyoId);
 
-    console.log(`[TrackVerifier] ✅ Found: ${verified.artist} - ${verified.title}`);
-    console.log(`[TrackVerifier]    Old ID: ${originalTrackId}`);
-    console.log(`[TrackVerifier]    New ID: ${verified.voyoId}`);
+    devLog(`[TrackVerifier] ✅ Found: ${verified.artist} - ${verified.title}`);
+    devLog(`[TrackVerifier]    Old ID: ${originalTrackId}`);
+    devLog(`[TrackVerifier]    New ID: ${verified.voyoId}`);
 
     // Cache the result with expiry timestamp
     verificationResults.set(cacheKey, {
@@ -251,7 +252,7 @@ export async function isTrackPlayable(trackId: string): Promise<{ playable: bool
     return { playable: false, reason: `http_${response.status}` };
   } catch (error) {
     // Network error - don't mark as permanent failure
-    console.warn(`[TrackVerifier] Playability check failed for ${trackId}:`, error);
+    devWarn(`[TrackVerifier] Playability check failed for ${trackId}:`, error);
     return { playable: false, reason: 'network_error' };
   }
 }
@@ -283,7 +284,7 @@ export function markTrackAsFailed(trackId: string, errorCode: number): void {
       reason = `youtube_error_${errorCode}`;
   }
 
-  console.log(`[TrackVerifier] ⛔ Marked as failed: ${trackId} (${reason})`);
+  devLog(`[TrackVerifier] ⛔ Marked as failed: ${trackId} (${reason})`);
 }
 
 /**
@@ -307,10 +308,10 @@ function updateTrackInPool(originalTrackId: string, verified: { voyoId: string; 
       poolTrack.coverUrl = verified.thumbnail;
       if (verified.duration) poolTrack.duration = verified.duration;
 
-      console.log(`[TrackVerifier] 📦 Updated pool track: ${poolTrack.title}`);
+      devLog(`[TrackVerifier] 📦 Updated pool track: ${poolTrack.title}`);
     }
   } catch (error) {
-    console.warn('[TrackVerifier] Could not update pool:', error);
+    devWarn('[TrackVerifier] Could not update pool:', error);
   }
 }
 
@@ -334,10 +335,10 @@ async function updateCurrentTrack(originalTrackId: string, verified: { voyoId: s
 
       // Update current track (this will trigger re-render with new thumbnail)
       playerStore.setCurrentTrack(updatedTrack);
-      console.log(`[TrackVerifier] 🎵 Updated current track: ${currentTrack.title}`);
+      devLog(`[TrackVerifier] 🎵 Updated current track: ${currentTrack.title}`);
     }
   } catch (error) {
-    console.warn('[TrackVerifier] Could not update current track:', error);
+    devWarn('[TrackVerifier] Could not update current track:', error);
   }
 }
 
@@ -363,10 +364,10 @@ async function saveToDatabase(verified: { voyoId: string; title: string; artist:
 
     const saved = await saveVerifiedTrack(track, undefined, 'user_search');
     if (saved) {
-      console.log(`[TrackVerifier] 💾 Saved to Central DB for future users!`);
+      devLog(`[TrackVerifier] 💾 Saved to Central DB for future users!`);
     }
   } catch (error) {
-    console.warn('[TrackVerifier] Could not save to Central DB:', error);
+    devWarn('[TrackVerifier] Could not save to Central DB:', error);
   }
 }
 
@@ -376,7 +377,7 @@ async function saveToDatabase(verified: { voyoId: string; title: string; artist:
 export function clearVerificationCache(): void {
   verificationResults.clear();
   pendingVerifications.clear();
-  console.log('[TrackVerifier] Cache cleared');
+  devLog('[TrackVerifier] Cache cleared');
 }
 
 // ============================================
@@ -435,14 +436,14 @@ async function verifyContentMatch(
     const isMatch = hasArtist || hasTitle;
 
     if (!isMatch) {
-      console.log(`[TrackVerifier] ❌ CONTENT MISMATCH:`);
-      console.log(`   Expected: ${expectedArtist} - ${expectedTitle}`);
-      console.log(`   Actual: ${data.title}`);
+      devLog(`[TrackVerifier] ❌ CONTENT MISMATCH:`);
+      devLog(`   Expected: ${expectedArtist} - ${expectedTitle}`);
+      devLog(`   Actual: ${data.title}`);
     }
 
     return { valid: isMatch, actualTitle: data.title };
   } catch (error) {
-    console.warn(`[TrackVerifier] Could not verify content for ${trackId}:`, error);
+    devWarn(`[TrackVerifier] Could not verify content for ${trackId}:`, error);
     return { valid: true }; // Assume valid if we can't check
   }
 }
@@ -459,7 +460,7 @@ export async function batchHealTracks(): Promise<{
   total: number;
   skipped: number;
 }> {
-  console.log('[TrackVerifier] 🔧 BATCH HEAL STARTED...');
+  devLog('[TrackVerifier] 🔧 BATCH HEAL STARTED...');
 
   const poolStore = useTrackPoolStore.getState();
   const hotPool = poolStore.hotPool;
@@ -468,7 +469,7 @@ export async function batchHealTracks(): Promise<{
   let skipped = 0;
   const failed: string[] = [];
 
-  console.log(`[TrackVerifier] 📊 Checking ${hotPool.length} tracks in pool...`);
+  devLog(`[TrackVerifier] 📊 Checking ${hotPool.length} tracks in pool...`);
 
   for (const track of hotPool) {
     const thumbnailUrl = getThumb(track.trackId);
@@ -483,10 +484,10 @@ export async function batchHealTracks(): Promise<{
         skipped++;
         continue; // Both valid, skip
       }
-      console.log(`[TrackVerifier] ⚠️ CONTENT MISMATCH: ${track.artist} - ${track.title}`);
-      console.log(`[TrackVerifier]    Actual video: ${contentCheck.actualTitle}`);
+      devLog(`[TrackVerifier] ⚠️ CONTENT MISMATCH: ${track.artist} - ${track.title}`);
+      devLog(`[TrackVerifier]    Actual video: ${contentCheck.actualTitle}`);
     } else {
-      console.log(`[TrackVerifier] ❌ Bad thumbnail: ${track.artist} - ${track.title}`);
+      devLog(`[TrackVerifier] ❌ Bad thumbnail: ${track.artist} - ${track.title}`);
     }
 
     // Try to heal
@@ -494,21 +495,21 @@ export async function batchHealTracks(): Promise<{
 
     if (result) {
       healed++;
-      console.log(`[TrackVerifier] ✅ Healed: ${track.artist} - ${track.title}`);
+      devLog(`[TrackVerifier] ✅ Healed: ${track.artist} - ${track.title}`);
     } else {
       failed.push(`${track.artist} - ${track.title}`);
-      console.log(`[TrackVerifier] ⚠️ Could not heal: ${track.artist} - ${track.title}`);
+      devLog(`[TrackVerifier] ⚠️ Could not heal: ${track.artist} - ${track.title}`);
     }
 
     // Small delay to avoid hammering API
     await new Promise(r => setTimeout(r, 300));
   }
 
-  console.log(`[TrackVerifier] 🎉 BATCH HEAL COMPLETE`);
-  console.log(`[TrackVerifier]    Total: ${hotPool.length}`);
-  console.log(`[TrackVerifier]    Valid: ${skipped}`);
-  console.log(`[TrackVerifier]    Healed: ${healed}`);
-  console.log(`[TrackVerifier]    Failed: ${failed.length}`);
+  devLog(`[TrackVerifier] 🎉 BATCH HEAL COMPLETE`);
+  devLog(`[TrackVerifier]    Total: ${hotPool.length}`);
+  devLog(`[TrackVerifier]    Valid: ${skipped}`);
+  devLog(`[TrackVerifier]    Healed: ${healed}`);
+  devLog(`[TrackVerifier]    Failed: ${failed.length}`);
 
   return { healed, failed, total: hotPool.length, skipped };
 }
@@ -528,7 +529,7 @@ export async function validateBeforePool(
 
   if (!thumbnailValid) {
     // Thumbnail doesn't load, definitely need to verify
-    console.log(`[TrackVerifier] 🔍 Thumbnail failed, verifying: ${artist} - ${title}`);
+    devLog(`[TrackVerifier] 🔍 Thumbnail failed, verifying: ${artist} - ${title}`);
     return await findCorrectTrack(artist, title);
   }
 
@@ -537,8 +538,8 @@ export async function validateBeforePool(
 
   if (!contentCheck.valid) {
     // CONTENT MISMATCH! Wrong video ID (like Gobe → Fleetwood Mac)
-    console.log(`[TrackVerifier] ⚠️ CONTENT MISMATCH detected for: ${artist} - ${title}`);
-    console.log(`[TrackVerifier]    Video is actually: ${contentCheck.actualTitle}`);
+    devLog(`[TrackVerifier] ⚠️ CONTENT MISMATCH detected for: ${artist} - ${title}`);
+    devLog(`[TrackVerifier]    Video is actually: ${contentCheck.actualTitle}`);
     return await findCorrectTrack(artist, title, contentCheck.actualTitle);
   }
 
@@ -559,7 +560,7 @@ async function findCorrectTrack(
 
     if (results.length > 0) {
       const verified = results[0];
-      console.log(`[TrackVerifier] ✅ Found correct: ${verified.artist} - ${verified.title}`);
+      devLog(`[TrackVerifier] ✅ Found correct: ${verified.artist} - ${verified.title}`);
       return {
         valid: true,
         verifiedId: verified.voyoId,
@@ -568,7 +569,7 @@ async function findCorrectTrack(
       };
     }
   } catch (error) {
-    console.warn(`[TrackVerifier] Search failed for ${artist} - ${title}`);
+    devWarn(`[TrackVerifier] Search failed for ${artist} - ${title}`);
   }
 
   return { valid: false, mismatch: mismatchedTitle };
@@ -585,7 +586,7 @@ export async function safeAddToPool(
   const validation = await validateBeforePool(track.trackId, track.artist, track.title);
 
   if (!validation.valid) {
-    console.warn(`[TrackVerifier] ❌ Rejected invalid track: ${track.artist} - ${track.title}`);
+    devWarn(`[TrackVerifier] ❌ Rejected invalid track: ${track.artist} - ${track.title}`);
     return false;
   }
 
@@ -623,7 +624,7 @@ export async function safeAddManyToPool(
  */
 export async function runStartupHeal(): Promise<void> {
   if (hasRunStartupHeal) {
-    console.log('[TrackVerifier] Startup heal already ran');
+    devLog('[TrackVerifier] Startup heal already ran');
     return;
   }
 
@@ -635,19 +636,19 @@ export async function runStartupHeal(): Promise<void> {
   const poolStore = useTrackPoolStore.getState();
 
   if (poolStore.hotPool.length === 0) {
-    console.log('[TrackVerifier] No tracks in pool, skipping startup heal');
+    devLog('[TrackVerifier] No tracks in pool, skipping startup heal');
     return;
   }
 
-  console.log('[TrackVerifier] 🚀 Running startup heal...');
+  devLog('[TrackVerifier] 🚀 Running startup heal...');
 
   // Run batch heal in background
   batchHealTracks().then(result => {
     if (result.healed > 0) {
-      console.log(`[TrackVerifier] ✅ Startup heal fixed ${result.healed} tracks`);
+      devLog(`[TrackVerifier] ✅ Startup heal fixed ${result.healed} tracks`);
     }
     if (result.failed.length > 0) {
-      console.warn(`[TrackVerifier] ⚠️ Could not heal ${result.failed.length} tracks`);
+      devWarn(`[TrackVerifier] ⚠️ Could not heal ${result.failed.length} tracks`);
     }
   }).catch(err => {
     console.error('[TrackVerifier] Startup heal error:', err);
@@ -669,7 +670,7 @@ export function isKnownUnplayable(trackId: string): boolean {
  */
 export function clearFailure(trackId: string): void {
   permanentFailures.delete(trackId);
-  console.log(`[TrackVerifier] Cleared failure for: ${trackId}`);
+  devLog(`[TrackVerifier] Cleared failure for: ${trackId}`);
 }
 
 /**
@@ -708,11 +709,11 @@ if (typeof window !== 'undefined') {
     getCached: () => Array.from(verificationResults.entries()),
     getFailures: () => Array.from(permanentFailures.entries()),
   };
-  console.log('🔧 [TrackVerifier] Debug commands:');
-  console.log('   window.trackVerifier.batchHeal()  - Fix ALL bad thumbnails NOW');
-  console.log('   window.trackVerifier.verify(id, artist, title)  - Fix single track');
-  console.log('   window.trackVerifier.stats()  - Get verification statistics');
-  console.log('   window.trackVerifier.getFailures()  - List permanently failed tracks');
+  devLog('🔧 [TrackVerifier] Debug commands:');
+  devLog('   window.trackVerifier.batchHeal()  - Fix ALL bad thumbnails NOW');
+  devLog('   window.trackVerifier.verify(id, artist, title)  - Fix single track');
+  devLog('   window.trackVerifier.stats()  - Get verification statistics');
+  devLog('   window.trackVerifier.getFailures()  - List permanently failed tracks');
 }
 
 export default {

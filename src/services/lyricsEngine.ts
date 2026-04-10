@@ -45,6 +45,7 @@ import {
 
 import { lyricsAPI, isSupabaseConfigured, type LyricsRow, type LyricSegmentRow } from '../lib/supabase';
 import { type Track } from '../types';
+import { devLog, devWarn } from '../utils/logger';
 
 // Re-export LRCLIB types for convenience
 export type { LRCLibResult, ParsedLyricLine };
@@ -126,7 +127,7 @@ export async function fetchLyricsSimple(
     if (onProgress) {
       onProgress({ stage, progress, message });
     }
-    console.log(`[LyricsEngine] ${stage}: ${message} (${progress}%)`);
+    devLog(`[LyricsEngine] ${stage}: ${message} (${progress}%)`);
   };
 
   updateProgress('fetching', 10, 'Checking LRCLIB...');
@@ -328,7 +329,7 @@ export async function generateLyrics(
     if (onProgress) {
       onProgress({ stage, progress, message });
     }
-    console.log(`[LyricsEngine] ${stage}: ${message} (${progress}%)`);
+    devLog(`[LyricsEngine] ${stage}: ${message} (${progress}%)`);
   };
 
   try {
@@ -377,12 +378,12 @@ export async function generateLyrics(
           polished_by: ['lrclib'],
           verified_by: 'lrclib',
         }).then(saved => {
-          if (saved) console.log(`[LyricsEngine] ✅ Cached LRCLIB lyrics to Supabase: ${track.title}`);
+          if (saved) devLog(`[LyricsEngine] ✅ Cached LRCLIB lyrics to Supabase: ${track.title}`);
         }).catch((err) => {
           // Don't block playback on a cache failure, but log the actual error
           // so we can spot when Supabase writes start failing instead of
           // silently swallowing them.
-          console.warn(`[LyricsEngine] Failed to cache LRCLIB lyrics: ${err?.message ?? err}`);
+          devWarn(`[LyricsEngine] Failed to cache LRCLIB lyrics: ${err?.message ?? err}`);
         });
       }
 
@@ -776,7 +777,7 @@ export function submitCorrection(
   );
 
   if (success) {
-    console.log(`[LyricsEngine] Correction submitted by ${userId} for segment ${segmentIndex}`);
+    devLog(`[LyricsEngine] Correction submitted by ${userId} for segment ${segmentIndex}`);
   }
 
   return success;
@@ -802,7 +803,7 @@ export function contributeWord(
     sources: [`community:${userId}`],
   });
 
-  console.log(`[LyricsEngine] Word "${word}" contributed by ${userId}`);
+  devLog(`[LyricsEngine] Word "${word}" contributed by ${userId}`);
   return id;
 }
 
@@ -830,7 +831,7 @@ export function reportIssue(
   });
 
   localStorage.setItem(issuesKey, JSON.stringify(issues));
-  console.log(`[LyricsEngine] Issue reported for ${trackId} segment ${segmentIndex}`);
+  devLog(`[LyricsEngine] Issue reported for ${trackId} segment ${segmentIndex}`);
 }
 
 // ============================================================================
@@ -974,7 +975,7 @@ export function getLyricsStats(): {
 // INITIALIZATION
 // ============================================================================
 
-console.log('[LyricsEngine] Service loaded');
+devLog('[LyricsEngine] Service loaded');
 
 // Export types
 export type {

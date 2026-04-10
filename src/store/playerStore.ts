@@ -40,6 +40,7 @@ async function getDatabaseDiscovery() {
   return databaseDiscoveryModule;
 }
 import { isKnownUnplayable } from '../services/trackVerifier';
+import { devLog, devWarn } from '../utils/logger';
 
 // Network quality types
 type NetworkQuality = 'slow' | 'medium' | 'fast' | 'unknown';
@@ -99,13 +100,13 @@ export function getRecentHistory(limit = 10): PersistedHistoryItem[] {
 if (typeof window !== 'undefined') {
   (window as any).voyoHistory = () => {
     const history = getRecentHistory(20);
-    console.log('🎵 VOYO Recent History:');
+    devLog('🎵 VOYO Recent History:');
     history.forEach((h, i) => {
-      console.log(`${i + 1}. ${h.title} - ${h.artist} (${new Date(h.playedAt).toLocaleTimeString()})`);
+      devLog(`${i + 1}. ${h.title} - ${h.artist} (${new Date(h.playedAt).toLocaleTimeString()})`);
     });
     return history;
   };
-  console.log('[VOYO] Type voyoHistory() in console to see recent tracks');
+  devLog('[VOYO] Type voyoHistory() in console to see recent tracks');
 }
 
 function getPersistedTrack(): Track | null {
@@ -519,7 +520,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       ...current,
       history: [...(current.history || []).slice(-49), newHistoryItem],
     });
-    console.log('[VOYO] Track started, saved immediately:', track.title);
+    devLog('[VOYO] Track started, saved immediately:', track.title);
 
     // Update Media Session
     if (typeof navigator !== 'undefined' && 'mediaSession' in navigator) {
@@ -630,7 +631,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       while (queueToProcess.length > 0 && !nextPlayable) {
         const [candidate, ...remaining] = queueToProcess;
         if (candidate.track.trackId && isKnownUnplayable(candidate.track.trackId)) {
-          console.warn(`[PlayerStore] Skipping unplayable track in queue: ${candidate.track.title}`);
+          devWarn(`[PlayerStore] Skipping unplayable track in queue: ${candidate.track.title}`);
           queueToProcess = remaining;
         } else {
           nextPlayable = candidate;
@@ -640,7 +641,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
 
       // If no playable track found in queue, fall through to other sources
       if (!nextPlayable) {
-        console.log('[PlayerStore] No playable tracks in queue, trying other sources...');
+        devLog('[PlayerStore] No playable tracks in queue, trying other sources...');
         set({ queue: [] }); // Clear the dead queue
       } else {
         if (state.currentTrack && state.currentTime > 5) {
@@ -935,7 +936,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
 
       // FIX 5: Reject known unplayable tracks
       if (track.trackId && isKnownUnplayable(track.trackId)) {
-        console.warn(`[PlayerStore] Rejected unplayable track from queue: ${track.title}`);
+        devWarn(`[PlayerStore] Rejected unplayable track from queue: ${track.title}`);
         return state; // Don't add unplayable track
       }
 
@@ -1082,7 +1083,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
           oyeReactions: h.oyeReactions,
         })),
       });
-      console.log('[VOYO] History saved:', state.history.slice(-1)[0]?.track?.title);
+      devLog('[VOYO] History saved:', state.history.slice(-1)[0]?.track?.title);
     }, 100);
 
     // CLOUD SYNC: Sync history to cloud (debounced)
@@ -1165,12 +1166,12 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
           const hotAdded = newHot.length;
           const discoverAdded = newDiscover.length;
           if (hotAdded > 0 || discoverAdded > 0) {
-            console.log(`[VOYO] 🔥 ACCUMULATED: +${hotAdded} hot (${mergedHot.length} total), +${discoverAdded} discover (${mergedDiscover.length} total)`);
+            devLog(`[VOYO] 🔥 ACCUMULATED: +${hotAdded} hot (${mergedHot.length} total), +${discoverAdded} discover (${mergedDiscover.length} total)`);
           }
           return;
         }
       } catch (err) {
-        console.warn('[VOYO] Database discovery failed, keeping existing pool:', err);
+        devWarn('[VOYO] Database discovery failed, keeping existing pool:', err);
       }
     });
 
@@ -1264,7 +1265,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
           // Only cache if not already cached
           checkCache(currentTrack.trackId).then((cached) => {
             if (!cached) {
-              console.log(`🔥 [OYE] Auto-boosting: ${currentTrack.title}`);
+              devLog(`🔥 [OYE] Auto-boosting: ${currentTrack.title}`);
               cacheTrack(
                 currentTrack.trackId,
                 currentTrack.title,

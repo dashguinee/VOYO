@@ -12,6 +12,7 @@
 import { useCallback } from 'react';
 import { usePlayerStore } from '../store/playerStore';
 import { unlockMobileAudio, isAudioUnlocked } from '../utils/mobileAudioUnlock';
+import { devWarn } from '../utils/logger';
 
 /**
  * Get the global audio element used by AudioPlayer
@@ -86,7 +87,7 @@ export function useMobilePlay() {
       } catch (err: any) {
         if (err.name === 'NotAllowedError') {
           // Autoplay was blocked - try again on next tap
-          console.warn('[VOYO] Autoplay blocked - user interaction required');
+          devWarn('[VOYO] Autoplay blocked - user interaction required');
         } else if (err.name === 'AbortError') {
           // Play was interrupted (user paused quickly) - ignore
           return;

@@ -9,6 +9,7 @@
  */
 
 import { uploadToR2 } from './api';
+import { devLog } from '../utils/logger';
 
 const DB_NAME = 'voyo-music-cache';
 const DB_VERSION = 1;
@@ -221,7 +222,7 @@ export async function downloadTrack(
         // Rate limited - exponential backoff
         const retryAfter = response.headers.get('Retry-After');
         const waitTime = retryAfter ? parseInt(retryAfter, 10) * 1000 : retryDelay;
-        console.log(`🎵 CACHE: Rate limited (429), retrying in ${waitTime / 1000}s...`);
+        devLog(`🎵 CACHE: Rate limited (429), retrying in ${waitTime / 1000}s...`);
         await new Promise(resolve => setTimeout(resolve, waitTime));
         retryDelay *= 2; // Double the delay for next retry
         continue;
@@ -304,7 +305,7 @@ export async function downloadTrack(
         uploadToR2(trackId, blob, quality === 'boosted' ? 'high' : 'low')
           .then(result => {
             if (result.success) {
-              console.log(`🌐 [COLLECTIVE] Contributed ${trackId} to shared library`);
+              devLog(`🌐 [COLLECTIVE] Contributed ${trackId} to shared library`);
             }
           })
           .catch(() => {}); // Silent fail - local cache is primary
@@ -463,7 +464,7 @@ export async function migrateVoyoIds(): Promise<void> {
       // Check if this track has a VOYO ID
       if (track.id.startsWith('vyo_')) {
         const rawId = decodeVoyoId(track.id);
-        console.log('🔄 MIGRATE: Converting', track.id, '→', rawId, '| title:', track.title);
+        devLog('🔄 MIGRATE: Converting', track.id, '→', rawId, '| title:', track.title);
 
         // Get the audio blob
         const audioTransaction = database.transaction(STORE_NAME, 'readonly');
@@ -490,7 +491,7 @@ export async function migrateVoyoIds(): Promise<void> {
               writeTransaction.objectStore(META_STORE).delete(track.id);
 
               writeTransaction.oncomplete = () => {
-                console.log('✅ MIGRATE: Successfully migrated', track.title);
+                devLog('✅ MIGRATE: Successfully migrated', track.title);
                 resolve();
               };
               writeTransaction.onerror = () => resolve();

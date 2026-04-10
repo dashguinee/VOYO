@@ -8,6 +8,7 @@
  */
 
 import { supabase, isSupabaseConfigured } from './supabase';
+import { devLog } from '../utils/logger';
 
 // ============================================
 // VIBE TYPES
@@ -412,13 +413,13 @@ export const vibeEngine = {
    */
   async getTracksForVibe(vibeId: string, limit = 50): Promise<VibeTrack[]> {
     if (!isSupabaseConfigured || !supabase) {
-      console.log('[VibeEngine] Supabase not configured');
+      devLog('[VibeEngine] Supabase not configured');
       return [];
     }
 
     const vibe = VIBES[vibeId];
     if (!vibe) {
-      console.log(`[VibeEngine] Unknown vibe: ${vibeId}`);
+      devLog(`[VibeEngine] Unknown vibe: ${vibeId}`);
       return [];
     }
 

@@ -9,6 +9,7 @@
  */
 
 import { createClient } from '@supabase/supabase-js';
+import { devLog, devWarn } from '../../utils/logger';
 
 // Command Center's Supabase credentials (social data)
 // Check multiple env var names for compatibility
@@ -134,7 +135,7 @@ export type AppCode = typeof APP_CODES[keyof typeof APP_CODES];
 export const friendsAPI = {
   async getFriends(userId: string, appFilter?: AppCode): Promise<Friend[]> {
     if (!ccSupabase) {
-      console.warn('[DAHUB] Command Center Supabase not configured');
+      devWarn('[DAHUB] Command Center Supabase not configured');
       return [];
     }
 
@@ -242,7 +243,7 @@ export const friendsAPI = {
         .eq('core_id', userId);
 
       if (userServicesError || !userServices?.length) {
-        console.log('[DAHUB] No shared accounts found for user');
+        devLog('[DAHUB] No shared accounts found for user');
         return [];
       }
 

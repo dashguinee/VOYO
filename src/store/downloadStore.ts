@@ -24,6 +24,7 @@ import {
   type DownloadSetting,
 } from '../services/downloadManager';
 import { audioEngine } from '../services/audioEngine';
+import { devLog, devWarn } from '../utils/logger';
 
 // Edge Worker for extraction (replaces Fly.io - FREE + faster)
 const EDGE_WORKER_URL = 'https://voyo-edge.dash-webtv.workers.dev';
@@ -170,12 +171,12 @@ export const useDownloadStore = create<DownloadStore>((set, get) => ({
   checkCache: async (trackId: string) => {
     // NORMALIZE: Always check with raw YouTube ID
     const normalizedId = decodeVoyoId(trackId);
-    console.log('🎵 CACHE: Checking if trackId is cached:', trackId, '→ normalized:', normalizedId);
+    devLog('🎵 CACHE: Checking if trackId is cached:', trackId, '→ normalized:', normalizedId);
     const cached = await isTrackCached(normalizedId);
-    console.log('🎵 CACHE: isTrackCached result:', cached);
+    devLog('🎵 CACHE: isTrackCached result:', cached);
     if (cached) {
       const url = await getCachedTrackUrl(normalizedId);
-      console.log('🎵 CACHE: Got blob URL:', url ? 'YES' : 'NO');
+      devLog('🎵 CACHE: Got blob URL:', url ? 'YES' : 'NO');
       if (url) {
         return url;
       }
@@ -187,7 +188,7 @@ export const useDownloadStore = create<DownloadStore>((set, get) => ({
   boostTrack: async (trackId, title, artist, duration, thumbnail) => {
     // NORMALIZE: Always use raw YouTube ID for storage (not VOYO encoded)
     const normalizedId = decodeVoyoId(trackId);
-    console.log('🎵 BOOST: Starting boost for trackId:', trackId, '→ normalized:', normalizedId, '| title:', title);
+    devLog('🎵 BOOST: Starting boost for trackId:', trackId, '→ normalized:', normalizedId, '| title:', title);
     const { downloads, manualBoostCount, autoBoostEnabled, boostStartTimes } = get();
 
     // Record boost start time for hot-swap feature
@@ -219,7 +220,7 @@ export const useDownloadStore = create<DownloadStore>((set, get) => ({
       // ADAPTIVE BITRATE: Use audioEngine to select optimal quality based on network
       const optimalBitrate = audioEngine.selectOptimalBitrate();
       const bitrateValue = audioEngine.getBitrateValue(optimalBitrate);
-      console.log(`🎵 BOOST: Using adaptive bitrate: ${optimalBitrate} (${bitrateValue}kbps)`);
+      devLog(`🎵 BOOST: Using adaptive bitrate: ${optimalBitrate} (${bitrateValue}kbps)`);
 
       // Extract via Edge Worker (FREE, 300+ locations, handles CORS)
       const extractUrl = `${EDGE_WORKER_URL}/extract/${normalizedId}`;
@@ -250,7 +251,7 @@ export const useDownloadStore = create<DownloadStore>((set, get) => ({
       );
 
       if (success) {
-        console.log('🎵 BOOST: ✅ Successfully boosted trackId:', trackId, '→ stored as:', normalizedId, '| title:', title);
+        devLog('🎵 BOOST: ✅ Successfully boosted trackId:', trackId, '→ stored as:', normalizedId, '| title:', title);
         const finalDownloads = new Map(get().downloads);
         finalDownloads.set(normalizedId, { trackId: normalizedId, progress: 100, status: 'complete' });
 
@@ -267,8 +268,8 @@ export const useDownloadStore = create<DownloadStore>((set, get) => ({
         audioEngine.recordDownloadMeasurement(estimatedBytes, durationMs);
 
         const networkStats = audioEngine.getNetworkStats();
-        console.log(`🎵 BOOST: Completed in ${boostDuration.toFixed(1)}s - ${isFastBoost ? '⚡ FAST (DJ rewind!)' : '📦 Normal'}`);
-        console.log(`🎵 BOOST: Network speed estimate: ${networkStats.speed.toFixed(0)} kbps`);
+        devLog(`🎵 BOOST: Completed in ${boostDuration.toFixed(1)}s - ${isFastBoost ? '⚡ FAST (DJ rewind!)' : '📦 Normal'}`);
+        devLog(`🎵 BOOST: Network speed estimate: ${networkStats.speed.toFixed(0)} kbps`);
 
         // Increment manual boost count
         const newCount = manualBoostCount + 1;
@@ -315,17 +316,17 @@ export const useDownloadStore = create<DownloadStore>((set, get) => ({
     // Skip if already cached at ANY quality (don't downgrade or waste bandwidth)
     const currentQuality = await getTrackQuality(normalizedId);
     if (currentQuality) {
-      console.log('🎵 CACHE: Track already cached at', currentQuality, 'quality, skipping:', title);
+      devLog('🎵 CACHE: Track already cached at', currentQuality, 'quality, skipping:', title);
       return;
     }
 
     // Check network settings
     if (!shouldAutoDownload()) {
-      console.log('🎵 CACHE: Network settings prevent auto-cache');
+      devLog('🎵 CACHE: Network settings prevent auto-cache');
       return;
     }
 
-    console.log('🎵 CACHE: Auto-caching track:', title);
+    devLog('🎵 CACHE: Auto-caching track:', title);
 
     try {
       // Extract via Edge Worker (FREE, handles CORS)
@@ -340,7 +341,7 @@ export const useDownloadStore = create<DownloadStore>((set, get) => ({
       );
 
       if (success) {
-        console.log('🎵 CACHE: ✅ Auto-cached:', title);
+        devLog('🎵 CACHE: ✅ Auto-cached:', title);
         await get().refreshCacheInfo();
         // Emit completion for hot-swap (upgrade stream → cached)
         set({
@@ -354,7 +355,7 @@ export const useDownloadStore = create<DownloadStore>((set, get) => ({
       }
     } catch (error) {
       // Silent fail - don't interrupt user experience
-      console.log('🎵 CACHE: Auto-cache failed for', title, error);
+      devLog('🎵 CACHE: Auto-cache failed for', title, error);
     }
   },
 
@@ -419,7 +420,7 @@ export const useDownloadStore = create<DownloadStore>((set, get) => ({
     }
 
     if (iterations >= MAX_ITERATIONS) {
-      console.warn('[VOYO] processQueue hit iteration limit, clearing queue');
+      devWarn('[VOYO] processQueue hit iteration limit, clearing queue');
       downloadQueue.length = 0;
     }
 

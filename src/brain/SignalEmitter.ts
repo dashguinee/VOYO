@@ -18,6 +18,8 @@
  * 9. Mix Signals - Pre-curated mix interactions
  */
 
+import { devLog } from '../utils/logger';
+
 // ============================================
 // SIGNAL TYPES
 // ============================================
@@ -275,7 +277,7 @@ class SignalEmitter {
 
   constructor() {
     this.sessionId = this.generateSessionId();
-    console.log('[Brain] SignalEmitter initialized, session:', this.sessionId);
+    devLog('[Brain] SignalEmitter initialized, session:', this.sessionId);
   }
 
   private generateSessionId(): string {

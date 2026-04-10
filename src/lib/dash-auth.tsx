@@ -9,6 +9,7 @@
 
 import { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
+import { devLog } from '../utils/logger';
 
 // Command Center Supabase - THE source of truth
 // Use env vars with fallback to hardcoded values for reliability
@@ -372,7 +373,7 @@ export async function exchangeSSOToken(
       key: STORAGE_KEY,
     }));
 
-    console.log('[DASH SSO] Token exchanged successfully for:', user.core_id);
+    devLog('[DASH SSO] Token exchanged successfully for:', user.core_id);
     return { success: true };
   } catch (e) {
     console.error('[DASH SSO] Exchange failed:', e);
@@ -414,7 +415,7 @@ export async function handleSSOCallback(): Promise<boolean> {
 
         // Clean URL
         window.history.replaceState({}, '', window.location.pathname);
-        console.log('[DASH SSO] Auto sign-in successful via dashAuth!', citizen.coreId);
+        devLog('[DASH SSO] Auto sign-in successful via dashAuth!', citizen.coreId);
 
         // Trigger re-render
         window.dispatchEvent(new StorageEvent('storage', { key: STORAGE_KEY }));
@@ -428,11 +429,11 @@ export async function handleSSOCallback(): Promise<boolean> {
   // Flow 2: Check for sso_token (token-based, requires exchange)
   const ssoToken = params.get('sso_token');
   if (ssoToken) {
-    console.log('[DASH SSO] Found SSO token, exchanging...');
+    devLog('[DASH SSO] Found SSO token, exchanging...');
     const result = await exchangeSSOToken(ssoToken);
     if (result.success) {
       window.history.replaceState({}, '', window.location.pathname);
-      console.log('[DASH SSO] Auto sign-in successful via token!');
+      devLog('[DASH SSO] Auto sign-in successful via token!');
       return true;
     }
     console.error('[DASH SSO] Token exchange failed:', result.error);

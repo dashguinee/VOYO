@@ -12,6 +12,7 @@
  */
 
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { devLog, devWarn } from '../utils/logger';
 
 // ============================================
 // TYPES
@@ -122,7 +123,7 @@ class MomentsService {
   private localCache: Map<string, Moment> = new Map();
 
   constructor() {
-    console.log('[MomentsService] Initialized');
+    devLog('[MomentsService] Initialized');
   }
 
   // ============================================
@@ -134,7 +135,7 @@ class MomentsService {
    */
   async createMoment(input: MomentInput): Promise<Moment | null> {
     if (!supabase || !isSupabaseConfigured) {
-      console.log('[MomentsService] Supabase not configured');
+      devLog('[MomentsService] Supabase not configured');
       return null;
     }
 
@@ -170,7 +171,7 @@ class MomentsService {
 
       const moment = data as Moment;
       this.localCache.set(moment.id, moment);
-      console.log(`[MomentsService] Created moment: ${moment.id} (${moment.title})`);
+      devLog(`[MomentsService] Created moment: ${moment.id} (${moment.title})`);
       return moment;
     } catch (err) {
       console.error('[MomentsService] Create error:', err);
@@ -208,7 +209,7 @@ class MomentsService {
       // Invalidate cache
       this.localCache.delete(momentId);
 
-      console.log(`[MomentsService] Linked moment ${momentId} to track ${trackId}`);
+      devLog(`[MomentsService] Linked moment ${momentId} to track ${trackId}`);
       return data === true;
     } catch (err) {
       console.error('[MomentsService] Link error:', err);
@@ -767,7 +768,7 @@ class MomentsService {
    */
   clearCache(): void {
     this.localCache.clear();
-    console.log('[MomentsService] Cache cleared');
+    devLog('[MomentsService] Cache cleared');
   }
 
   /**

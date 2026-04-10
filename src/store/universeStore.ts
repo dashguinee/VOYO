@@ -35,6 +35,7 @@ import {
   NowPlaying,
 } from '../lib/supabase';
 import { TRACKS } from '../data/tracks';
+import { devLog } from '../utils/logger';
 
 // ============================================
 // TYPES
@@ -393,7 +394,7 @@ export const useUniverseStore = create<UniverseStore>((set, get) => ({
         // Clean URL
         window.history.replaceState({}, '', window.location.pathname);
 
-        console.log('[DASH Auth] Logged in as:', citizen.coreId);
+        devLog('[DASH Auth] Logged in as:', citizen.coreId);
         return true;
       }
     } catch (e) {
@@ -591,7 +592,7 @@ export const useUniverseStore = create<UniverseStore>((set, get) => ({
 
       // Note: History is not restored to avoid duplicates - it rebuilds as user plays
 
-      console.log('[VOYO] Synced from cloud:', currentUsername);
+      devLog('[VOYO] Synced from cloud:', currentUsername);
       return true;
     } catch (error) {
       console.error('[VOYO] Sync from cloud failed:', error);

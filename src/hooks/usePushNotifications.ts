@@ -11,6 +11,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { commandCenter } from '../lib/voyo-api'
 import { getDashSession } from '../lib/dash-auth'
+import { devWarn } from '../utils/logger';
 
 const VAPID_KEY_RAW = import.meta.env.VITE_VAPID_PUBLIC_KEY || ''
 
@@ -78,7 +79,7 @@ export function usePushNotifications() {
       )
 
       if (error) {
-        console.warn('[VOYO] Token save failed:', error.message)
+        devWarn('[VOYO] Token save failed:', error.message)
         return 'failed'
       }
 
@@ -93,7 +94,7 @@ export function usePushNotifications() {
       setIsSubscribed(true)
       return 'success'
     } catch (err) {
-      console.warn('[VOYO] Push subscription failed:', err)
+      devWarn('[VOYO] Push subscription failed:', err)
       return 'failed'
     }
   }, [supported])

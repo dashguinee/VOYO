@@ -19,6 +19,7 @@ import {
 import { DirectMessageChat } from './DirectMessageChat';
 import { usePlayerStore } from '../../store/playerStore';
 import { getYouTubeThumbnail } from '../../data/tracks';
+import { devWarn } from '../../utils/logger';
 
 // ==============================================
 // CONSTANTS & HELPERS
@@ -1072,16 +1073,16 @@ export function Dahub({ userId: propsUserId, userName: propsUserName, userAvatar
       ]);
 
       if (friendsRes.status === 'fulfilled') setFriends(friendsRes.value);
-      else console.warn('[dahub] getFriends failed:', friendsRes.reason);
+      else devWarn('[dahub] getFriends failed:', friendsRes.reason);
 
       if (sharedRes.status === 'fulfilled') setSharedMembers(sharedRes.value);
-      else console.warn('[dahub] getSharedAccountMembers failed:', sharedRes.reason);
+      else devWarn('[dahub] getSharedAccountMembers failed:', sharedRes.reason);
 
       if (conversationsRes.status === 'fulfilled') setConversations(conversationsRes.value);
-      else console.warn('[dahub] getConversations failed:', conversationsRes.reason);
+      else devWarn('[dahub] getConversations failed:', conversationsRes.reason);
 
       if (unreadRes.status === 'fulfilled') setUnreadCount(unreadRes.value);
-      else console.warn('[dahub] getUnreadCount failed:', unreadRes.reason);
+      else devWarn('[dahub] getUnreadCount failed:', unreadRes.reason);
     } catch (err) {
       // allSettled never throws, but defensive in case React batching surprises us.
       console.error('[dahub] loadData unexpected:', err);

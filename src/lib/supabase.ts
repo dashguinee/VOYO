@@ -13,6 +13,7 @@
  */
 
 import { createClient } from '@supabase/supabase-js';
+import { devLog, devWarn } from '../utils/logger';
 
 // Get from environment or use defaults for development
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
@@ -413,7 +414,7 @@ export const lyricsAPI = {
       console.error('[Lyrics] Save error:', error);
       return false;
     }
-    console.log(`[Lyrics] Saved lyrics for ${lyrics.track_id}`);
+    devLog(`[Lyrics] Saved lyrics for ${lyrics.track_id}`);
     return true;
   },
 
@@ -572,7 +573,7 @@ export interface VideoIntelligenceRow {
 export const videoIntelligenceAPI = {
   async sync(video: Partial<VideoIntelligenceRow> & { youtube_id: string }): Promise<boolean> {
     if (!supabase) {
-      console.log('[VideoIntelligence] Supabase not configured, skipping sync');
+      devLog('[VideoIntelligence] Supabase not configured, skipping sync');
       return false;
     }
     const { error } = await supabase
@@ -588,7 +589,7 @@ export const videoIntelligenceAPI = {
       console.error('[VideoIntelligence] Sync error:', error.message);
       return false;
     }
-    console.log(`[VideoIntelligence] Synced ${video.youtube_id} to Supabase`);
+    devLog(`[VideoIntelligence] Synced ${video.youtube_id} to Supabase`);
     return true;
   },
 
@@ -665,7 +666,7 @@ export const videoIntelligenceAPI = {
       console.error('[VideoIntelligence] Batch sync error:', error.message);
       return 0;
     }
-    console.log(`[VideoIntelligence] Batch synced ${count} videos`);
+    devLog(`[VideoIntelligence] Batch synced ${count} videos`);
     return count || 0;
   },
 
@@ -701,9 +702,9 @@ export const videoIntelligenceAPI = {
       })
       .eq('youtube_id', normalizedId);
     if (error) {
-      console.warn('[VideoIntelligence] Flag for download failed:', error.message);
+      devWarn('[VideoIntelligence] Flag for download failed:', error.message);
     } else {
-      console.log(`[VideoIntelligence] Flagged ${normalizedId} for R2 download`);
+      devLog(`[VideoIntelligence] Flagged ${normalizedId} for R2 download`);
     }
   },
 
@@ -716,7 +717,7 @@ export const videoIntelligenceAPI = {
       .order('voyo_play_count', { ascending: false })
       .limit(limit);
     if (error) {
-      console.warn('[VideoIntelligence] getByArtist error:', error.message);
+      devWarn('[VideoIntelligence] getByArtist error:', error.message);
       return [];
     }
     return data || [];
@@ -767,7 +768,7 @@ export const playlistAPI = {
       console.error('[Playlist] Save error:', error.message);
       return false;
     }
-    console.log(`[Playlist] Saved: ${playlist.name} (${playlist.id})`);
+    devLog(`[Playlist] Saved: ${playlist.name} (${playlist.id})`);
     return true;
   },
 
@@ -804,7 +805,7 @@ export const playlistAPI = {
       console.error('[Playlist] Delete error:', error.message);
       return false;
     }
-    console.log(`[Playlist] Deleted: ${playlistId}`);
+    devLog(`[Playlist] Deleted: ${playlistId}`);
     return true;
   },
 
@@ -827,7 +828,7 @@ export const playlistAPI = {
       console.error('[Playlist] Batch save error:', error.message);
       return 0;
     }
-    console.log(`[Playlist] Batch saved ${count} playlists`);
+    devLog(`[Playlist] Batch saved ${count} playlists`);
     return count || 0;
   },
 

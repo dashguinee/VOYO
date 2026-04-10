@@ -9,6 +9,8 @@
  * Dark Mode: No third-party APIs, full control, VOYO branding
  */
 
+import { devLog, devWarn } from '../utils/logger';
+
 // Production endpoints
 const API_URL = 'https://voyo-edge.dash-webtv.workers.dev';
 const EDGE_WORKER_URL = 'https://voyo-edge.dash-webtv.workers.dev';
@@ -41,7 +43,7 @@ export async function searchMusic(query: string, limit: number = 10): Promise<Se
   );
 
   if (!response.ok) {
-    console.warn(`[API] YouTube search failed: ${response.status}`);
+    devWarn(`[API] YouTube search failed: ${response.status}`);
     return []; // Return empty, don't throw - let caller handle gracefully
   }
 
@@ -205,13 +207,13 @@ export async function uploadToR2(
     const data = await response.json();
 
     if (response.ok && data.success) {
-      console.log(`🌐 [R2] Uploaded ${youtubeId} to collective (${data.status})`);
+      devLog(`🌐 [R2] Uploaded ${youtubeId} to collective (${data.status})`);
       return { success: true, status: data.status };
     }
 
     return { success: false, error: data.error || 'Upload failed' };
   } catch (err: any) {
-    console.warn(`🌐 [R2] Upload failed for ${youtubeId}:`, err.message);
+    devWarn(`🌐 [R2] Upload failed for ${youtubeId}:`, err.message);
     return { success: false, error: err.message };
   }
 }
@@ -243,13 +245,13 @@ export async function getAudioStream(videoId: string, quality?: string): Promise
     const r2Result = await checkR2Cache(youtubeId, edgeQuality);
 
     if (r2Result.exists && r2Result.url) {
-      console.log(`[VOYO] 🚀 R2 HIT via Edge: ${youtubeId}`);
+      devLog(`[VOYO] 🚀 R2 HIT via Edge: ${youtubeId}`);
       return r2Result.url;
     }
 
     // STEP 2: R2 miss → YouTube IFrame fallback
     // IFrame always works, no extraction needed
-    console.log(`[VOYO] R2 miss, using IFrame: ${youtubeId}`);
+    devLog(`[VOYO] R2 miss, using IFrame: ${youtubeId}`);
     return `iframe:${youtubeId}`;
 
   } catch (err) {

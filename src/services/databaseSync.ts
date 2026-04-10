@@ -7,6 +7,7 @@
 
 import { videoIntelligenceAPI, isSupabaseConfigured } from '../lib/supabase';
 import { Track } from '../types';
+import { devLog, devWarn } from '../utils/logger';
 
 // Debounce map to avoid syncing the same track multiple times in quick succession
 const recentlySynced = new Map<string, number>();
@@ -64,7 +65,7 @@ export async function syncToDatabase(track: Track | {
 
     return success;
   } catch (error) {
-    console.warn('[DatabaseSync] Failed:', trackId, error);
+    devWarn('[DatabaseSync] Failed:', trackId, error);
     return false;
   }
 }
@@ -115,10 +116,10 @@ export async function syncManyToDatabase(tracks: Array<Track | {
       if (trackId) recentlySynced.set(trackId, now);
     }
 
-    console.log(`[DatabaseSync] Batch synced ${count} tracks`);
+    devLog(`[DatabaseSync] Batch synced ${count} tracks`);
     return count;
   } catch (error) {
-    console.warn('[DatabaseSync] Batch sync failed:', error);
+    devWarn('[DatabaseSync] Batch sync failed:', error);
     return 0;
   }
 }

@@ -13,6 +13,8 @@
  * Future: Expand to other African languages (Yoruba, Wolof, Mandinka, etc.)
  */
 
+import { devLog, devWarn } from '../utils/logger';
+
 // ============================================================================
 // TYPES
 // ============================================================================
@@ -65,7 +67,7 @@ export async function loadLexicon(): Promise<void> {
   if (isLoaded) return;
 
   try {
-    console.log('[Lexicon] Loading Soussou lexicon...');
+    devLog('[Lexicon] Loading Soussou lexicon...');
 
     // In browser context, we need to fetch from a served location
     // For now, we'll embed a subset or fetch from API
@@ -78,7 +80,7 @@ export async function loadLexicon(): Promise<void> {
       if (data.version === 'v1' && data.entries?.length > 0) {
         lexicon = data.entries;
         buildIndex();
-        console.log(`[Lexicon] Loaded ${lexicon.length} entries from cache`);
+        devLog(`[Lexicon] Loaded ${lexicon.length} entries from cache`);
         isLoaded = true;
         return;
       }
@@ -88,7 +90,7 @@ export async function loadLexicon(): Promise<void> {
     // For development, we'll initialize with common words
     lexicon = getCommonSoussouWords();
     buildIndex();
-    console.log(`[Lexicon] Initialized with ${lexicon.length} common words`);
+    devLog(`[Lexicon] Initialized with ${lexicon.length} common words`);
     isLoaded = true;
 
   } catch (error) {
@@ -125,7 +127,7 @@ function buildIndex(): void {
     }
   }
 
-  console.log(`[Lexicon] Index built with ${variantIndex.size} unique forms`);
+  devLog(`[Lexicon] Index built with ${variantIndex.size} unique forms`);
 }
 
 /**
@@ -149,7 +151,7 @@ function normalize(text: string): string {
  */
 export function translateWord(word: string): TranslationMatch | null {
   if (!isLoaded) {
-    console.warn('[Lexicon] Not loaded yet');
+    devWarn('[Lexicon] Not loaded yet');
     return null;
   }
 
@@ -383,7 +385,7 @@ export function addWord(entry: Omit<LexiconEntry, 'id'>): string {
   // Save to local storage
   saveUserContributions();
 
-  console.log(`[Lexicon] Added word: ${newEntry.base}`);
+  devLog(`[Lexicon] Added word: ${newEntry.base}`);
   return id;
 }
 
@@ -513,4 +515,4 @@ loadLexicon().then(() => {
   loadUserContributions();
 });
 
-console.log('[Lexicon] Service loaded');
+devLog('[Lexicon] Service loaded');

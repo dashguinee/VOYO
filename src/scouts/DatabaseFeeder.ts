@@ -10,6 +10,7 @@ import { videoIntelligenceAPI } from '../lib/supabase';
 import { TrackKnowledge, useKnowledgeStore } from '../knowledge/KnowledgeStore';
 import { scoutManager, unleashScouts, classifyTrack, SCOUT_CONFIGS } from './HungryScouts';
 import { PrimaryMood, AfricanGenre, AfricanRegion } from '../knowledge/MoodTags';
+import { devLog, devWarn } from '../utils/logger';
 
 // ============================================
 // FEED TO SUPABASE
@@ -33,11 +34,11 @@ export async function feedTrackToDatabase(track: TrackKnowledge): Promise<boolea
     });
 
     if (success) {
-      console.log(`[Feeder] Fed to DB: ${track.artistName} - ${track.title}`);
+      devLog(`[Feeder] Fed to DB: ${track.artistName} - ${track.title}`);
     }
     return success;
   } catch (error) {
-    console.warn(`[Feeder] Failed to feed: ${track.id}`, error);
+    devWarn(`[Feeder] Failed to feed: ${track.id}`, error);
     return false;
   }
 }
@@ -61,7 +62,7 @@ export async function feedTracksToDatabase(tracks: TrackKnowledge[]): Promise<nu
   }));
 
   const count = await videoIntelligenceAPI.batchSync(videos);
-  console.log(`[Feeder] Batch fed ${count} tracks to Supabase`);
+  devLog(`[Feeder] Batch fed ${count} tracks to Supabase`);
   return count;
 }
 
@@ -78,8 +79,8 @@ export async function unleashAndFeed(): Promise<{
   tracksFed: number;
   scoutsRun: number;
 }> {
-  console.log('[Feeder] UNLEASHING HUNGRY SCOUTS...');
-  console.log('[Feeder] They will discover African music and feed the collective brain!');
+  devLog('[Feeder] UNLEASHING HUNGRY SCOUTS...');
+  devLog('[Feeder] They will discover African music and feed the collective brain!');
 
   const startTime = Date.now();
   let totalDiscovered = 0;
@@ -92,7 +93,7 @@ export async function unleashAndFeed(): Promise<{
 
   for (let i = 0; i < scouts.length; i += batchSize) {
     const batch = scouts.slice(i, i + batchSize);
-    console.log(`[Feeder] Running batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(scouts.length / batchSize)}...`);
+    devLog(`[Feeder] Running batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(scouts.length / batchSize)}...`);
 
     const results = await Promise.all(batch.map(async (scout) => {
       try {
@@ -106,7 +107,7 @@ export async function unleashAndFeed(): Promise<{
         }
         return { discovered: 0, fed: 0 };
       } catch (error) {
-        console.warn(`[Feeder] Scout ${scout.config.name} failed:`, error);
+        devWarn(`[Feeder] Scout ${scout.config.name} failed:`, error);
         return { discovered: 0, fed: 0 };
       }
     }));
@@ -123,10 +124,10 @@ export async function unleashAndFeed(): Promise<{
   }
 
   const duration = ((Date.now() - startTime) / 1000).toFixed(1);
-  console.log(`[Feeder] COMPLETE in ${duration}s`);
-  console.log(`[Feeder] Scouts run: ${scoutsRun}`);
-  console.log(`[Feeder] Tracks discovered: ${totalDiscovered}`);
-  console.log(`[Feeder] Tracks fed to DB: ${totalFed}`);
+  devLog(`[Feeder] COMPLETE in ${duration}s`);
+  devLog(`[Feeder] Scouts run: ${scoutsRun}`);
+  devLog(`[Feeder] Tracks discovered: ${totalDiscovered}`);
+  devLog(`[Feeder] Tracks fed to DB: ${totalFed}`);
 
   return { tracksDiscovered: totalDiscovered, tracksFed: totalFed, scoutsRun };
 }
@@ -138,7 +139,7 @@ export async function feedPriorityScouts(): Promise<{
   tracksDiscovered: number;
   tracksFed: number;
 }> {
-  console.log('[Feeder] Running priority scouts...');
+  devLog('[Feeder] Running priority scouts...');
 
   const priorityScouts = scoutManager.getAllScouts()
     .filter(s => s.config.priority >= 8);
@@ -164,7 +165,7 @@ export async function feedPriorityScouts(): Promise<{
     totalFed += r.fed;
   });
 
-  console.log(`[Feeder] Priority run: ${totalDiscovered} discovered, ${totalFed} fed`);
+  devLog(`[Feeder] Priority run: ${totalDiscovered} discovered, ${totalFed} fed`);
   return { tracksDiscovered: totalDiscovered, tracksFed: totalFed };
 }
 
@@ -181,13 +182,13 @@ export async function syncKnowledgeToDatabase(): Promise<number> {
   const tracks = Array.from(store.tracks.values());
 
   if (tracks.length === 0) {
-    console.log('[Feeder] No local knowledge to sync');
+    devLog('[Feeder] No local knowledge to sync');
     return 0;
   }
 
-  console.log(`[Feeder] Syncing ${tracks.length} tracks from local knowledge...`);
+  devLog(`[Feeder] Syncing ${tracks.length} tracks from local knowledge...`);
   const fed = await feedTracksToDatabase(tracks);
-  console.log(`[Feeder] Synced ${fed} tracks to Supabase`);
+  devLog(`[Feeder] Synced ${fed} tracks to Supabase`);
   return fed;
 }
 
@@ -218,7 +219,7 @@ const VOYO_API = 'https://voyo-edge.dash-webtv.workers.dev';
  * Uses our own Fly.io backend with yt-dlp
  */
 export async function searchAndFeed(query: string, limit: number = 15): Promise<number> {
-  console.log(`[Feeder] Searching: "${query}"...`);
+  devLog(`[Feeder] Searching: "${query}"...`);
 
   try {
     const response = await fetch(
@@ -227,7 +228,7 @@ export async function searchAndFeed(query: string, limit: number = 15): Promise<
     );
 
     if (!response.ok) {
-      console.warn(`[Feeder] VOYO API error: ${response.status}`);
+      devWarn(`[Feeder] VOYO API error: ${response.status}`);
       return 0;
     }
 
@@ -235,7 +236,7 @@ export async function searchAndFeed(query: string, limit: number = 15): Promise<
     const items = data.results || [];
 
     if (items.length === 0) {
-      console.log(`[Feeder] No results for "${query}"`);
+      devLog(`[Feeder] No results for "${query}"`);
       return 0;
     }
 
@@ -285,7 +286,7 @@ export async function searchAndFeed(query: string, limit: number = 15): Promise<
     }
 
     if (tracks.length === 0) {
-      console.log(`[Feeder] No valid tracks from "${query}"`);
+      devLog(`[Feeder] No valid tracks from "${query}"`);
       return 0;
     }
 
@@ -295,11 +296,11 @@ export async function searchAndFeed(query: string, limit: number = 15): Promise<
 
     // Feed to database
     const fed = await feedTracksToDatabase(tracks);
-    console.log(`[Feeder] "${query}" → ${fed} tracks fed`);
+    devLog(`[Feeder] "${query}" → ${fed} tracks fed`);
 
     return fed;
   } catch (error) {
-    console.warn(`[Feeder] Search failed for "${query}":`, error);
+    devWarn(`[Feeder] Search failed for "${query}":`, error);
     return 0;
   }
 }
@@ -318,7 +319,7 @@ export async function bulkSearchAndFeed(queries: string[]): Promise<number> {
     await new Promise(r => setTimeout(r, 500));
   }
 
-  console.log(`[Feeder] Bulk search complete: ${totalFed} total tracks fed`);
+  devLog(`[Feeder] Bulk search complete: ${totalFed} total tracks fed`);
   return totalFed;
 }
 
@@ -417,13 +418,13 @@ export async function buildAfricanMusicDatabase(): Promise<{
   tracksFed: number;
   duration: number;
 }> {
-  console.log('');
-  console.log('='.repeat(60));
-  console.log('🌍 BUILDING AFRICAN MUSIC DATABASE');
-  console.log('='.repeat(60));
-  console.log(`Queries to run: ${AFRICAN_ARTIST_QUERIES.length}`);
-  console.log('⏱️  Using 2s delay between queries to avoid rate limits');
-  console.log('');
+  devLog('');
+  devLog('='.repeat(60));
+  devLog('🌍 BUILDING AFRICAN MUSIC DATABASE');
+  devLog('='.repeat(60));
+  devLog(`Queries to run: ${AFRICAN_ARTIST_QUERIES.length}`);
+  devLog('⏱️  Using 2s delay between queries to avoid rate limits');
+  devLog('');
 
   const startTime = Date.now();
   let totalFed = 0;
@@ -434,7 +435,7 @@ export async function buildAfricanMusicDatabase(): Promise<{
     try {
       // If we've had 3+ consecutive failures, wait longer
       if (consecutiveFailures >= 3) {
-        console.log(`[Feeder] 💤 Rate limit pause (5s)...`);
+        devLog(`[Feeder] 💤 Rate limit pause (5s)...`);
         await new Promise(r => setTimeout(r, 5000));
         consecutiveFailures = 0;
       }
@@ -450,26 +451,26 @@ export async function buildAfricanMusicDatabase(): Promise<{
       }
 
       // Progress
-      console.log(`[${queriesRun}/${AFRICAN_ARTIST_QUERIES.length}] "${query}" → ${fed} tracks`);
+      devLog(`[${queriesRun}/${AFRICAN_ARTIST_QUERIES.length}] "${query}" → ${fed} tracks`);
 
       // Rate limit: 2s between queries to be gentle on the API
       await new Promise(r => setTimeout(r, 2000));
     } catch (error) {
       consecutiveFailures++;
-      console.warn(`Failed: ${query}`);
+      devWarn(`Failed: ${query}`);
     }
   }
 
   const duration = (Date.now() - startTime) / 1000;
 
-  console.log('');
-  console.log('='.repeat(60));
-  console.log('🌍 DATABASE BUILD COMPLETE');
-  console.log('='.repeat(60));
-  console.log(`Queries run: ${queriesRun}`);
-  console.log(`Tracks fed: ${totalFed}`);
-  console.log(`Duration: ${duration.toFixed(1)}s`);
-  console.log('');
+  devLog('');
+  devLog('='.repeat(60));
+  devLog('🌍 DATABASE BUILD COMPLETE');
+  devLog('='.repeat(60));
+  devLog(`Queries run: ${queriesRun}`);
+  devLog(`Tracks fed: ${totalFed}`);
+  devLog(`Duration: ${duration.toFixed(1)}s`);
+  devLog('');
 
   return { queriesRun, tracksFed: totalFed, duration };
 }
@@ -490,9 +491,9 @@ if (typeof window !== 'undefined') {
     stats: getDatabaseStats,
   };
 
-  console.log('[Feeder] Database feeding commands available:');
-  console.log('  window.feedDatabase.unleash()  - Run ALL scouts and feed DB');
-  console.log('  window.feedDatabase.build()    - Build African music database');
-  console.log('  window.feedDatabase.search(q)  - Search and feed specific query');
-  console.log('  window.feedDatabase.stats()    - Get database stats');
+  devLog('[Feeder] Database feeding commands available:');
+  devLog('  window.feedDatabase.unleash()  - Run ALL scouts and feed DB');
+  devLog('  window.feedDatabase.build()    - Build African music database');
+  devLog('  window.feedDatabase.search(q)  - Search and feed specific query');
+  devLog('  window.feedDatabase.stats()    - Get database stats');
 }

@@ -7,6 +7,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { playlistAPI, isSupabaseConfigured } from '../lib/supabase';
+import { devLog } from '../utils/logger';
 
 export interface Playlist {
   id: string;
@@ -138,7 +139,7 @@ export const usePlaylistStore = create<PlaylistStore>()(
           updatedAt: p.updatedAt,
         })));
 
-        console.log(`[PlaylistStore] Synced ${count} playlists to cloud`);
+        devLog(`[PlaylistStore] Synced ${count} playlists to cloud`);
         return count > 0 || playlists.length === 0;
       },
 
@@ -160,7 +161,7 @@ export const usePlaylistStore = create<PlaylistStore>()(
                 updatedAt: p.updatedAt,
               })),
             });
-            console.log(`[PlaylistStore] Loaded ${cloudPlaylists.length} playlists from cloud`);
+            devLog(`[PlaylistStore] Loaded ${cloudPlaylists.length} playlists from cloud`);
           }
 
           return true;

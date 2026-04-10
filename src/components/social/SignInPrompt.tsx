@@ -10,6 +10,7 @@ import { Play } from 'lucide-react';
 import { usePlayerStore } from '../../store/playerStore';
 import { useAuth } from '../../hooks/useAuth';
 import { friendsAPI, activityAPI, Friend, FriendActivity } from '../../lib/voyo-api';
+import { devWarn } from '../../utils/logger';
 
 // Default avatars for fallback (diverse, West Africa vibes)
 const DEFAULT_AVATARS = [
@@ -111,7 +112,7 @@ export const VoyoLiveCard = ({ onSwitchToVOYO }: VoyoLiveCardProps = {}) => {
           setFriendsListening(realList);
         }
       } catch (err) {
-        console.warn('[VoyoLiveCard] Failed to load:', err);
+        devWarn('[VoyoLiveCard] Failed to load:', err);
       }
     };
 

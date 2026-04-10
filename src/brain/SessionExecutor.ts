@@ -20,6 +20,7 @@ import { searchMusic } from '../services/api';
 import { Track } from '../types';
 import { getThumb } from '../utils/thumbnail';
 import { encodeVoyoId } from '../utils/voyoId';
+import { devLog, devWarn } from '../utils/logger';
 
 // ============================================
 // TYPES
@@ -88,7 +89,7 @@ class SessionExecutor {
     this.state = this.createInitialState();
     this.patterns = this.createInitialPatterns();
     this.subscribeToSignals();
-    console.log('[Brain] SessionExecutor initialized');
+    devLog('[Brain] SessionExecutor initialized');
   }
 
   private createInitialState(): ExecutorState {
@@ -207,7 +208,7 @@ class SessionExecutor {
     this.state.isBlending = false;
     this.state.currentSession = 'main';
 
-    console.log(`[Brain] Loaded Brain output: "${output.sessionName}" with ${this.state.currentQueue.length} main tracks, ${output.shadows.length} shadows`);
+    devLog(`[Brain] Loaded Brain output: "${output.sessionName}" with ${this.state.currentQueue.length} main tracks, ${output.shadows.length} shadows`);
   }
 
   // ============================================
@@ -317,7 +318,7 @@ class SessionExecutor {
    * Initiate transition to another session
    */
   private initiateTransition(rule: TransitionRule): void {
-    console.log(`[Brain] Transitioning from ${rule.from} to ${rule.to} (${rule.blendTracks} track blend)`);
+    devLog(`[Brain] Transitioning from ${rule.from} to ${rule.to} (${rule.blendTracks} track blend)`);
 
     this.state.isBlending = true;
     this.state.blendFrom = rule.from;
@@ -335,7 +336,7 @@ class SessionExecutor {
    * Transition to a shadow session
    */
   private transitionToShadow(shadow: ShadowSession): void {
-    console.log(`[Brain] Transitioning to shadow: ${shadow.name} (${shadow.blendSpeed})`);
+    devLog(`[Brain] Transitioning to shadow: ${shadow.name} (${shadow.blendSpeed})`);
 
     const blendTracks = shadow.blendSpeed === 'instant' ? 1 :
                         shadow.blendSpeed === 'smooth' ? 3 : 5;
@@ -362,7 +363,7 @@ class SessionExecutor {
    */
   getNextTrack(): NextTrackResult | null {
     if (!this.brainOutput) {
-      console.warn('[Brain] No Brain output loaded');
+      devWarn('[Brain] No Brain output loaded');
       return null;
     }
 
@@ -385,7 +386,7 @@ class SessionExecutor {
   private getFromMainQueue(): NextTrackResult | null {
     const track = this.brainOutput?.mainQueue.tracks[this.state.queuePosition];
     if (!track) {
-      console.log('[Brain] Main queue exhausted');
+      devLog('[Brain] Main queue exhausted');
       return null;
     }
 
@@ -408,7 +409,7 @@ class SessionExecutor {
   private getFromShadow(shadowId: string): NextTrackResult | null {
     const shadowQueue = this.shadowQueues.get(shadowId);
     if (!shadowQueue || shadowQueue.length === 0) {
-      console.log(`[Brain] Shadow ${shadowId} exhausted, returning to main`);
+      devLog(`[Brain] Shadow ${shadowId} exhausted, returning to main`);
       this.state.currentSession = 'main';
       return this.getFromMainQueue();
     }
@@ -438,7 +439,7 @@ class SessionExecutor {
       // Blend complete
       this.state.isBlending = false;
       this.state.currentSession = this.state.blendTo;
-      console.log(`[Brain] Blend complete, now in ${this.state.currentSession}`);
+      devLog(`[Brain] Blend complete, now in ${this.state.currentSession}`);
     }
 
     // Get track from appropriate queue
@@ -613,7 +614,7 @@ class SessionExecutor {
     this.patterns = this.createInitialPatterns();
     this.brainOutput = null;
     this.shadowQueues.clear();
-    console.log('[Brain] SessionExecutor reset');
+    devLog('[Brain] SessionExecutor reset');
   }
 }
 

@@ -11,6 +11,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import artistMasterData from '../data/artist_master.json';
+import { devWarn } from '../utils/logger';
 
 // ============================================
 // TYPES
@@ -156,13 +157,13 @@ export function useArtist(artistName: string): UseArtistReturn {
         if (tracksResult.status === 'fulfilled') {
           setTracks(tracksResult.value);
         } else {
-          console.warn('[useArtist] Tracks fetch failed:', tracksResult.reason);
+          devWarn('[useArtist] Tracks fetch failed:', tracksResult.reason);
         }
 
         if (momentsResult.status === 'fulfilled') {
           setMoments(momentsResult.value);
         } else {
-          console.warn('[useArtist] Moments fetch failed:', momentsResult.reason);
+          devWarn('[useArtist] Moments fetch failed:', momentsResult.reason);
         }
 
         // Only set error if both failed

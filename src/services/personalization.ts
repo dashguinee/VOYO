@@ -23,6 +23,7 @@ import { useIntentStore, matchTrackToMode, VibeMode, MODE_KEYWORDS } from '../st
 import { useTrackPoolStore, PooledTrack } from '../store/trackPoolStore';
 import { safeAddManyToPool } from './trackVerifier';
 import { saveVerifiedTrack } from './centralDJ';
+import { devLog } from '../utils/logger';
 
 // ============================================
 // SCORING WEIGHTS
@@ -579,9 +580,9 @@ export function debugIntent(): void {
   const dominantModes = intentStore.getDominantModes(3);
   const weights = intentStore.getIntentWeights();
 
-  console.log('[VOYO Intent Engine]');
-  console.log('Dominant Modes:', dominantModes);
-  console.log('Mode Weights:', weights);
+  devLog('[VOYO Intent Engine]');
+  devLog('Dominant Modes:', dominantModes);
+  devLog('Mode Weights:', weights);
 }
 
 // ============================================
@@ -610,7 +611,7 @@ export function getPoolAwareHotTracks(limit: number = 5): Track[] {
 
   // Fallback to static if pool empty
   if (hotPool.length === 0) {
-    console.log('[VOYO] Pool empty, falling back to static tracks');
+    devLog('[VOYO] Pool empty, falling back to static tracks');
     return getPersonalizedHotTracks(limit);
   }
 
@@ -797,7 +798,7 @@ export function getPoolAwareDiscoveryTracks(
  */
 export async function addSearchResultsToPool(tracks: Track[]): Promise<void> {
   const added = await safeAddManyToPool(tracks, 'search');
-  console.log(`[VOYO Pool] Added ${added}/${tracks.length} validated search results to pool`);
+  devLog(`[VOYO Pool] Added ${added}/${tracks.length} validated search results to pool`);
 
   // COLLECTIVE BRAIN: Sync validated search results to Supabase
   // So other users can benefit from discovered tracks

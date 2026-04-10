@@ -13,6 +13,7 @@
 
 import Tesseract from 'tesseract.js';
 import { videoIntelligenceAPI, isSupabaseConfigured } from '../lib/supabase';
+import { devLog, devWarn } from '../utils/logger';
 
 // ============================================
 // TYPES
@@ -72,16 +73,16 @@ async function getWorker(): Promise<Tesseract.Worker> {
 
   isInitializing = true;
   initPromise = (async () => {
-    console.log('[VOYO OCR] Initializing Tesseract...');
+    devLog('[VOYO OCR] Initializing Tesseract...');
     const newWorker = await Tesseract.createWorker('eng', 1, {
       logger: (m) => {
         if (m.status === 'recognizing text') {
-          console.log(`[VOYO OCR] Progress: ${Math.round(m.progress * 100)}%`);
+          devLog(`[VOYO OCR] Progress: ${Math.round(m.progress * 100)}%`);
         }
       }
     });
     worker = newWorker;
-    console.log('[VOYO OCR] Ready');
+    devLog('[VOYO OCR] Ready');
     return worker;
   })();
 
@@ -98,7 +99,7 @@ export async function extractTextFromImage(imageSource: string | HTMLCanvasEleme
   const result = await tesseractWorker.recognize(imageSource);
   const endTime = performance.now();
 
-  console.log(`[VOYO OCR] Extracted in ${Math.round(endTime - startTime)}ms`);
+  devLog(`[VOYO OCR] Extracted in ${Math.round(endTime - startTime)}ms`);
 
   const lines = result.data.text
     .split('\n')
@@ -137,7 +138,7 @@ export async function captureRegion(
   if (element instanceof HTMLIFrameElement) {
     // Can't directly access iframe content due to CORS
     // But we can capture the region where suggestions appear
-    console.log('[VOYO OCR] Iframe detected - will capture visible region');
+    devLog('[VOYO OCR] Iframe detected - will capture visible region');
   }
 
   return canvas;
@@ -308,7 +309,7 @@ export async function cacheVideo(video: VideoIntelligence): Promise<void> {
       discovery_method: video.discoveryMethod || null,
     }).catch(err => {
       // Don't fail local cache if Supabase sync fails
-      console.warn('[VideoIntelligence] Supabase sync failed:', err);
+      devWarn('[VideoIntelligence] Supabase sync failed:', err);
     });
   }
 }
@@ -344,7 +345,7 @@ export async function searchLocalCache(query: string): Promise<VideoIntelligence
       }
 
       if (bestMatch) {
-        console.log(`[VOYO Intelligence] Local HIT: "${query}" → ${bestMatch.youtubeId} (${Math.round(bestSimilarity * 100)}% match)`);
+        devLog(`[VOYO Intelligence] Local HIT: "${query}" → ${bestMatch.youtubeId} (${Math.round(bestSimilarity * 100)}% match)`);
       }
 
       resolve(bestMatch);
@@ -361,7 +362,7 @@ export async function searchLocalCache(query: string): Promise<VideoIntelligence
       const supabaseResults = await videoIntelligenceAPI.search(query, 1);
       if (supabaseResults.length > 0) {
         const result = supabaseResults[0];
-        console.log(`[VOYO Intelligence] Supabase HIT: "${query}" → ${result.youtube_id}`);
+        devLog(`[VOYO Intelligence] Supabase HIT: "${query}" → ${result.youtube_id}`);
 
         // Cache locally for next time
         const video: VideoIntelligence = {
@@ -384,11 +385,11 @@ export async function searchLocalCache(query: string): Promise<VideoIntelligence
         return video;
       }
     } catch (err) {
-      console.warn('[VOYO Intelligence] Supabase search failed:', err);
+      devWarn('[VOYO Intelligence] Supabase search failed:', err);
     }
   }
 
-  console.log(`[VOYO Intelligence] Cache MISS: "${query}"`);
+  devLog(`[VOYO Intelligence] Cache MISS: "${query}"`);
   return null;
 }
 
@@ -422,7 +423,7 @@ export async function searchYouTube(query: string): Promise<VideoIntelligence | 
     const response = await fetch(`/api/youtube/search?q=${encodeURIComponent(query)}`);
 
     if (!response.ok) {
-      console.warn('[VOYO Intelligence] YouTube search failed');
+      devWarn('[VOYO Intelligence] YouTube search failed');
       return null;
     }
 
@@ -470,12 +471,12 @@ export async function getRelatedVideos(videoId: string, limit = 5): Promise<Rela
     const response = await fetch(`${API_BASE}/related?v=${videoId}&limit=${limit}`);
 
     if (!response.ok) {
-      console.warn('[VOYO Intelligence] Related videos failed');
+      devWarn('[VOYO Intelligence] Related videos failed');
       return [];
     }
 
     const data = await response.json();
-    console.log(`[VOYO Intelligence] Got ${data.videos?.length || 0} related videos`);
+    devLog(`[VOYO Intelligence] Got ${data.videos?.length || 0} related videos`);
     return data.videos || [];
   } catch (err) {
     console.error('[VOYO Intelligence] Related videos error:', err);
@@ -529,11 +530,11 @@ export async function extractVideosFromScreenshot(
 ): Promise<string[]> {
   // 1. OCR extraction
   const ocrResult = await extractTextFromImage(imageSource);
-  console.log('[VOYO Intelligence] OCR extracted:', ocrResult.lines);
+  devLog('[VOYO Intelligence] OCR extracted:', ocrResult.lines);
 
   // 2. Parse video titles
   const extractedVideos = parseVideoTitles(ocrResult);
-  console.log('[VOYO Intelligence] Parsed videos:', extractedVideos);
+  devLog('[VOYO Intelligence] Parsed videos:', extractedVideos);
 
   // 3. Find YouTube IDs for each
   const videoIds: string[] = [];
@@ -545,7 +546,7 @@ export async function extractVideosFromScreenshot(
     }
   }
 
-  console.log('[VOYO Intelligence] Found IDs:', videoIds);
+  devLog('[VOYO Intelligence] Found IDs:', videoIds);
   return videoIds;
 }
 
@@ -610,6 +611,6 @@ export async function terminateOCR(): Promise<void> {
   if (worker) {
     await worker.terminate();
     worker = null;
-    console.log('[VOYO OCR] Terminated');
+    devLog('[VOYO OCR] Terminated');
   }
 }

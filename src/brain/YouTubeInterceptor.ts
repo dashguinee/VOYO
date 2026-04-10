@@ -15,6 +15,7 @@
  */
 
 import { signals } from './SignalEmitter';
+import { devLog } from '../utils/logger';
 
 // ============================================
 // TYPES
@@ -74,7 +75,7 @@ class YouTubeInterceptor {
   private maxSources: number = 50;
 
   constructor() {
-    console.log('[Brain] YouTubeInterceptor initialized');
+    devLog('[Brain] YouTubeInterceptor initialized');
   }
 
   // ============================================
@@ -178,7 +179,7 @@ class YouTubeInterceptor {
     })).filter(r => r.videoId); // Filter out empty IDs
 
     if (recommendations.length === 0) {
-      console.log('[Brain] No valid recommendations to capture');
+      devLog('[Brain] No valid recommendations to capture');
       return;
     }
 
@@ -238,7 +239,7 @@ class YouTubeInterceptor {
       })));
     }
 
-    console.log(`[Brain] Captured ${recommendations.length} recommendations from ${sourceTrackId}, ${recurring.length} recurring`);
+    devLog(`[Brain] Captured ${recommendations.length} recommendations from ${sourceTrackId}, ${recurring.length} recurring`);
   }
 
   // ============================================
@@ -348,7 +349,7 @@ class YouTubeInterceptor {
       }
     }
 
-    console.log(`[Brain] Cleared old recommendations, ${this.recurringTracker.size} remaining`);
+    devLog(`[Brain] Cleared old recommendations, ${this.recurringTracker.size} remaining`);
   }
 
   /**
@@ -357,7 +358,7 @@ class YouTubeInterceptor {
   reset(): void {
     this.recentRecs.clear();
     this.recurringTracker.clear();
-    console.log('[Brain] YouTubeInterceptor reset');
+    devLog('[Brain] YouTubeInterceptor reset');
   }
 }
 

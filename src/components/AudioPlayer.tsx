@@ -131,6 +131,13 @@ export const AudioPlayer = () => {
 
   const wakeLockRef = useRef<WakeLockSentinel | null>(null);
   const lastTrackIdRef = useRef<string | null>(null);
+  // Monotonic counter — incremented on every loadTrack invocation. Used as a
+  // cancellation token: each in-flight loadTrack captures `myAttempt` at the
+  // top and bails out at every await boundary if a newer load has started.
+  // Without this, a slow R2/Edge fetch for an old track can finish AFTER the
+  // user has skipped to a new one and clobber `audioRef.current.src` with a
+  // stale URL — symptom: wrong track plays after rapid skips.
+  const loadAttemptRef = useRef<number>(0);
   const previousTrackRef = useRef<Track | null>(null);
   const hasRecordedPlayRef = useRef<boolean>(false);
   const trackProgressRef = useRef<number>(0);
@@ -862,6 +869,13 @@ export const AudioPlayer = () => {
 
   // === MAIN TRACK LOADING LOGIC ===
   useEffect(() => {
+    // Capture this load attempt's id at the top. If a newer loadTrack starts
+    // while we're awaiting (rapid skips), `loadAttemptRef.current` advances
+    // and our local `myAttempt` becomes stale — `isStale()` returns true and
+    // we bail before clobbering audio.src with the wrong URL.
+    const myAttempt = ++loadAttemptRef.current;
+    const isStale = () => loadAttemptRef.current !== myAttempt;
+
     const loadTrack = async () => {
       if (!currentTrack?.trackId) return;
 
@@ -956,6 +970,7 @@ export const AudioPlayer = () => {
       const API_BASE = 'https://voyo-edge.dash-webtv.workers.dev';
       const { url: bestUrl, cached: fromCache } = audioEngine.getBestAudioUrl(trackId, API_BASE);
       const cachedUrl = fromCache ? bestUrl : await checkCache(trackId);
+      if (isStale()) { devLog(`[AudioPlayer] cancelled stale load for ${trackId} after checkCache`); return; }
 
       if (cachedUrl) {
         // ⚡ BOOSTED - Play from cache instantly
@@ -1019,6 +1034,7 @@ export const AudioPlayer = () => {
         devLog('🎵 [VOYO] Not in local cache, checking R2 collective...');
 
         const r2Result = await checkR2Cache(trackId);
+        if (isStale()) { devLog(`[AudioPlayer] cancelled stale load for ${trackId} after R2 check`); return; }
 
         if (r2Result.exists && r2Result.url) {
           // 🚀 R2 HIT - Play from collective cache with EQ
@@ -1084,9 +1100,16 @@ export const AudioPlayer = () => {
           devLog('🎵 [VOYO] R2 miss, getting stream URL...');
 
           try {
-            // Get the direct YouTube audio URL from our worker
-            const streamResponse = await fetch(`${EDGE_WORKER_URL}/stream?v=${trackId}`);
+            // Get the direct YouTube audio URL from our worker.
+            // Use AbortSignal.timeout so a slow Edge Worker doesn't hang forever
+            // (the same fix we made in preloadManager.ts in v0.2.x).
+            const streamResponse = await fetch(
+              `${EDGE_WORKER_URL}/stream?v=${trackId}`,
+              { signal: AbortSignal.timeout(5000) },
+            );
+            if (isStale()) { devLog(`[AudioPlayer] cancelled stale load for ${trackId} after stream fetch`); return; }
             const streamData = await streamResponse.json();
+            if (isStale()) { devLog(`[AudioPlayer] cancelled stale load for ${trackId} after stream json`); return; }
 
             if (!streamData.url) {
               console.error('🚨 [VOYO] No stream URL available');

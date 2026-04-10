@@ -13,6 +13,7 @@
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { Track } from '../types';
 import { getThumb } from '../utils/thumbnail';
+import { devLog, devWarn } from '../utils/logger';
 
 // ============================================
 // TYPES
@@ -183,7 +184,7 @@ export async function getTracksByMode(
   limit: number = 20
 ): Promise<CentralTrack[]> {
   if (!supabase || !isSupabaseConfigured) {
-    console.log('[Central DJ] Supabase not configured, skipping');
+    devLog('[Central DJ] Supabase not configured, skipping');
     return [];
   }
 
@@ -198,7 +199,7 @@ export async function getTracksByMode(
       return [];
     }
 
-    console.log(`[Central DJ] Found ${data?.length || 0} tracks for ${mode}`);
+    devLog(`[Central DJ] Found ${data?.length || 0} tracks for ${mode}`);
     return data || [];
   } catch (err) {
     console.error('[Central DJ] Error:', err);
@@ -214,7 +215,7 @@ export async function getTracksByVibe(
   limit: number = 20
 ): Promise<CentralTrack[]> {
   if (!supabase || !isSupabaseConfigured) {
-    console.log('[Central DJ] Supabase not configured, skipping');
+    devLog('[Central DJ] Supabase not configured, skipping');
     return [];
   }
 
@@ -233,7 +234,7 @@ export async function getTracksByVibe(
       return [];
     }
 
-    console.log(`[Central DJ] Found ${data?.length || 0} tracks matching vibe profile`);
+    devLog(`[Central DJ] Found ${data?.length || 0} tracks matching vibe profile`);
     return data || [];
   } catch (err) {
     console.error('[Central DJ] Error:', err);
@@ -257,7 +258,7 @@ export async function getHotTracks(limit: number = 20): Promise<CentralTrack[]> 
       return [];
     }
 
-    console.log(`[Central DJ] 🔥 Found ${data?.length || 0} hot tracks`);
+    devLog(`[Central DJ] 🔥 Found ${data?.length || 0} hot tracks`);
     return data || [];
   } catch (err) {
     console.error('[Central DJ] Error:', err);
@@ -291,7 +292,7 @@ export async function saveVerifiedTrack(
   discoveredBy: 'gemini' | 'user_search' | 'related' | 'seed' = 'gemini'
 ): Promise<boolean> {
   if (!supabase || !isSupabaseConfigured) {
-    console.log('[Central DJ] Cannot save - Supabase not configured');
+    devLog('[Central DJ] Cannot save - Supabase not configured');
     return false;
   }
 
@@ -344,7 +345,7 @@ export async function saveVerifiedTrack(
       return false;
     }
 
-    console.log(`[Central DJ] ✅ Saved: ${track.artist} - ${track.title} [${detectedModes.join(', ')}]`);
+    devLog(`[Central DJ] ✅ Saved: ${track.artist} - ${track.title} [${detectedModes.join(', ')}]`);
     return true;
   } catch (err) {
     console.error('[Central DJ] Save error:', err);
@@ -378,7 +379,7 @@ export async function saveVerifiedTracks(
  */
 export async function recordSignal(signal: SignalData): Promise<boolean> {
   if (!supabase || !isSupabaseConfigured) {
-    console.log('[Central DJ] Cannot record signal - Supabase not configured');
+    devLog('[Central DJ] Cannot record signal - Supabase not configured');
     return false;
   }
 
@@ -400,7 +401,7 @@ export async function recordSignal(signal: SignalData): Promise<boolean> {
       return false;
     }
 
-    console.log(`[Central DJ] 📊 Signal: ${signal.action} on ${signal.trackId.substring(0, 10)}...`);
+    devLog(`[Central DJ] 📊 Signal: ${signal.action} on ${signal.trackId.substring(0, 10)}...`);
     return true;
   } catch (err) {
     console.error('[Central DJ] Signal error:', err);
@@ -447,7 +448,7 @@ export const signals = {
  */
 export async function trainVibe(signal: VibeTrainSignal): Promise<boolean> {
   if (!supabase || !isSupabaseConfigured) {
-    console.log('[Central DJ] Cannot train vibe - Supabase not configured');
+    devLog('[Central DJ] Cannot train vibe - Supabase not configured');
     return false;
   }
 
@@ -478,7 +479,7 @@ export async function trainVibe(signal: VibeTrainSignal): Promise<boolean> {
 
     if (!existing) {
       // Track doesn't exist in central DB yet - that's OK, will be added later
-      console.log(`[Central DJ] Track ${signal.trackId.substring(0, 10)}... not in central DB yet`);
+      devLog(`[Central DJ] Track ${signal.trackId.substring(0, 10)}... not in central DB yet`);
       return false;
     }
 
@@ -492,11 +493,11 @@ export async function trainVibe(signal: VibeTrainSignal): Promise<boolean> {
     if (error) {
       // RPC doesn't exist yet - log and continue
       // The RPC will be available after running the migration
-      console.log('[Central DJ] Vibe training RPC not available yet - run the migration');
+      devLog('[Central DJ] Vibe training RPC not available yet - run the migration');
       return false;
     }
 
-    console.log(`[Central DJ] 🎯 Trained: ${signal.trackId.substring(0, 10)}... → ${signal.modeId} +${increment}`);
+    devLog(`[Central DJ] 🎯 Trained: ${signal.trackId.substring(0, 10)}... → ${signal.modeId} +${increment}`);
     return true;
   } catch (err) {
     console.error('[Central DJ] Vibe train error:', err);
@@ -601,17 +602,17 @@ const SEED_SYNC_KEY = 'voyo_seed_synced_v1';
  */
 export async function syncSeedTracks(tracks: Track[]): Promise<number> {
   if (!supabase || !isSupabaseConfigured) {
-    console.log('[Central DJ] Supabase not configured, skipping seed sync');
+    devLog('[Central DJ] Supabase not configured, skipping seed sync');
     return 0;
   }
 
   // Check if already synced
   if (localStorage.getItem(SEED_SYNC_KEY)) {
-    console.log('[Central DJ] Seed tracks already synced');
+    devLog('[Central DJ] Seed tracks already synced');
     return 0;
   }
 
-  console.log(`[Central DJ] 🌱 Syncing ${tracks.length} seed tracks to Supabase...`);
+  devLog(`[Central DJ] 🌱 Syncing ${tracks.length} seed tracks to Supabase...`);
 
   let synced = 0;
   for (const track of tracks) {
@@ -621,7 +622,7 @@ export async function syncSeedTracks(tracks: Track[]): Promise<number> {
 
   // Mark as synced
   localStorage.setItem(SEED_SYNC_KEY, new Date().toISOString());
-  console.log(`[Central DJ] ✅ Synced ${synced}/${tracks.length} seed tracks`);
+  devLog(`[Central DJ] ✅ Synced ${synced}/${tracks.length} seed tracks`);
 
   return synced;
 }
@@ -651,7 +652,7 @@ if (typeof window !== 'undefined') {
     stats: getStats,
     userHash: getUserHash,
   };
-  console.log('🎯 [Central DJ] Debug: window.voyoCentral.getByMode("afro-heat") / .train({trackId, modeId, action}) / .stats()');
+  devLog('🎯 [Central DJ] Debug: window.voyoCentral.getByMode("afro-heat") / .train({trackId, modeId, action}) / .stats()');
 }
 
 export default {

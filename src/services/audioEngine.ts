@@ -19,7 +19,7 @@
  */
 
 import { mediaCache } from './mediaCache';
-import { devLog } from '../utils/logger';
+import { devLog, devWarn } from '../utils/logger';
 
 export type BitrateLevel = 'low' | 'medium' | 'high';
 export type BufferStatus = 'healthy' | 'warning' | 'emergency';
@@ -108,7 +108,7 @@ export function connectAudioChain(audio: HTMLAudioElement): AudioChainResult | n
 
     return { ctx: _audioCtx, source: _sourceNode, alreadyWired: false };
   } catch (e) {
-    console.warn('[AudioEngine] connectAudioChain failed:', e);
+    devWarn('[AudioEngine] connectAudioChain failed:', e);
     // Last resort: if source exists, connect straight to destination
     if (_sourceNode && _audioCtx) {
       try { _sourceNode.connect(_audioCtx.destination); } catch {}

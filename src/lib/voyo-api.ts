@@ -11,6 +11,7 @@
  */
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { devWarn } from '../utils/logger';
 
 // ============================================
 // DUAL SUPABASE SETUP
@@ -315,7 +316,7 @@ export const friendsAPI = {
    */
   async addFriend(myDashId: string, friendDashId: string, nickname?: string): Promise<boolean> {
     if (!commandCenter) {
-      console.warn('[VOYO] Command Center not configured');
+      devWarn('[VOYO] Command Center not configured');
       return false;
     }
 
@@ -456,7 +457,7 @@ export const messagesAPI = {
     attachment?: MessageAttachment
   ): Promise<boolean> {
     if (!commandCenter) {
-      console.warn('[VOYO] Command Center not configured');
+      devWarn('[VOYO] Command Center not configured');
       return false;
     }
 

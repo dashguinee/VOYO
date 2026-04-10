@@ -4,6 +4,8 @@
  * Best coverage for African/Afrobeats music
  */
 
+import { devLog, devWarn } from '../utils/logger';
+
 const GENIUS_SEARCH = 'https://genius.com/api/search/multi';
 const CORS_PROXY = 'https://corsproxy.io/?';
 
@@ -40,7 +42,7 @@ async function searchGenius(query: string): Promise<string | null> {
     }
     return null;
   } catch (error) {
-    console.warn('[Genius] Search failed:', error);
+    devWarn('[Genius] Search failed:', error);
     return null;
   }
 }
@@ -88,7 +90,7 @@ async function scrapeLyrics(geniusUrl: string): Promise<string | null> {
 
     return cleanLyrics(lyrics);
   } catch (error) {
-    console.warn('[Genius] Scrape failed:', error);
+    devWarn('[Genius] Scrape failed:', error);
     return null;
   }
 }
@@ -107,7 +109,7 @@ export async function getGeniusLyrics(
   trackName: string,
   artistName: string
 ): Promise<GeniusResult> {
-  console.log(`[Genius] Searching: ${trackName} - ${artistName}`);
+  devLog(`[Genius] Searching: ${trackName} - ${artistName}`);
 
   // Clean up names
   const cleanTrack = trackName
@@ -126,7 +128,7 @@ export async function getGeniusLyrics(
   const geniusUrl = await searchGenius(query);
 
   if (!geniusUrl) {
-    console.log('[Genius] Not found');
+    devLog('[Genius] Not found');
     return { found: false, source: 'genius' };
   }
 
@@ -134,11 +136,11 @@ export async function getGeniusLyrics(
   const lyrics = await scrapeLyrics(geniusUrl);
 
   if (!lyrics) {
-    console.log('[Genius] Failed to scrape');
+    devLog('[Genius] Failed to scrape');
     return { found: false, source: 'genius' };
   }
 
-  console.log(`[Genius] Found! ${lyrics.length} chars`);
+  devLog(`[Genius] Found! ${lyrics.length} chars`);
   return {
     found: true,
     title: cleanTrack,
@@ -174,4 +176,4 @@ export async function batchFetchLyrics(
   return results;
 }
 
-console.log('[Genius Scraper] Loaded - Grey zone lyrics');
+devLog('[Genius Scraper] Loaded - Grey zone lyrics');

@@ -10,6 +10,8 @@
  * Built from research across 16 African countries.
  */
 
+import { devLog } from '../utils/logger';
+
 export type ArtistTier = 'A' | 'B' | 'C' | 'D';
 
 interface ArtistInfo {
@@ -293,4 +295,4 @@ const stats = getAllVerifiedArtists().reduce(
   { A: 0, B: 0, C: 0, D: 0 } as Record<ArtistTier, number>
 );
 
-console.log(`[ArtistTiers] Loaded: A=${stats.A}, B=${stats.B}, C=${stats.C}`);
+devLog(`[ArtistTiers] Loaded: A=${stats.A}, B=${stats.B}, C=${stats.C}`);
