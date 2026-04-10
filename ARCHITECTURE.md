@@ -670,6 +670,125 @@ These came back from audits as "delete this" or "fix this" but turned out to alr
 - Break `Dahub.tsx` into `DahubShell` + tab content files.
 - Smoke test for the audio pipeline (rapid skip → verify no connection pool exhaustion). Prevents regressions of gotcha #4.
 
+## OYO DJ — the central brain (current state + winning architecture)
+
+The product owner's vision is **one brain (OYO DJ) with N branches (UI surfaces)**. Every surface should tie back to OYO DJ as both an event sink (so it learns from interactions) and a personality voice (so it speaks back through the UI). Below is the current state, the gap, and the path.
+
+### What OYO DJ actually is today
+
+`src/services/oyoDJ.ts` — 879 lines. **It's a personality layer, not a curator.** It manages:
+- DJ identity (`name`, `nickname`, `personality traits`, `catchphrases`, `voice settings`)
+- Learned preferences (`favoriteArtists`, `favoriteMoods`, `peakListeningHours`, `dislikedArtists`)
+- Track lifecycle event handlers (`onTrackPlay`, `onTrackSkip`, `onTrackReaction`, `onTrackComplete`)
+- Voice output (`speak`, `say`, `introduce`, `vibeCheck` — uses Web Speech API + Gemini for announcements)
+- Social (`shareMoment`, `getSharedMoments`, `setPublicProfile`)
+- Insights (`getInsights()` returns favouriteArtists/favouriteMoods/peakHours)
+
+**What it does NOT do today**: pick tracks. The hot belt and discovery belt are populated by `databaseDiscovery` → `essenceEngine` (via `playerStore.refreshRecommendations`), with secondary input from `centralDJ`, `personalization`, and `poolCurator`. Three competing curation systems, none of which feed through OYO.
+
+### Current call sites (verified)
+
+| File:line | Function | Purpose |
+|---|---|---|
+| `components/AudioPlayer.tsx:39` | `onTrackPlay`, `onTrackComplete` | Already wired. Records playback events. |
+| `components/voyo/OyoIsland.tsx:18` | `getProfile()` | Read-only — pulls DJ identity for the Island UI. |
+| `store/reactionStore.ts` (NEW) | `onTrackReaction(track)` | Wired in `eebe619`'s sibling commit. Reactions now feed `favoriteArtists`. |
+| `store/playerStore.ts` (NEW) | `getInsights()` | Wired in the same commit. Hot belt is now sorted with OYO favourites first. |
+
+### The 4 surfaces (not 6 — the agent verified the count)
+
+The branches the product owner imagined as "6 surfaces of experience" are **actually 4 in the codebase today**, each tied to an `App.tsx` mode lazy chunk:
+
+1. **Classic Mode** (`components/classic/ClassicMode.tsx`) — sub-surfaces: `HomeFeed`, `Library`, `Hub`, `NowPlaying`. Reads from `playerStore.hotTracks` + `personalization.getPoolAwareHotTracks`. Connection to OYO DJ: **VIA-STORE** now that hotTracks is OYO-sorted.
+2. **Portrait VOYO** (`components/voyo/PortraitVOYO.tsx`) — tab orchestrator: `MUSIC | FEED | CREATE | DAHUB`. The MUSIC tab renders `VoyoPortraitPlayer` (3-column grid: HOT | VOYO FEED | DISCOVERY). Connection: **VIA-STORE** for HOT, **TRANSITIVE** for everything else (OyoIsland imports `getProfile` for personality display, no event hooks).
+3. **Landscape VOYO** (`components/voyo/LandscapeVOYO.tsx`) — full-screen player + side panels, auto-activated on rotation. Same data sources as Portrait. Same connection.
+4. **Video Mode** (`components/voyo/VideoMode.tsx`) — full-screen video playback with floating reactions overlay. Connection to OYO DJ: **NONE** today. Reactions land in `reactionStore` but VideoMode never imports oyoDJ.
+
+`CREATE` tab is hidden until backend is ready. Brain subsystem (`src/brain/`) is lazy-loaded but its outputs are **not yet consumed** by the playback path — see Cleanup roadmap #1.
+
+### Disconnected surfaces (real wiring gaps)
+
+1. **`HomeFeed` (Classic Mode)** — calls `personalization.getPoolAwareHotTracks` directly instead of reading `playerStore.hotTracks`. The OYO boost in `playerStore` doesn't reach HomeFeed because HomeFeed bypasses the store. **Fix**: route HomeFeed through `playerStore.hotTracks` so it inherits the OYO sort. Medium effort.
+2. **`VoyoMoments` feed** — uses `useMoments()` → `momentsService`, no OYO context at all. Could weave OYO catchphrases between moments using `oyoDJ.say()`. Medium effort, low risk.
+3. **`VideoMode` reactions** — records to `reactionStore` but never feeds OYO. Now resolved indirectly because `reactionStore.createReaction` calls `oyoDJ.onTrackReaction` for ALL surfaces (not just VideoMode) — Video gets the wiring for free.
+4. **`VoyoPortraitPlayer` lyrics moments** — `lyricsEngine` displays text but doesn't call `oyoDJ.introduce()` or `oyoDJ.say()`. Could surface DJ commentary at lyrical pauses. Low priority.
+
+### Curation services consolidation (where this is heading)
+
+| Service | Callers | Role today | Target role |
+|---|---|---|---|
+| **`oyoDJ`** | 4 (after this commit) | Personality + learning | **Promoted to unified DJ.** Ingests all signals. Outputs: `favoriteArtists` boost on `playerStore.hotTracks`, voice on every surface. |
+| `centralDJ` | 5 | Vibe-to-track Supabase signal logger | Keep as canonical Supabase writer. Add `getSignalContext()` so OYO can read historical vibes. |
+| `intelligentDJ` | 1 (AudioPlayer:38) | Gemini-powered DJ flywheel after every N plays | **KEEP** — verified by inspection. The agent flagged it for deletion but it runs `runDJ()` which is the Gemini discovery loop. Not redundant. |
+| `personalization` | 3 | Per-track/artist/mood weights | Subordinate to OYO. Provides preference WEIGHTS that OYO consumes. |
+| `poolCurator` | 3 | Living pool bootstrap + scoring refresh | Keep unchanged. |
+| `feedAlgorithm` | 1 | Feed timing/treatment for VoyoMoments | Could merge into `momentsService`. Low priority. |
+| `databaseDiscovery` | 1 (lazy) | Supabase essence-fingerprint search | **KEEP — load-bearing.** Lazy-imported by playerStore. The agent flagged this for deletion in TWO separate audits and it was wrong both times. |
+| `geminiCurator`, `voyoDJ` | — | — | **DELETED** in `eebe619` (truly 0 callers). |
+
+### The winning architecture
+
+```
+                    ┌──────────────────────────────┐
+                    │   ONE BRAIN — OYO DJ         │
+                    │   (services/oyoDJ.ts)        │
+                    │                              │
+                    │  Learns from:                │
+                    │   • play / complete          │
+                    │   • skip                     │
+                    │   • reaction (OYÉ)           │
+                    │   • peak hours, moods        │
+                    │                              │
+                    │  Outputs:                    │
+                    │   • favoriteArtists  ──┐     │
+                    │   • voice (Web Speech) ─┐    │
+                    │   • milestones, social  │    │
+                    └──────────┬──────────────┴────┘
+                               │ getInsights()    │ speak() / say()
+              ┌────────────────┼──────────────────┘
+              │   playerStore  │
+              │   .hotTracks   │
+              │   (OYO-sorted) │
+              └────────┬───────┘
+                       │
+   ┌──────────┬────────┼────────────┬────────────┐
+   │          │        │            │            │
+┌──▼────┐  ┌──▼────┐  ┌▼─────────┐  ┌▼─────────┐  ┌▼─────────┐
+│Classic│  │Portr. │  │Landscape │  │  Video   │  │ Dahub    │
+│ Home  │  │ VOYO  │  │  VOYO    │  │   Mode   │  │ (social) │
+│ Lib   │  │MUSIC  │  │          │  │          │  │          │
+│ Hub   │  │FEED   │  │          │  │          │  │          │
+└───────┘  │CREATE │  └──────────┘  └──────────┘  └──────────┘
+           │DAHUB  │
+           └───────┘
+   All surfaces:
+   • read playerStore.hotTracks (OYO-sorted)
+   • emit reactions → oyoDJ.onTrackReaction → favoriteArtists ↑
+   • emit plays → oyoDJ.onTrackPlay → peakHours ↑, totalTime ↑
+   • emit completes → oyoDJ.onTrackComplete → favoriteMoods ↑
+
+   Supporting (no UI ownership):
+   • databaseDiscovery — Supabase essence search (lazy, load-bearing)
+   • centralDJ — Supabase signal write path
+   • intelligentDJ — Gemini DJ flywheel (every N plays)
+   • personalization — preference weights
+   • poolCurator — living pool bootstrap
+```
+
+### What landed in this commit (the OYO wiring round)
+
+- **`reactionStore.createReaction`** now calls `oyoDJ.onTrackReaction(track)` after every reaction (offline path AND Supabase path). This is the critical wire — without it, `favoriteArtists` stays empty forever and the boost below is a no-op.
+- **`playerStore.refreshRecommendations`** now reads `oyoDJ.getInsights().favoriteArtists` and stable-sorts the merged hot belt with favourites first. New users (empty list) see no behaviour change. Returning users see their reaction history bubble to the top of every surface that reads `hotTracks` (Portrait MUSIC, Landscape, Dahub previews).
+- **No tracks are removed**, only reordered. The MAX_HOT_POOL cap (50) is unchanged. Discovery is intentionally NOT OYO-sorted (it's the diversity channel).
+
+### Still open (the OYO promotion roadmap)
+
+1. **Route `HomeFeed` through `playerStore.hotTracks`** so Classic Mode inherits the OYO sort instead of bypassing the store. Medium effort.
+2. **Wire `oyoDJ.onTrackSkip`** from skip buttons in `VoyoPortraitPlayer` and `NowPlaying`. Currently skip events bypass OYO so the `dislikedArtists` learning never happens.
+3. **Surface OYO voice in the UI** — `OyoIsland` displays `getProfile()` but doesn't render `speak()` output. Add a small subtitle/toast that shows the latest DJ utterance.
+4. **Promote OYO from sort-only to merge-source** — the next step beyond sorting is having OYO actually CONTRIBUTE tracks to the hot pool from its `favoriteArtists` (e.g., fetch the user's top 5 favourites' latest releases and inject them).
+5. **Wire Brain outputs into OYO** — `sessionExecutor.getHotBelt()` produces a curated belt that nothing reads. Either consume it (and Brain becomes load-bearing) or delete the Brain subsystem entirely (it's currently lazy-loaded for ~38 KB). Decide which.
+
 ## Lessons from the April 2026 cleanup
 
 These are the rules that got beaten into the codebase across 4 production

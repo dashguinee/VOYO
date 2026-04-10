@@ -40,6 +40,7 @@ async function getDatabaseDiscovery() {
   return databaseDiscoveryModule;
 }
 import { isKnownUnplayable } from '../services/trackVerifier';
+import { getInsights as getOyoInsights } from '../services/oyoDJ';
 import { devLog, devWarn } from '../utils/logger';
 
 // Network quality types
@@ -1147,9 +1148,32 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
           // MERGE HOT: Existing (cleaned) + New, dedupe, cap at MAX
           const existingHotIds = new Set(cleanExistingHot.map(t => t.id));
           const newHot = dbHot.filter(t => !existingHotIds.has(t.id) && !excludeIds.has(t.id));
-          const mergedHot = [...cleanExistingHot, ...newHot].slice(0, MAX_HOT_POOL);
+          const mergedHotRaw = [...cleanExistingHot, ...newHot];
+
+          // ── OYO DJ BOOST ─────────────────────────────────────────────
+          // Promote tracks whose artist matches OYO's learned favourites
+          // (populated from user reactions via oyoDJ.onTrackReaction).
+          // Stable sort: favourites first, everything else preserves order.
+          // No-op for new users (empty favoriteArtists list).
+          // This is the architectural North Star: every surface that reads
+          // hotTracks now sees content shaped by the OYO DJ brain.
+          const oyoInsights = getOyoInsights();
+          const favoriteArtists = new Set(
+            oyoInsights.favoriteArtists.map(a => a.toLowerCase())
+          );
+          const mergedHot = favoriteArtists.size === 0
+            ? mergedHotRaw.slice(0, MAX_HOT_POOL)
+            : [...mergedHotRaw]
+                .sort((a, b) => {
+                  const aFav = favoriteArtists.has((a.artist ?? '').toLowerCase()) ? 1 : 0;
+                  const bFav = favoriteArtists.has((b.artist ?? '').toLowerCase()) ? 1 : 0;
+                  return bFav - aFav; // favourites first
+                })
+                .slice(0, MAX_HOT_POOL);
 
           // MERGE DISCOVER: Existing (cleaned) + New, dedupe, cap at MAX
+          // (Discovery is intentionally NOT OYO-boosted — it's the diversity
+          // channel; if OYO already loves it, it belongs in Hot, not here.)
           const existingDiscoverIds = new Set(cleanExistingDiscover.map(t => t.id));
           const newDiscover = dbDiscover.filter(t => !existingDiscoverIds.has(t.id) && !excludeIds.has(t.id));
           const mergedDiscover = [...cleanExistingDiscover, ...newDiscover].slice(0, MAX_DISCOVER_POOL);

@@ -14,7 +14,9 @@
 import { create } from 'zustand';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { useTrackPoolStore } from './trackPoolStore';
+import { onTrackReaction as oyoOnTrackReaction } from '../services/oyoDJ';
 import { devLog, devWarn } from '../utils/logger';
+import type { Track } from '../types';
 
 // ============================================
 // TYPES
@@ -218,7 +220,17 @@ export const useReactionStore = create<ReactionStore>((set, get) => ({
       }
       // BOOST TRACK SCORE IN POOL - Reactions are strong engagement signals!
       useTrackPoolStore.getState().recordReaction(trackId);
-      devLog(`[Reactions] Boosted pool score for ${trackId}`);
+      // FEED THE BRAIN — OYO DJ learns favorite artists from reactions.
+      // Without this wire, oyoDJ.getInsights().favoriteArtists stays empty
+      // and the playerStore.refreshRecommendations boost is a no-op.
+      void oyoOnTrackReaction({
+        id: trackId,
+        trackId,
+        title: trackTitle,
+        artist: trackArtist,
+        coverUrl: trackThumbnail,
+      } as Track);
+      devLog(`[Reactions] Boosted pool score + fed OYO DJ for ${trackId}`);
       return true;
     }
 
@@ -251,7 +263,15 @@ export const useReactionStore = create<ReactionStore>((set, get) => ({
       }
       // BOOST TRACK SCORE IN POOL - Reactions are strong engagement signals!
       useTrackPoolStore.getState().recordReaction(trackId);
-      devLog(`[Reactions] Boosted pool score for ${trackId}`);
+      // FEED THE BRAIN — OYO DJ learns favorite artists from reactions.
+      void oyoOnTrackReaction({
+        id: trackId,
+        trackId,
+        title: trackTitle,
+        artist: trackArtist,
+        coverUrl: trackThumbnail,
+      } as Track);
+      devLog(`[Reactions] Boosted pool score + fed OYO DJ for ${trackId}`);
       return true;
     } catch (err) {
       console.error('[Reactions] Error:', err);
