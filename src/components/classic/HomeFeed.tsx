@@ -15,6 +15,7 @@ import { SmartImage } from '../ui/SmartImage';
 import { VIBES, Vibe } from '../../data/tracks';
 import { LottieIcon } from '../ui/LottieIcon';
 import { getUserTopTracks, getPoolAwareHotTracks, getPoolAwareDiscoveryTracks, calculateBehaviorScore } from '../../services/personalization';
+import { getInsights as getOyoInsights } from '../../services/oyoDJ';
 import { usePreferenceStore } from '../../store/preferenceStore';
 import { usePlayerStore } from '../../store/playerStore';
 import { useTrackPoolStore } from '../../store/trackPoolStore';
@@ -895,16 +896,28 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
 
   // PERSONALIZED SECTIONS - Uses behavior (40%) + intent (60%) scoring
   // Made For You: YOUR top tracks based on listens, completions, reactions
+  // PLUS OYO DJ favorite-artist tier so the "one brain" doesn't lose to the
+  // local re-sort. Two-tier stable sort: favorites first (by behavior within),
+  // non-favorites second (also by behavior within). Preserves both signals.
   const madeForYou = useMemo(() => {
-    // Always use personalized scoring - DJ tracks are the pool, scoring is personal
     const personalizedHot = getPoolAwareHotTracks(15);
-    // If we have DJ-curated tracks, score and sort them by user behavior
     if (hotTracks.length > 0) {
+      // OYO DJ tier: artists the user has reacted to before. Empty for new users
+      // (set.size === 0 → falls through to plain behavior sort, no change).
+      const oyoFavorites = new Set(
+        getOyoInsights().favoriteArtists.map(a => a.toLowerCase())
+      );
       const scored = hotTracks.map(track => ({
         track,
-        score: calculateBehaviorScore(track, trackPreferences) + (track.oyeScore || 0) * 0.0001
+        isFavorite: oyoFavorites.has((track.artist ?? '').toLowerCase()),
+        score: calculateBehaviorScore(track, trackPreferences) + (track.oyeScore || 0) * 0.0001,
       }));
-      scored.sort((a, b) => b.score - a.score);
+      scored.sort((a, b) => {
+        // Tier 1: OYO favorites bubble to the top
+        if (a.isFavorite !== b.isFavorite) return a.isFavorite ? -1 : 1;
+        // Tier 2 (within): behavior score wins
+        return b.score - a.score;
+      });
       return scored.map(s => s.track).slice(0, 15);
     }
     return personalizedHot;

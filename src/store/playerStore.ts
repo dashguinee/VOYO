@@ -40,7 +40,7 @@ async function getDatabaseDiscovery() {
   return databaseDiscoveryModule;
 }
 import { isKnownUnplayable } from '../services/trackVerifier';
-import { getInsights as getOyoInsights } from '../services/oyoDJ';
+import { getInsights as getOyoInsights, onTrackSkip as oyoOnTrackSkip } from '../services/oyoDJ';
 import { devLog, devWarn } from '../utils/logger';
 
 // Network quality types
@@ -616,6 +616,11 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       if (completionRate < 30) {
         // User skipped (less than 30% played)
         recordPoolEngagement(state.currentTrack.id, 'skip');
+        // OYO DJ learning: feed the skip event so dislikedArtists builds up.
+        // Wired here at the playerStore.nextTrack boundary so EVERY surface
+        // that triggers a skip (Portrait, Landscape, Classic, queue, hotkey)
+        // feeds the brain for free — no per-surface wiring needed.
+        oyoOnTrackSkip(state.currentTrack);
       } else {
         // User completed (at least 30% played)
         recordPoolEngagement(state.currentTrack.id, 'complete', { completionRate });
