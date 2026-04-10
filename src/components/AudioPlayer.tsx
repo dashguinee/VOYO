@@ -986,13 +986,21 @@ export const AudioPlayer = () => {
       // FADE: Ramp masterGain to silence (15ms) BEFORE pause so the outgoing
       // track fades out cleanly and the chain is silent while the new src
       // decodes. Prevents the speaker pop on every track skip.
+      // NOTE: The ramp is scheduled on the AudioContext clock, so we must
+      // wait for it to complete (~20ms) before calling .pause(). Otherwise
+      // the pause cuts playback mid-ramp → audible click.
       if (audioRef.current) {
         muteMasterGainInstantly();
         audioRef.current.oncanplaythrough = null;
         audioRef.current.oncanplay = null;
         audioRef.current.onplay = null;
-        audioRef.current.pause();
-        audioRef.current.currentTime = 0;
+        // Hold a reference so the timeout doesn't pause a future track
+        const audioToFade = audioRef.current;
+        await new Promise<void>(resolve => setTimeout(resolve, 25));
+        if (audioRef.current === audioToFade) {
+          audioRef.current.pause();
+          audioRef.current.currentTime = 0;
+        }
       }
 
       // RESUME FIX: On initial load, if we have a saved position > 5s, auto-resume playback
@@ -1437,25 +1445,76 @@ export const AudioPlayer = () => {
 
     const audio = audioRef.current;
     if (isPlaying && audio.paused && audio.src && audio.readyState >= 1) {
-      // FIX: Restore volume before playing — it may be stuck at 0 from the loading phase
-      if (audioEnhancedRef.current && gainNodeRef.current) {
-        audio.volume = 1.0;
-        applyMasterGain();
-      } else {
-        audio.volume = volume / 100;
-      }
+      // CLICK-FREE PLAY:
+      // 1. Ensure audio context is live
+      // 2. Anchor gain at silence BEFORE .play() so first samples aren't loud
+      // 3. Start playback
+      // 4. Ramp gain up to target (60ms) — buries the transient
       if (audioContextRef.current?.state === 'suspended') {
         audioContextRef.current.resume();
       }
-      audio.play().catch(e => {
-        devWarn('🎵 [Playback] Resume play failed:', e.name);
-        // Browser blocked the play (autoplay policy, no user gesture yet).
-        // Sync the store back to false so the UI button matches reality.
-        // The user will then tap play (a real gesture) and that's allowed.
-        usePlayerStore.getState().setIsPlaying(false);
-      });
+      if (audioEnhancedRef.current && gainNodeRef.current && audioContextRef.current) {
+        const ctx = audioContextRef.current;
+        const now = ctx.currentTime;
+        const param = gainNodeRef.current.gain;
+        // Anchor at near-silence so .play() doesn't hit a hot chain
+        param.cancelScheduledValues(now);
+        param.setValueAtTime(0.0001, now);
+        audio.volume = 1.0;
+        audio.play().then(() => {
+          fadeInMasterGain(60); // Ramp up to target post-play
+        }).catch(e => {
+          devWarn('🎵 [Playback] Resume play failed:', e.name);
+          usePlayerStore.getState().setIsPlaying(false);
+        });
+      } else {
+        // Fallback: no Web Audio chain — ramp HTML element volume
+        audio.volume = 0;
+        audio.play().then(() => {
+          const target = volume / 100;
+          const start = performance.now();
+          const step = () => {
+            const t = Math.min((performance.now() - start) / 60, 1);
+            if (audioRef.current) audioRef.current.volume = t * target;
+            if (t < 1) requestAnimationFrame(step);
+          };
+          requestAnimationFrame(step);
+        }).catch(e => {
+          devWarn('🎵 [Playback] Resume play failed:', e.name);
+          usePlayerStore.getState().setIsPlaying(false);
+        });
+      }
     } else if (!isPlaying && !audio.paused) {
-      audio.pause();
+      // CLICK-FREE PAUSE:
+      // 1. Ramp gain to near-silence (40ms)
+      // 2. Call .pause() after the ramp completes (50ms timeout buffers)
+      if (audioEnhancedRef.current && gainNodeRef.current && audioContextRef.current) {
+        const ctx = audioContextRef.current;
+        const now = ctx.currentTime;
+        const param = gainNodeRef.current.gain;
+        param.cancelScheduledValues(now);
+        param.setValueAtTime(param.value, now);
+        param.linearRampToValueAtTime(0.0001, now + 0.04);
+        setTimeout(() => {
+          if (audioRef.current && !audioRef.current.paused) {
+            audioRef.current.pause();
+          }
+        }, 50);
+      } else {
+        // Fallback: ramp HTML element volume then pause
+        const startVol = audio.volume;
+        const start = performance.now();
+        const step = () => {
+          const t = Math.min((performance.now() - start) / 40, 1);
+          if (audioRef.current) audioRef.current.volume = startVol * (1 - t);
+          if (t < 1) {
+            requestAnimationFrame(step);
+          } else if (audioRef.current) {
+            audioRef.current.pause();
+          }
+        };
+        requestAnimationFrame(step);
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isPlaying]);
