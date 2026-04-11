@@ -1033,6 +1033,41 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
         prefetchTrack(track.trackId);
       }
 
+      // QUEUE PRE-BOOST: kick off a background cacheTrack for the
+      // queued track so it hits R2 before the user reaches it. This
+      // means background play will work for queued tracks — the audio
+      // element will find the R2 URL on loadTrack instead of falling
+      // back to iframe audio (which can't play in background).
+      //
+      // Deferred 2.5s so it doesn't compete with the currently-playing
+      // track's first-buffer bandwidth. Respects downloadSetting ('never'
+      // bypasses entirely, 'wifi-only' gates on connection type).
+      //
+      // Dynamic import to keep downloadStore out of the player-store
+      // startup dependency chain.
+      if (track.trackId) {
+        setTimeout(() => {
+          import('./downloadStore').then(({ useDownloadStore }) => {
+            const ds = useDownloadStore.getState();
+            if (ds.downloadSetting === 'never') return;
+            if (ds.downloadSetting === 'wifi-only') {
+              const conn = (navigator as any).connection || (navigator as any).mozConnection || (navigator as any).webkitConnection;
+              const isWifi = !conn || conn.type === 'wifi' || conn.type === 'ethernet' || !conn.effectiveType?.includes('2g');
+              if (!isWifi) return;
+            }
+            // Don't re-cache if already present (cacheTrack itself no-ops
+            // if the track is already in IndexedDB at any quality).
+            ds.cacheTrack(
+              track.trackId!,
+              track.title,
+              track.artist,
+              track.duration || 0,
+              `https://voyo-edge.dash-webtv.workers.dev/cdn/art/${track.trackId}?quality=high`,
+            ).catch(() => {});
+          }).catch(() => {});
+        }, 2500);
+      }
+
       // POOL ENGAGEMENT: Record queue action (strong intent signal)
       recordPoolEngagement(track.id, 'queue');
 

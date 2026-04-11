@@ -1540,107 +1540,118 @@ export const AudioPlayer = () => {
             };
           }
         } else {
-          // 📡 R2 MISS - Get direct YouTube URL, stream via browser
-          // Browser fetches from YouTube CDN directly (no CORS issues with audio element)
-          devLog('🎵 [VOYO] R2 miss, getting stream URL...');
+          // 📡 R2 MISS — IFRAME FIRST, HOT-SWAP TO AUDIO ELEMENT
+          //
+          // Old flow: await /stream, then play audio element. If /stream
+          // failed, we'd call nextTrack() and the user would watch their
+          // track disappear. No fallback, no background play.
+          //
+          // New flow:
+          //   1. IMMEDIATELY set playbackSource='iframe'. The YouTubeIframe
+          //      component is always mounted and already loading the current
+          //      track's video — it auto-unMutes when playbackSource is not
+          //      cached/r2, and starts playing audio via the YouTube embed.
+          //      This gives INSTANT playback, no /stream wait.
+          //
+          //   2. In parallel, fire the /stream fetch. If it succeeds,
+          //      hot-swap from iframe → audio element for background-play
+          //      capability (iframes pause on mobile background; audio
+          //      elements don't).
+          //
+          //   3. If /stream fails, stay on iframe. Foreground playback still
+          //      works via the iframe audio; background play won't work for
+          //      this specific track but the app keeps flowing.
+          //
+          //   4. Queue pre-boost (wired in playerStore.addToQueue) reduces
+          //      how often we even reach this path — queued tracks get
+          //      cacheTrack'd in the background so they hit the R2 path.
+          devLog('🎵 [VOYO] R2 miss — starting iframe immediately, will hot-swap to audio element when stream arrives');
 
+          // Pause the audio element and silence the chain so we don't get
+          // any leaked sound from a stale src. The iframe becomes the source.
+          if (audioRef.current) {
+            audioRef.current.pause();
+          }
+          muteMasterGainInstantly();
+          isEdgeStreamRef.current = false;
+          setPlaybackSource('iframe');
+          // Iframe is playing now — clear the load watchdog so it doesn't
+          // fire and skip the track while we try to upgrade to audio element.
+          clearLoadWatchdog();
+          isLoadingTrackRef.current = false;
+
+          // Parallel stream fetch for hot-swap upgrade.
           try {
-            // Get the direct YouTube audio URL from our worker.
-            // Use AbortSignal.timeout so a slow Edge Worker doesn't hang forever
-            // (the same fix we made in preloadManager.ts in v0.2.x).
             const streamResponse = await fetch(
               `${EDGE_WORKER_URL}/stream?v=${trackId}`,
               { signal: AbortSignal.timeout(5000) },
             );
-            if (isStale()) { devLog(`[AudioPlayer] cancelled stale load for ${trackId} after stream fetch`); return; }
+            if (isStale()) { devLog(`[AudioPlayer] cancelled stale stream fetch for ${trackId}`); return; }
             const streamData = await streamResponse.json();
-            if (isStale()) { devLog(`[AudioPlayer] cancelled stale load for ${trackId} after stream json`); return; }
+            if (isStale()) { devLog(`[AudioPlayer] cancelled stale stream json for ${trackId}`); return; }
 
             if (!streamData.url) {
-              console.error('🚨 [VOYO] No stream URL available — skipping to next');
-              // Don't let the user stare at silence. Advance immediately
-              // instead of waiting for the watchdog to fire.
-              clearLoadWatchdog();
-              isLoadingTrackRef.current = false;
-              nextTrack();
+              devLog('🎵 [VOYO] No stream URL — iframe stays as audio source (no background play for this track)');
               return;
             }
 
-            devLog(`🎵 [VOYO] Got stream URL (${streamData.bitrate}bps ${streamData.mimeType})`);
-            isEdgeStreamRef.current = true; // Mark as streaming (not from IndexedDB)
-            setPlaybackSource('cached'); // Treat as cached for EQ purposes
+            devLog(`🎵 [VOYO] Got stream URL (${streamData.bitrate}bps ${streamData.mimeType}) — hot-swapping iframe → audio element`);
 
             const { boostProfile: profile } = usePlayerStore.getState();
             setupAudioEnhancement(profile);
 
             if (audioRef.current) {
               audioRef.current.volume = 1.0; // Pinned — loudness via masterGain
-              audioRef.current.src = streamData.url; // Browser fetches directly from YouTube CDN
+              audioRef.current.src = streamData.url;
               audioRef.current.load();
 
               audioRef.current.oncanplaythrough = () => {
                 if (!audioRef.current) return;
-                if (isStale()) return; // STALE GUARD — late canplaythrough after skip
+                if (isStale()) return;
 
+                // Seek audio element to the iframe's current position so
+                // the hot-swap is near-seamless. The store's currentTime is
+                // synced from the iframe at 4Hz, so at worst ~250ms off.
+                const iframePos = usePlayerStore.getState().currentTime;
                 if (isInitialLoadRef.current && savedCurrentTime > 5) {
                   audioRef.current.currentTime = savedCurrentTime;
                   isInitialLoadRef.current = false;
+                } else if (iframePos > 1) {
+                  audioRef.current.currentTime = iframePos;
                 }
 
                 const { isPlaying: shouldPlay } = usePlayerStore.getState();
-                const shouldAutoResume = shouldAutoResumeRef.current;
-                if (shouldAutoResume) {
-                  shouldAutoResumeRef.current = false;
-                }
+                if (!shouldPlay) return; // user paused during the swap, don't play
 
-                if ((shouldPlay || shouldAutoResume) && audioRef.current.paused) {
-                  audioContextRef.current?.state === 'suspended' && audioContextRef.current.resume().catch(() => {});
-                  if (shouldAutoResume) {
-                    fadeInVolume(1200);
-                  } else {
-                    // 400ms premium settle-in for every fresh edge-stream start.
-                    fadeInMasterGain(120);
-                  }
-                  audioRef.current.play().then(() => {
-                    clearLoadWatchdog();
-                    recordPlayEvent();
-                    if (shouldAutoResume && !shouldPlay) {
-                      usePlayerStore.getState().togglePlay();
-                    }
-                    devLog('🎵 [VOYO] Playback started (YouTube direct stream)');
-                  }).catch(e => handlePlayFailure(e, 'Stream'));
-                }
+                // HOT SWAP BEGINS.
+                // Flip the source flag — YouTubeIframe's own effect sees
+                // playbackSource become 'cached' and mutes/pauses the iframe
+                // automatically (its line ~253 effect). The audio element
+                // plays via the Web Audio chain with EQ + VOYEX applied.
+                isEdgeStreamRef.current = true;
+                setPlaybackSource('cached');
+
+                audioContextRef.current?.state === 'suspended' && audioContextRef.current.resume().catch(() => {});
+                fadeInMasterGain(140); // slightly longer fade so the iframe→audio transition is inaudible
+
+                audioRef.current.play().then(() => {
+                  clearLoadWatchdog();
+                  recordPlayEvent();
+                  devLog('🎵 [VOYO] Hot-swap complete — audio element is now the source, background play enabled');
+                }).catch(e => handlePlayFailure(e, 'Hot-swap'));
               };
 
-              // BACKGROUND CACHE — moved out of onplay entirely. The previous
-              // version fired a parallel download 30s into playback, which
-              // re-fetched the entire track from the Edge Worker /extract
-              // endpoint while the audio element was still streaming the
-              // SAME audio from YouTube CDN. Bandwidth competition →
-              // streaming buffer underrun → mid-track glitches.
-              //
-              // The new approach: cache fires at 85% progress (handled by
-              // a separate effect below) OR at handleEnded (most natural —
-              // no competition with current playback). The cache exists for
-              // the NEXT play of this track, so a 5-30s delay is invisible
-              // to the user, and prevents the glitch.
+              // Keep onplay wired but empty — cache triggers fire from the
+              // 85% progress milestone + onEnded fallback.
               audioRef.current.onplay = () => {
                 if (isStale()) return;
-                // Intentionally empty — cache trigger moved to progress
-                // milestone + onEnded fallback. See cacheTriggerEffect below.
               };
             }
           } catch (streamError) {
-            console.error('🚨 [VOYO] Stream error:', streamError);
-            // Fetch failed (timeout / network / 500). Advance to next so
-            // the app keeps flowing instead of sitting on a dead track.
-            // The watchdog would handle this in 8s, but explicit skip is
-            // faster UX — user doesn't wait for the timeout.
-            if (!isStale()) {
-              clearLoadWatchdog();
-              isLoadingTrackRef.current = false;
-              nextTrack();
-            }
+            devWarn('[VOYO] Stream fetch failed — iframe continues as audio source (no background play for this track):', streamError);
+            // Intentionally DO NOT call nextTrack(). The iframe is playing.
+            // Foreground playback works. Background play doesn't, but the
+            // user hears their track instead of watching it disappear.
           }
         }
       }
