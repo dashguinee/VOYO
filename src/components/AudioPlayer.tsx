@@ -174,6 +174,39 @@ export const AudioPlayer = () => {
   // fire so milestone checks (50/75/85%) stay accurate.
   const lastProgressWriteBucketRef = useRef<number>(-1);
   const lastMediaSessionWriteRef = useRef<number>(0);
+  // FLOW WATCHDOG: armed when loadTrack starts, cleared when play() succeeds.
+  // If it fires, it means loadTrack never reached a playing state — either
+  // the stream URL was null, fetch failed silently, canplaythrough never
+  // fired, or play() was rejected (autoplay block). Instead of sitting in a
+  // "loaded but silent" limbo, we auto-skip to the next track so the user
+  // always experiences flow. Stale guard ensures a late fire doesn't skip
+  // the CURRENT playing track after recovery.
+  const loadWatchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const clearLoadWatchdog = () => {
+    if (loadWatchdogRef.current) {
+      clearTimeout(loadWatchdogRef.current);
+      loadWatchdogRef.current = null;
+    }
+  };
+  // Handles the .catch side of a loadTrack play() promise. Distinguishes
+  // autoplay-block (user must tap — not a real failure) from real failures
+  // (stream died, decode error — skip immediately). Either way clears the
+  // watchdog so it doesn't fire redundantly.
+  const handlePlayFailure = (e: Error | DOMException, label: string) => {
+    devWarn(`[Playback] ${label} play failed:`, e.name);
+    clearLoadWatchdog();
+    if (e.name === 'NotAllowedError') {
+      // Autoplay blocked. Reflect paused state so the UI shows "tap to
+      // play" — don't auto-skip, the user wants THIS track.
+      usePlayerStore.getState().setIsPlaying(false);
+      isLoadingTrackRef.current = false;
+      return;
+    }
+    // Real failure — advance immediately rather than waiting 8s for the
+    // watchdog to skip. Flow stays uninterrupted.
+    isLoadingTrackRef.current = false;
+    nextTrack();
+  };
 
   // Store state — fine-grained selectors so AudioPlayer only re-renders when
   // fields it actually uses change. A broad destructure would cause a
@@ -1251,6 +1284,33 @@ export const AudioPlayer = () => {
       hasTriggered75PercentKeptRef.current = false; // Reset 75% kept trigger for new track
       hasTriggered30sListenRef.current = false; // Reset 30s listen flag for new track
 
+      // ── FLOW WATCHDOG ─────────────────────────────────────────────────
+      // Arm an 8s timer. If play() doesn't clear it, loadTrack is stuck —
+      // auto-skip to next track so the user always has flow.
+      //
+      // Why 8s: ~3s for stream fetch, ~2s for decoder init + first buffer,
+      // plus safety margin for slow connections. Longer than most recovery
+      // paths take, shorter than the user's patience for "why is nothing
+      // playing".
+      //
+      // We do NOT mark the track as permanently failed. A watchdog timeout
+      // could be a transient network blip — the track itself is probably
+      // fine. Just advance; if the user lands on the same track later and
+      // it's genuinely broken, the watchdog will skip it again.
+      //
+      // Stale guard ensures a late fire from a superseded loadTrack doesn't
+      // skip the current playing track. Pause guard respects user intent.
+      clearLoadWatchdog();
+      loadWatchdogRef.current = setTimeout(() => {
+        loadWatchdogRef.current = null;
+        if (isStale()) return; // newer loadTrack took over
+        const store = usePlayerStore.getState();
+        if (!store.isPlaying) return; // user paused, respect intent
+        devWarn(`[VOYO] Load watchdog fired for ${trackId} — 8s without playback, skipping`);
+        isLoadingTrackRef.current = false;
+        nextTrack();
+      }, 8000);
+
       // End previous session
       endListenSession(audioRef.current?.currentTime || 0, 0);
       startListenSession(currentTrack.id, currentTrack.duration || 0);
@@ -1295,9 +1355,10 @@ export const AudioPlayer = () => {
                 // so each fresh track eases in smoothly.
                 fadeInMasterGain(120);
                 audioRef.current.play().then(() => {
+                  clearLoadWatchdog();
                   recordPlayEvent();
                   devLog('🔮 [VOYO] Preloaded playback started!');
-                }).catch(e => devWarn('🎵 [Playback] Preloaded play failed:', e.name));
+                }).catch(e => handlePlayFailure(e, 'Preloaded'));
               }
               // Paused state: masterGain stays muted. When user taps play,
               // the play/pause effect's applyMasterGain() ramps it back up.
@@ -1368,13 +1429,14 @@ export const AudioPlayer = () => {
                 fadeInMasterGain(120);
               }
               audioRef.current.play().then(() => {
+                clearLoadWatchdog();
                 recordPlayEvent();
                 // Update store to reflect playing state if we auto-resumed
                 if (shouldAutoResume && !shouldPlay) {
                   usePlayerStore.getState().togglePlay();
                 }
                 devLog('🎵 [VOYO] Playback started (cached)');
-              }).catch(e => devWarn('🎵 [Playback] Cached play failed:', e.name));
+              }).catch(e => handlePlayFailure(e, 'Cached'));
             }
             // Paused state: masterGain stays muted; play/pause effect will
             // ramp it up via applyMasterGain() when the user taps play.
@@ -1434,12 +1496,13 @@ export const AudioPlayer = () => {
                   fadeInMasterGain(120);
                 }
                 audioRef.current.play().then(() => {
+                  clearLoadWatchdog();
                   recordPlayEvent();
                   if (shouldAutoResume && !shouldPlay) {
                     usePlayerStore.getState().togglePlay();
                   }
                   devLog('🎵 [VOYO] Playback started (R2)');
-                }).catch(e => devWarn('🎵 [Playback] R2 play failed:', e.name));
+                }).catch(e => handlePlayFailure(e, 'R2'));
               }
             };
           }
@@ -1461,7 +1524,12 @@ export const AudioPlayer = () => {
             if (isStale()) { devLog(`[AudioPlayer] cancelled stale load for ${trackId} after stream json`); return; }
 
             if (!streamData.url) {
-              console.error('🚨 [VOYO] No stream URL available');
+              console.error('🚨 [VOYO] No stream URL available — skipping to next');
+              // Don't let the user stare at silence. Advance immediately
+              // instead of waiting for the watchdog to fire.
+              clearLoadWatchdog();
+              isLoadingTrackRef.current = false;
+              nextTrack();
               return;
             }
 
@@ -1501,12 +1569,13 @@ export const AudioPlayer = () => {
                     fadeInMasterGain(120);
                   }
                   audioRef.current.play().then(() => {
+                    clearLoadWatchdog();
                     recordPlayEvent();
                     if (shouldAutoResume && !shouldPlay) {
                       usePlayerStore.getState().togglePlay();
                     }
                     devLog('🎵 [VOYO] Playback started (YouTube direct stream)');
-                  }).catch(e => devWarn('🎵 [Playback] Stream play failed:', e.name));
+                  }).catch(e => handlePlayFailure(e, 'Stream'));
                 }
               };
 
@@ -1530,6 +1599,15 @@ export const AudioPlayer = () => {
             }
           } catch (streamError) {
             console.error('🚨 [VOYO] Stream error:', streamError);
+            // Fetch failed (timeout / network / 500). Advance to next so
+            // the app keeps flowing instead of sitting on a dead track.
+            // The watchdog would handle this in 8s, but explicit skip is
+            // faster UX — user doesn't wait for the timeout.
+            if (!isStale()) {
+              clearLoadWatchdog();
+              isLoadingTrackRef.current = false;
+              nextTrack();
+            }
           }
         }
       }
@@ -1541,6 +1619,10 @@ export const AudioPlayer = () => {
       // Disarm any pending watchdog from the previous load so it doesn't
       // fire against the new track's in-flight load.
       disarmGainWatchdog();
+      // Same for the load watchdog — if the effect re-runs because the
+      // track changed, the new loadTrack will arm its own. Don't let the
+      // old one fire and skip the new track.
+      clearLoadWatchdog();
       // Clear loading guard so a stalled/failed load doesn't leave the
       // onPause handler permanently muted. The next loadTrack will set it
       // again at the start of its own pause cycle.
@@ -2123,6 +2205,12 @@ export const AudioPlayer = () => {
     const errorName = error ? (errorCodes[error.code] || `Unknown(${error.code})`) : 'Unknown';
     const recoveryStart = performance.now();
     console.error(`🚨 [VOYO] Audio error: ${errorName}`, error?.message);
+
+    // Clear the load watchdog — we're now in recovery mode. If recovery
+    // succeeds, we don't want the original 8s timer to fire and skip the
+    // newly-recovered track. If recovery fails, the final nextTrack() call
+    // will arm a fresh watchdog on the next track's loadTrack.
+    clearLoadWatchdog();
 
     if (!currentTrack?.trackId || !error) return;
 
