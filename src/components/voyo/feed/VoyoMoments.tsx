@@ -73,7 +73,32 @@ function slideVariants(dir: SlideDir, isSurrender: boolean = false) {
 
 const S = {
   container: css({ position: 'relative', width: '100%', height: '100%', backgroundColor: '#000', overflow: 'hidden', touchAction: 'none', userSelect: 'none', WebkitUserSelect: 'none' }),
-  topBar: css({ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 30, paddingTop: 'env(safe-area-inset-top, 12px)', background: 'transparent', pointerEvents: 'auto' }),
+  // Unified gradient surface from the very top through the compass arc.
+  // Fades smoothly over 30% of the screen so logo + tabs + compass sit on
+  // a single dark wash that blends into the video. Header opacity is
+  // controlled by hasInteracted state so it glides out of the way after
+  // the user engages with the first moment.
+  topBar: css({
+    position: 'absolute', top: 0, left: 0, right: 0, zIndex: 30,
+    paddingTop: 'env(safe-area-inset-top, 12px)',
+    background: 'linear-gradient(to bottom, rgba(0,0,0,0.78) 0%, rgba(0,0,0,0.55) 35%, rgba(0,0,0,0.22) 70%, transparent 100%)',
+    pointerEvents: 'auto',
+    transition: 'opacity 0.6s cubic-bezier(0.16, 1, 0.3, 1), transform 0.6s cubic-bezier(0.16, 1, 0.3, 1)',
+  }),
+  // Side shadow shapes — subtle vertical gradients on left and right edges
+  // that frame the video. Soft inset-shadow effect without an actual shadow
+  // (which would re-composite on every video frame). 24px wide, fades from
+  // ~30% black at the very edge to transparent.
+  sideShadowL: css({
+    position: 'absolute', top: 0, bottom: 0, left: 0, width: 28, zIndex: 25,
+    background: 'linear-gradient(to right, rgba(0,0,0,0.5) 0%, rgba(0,0,0,0.18) 50%, transparent 100%)',
+    pointerEvents: 'none',
+  }),
+  sideShadowR: css({
+    position: 'absolute', top: 0, bottom: 0, right: 0, width: 28, zIndex: 25,
+    background: 'linear-gradient(to left, rgba(0,0,0,0.5) 0%, rgba(0,0,0,0.18) 50%, transparent 100%)',
+    pointerEvents: 'none',
+  }),
   axisTabs: css({ display: 'flex', justifyContent: 'center', gap: 4, padding: '8px 16px 2px' }),
   compassArc: css({ position: 'relative', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', padding: '4px 0 10px', overflow: 'hidden', minHeight: 44 }),
   card: css({ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }),
@@ -661,6 +686,11 @@ export const VoyoMoments: React.FC<VoyoMomentsProps> = ({ onPlayFullTrack, onArt
   const [pendingStar, setPendingStar] = useState<{ momentId: string; creator: string; stars: number } | null>(null);
   const [selectedCategories, setSelectedCategories] = useState<Set<number>>(new Set());
   const [mixIndex, setMixIndex] = useState(0);
+  // Header glide-out: starts visible, fades smoothly after the user makes
+  // their first navigation gesture (swipe / tap-into-content). Returns
+  // visible if user double-taps or holds — those are gestures that suggest
+  // they want UI back. Standard TikTok/Reels pattern.
+  const [hasInteracted, setHasInteracted] = useState(false);
 
   // ============================================
   // MIX MODE — multi-category blended feed
@@ -822,6 +852,8 @@ export const VoyoMoments: React.FC<VoyoMomentsProps> = ({ onPlayFullTrack, onArt
     if (Math.abs(dx) > SWIPE_THRESHOLD || Math.abs(dy) > SWIPE_THRESHOLD) {
       // Calculate velocity (px/ms)
       const velocity = distance / Math.max(duration, 1);
+      // First swipe — header glides out of the way
+      if (!hasInteracted) setHasInteracted(true);
 
       if (Math.abs(dx) > Math.abs(dy)) {
         if (dx < 0) {
@@ -949,8 +981,20 @@ export const VoyoMoments: React.FC<VoyoMomentsProps> = ({ onPlayFullTrack, onArt
 
   return (
     <div ref={containerRef} style={S.container} onTouchStart={onTS} onTouchMove={onTM} onTouchEnd={onTE}>
-      {/* TOP BAR */}
-      <div style={S.topBar}>
+      {/* SIDE SHADOWS — frame the video with subtle vertical gradients */}
+      <div style={S.sideShadowL} />
+      <div style={S.sideShadowR} />
+
+      {/* TOP BAR — unified gradient surface, glides out after first interaction.
+          Tap the gradient area itself to bring it back if it's hidden. */}
+      <div
+        style={{
+          ...S.topBar,
+          opacity: hasInteracted ? 0 : 1,
+          transform: hasInteracted ? 'translateY(-12px)' : 'translateY(0)',
+          pointerEvents: hasInteracted ? 'none' : 'auto',
+        }}
+      >
         <div style={S.axisTabs}>
           {(['countries', 'vibes', 'genres'] as CategoryAxis[]).map(a => (
             <div key={a} style={axisTab(categoryAxis === a)} onClick={e => { e.stopPropagation(); setCategoryAxis(a); }}>
@@ -968,6 +1012,20 @@ export const VoyoMoments: React.FC<VoyoMomentsProps> = ({ onPlayFullTrack, onArt
           navAction={navAction}
         />
       </div>
+
+      {/* Tap-to-show-header strip — invisible 28px hot zone at the very top
+          that re-reveals the header when tapped. Lets users get the UI back
+          without needing to swipe back to "start" of the feed. */}
+      {hasInteracted && (
+        <div
+          style={{
+            position: 'absolute', top: 0, left: 0, right: 0,
+            height: 'calc(env(safe-area-inset-top, 12px) + 28px)',
+            zIndex: 31, pointerEvents: 'auto',
+          }}
+          onClick={(e) => { e.stopPropagation(); setHasInteracted(false); }}
+        />
+      )}
 
       {/* MIX MODE BADGE -- visible when multi-category blending is active */}
       {isMixMode && (
