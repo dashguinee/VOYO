@@ -4193,8 +4193,14 @@ export const VoyoPortraitPlayer = ({
     const dy = e.clientY - start.y;
 
     // If the gesture looks vertical (scrolling the portal layer), leave
-    // the card alone — don't fight the native scroll.
+    // the card alone — don't fight the native scroll. ALSO cancel the
+    // hold timer — otherwise a vertical scroll held for 400ms would
+    // falsely trigger DJ mode.
     if (Math.abs(dy) > Math.abs(dx) * HORIZONTAL_BIAS && Math.abs(dy) > 20) {
+      if (holdTimerRef.current) {
+        clearTimeout(holdTimerRef.current);
+        holdTimerRef.current = null;
+      }
       return;
     }
 

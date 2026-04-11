@@ -208,7 +208,17 @@ export const YouTubeIframe = memo(() => {
             // Genuinely unavailable — track gone
             console.warn('[YouTubeIframe] Video not found:', videoId);
             if (videoId) markTrackAsFailed(videoId, errorCode);
-            setTimeout(() => nextTrack(), 500);
+            // Re-check on fire: if the hot-swap completed during this
+            // 500ms window, the audio element is already playing the
+            // track via /stream — don't skip away from a working track.
+            setTimeout(() => {
+              const ps = usePlayerStore.getState().playbackSource;
+              if (ps === 'cached' || ps === 'r2') {
+                devLog('[YouTubeIframe] 100 recovery skipped — hot-swap won');
+                return;
+              }
+              nextTrack();
+            }, 500);
             return;
           }
 
@@ -227,7 +237,16 @@ export const YouTubeIframe = memo(() => {
             // Audio source is iframe itself AND iframe blocked → nothing to play
             console.warn('[YouTubeIframe] Embed blocked, no alternative source:', videoId);
             if (videoId) markTrackAsFailed(videoId, errorCode);
-            setTimeout(() => nextTrack(), 500);
+            // Same re-check as the 100 path: hot-swap may have won the
+            // race during the 500ms delay. Don't skip a newly-ready track.
+            setTimeout(() => {
+              const ps = usePlayerStore.getState().playbackSource;
+              if (ps === 'cached' || ps === 'r2') {
+                devLog('[YouTubeIframe] embed-blocked recovery skipped — hot-swap won');
+                return;
+              }
+              nextTrack();
+            }, 500);
             return;
           }
 

@@ -1349,6 +1349,11 @@ export const AudioPlayer = () => {
         audioRef.current.oncanplaythrough = null;
         audioRef.current.oncanplay = null;
         audioRef.current.onplay = null;
+        // CLEAR STALE LOOP FLAG: the iframe-miss branch sets loop=true to
+        // keep the silent WAV looping. If that load never reached hot-swap
+        // (stream failed), the flag persists. Without this reset, the next
+        // R2/cached track would loop forever on its first play.
+        audioRef.current.loop = false;
         // Hold a reference so the timeout doesn't pause a future track
         const audioToFade = audioRef.current;
         await new Promise<void>(resolve => setTimeout(resolve, 18));
@@ -1649,7 +1654,11 @@ export const AudioPlayer = () => {
           // Iframe is playing now — clear the load watchdog so it doesn't
           // fire and skip the track while we try to upgrade to audio element.
           clearLoadWatchdog();
-          isLoadingTrackRef.current = false;
+          // IMPORTANT: keep isLoadingTrackRef = TRUE throughout iframe phase.
+          // Setting it to false here would let the src-swap to silent WAV
+          // fire onPause → setIsPlaying(false) → iframe pauses itself.
+          // fadeInMasterGain (called in the hot-swap path) will clear it
+          // when the audio element actually takes over.
 
           // Point main audio element at silent WAV. The source node stays
           // wired through src changes (Web Audio API design). This triggers
@@ -2203,9 +2212,20 @@ export const AudioPlayer = () => {
     return cleanup;
   }, [isPlaying, playbackSource, currentTrack?.trackId, checkCache, setBufferHealth, setPlaybackSource, cacheTrack]);
 
-  // Media Session (only when using audio element: cached or r2)
+  // Media Session — registers for ANY playbackSource (cached/r2/iframe).
+  //
+  // CRITICAL: the iframe path needs this too. Without it, the lock screen
+  // shows stale metadata (from the previous cached/r2 track) and the
+  // action handlers are still wired to the old track context. Worse, if
+  // the first track of the session goes iframe-miss, the lock screen is
+  // blank and no hardware buttons work.
+  //
+  // We register whenever there's a currentTrack, regardless of source.
+  // The seek handlers route based on source: for iframe, they seek the
+  // YouTube player via getCurrentTime/seekTo; for cached/r2, they seek
+  // the main audio element directly.
   useEffect(() => {
-    if (!('mediaSession' in navigator) || !currentTrack || (playbackSource !== 'cached' && playbackSource !== 'r2')) return;
+    if (!('mediaSession' in navigator) || !currentTrack) return;
 
     // Multiple artwork sizes — the OS picks the right one for the lock
     // screen / notification shade / media widget depending on display
@@ -2235,9 +2255,23 @@ export const AudioPlayer = () => {
 
     // SEEK FORWARD / BACKWARD — used by headset hardware buttons, car
     // head units, and the lock-screen 10s skip arrows. Default offset
-    // of 10s matches every major music app. Click-free seek pattern:
-    // mute → seek → fade back in.
+    // of 10s matches every major music app.
+    //
+    // ROUTING: during iframe phase, the main audio element is playing a
+    // SILENT WAV — seeking it does nothing audible. We route iframe-phase
+    // seeks through the store's currentTime, which YouTubeIframe watches
+    // and translates into player.seekTo(). For cached/r2, we seek the
+    // audio element directly via the click-free mute → seek → fade pattern.
     const seekOffset = (dir: 1 | -1, offset: number) => {
+      const ps = usePlayerStore.getState().playbackSource;
+      if (ps === 'iframe') {
+        // Route through store — YouTubeIframe's seek effect picks this up.
+        const curr = usePlayerStore.getState().currentTime;
+        const dur = usePlayerStore.getState().duration;
+        const newTime = Math.max(0, Math.min(dur || 0, curr + dir * offset));
+        usePlayerStore.getState().seekTo(newTime);
+        return;
+      }
       if (!audioRef.current) return;
       const newTime = Math.max(0, Math.min(
         audioRef.current.duration || 0,
@@ -2254,7 +2288,13 @@ export const AudioPlayer = () => {
       seekOffset(-1, d.seekOffset || 10);
     });
     navigator.mediaSession.setActionHandler('seekto', (d) => {
-      if (d.seekTime === undefined || !audioRef.current) return;
+      if (d.seekTime === undefined) return;
+      const ps = usePlayerStore.getState().playbackSource;
+      if (ps === 'iframe') {
+        usePlayerStore.getState().seekTo(d.seekTime);
+        return;
+      }
+      if (!audioRef.current) return;
       muteMasterGainInstantly();
       audioRef.current.currentTime = d.seekTime;
       setTimeout(() => fadeInMasterGain(80), 30);
