@@ -50,6 +50,10 @@ type PrefetchStatus = 'idle' | 'loading' | 'ready' | 'error';
 // AbortController for cancelling async operations on rapid track changes
 let currentTrackAbortController: AbortController | null = null;
 
+// Dedup trackers for setCurrentTime persistence — see setCurrentTime impl
+let _lastPersistedSec = -1;
+let _lastPortalSyncSec = -1;
+
 // ============================================
 // PERSISTENCE HELPERS - Remember state on refresh
 // ============================================
@@ -602,14 +606,24 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
 
   setCurrentTime: (time) => {
     set({ currentTime: time });
-    // PERSIST: Save position every 5 seconds (avoid excessive writes)
-    if (Math.floor(time) % 5 === 0 && time > 0) {
+    // PERSIST: Save position when crossing each 5-second mark.
+    // CRITICAL: dedup by tracking the last persisted second. The previous
+    // version's `Math.floor(time) % 5 === 0` was true for time = 5.0,
+    // 5.1, ..., 5.9 — at 5-10Hz timeupdate events, that fired the
+    // synchronous JSON.parse + JSON.stringify + localStorage.setItem
+    // 5-10 times per second when crossing each 5s mark. Main thread block
+    // = audio glitch every 5s.
+    const flooredSec = Math.floor(time);
+    if (time > 0 && flooredSec % 5 === 0 && flooredSec !== _lastPersistedSec) {
+      _lastPersistedSec = flooredSec;
       const current = loadPersistedState();
       savePersistedState({ ...current, currentTime: time });
     }
 
-    // PORTAL SYNC: Update now_playing every 10 seconds for live position
-    if (Math.floor(time) % 10 === 0 && time > 0) {
+    // PORTAL SYNC: Update now_playing every 10 seconds for live position.
+    // Same dedup pattern.
+    if (time > 0 && flooredSec % 10 === 0 && flooredSec !== _lastPortalSyncSec) {
+      _lastPortalSyncSec = flooredSec;
       (async () => {
         try {
           const { useUniverseStore } = await import('./universeStore');

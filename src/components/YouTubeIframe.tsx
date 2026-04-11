@@ -337,12 +337,19 @@ export const YouTubeIframe = memo(() => {
     const DRIFT_THRESHOLD = 2; // seconds - only sync if drift is noticeable
     const CHECK_INTERVAL = 5000; // check every 5 seconds
 
+    // CRITICAL: read currentTime via getState() inside the callback, NOT
+    // from the closure. The previous version had `currentTime` in the dep
+    // array, which made this useEffect re-run on every audio tick (5-10Hz).
+    // Each re-run cleared and recreated the interval — meaning the 5s
+    // drift check almost never actually fired (it was reset before reaching
+    // its trigger time). Plus the constant create/clear churn was wasted
+    // CPU on the main thread.
     const syncInterval = setInterval(() => {
       const player = playerRef.current;
       if (!player?.getCurrentTime || !player?.seekTo) return;
 
       const videoTime = player.getCurrentTime() || 0;
-      const audioTime = currentTime; // From store (audio is updating this)
+      const audioTime = usePlayerStore.getState().currentTime;
       const drift = Math.abs(videoTime - audioTime);
 
       if (drift > DRIFT_THRESHOLD) {
@@ -352,7 +359,7 @@ export const YouTubeIframe = memo(() => {
     }, CHECK_INTERVAL);
 
     return () => clearInterval(syncInterval);
-  }, [playbackSource, isPlaying, currentTime]);
+  }, [playbackSource, isPlaying]);
 
   // Time update interval (only when streaming from iframe)
   useEffect(() => {

@@ -545,13 +545,31 @@ let maintenanceInterval: ReturnType<typeof setInterval> | null = null;
 export function startPoolMaintenance(): void {
   if (maintenanceInterval) return;
 
+  // CRITICAL: defer the actual maintenance work to browser idle. The
+  // rescoreAllTracks call iterates the entire hotPool (could be hundreds
+  // of tracks), recalculates scores, triggers a Zustand set → React render
+  // cascade, AND chains into refreshRecommendations. Combined that's
+  // 50-200ms of main thread work — every 5 minutes during playback. The
+  // user perceived this as "music glitches occasionally for no reason".
+  // requestIdleCallback runs the work during idle frames so it never
+  // competes with the audio thread.
   maintenanceInterval = setInterval(() => {
-    const store = useTrackPoolStore.getState();
-    store.rescoreAllTracks();
-    store.ageOutStale();
+    const w = window as unknown as {
+      requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => void;
+    };
+    const runMaintenance = () => {
+      const store = useTrackPoolStore.getState();
+      store.rescoreAllTracks();
+      store.ageOutStale();
+    };
+    if (typeof w.requestIdleCallback === 'function') {
+      w.requestIdleCallback(runMaintenance, { timeout: 10000 });
+    } else {
+      setTimeout(runMaintenance, 0);
+    }
   }, 5 * 60 * 1000); // 5 minutes
 
-  devLog('[VOYO Track Pool] Maintenance started');
+  devLog('[VOYO Track Pool] Maintenance started (idle-deferred)');
 }
 
 export function stopPoolMaintenance(): void {

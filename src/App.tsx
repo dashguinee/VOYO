@@ -1262,8 +1262,40 @@ function App() {
     return () => cancelIdle(idleId);
   }, []);
 
-  // REALTIME NOTIFICATIONS: Subscribe to Supabase events for DynamicIsland
+  // REALTIME NOTIFICATIONS: Subscribe to Supabase events for DynamicIsland.
+  // DEFERRED via requestIdleCallback so the WebSocket setup + Supabase
+  // realtime channel join doesn't race the first track load. Was firing on
+  // mount alongside ~10 other things, contributing to startup audio
+  // muffling. The user doesn't need realtime notifications in the first
+  // few seconds — they're just landing on the app.
   useEffect(() => {
+    const w = window as unknown as {
+      requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number;
+      cancelIdleCallback?: (id: number) => void;
+    };
+    const scheduleIdle = (cb: () => void): number => {
+      if (typeof w.requestIdleCallback === 'function') {
+        return w.requestIdleCallback(cb, { timeout: 8000 });
+      }
+      return window.setTimeout(cb, 3000) as unknown as number;
+    };
+    let teardown: (() => void) | null = null;
+    const idleId = scheduleIdle(() => {
+      teardown = setupRealtimeNotifications();
+    });
+    return () => {
+      if (typeof w.cancelIdleCallback === 'function') {
+        w.cancelIdleCallback(idleId);
+      } else {
+        window.clearTimeout(idleId);
+      }
+      teardown?.();
+    };
+  }, []);
+
+  // Original setup, extracted for the deferred wrapper above.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const setupRealtimeNotifications = useCallback((): (() => void) => {
     const { subscribeToReactions, unsubscribeFromReactions } = useReactionStore.getState();
 
     // Get current DASH ID from localStorage (Command Center auth)

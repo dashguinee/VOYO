@@ -355,13 +355,21 @@ const NeonBillboardCard = memo(({
   useEffect(() => {
     if (!isInView || allTaglines.length === 0) return;
 
+    let interval: ReturnType<typeof setInterval> | null = null;
     const timer = setTimeout(() => {
-      const interval = setInterval(() => {
+      // CRITICAL: assign to outer-scope var so the cleanup can clear it.
+      // The previous version's `return () => clearInterval(interval)` was
+      // INSIDE the setTimeout callback — captured by setTimeout (which
+      // returns void), not by useEffect. Result: the interval kept running
+      // forever after unmount. Memory leak + always-on timer.
+      interval = setInterval(() => {
         setCurrentTagline(prev => (prev + 1) % allTaglines.length);
       }, timing.taglineDwell);
-      return () => clearInterval(interval);
     }, delay * 1000);
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(timer);
+      if (interval) clearInterval(interval);
+    };
   }, [allTaglines.length, delay, timing.taglineDwell, isInView]);
 
   // 5-Layer Neon Glow System (research: Z2, Z10)
