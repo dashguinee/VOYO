@@ -85,11 +85,11 @@ export const VoyoBottomNav = ({ onDahub, onHome, oyoSurface = 'home', playerMode
       const max = el.scrollHeight - el.clientHeight;
       if (max <= 0) return; // not scrollable
       const pct = el.scrollTop / max;
-      // Hysteresis — reveal at 75%, hide back at 70% so the nav doesn't
-      // strobe right at the threshold.
+      // Hysteresis — reveal at 88% (truly near the bottom), hide back
+      // at 84% so the nav doesn't strobe right at the threshold.
       setNavState((prev) => {
-        if (pct >= 0.75) return 'full';
-        if (pct < 0.7) return 'fade';
+        if (pct >= 0.88) return 'full';
+        if (pct < 0.84) return 'fade';
         return prev;
       });
     };

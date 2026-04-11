@@ -1084,41 +1084,113 @@ const VoyoBrandTint = ({ isPlayed }: { isPlayed?: boolean }) => (
 );
 
 // ============================================
-// SMALL CARD (History/Queue - with VOYO brand tint)
+// SMALL CARD (History/Queue)
+// Title + artist OVERLAID on the card image (no separate text row).
+// Played tracks get a deeper purple tint over the whole card. The
+// first "next up" queue card gets a double-sided Apple ring glow that
+// pulses occasionally to draw the eye.
 // ============================================
-const SmallCard = memo(({ track, onTap, isPlayed }: { track: Track; onTap: () => void; isPlayed?: boolean }) => (
+const SmallCard = memo(({ track, onTap, isPlayed, isNextUp }: {
+  track: Track;
+  onTap: () => void;
+  isPlayed?: boolean;
+  isNextUp?: boolean;
+}) => (
   <button
-    className="flex flex-col gap-2 w-[70px] flex-shrink-0 group"
+    className="relative flex-shrink-0 group"
+    style={{ width: 78, height: 78 }}
     onClick={onTap}
   >
-    <div className="w-[70px] h-[70px] rounded-2xl overflow-hidden relative border border-white/5 bg-gradient-to-br from-purple-900/30 to-violet-900/20">
+    {/* Apple-style double-sided ring glow on the next-up queue card.
+        Two rings — outer pulsing, inner steady — to create that
+        depth-on-glass effect Apple uses for "this is next." */}
+    {isNextUp && (
+      <>
+        <div
+          className="absolute pointer-events-none rounded-[18px]"
+          style={{
+            inset: -3,
+            border: '1.5px solid rgba(212,160,83,0.55)',
+            boxShadow: '0 0 14px rgba(212,160,83,0.35), inset 0 0 10px rgba(212,160,83,0.15)',
+            animation: 'voyo-nextup-pulse 4.2s ease-in-out infinite',
+          }}
+        />
+        <div
+          className="absolute pointer-events-none rounded-[16px]"
+          style={{
+            inset: 0,
+            border: '1px solid rgba(139,92,246,0.35)',
+            boxShadow: 'inset 0 0 8px rgba(139,92,246,0.18)',
+          }}
+        />
+      </>
+    )}
+
+    <div
+      className="w-full h-full rounded-2xl overflow-hidden relative bg-gradient-to-br from-purple-900/30 to-violet-900/20"
+      style={{ border: '1px solid rgba(255,255,255,0.05)' }}
+    >
       <SmartImage
         src={getTrackThumbnailUrl(track, 'medium')}
         alt={`${track.title} by ${track.artist}`}
-        className={`w-full h-full object-cover transition-all duration-300 ${
-          isPlayed ? 'opacity-60' : 'opacity-90 group-hover:opacity-100 group-hover:scale-105'
-        }`}
+        className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
         trackId={track.trackId}
         artist={track.artist}
         title={track.title}
         lazy={true}
       />
-      {/* VOYO Brand Tint - fades on hover */}
-      <VoyoBrandTint isPlayed={isPlayed} />
-      {/* Played checkmark overlay */}
+
+      {/* PLAYED TINT — deeper purple wash over the whole card so the
+          eye can immediately separate "already heard" from "queued."
+          No more checkmark badge. */}
       {isPlayed && (
-        <div className="absolute inset-0 flex items-center justify-center">
-          <div className="w-5 h-5 rounded-full bg-purple-500/80 flex items-center justify-center shadow-lg">
-            <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-            </svg>
-          </div>
-        </div>
+        <div
+          className="absolute inset-0 pointer-events-none"
+          style={{
+            background: 'linear-gradient(160deg, rgba(76,29,149,0.55) 0%, rgba(45,18,90,0.65) 60%, rgba(28,12,55,0.78) 100%)',
+            mixBlendMode: 'multiply',
+          }}
+        />
       )}
-    </div>
-    <div className="text-left">
-      <h4 className={`text-[10px] font-bold truncate leading-tight ${isPlayed ? 'text-gray-400' : 'text-white'}`}>{track.title}</h4>
-      <p className="text-[9px] text-gray-500 truncate">{track.artist}</p>
+
+      {/* QUEUED TINT — subtler bronze warmth on tracks waiting their
+          turn. Just enough to feel "next" without competing with the
+          played-tint contrast. */}
+      {!isPlayed && (
+        <div
+          className="absolute inset-0 pointer-events-none"
+          style={{
+            background: 'linear-gradient(180deg, transparent 55%, rgba(212,160,83,0.18) 100%)',
+          }}
+        />
+      )}
+
+      {/* TEXT OVERLAY — title + artist read straight on the image,
+          floored over a soft dark gradient for legibility. */}
+      <div
+        className="absolute inset-x-0 bottom-0 px-1.5 pb-1 pt-3 pointer-events-none"
+        style={{
+          background: 'linear-gradient(180deg, transparent 0%, rgba(0,0,0,0.55) 60%, rgba(0,0,0,0.85) 100%)',
+        }}
+      >
+        <h4
+          className={`text-[9px] font-bold truncate leading-tight ${
+            isPlayed ? 'text-white/70' : 'text-white'
+          }`}
+          style={{ textShadow: '0 1px 2px rgba(0,0,0,0.8)' }}
+        >
+          {track.title}
+        </h4>
+        <p
+          className="text-[8px] truncate leading-tight"
+          style={{
+            color: isPlayed ? 'rgba(255,255,255,0.45)' : 'rgba(255,255,255,0.6)',
+            textShadow: '0 1px 2px rgba(0,0,0,0.8)',
+          }}
+        >
+          {track.artist}
+        </p>
+      </div>
     </div>
   </button>
 ));
@@ -3678,6 +3750,28 @@ export const VoyoPortraitPlayer = ({
 
   const vibesColor = getVibesColor();
 
+  // ===== CAROUSEL SIDE-SHIFT — paired carousel "active side" mechanic =====
+  // When the user starts interacting with one side of a paired carousel
+  // (history/queue OR HOT/DISCOVERY), that side smoothly expands to ~65%
+  // of the row and the inactive side compresses to ~35%. This is also
+  // how the "scroll lock" requirement is satisfied — the inactive side
+  // is too small to grab, so only one rail scrolls at a time.
+  // After ~3.5s of idle the row balances back to 50/50.
+  const [topRowActive, setTopRowActive] = useState<'history' | 'queue' | null>(null);
+  const topRowIdleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const activateTopRow = useCallback((side: 'history' | 'queue') => {
+    setTopRowActive(side);
+    if (topRowIdleTimer.current) clearTimeout(topRowIdleTimer.current);
+    topRowIdleTimer.current = setTimeout(() => setTopRowActive(null), 3500);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (topRowIdleTimer.current) clearTimeout(topRowIdleTimer.current);
+    };
+  }, []);
+
   // PORTAL SCROLL — the layered scroll model.
   //
   // Three layers stack inside the player:
@@ -3894,8 +3988,20 @@ export const VoyoPortraitPlayer = ({
     setIsFullscreenVideo(true);
   }, []);
 
+  // Did the pointer/tap originate on an actual interactive element
+  // (button, input, link)? If so, the canvas tap/hold gesture must
+  // ignore it — otherwise tapping play/pause/skip etc. would also
+  // toggle controls reveal and open OyoIsland.
+  const didOriginateOnInteractive = (e: { target: EventTarget | null }) => {
+    const t = e.target as HTMLElement | null;
+    if (!t) return false;
+    if (typeof t.closest !== 'function') return false;
+    return !!t.closest('button, [role="button"], input, textarea, a, label, select');
+  };
+
   // Handle tap/hold/double-tap
-  const handleCanvasPointerDown = useCallback(() => {
+  const handleCanvasPointerDown = useCallback((e: React.PointerEvent) => {
+    if (didOriginateOnInteractive(e)) return;
     didHoldRef.current = false;
     // Start hold timer (400ms to trigger DJ mode)
     holdTimerRef.current = setTimeout(() => {
@@ -3915,7 +4021,10 @@ export const VoyoPortraitPlayer = ({
     }
   }, []);
 
-  const handleCanvasTap = useCallback(() => {
+  const handleCanvasTap = useCallback((e: React.MouseEvent) => {
+    // Skip clicks that came from real interactive elements (player
+    // buttons, inputs, etc.) — those have their own onClick already.
+    if (didOriginateOnInteractive(e)) return;
     // Skip if this was a hold
     if (didHoldRef.current) {
       didHoldRef.current = false;
@@ -4265,21 +4374,33 @@ export const VoyoPortraitPlayer = ({
           ╚═════════════════════════════════════════════════════════════╝ */}
       <div
         className="sticky top-0 z-20 flex flex-col flex-shrink-0"
-        style={{ height: 'calc(100% - 325px)' }}
+        style={{ height: 'calc(100% - 360px)' }}
       >
 
       {/* --- TOP SECTION (History/Queue) --- Part of the anchor.
            Always visible — never fades on scroll. The bubbles are part of
-           the player's "hearth" alongside the BigCenterCard. */}
+           the player's "hearth" alongside the BigCenterCard.
+           Carousel side-shift: when the user grabs one side it expands
+           to ~65% width and the other compresses to ~35%. Idle returns
+           to 50/50. The compress doubles as a soft scroll-lock — the
+           inactive side is too narrow to scroll. */}
       <div
-        className="px-6 flex justify-between items-start z-20 h-[14%]"
+        className="px-6 flex items-start gap-2 z-20 h-[14%]"
         style={{
           paddingTop: 'max(1.25rem, env(safe-area-inset-top))',
         }}
       >
 
-        {/* Left: History (scrollable) */}
-        <div className="relative max-w-[48%]">
+        {/* Left: History (scrollable). Width shifts based on active side. */}
+        <div
+          className="relative overflow-hidden"
+          style={{
+            flexBasis: topRowActive === 'history' ? '65%' : topRowActive === 'queue' ? '32%' : '49%',
+            transition: 'flex-basis 0.42s cubic-bezier(0.16, 1, 0.3, 1)',
+          }}
+          onPointerDown={() => activateTopRow('history')}
+          onTouchStart={() => activateTopRow('history')}
+        >
           {/* Scroll fade indicator - right edge */}
           {historyTracks.length > 2 && (
             <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-[#0a0a0f] to-transparent pointer-events-none z-10" />
@@ -4287,7 +4408,11 @@ export const VoyoPortraitPlayer = ({
 
           <div
             className="flex gap-3 overflow-x-auto scrollbar-hide"
-            style={{ scrollSnapType: 'x mandatory' }}
+            style={{
+              scrollSnapType: 'x mandatory',
+              pointerEvents: topRowActive === 'queue' ? 'none' : 'auto',
+            }}
+            onScroll={() => activateTopRow('history')}
           >
             {historyTracks.length > 0 ? (
               historyTracks.slice(0, 10).map((track, i) => (
@@ -4309,8 +4434,16 @@ export const VoyoPortraitPlayer = ({
           </div>
         </div>
 
-        {/* Right: Queue + Add (scrollable, reversed) */}
-        <div className="relative max-w-[48%]">
+        {/* Right: Queue + Add (scrollable, reversed). Side-shift mirror. */}
+        <div
+          className="relative overflow-hidden"
+          style={{
+            flexBasis: topRowActive === 'queue' ? '65%' : topRowActive === 'history' ? '32%' : '49%',
+            transition: 'flex-basis 0.42s cubic-bezier(0.16, 1, 0.3, 1)',
+          }}
+          onPointerDown={() => activateTopRow('queue')}
+          onTouchStart={() => activateTopRow('queue')}
+        >
           {/* Scroll fade indicator - left edge */}
           {queueTracks.length > 1 && (
             <div className="absolute left-0 top-0 bottom-0 w-8 bg-gradient-to-r from-[#0a0a0f] to-transparent pointer-events-none z-10" />
@@ -4318,7 +4451,11 @@ export const VoyoPortraitPlayer = ({
 
           <div
             className="flex gap-3 overflow-x-auto scrollbar-hide flex-row-reverse"
-            style={{ scrollSnapType: 'x mandatory' }}
+            style={{
+              scrollSnapType: 'x mandatory',
+              pointerEvents: topRowActive === 'history' ? 'none' : 'auto',
+            }}
+            onScroll={() => activateTopRow('queue')}
           >
             {/* Add button always visible at end */}
             <button
@@ -4336,6 +4473,7 @@ export const VoyoPortraitPlayer = ({
                     track={track}
                     onTap={() => playTrack(track)}
                     isPlayed={playedTrackIds.has(track.id)}
+                    isNextUp={i === 0}
                   />
                 </div>
               ))
@@ -4544,8 +4682,8 @@ export const VoyoPortraitPlayer = ({
           When the cube dock is open, the min-height grows so the chat
           space slides in without pushing the rail offscreen. */}
       <div
-        className={`flex-shrink-0 w-full backdrop-blur-2xl relative z-40 flex flex-col pt-2 pb-6 transition-[min-height] duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] ${
-          cubeDockOpen ? 'min-h-[440px]' : oyeBarBehavior === 'fade' ? 'min-h-[325px]' : ''
+        className={`flex-shrink-0 w-full backdrop-blur-2xl relative z-40 flex flex-col pt-3 pb-7 transition-[min-height] duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+          cubeDockOpen ? 'min-h-[480px]' : oyeBarBehavior === 'fade' ? 'min-h-[360px]' : ''
         }`}
         style={{
           // Layer B fade: opacity drops with portal progress, content
@@ -4720,11 +4858,27 @@ export const VoyoPortraitPlayer = ({
           </button>
         </div>
 
-        {/* Horizontal Scroll Deck - Two Separate Zones */}
+        {/* Horizontal Scroll Deck - Two Separate Zones with side-shift.
+            Same active-side mechanic as the top history/queue row: when
+            HOT is active it expands to ~62%, DISCOVERY contracts. Idle
+            returns to balance. Uses the existing isHotBeltActive /
+            isDiscoveryBeltActive state. */}
         <div className="flex items-center relative h-24">
 
           {/* ========== HOT ZONE (Left side) ========== */}
-          <div className="flex-1 flex items-center relative h-full">
+          <div
+            className="flex items-center relative h-full"
+            style={{
+              flexBasis: isHotBeltActive && !isDiscoveryBeltActive
+                ? '62%'
+                : isDiscoveryBeltActive && !isHotBeltActive
+                ? '36%'
+                : '49%',
+              flexGrow: 0,
+              flexShrink: 0,
+              transition: 'flex-basis 0.42s cubic-bezier(0.16, 1, 0.3, 1)',
+            }}
+          >
             {/* Rust Portal Line (left edge of HOT zone) — deep ember, premium */}
             <button
               onClick={() => {
@@ -4887,8 +5041,20 @@ export const VoyoPortraitPlayer = ({
             </button>
           </div>
 
-          {/* ========== DISCOVERY ZONE (Right side) ========== */}
-          <div className="flex-1 flex items-center relative h-full">
+          {/* ========== DISCOVERY ZONE (Right side) — side-shift mirror ========== */}
+          <div
+            className="flex items-center relative h-full"
+            style={{
+              flexBasis: isDiscoveryBeltActive && !isHotBeltActive
+                ? '62%'
+                : isHotBeltActive && !isDiscoveryBeltActive
+                ? '36%'
+                : '49%',
+              flexGrow: 0,
+              flexShrink: 0,
+              transition: 'flex-basis 0.42s cubic-bezier(0.16, 1, 0.3, 1)',
+            }}
+          >
             {/* DISCOVERY Cards Belt (loops within this zone) */}
             <PortalBelt
               tracks={discoverTracks.slice(0, 8)}
