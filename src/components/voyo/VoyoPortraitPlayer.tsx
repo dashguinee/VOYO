@@ -3262,6 +3262,7 @@ export const VoyoPortraitPlayer = ({
   const isPlaying = usePlayerStore(s => s.isPlaying);
   const videoTarget = usePlayerStore(s => s.videoTarget);
   const setVideoTarget = usePlayerStore(s => s.setVideoTarget);
+  const videoBlocked = usePlayerStore(s => s.videoBlocked);
   const queue = usePlayerStore(s => s.queue);
   const history = usePlayerStore(s => s.history);
   const hotTracks = usePlayerStore(s => s.hotTracks);
@@ -4136,8 +4137,9 @@ export const VoyoPortraitPlayer = ({
       }`}
     >
 
-      {/* FULLSCREEN BACKGROUND - Album art with dark overlay for floating effect */}
-      {backdropEnabled && (
+      {/* FULLSCREEN BACKGROUND - Album art with dark overlay for floating effect.
+          Auto-shows when videoBlocked (region-restricted embeds → graceful fallback). */}
+      {(backdropEnabled || videoBlocked) && (
         <FullscreenBackground trackId={currentTrack?.trackId} />
       )}
 

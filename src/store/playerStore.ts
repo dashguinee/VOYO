@@ -207,6 +207,7 @@ interface PlayerStore {
   viewMode: ViewMode;
   videoTarget: 'hidden' | 'portrait' | 'landscape'; // Where to show the video iframe (replaces isVideoMode)
   videoPolitePosition: 'center' | 'bottom' | 'top-right' | 'top-left'; // Auto-position based on page context
+  videoBlocked: boolean; // True when the YouTube embed is blocked for the current track (region-restricted, age-gated, embedding disabled). Audio may still play from R2/cache — we fall back to the album-art backdrop.
   seekPosition: number | null; // When set, AudioPlayer should seek to this position
 
   // Flag to signal that a track was selected (from search, etc.) and NowPlaying should open
@@ -298,6 +299,7 @@ interface PlayerStore {
   setViewMode: (mode: ViewMode) => void;
   setVideoTarget: (target: 'hidden' | 'portrait' | 'landscape') => void;
   setVideoPolitePosition: (pos: 'center' | 'bottom' | 'top-right' | 'top-left') => void;
+  setVideoBlocked: (blocked: boolean) => void;
 
   // Actions - Queue
   addToQueue: (track: Track, position?: number) => void;
@@ -354,6 +356,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   viewMode: 'card',
   videoTarget: 'hidden',
   videoPolitePosition: 'center',
+  videoBlocked: false,
   shuffleMode: false,
   repeatMode: 'off',
 
@@ -951,6 +954,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
 
   setVideoTarget: (target: 'hidden' | 'portrait' | 'landscape') => set({ videoTarget: target }),
   setVideoPolitePosition: (pos: 'center' | 'bottom' | 'top-right' | 'top-left') => set({ videoPolitePosition: pos }),
+  setVideoBlocked: (blocked: boolean) => set({ videoBlocked: blocked }),
 
   // Queue Actions
   addToQueue: (track, position) => {

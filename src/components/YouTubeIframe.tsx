@@ -181,29 +181,69 @@ export const YouTubeIframe = memo(() => {
         },
         onError: (e: any) => {
           const errorCode = e.data;
-          console.error('[YouTubeIframe] Error:', errorCode);
           initializingRef.current = false;
 
-          // Mark track as failed for future reference
-          if (videoId) {
-            markTrackAsFailed(videoId, errorCode);
+          // YouTube iframe error codes:
+          //   2   = invalid param
+          //   5   = HTML5 playback error
+          //   100 = video not found / removed
+          //   101 = embedding disabled by uploader
+          //   150 = embedding disabled (region-restricted, age-gated, private)
+          //
+          // PREVIOUS BEHAVIOR: blanket-skip to next track on 100/101/150.
+          // That destroyed playback for any region-restricted track — user
+          // loses the song they came for, even though the audio URL might
+          // be perfectly valid from R2 / cache.
+          //
+          // NEW BEHAVIOR:
+          //   100      → video genuinely gone, skip is correct
+          //   101/150  → video can't EMBED but the AUDIO might still play
+          //              from cached / R2 / iframe-source. If playback source
+          //              is non-iframe, keep the music, hide the video, let
+          //              the album-art backdrop take over gracefully.
+          const store = usePlayerStore.getState();
+          const audioAlive = store.playbackSource === 'cached' || store.playbackSource === 'r2';
+
+          if (errorCode === 100) {
+            // Genuinely unavailable — track gone
+            console.warn('[YouTubeIframe] Video not found:', videoId);
+            if (videoId) markTrackAsFailed(videoId, errorCode);
+            setTimeout(() => nextTrack(), 500);
+            return;
           }
 
-          // Auto-skip to next track on playback errors
-          // Error codes: 100 = not found, 101/150 = embedding disabled
-          if (errorCode === 100 || errorCode === 101 || errorCode === 150) {
-            devLog('[YouTubeIframe] Skipping unplayable track...');
+          if (errorCode === 101 || errorCode === 150) {
+            // Embedding blocked (region / age-gate / embedding disabled).
+            // If audio is already flowing from another source, keep the music,
+            // fall back to backdrop-only. Otherwise we have no choice but to skip.
+            if (audioAlive) {
+              devLog('[YouTubeIframe] Embed blocked — falling back to backdrop, audio continues');
+              // Signal blocked state so the player auto-shows FullscreenBackground
+              store.setVideoBlocked(true);
+              store.setVideoTarget('hidden');
+              // Do NOT mark as failed — the track is fine, it's just the embed
+              return;
+            }
+            // Audio source is iframe itself AND iframe blocked → nothing to play
+            console.warn('[YouTubeIframe] Embed blocked, no alternative source:', videoId);
+            if (videoId) markTrackAsFailed(videoId, errorCode);
             setTimeout(() => nextTrack(), 500);
+            return;
           }
+
+          // Any other error: log quietly, don't spam the console
+          devLog('[YouTubeIframe] Player error (ignored):', errorCode);
         },
       },
     });
   }, [volume, nextTrack, setDuration]);
 
-  // Init player when track changes
+  // Init player when track changes — also clear any prior videoBlocked flag
+  // so each new track starts with a fresh "video is fine until proven otherwise" state.
   useEffect(() => {
-    if (youtubeId && isApiLoadedRef.current) {
-      initPlayer(youtubeId);
+    if (youtubeId) {
+      usePlayerStore.getState().setVideoBlocked(false);
+      if (isApiLoadedRef.current) initPlayer(youtubeId);
     }
   }, [youtubeId, initPlayer]);
 
