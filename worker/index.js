@@ -1,5 +1,5 @@
 /**
- * VOYO Music - Cloudflare Worker v4
+ * VOYO Music - Cloudflare Worker v7
  *
  * ZERO-GAP ARCHITECTURE:
  * - Supabase = Source of Truth (what's cached)
@@ -13,66 +13,99 @@
  * - /upload/{id}   → ATOMIC: R2 put + Supabase upsert
  * - /stream?v={id} → Get extraction URL (legacy)
  * - /thumb/{id}    → Thumbnail proxy
+ * - /debug?v={id}  → Probe every client, return per-client diagnostics
  *
  * Edge = 300+ locations worldwide = FAST
+ *
+ * ───────────────────────────────────────────────────────────────
+ * 2026-04-11: YouTube extraction fix
+ *  - ANDROID_TESTSUITE was rejected by YouTube mid-2024 → removed
+ *  - Old ANDROID/IOS clientVersions aged out → bumped to late-2024
+ *  - Added ANDROID_VR (Quest 3) — stable + barely throttled
+ *  - Added WEB_EMBEDDED_PLAYER fallback
+ *  - signatureTimestamp bumped 19950 → 20250
+ *  - Search endpoint now uses WEB client (ANDROID gets 400s)
+ * ───────────────────────────────────────────────────────────────
  */
 
-// Client configurations ranked by success rate
+// Current InnerTube signatureTimestamp (as of 2026-Q1).
+// If extraction starts returning ciphered-only URLs, bump this.
+const SIGNATURE_TIMESTAMP = 20250;
+
+// InnerTube public API key (shared by all YouTube clients — not a secret,
+// embedded in ytcfg on youtube.com). Used only as the ?key= query param.
+const INNERTUBE_API_KEY = 'AIzaSyA8eiZmM1FaDVjRy-df2KTyQ_vz_yYM39w';
+
+// Client configurations ranked by success rate (best → worst).
+// IOS is the most reliable for audio extraction as of late-2025; returns
+// un-ciphered URLs. ANDROID_VR is less throttled but sometimes returns
+// lower-bitrate formats. WEB_EMBEDDED_PLAYER is the final browser fallback.
 const CLIENTS = [
   {
-    name: 'ANDROID_TESTSUITE',
+    name: 'IOS',
     context: {
       client: {
-        clientName: 'ANDROID_TESTSUITE',
-        clientVersion: '1.9',
-        androidSdkVersion: 30,
+        clientName: 'IOS',
+        clientVersion: '19.32.8',
+        deviceMake: 'Apple',
+        deviceModel: 'iPhone16,2',
+        osName: 'iPhone',
+        osVersion: '17.6.1.21G93',
         hl: 'en',
         gl: 'US',
       }
     },
-    userAgent: 'com.google.android.youtube/1.9 (Linux; U; Android 11) gzip'
+    userAgent: 'com.google.ios.youtube/19.32.8 (iPhone16,2; U; CPU iOS 17_6_1 like Mac OS X; en_US)'
+  },
+  {
+    name: 'ANDROID_VR',
+    context: {
+      client: {
+        clientName: 'ANDROID_VR',
+        clientVersion: '1.60.19',
+        deviceMake: 'Oculus',
+        deviceModel: 'Quest 3',
+        androidSdkVersion: 32,
+        osName: 'Android',
+        osVersion: '12L',
+        hl: 'en',
+        gl: 'US',
+      }
+    },
+    userAgent: 'com.google.android.apps.youtube.vr.oculus/1.60.19 (Linux; U; Android 12L; en_US; Quest 3)'
   },
   {
     name: 'ANDROID_MUSIC',
     context: {
       client: {
         clientName: 'ANDROID_MUSIC',
-        clientVersion: '6.42.52',
-        androidSdkVersion: 30,
+        clientVersion: '7.27.52',
+        androidSdkVersion: 33,
+        osName: 'Android',
+        osVersion: '13',
         hl: 'en',
         gl: 'US',
       }
     },
-    userAgent: 'com.google.android.apps.youtube.music/6.42.52 (Linux; U; Android 11) gzip'
+    userAgent: 'com.google.android.apps.youtube.music/7.27.52 (Linux; U; Android 13) gzip'
   },
   {
-    name: 'ANDROID',
+    name: 'WEB_EMBEDDED_PLAYER',
     context: {
       client: {
-        clientName: 'ANDROID',
-        clientVersion: '19.09.37',
-        androidSdkVersion: 30,
+        clientName: 'WEB_EMBEDDED_PLAYER',
+        clientVersion: '1.20241205.01.00',
         hl: 'en',
         gl: 'US',
+      },
+      thirdParty: {
+        embedUrl: 'https://www.youtube.com/'
       }
     },
-    userAgent: 'com.google.android.youtube/19.09.37 (Linux; U; Android 11) gzip'
+    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
   },
   {
-    name: 'IOS',
-    context: {
-      client: {
-        clientName: 'IOS',
-        clientVersion: '19.09.3',
-        deviceModel: 'iPhone14,3',
-        hl: 'en',
-        gl: 'US',
-      }
-    },
-    userAgent: 'com.google.ios.youtube/19.09.3 (iPhone14,3; U; CPU iOS 15_6 like Mac OS X)'
-  },
-  {
-    name: 'TV_EMBEDDED',
+    name: 'TVHTML5_SIMPLY_EMBEDDED_PLAYER',
     context: {
       client: {
         clientName: 'TVHTML5_SIMPLY_EMBEDDED_PLAYER',
@@ -89,7 +122,7 @@ const CLIENTS = [
 ];
 
 async function tryClient(videoId, clientConfig) {
-  const response = await fetch('https://www.youtube.com/youtubei/v1/player?key=AIzaSyA8eiZmM1FaDVjRy-df2KTyQ_vz_yYM39w', {
+  const response = await fetch(`https://www.youtube.com/youtubei/v1/player?key=${INNERTUBE_API_KEY}&prettyPrint=false`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -98,13 +131,16 @@ async function tryClient(videoId, clientConfig) {
       'X-YouTube-Client-Version': clientConfig.context.client.clientVersion,
       'Origin': 'https://www.youtube.com',
       'Referer': 'https://www.youtube.com/',
+      'Accept': 'application/json',
+      'Accept-Language': 'en-US,en;q=0.9',
     },
     body: JSON.stringify({
       videoId: videoId,
       context: clientConfig.context,
       playbackContext: {
         contentPlaybackContext: {
-          signatureTimestamp: 19950 // Recent signature timestamp
+          signatureTimestamp: SIGNATURE_TIMESTAMP,
+          html5Preference: 'HTML5_PREF_WANTS'
         }
       },
       contentCheckOk: true,
@@ -112,23 +148,54 @@ async function tryClient(videoId, clientConfig) {
     })
   });
 
-  return response.json();
+  // Surface HTTP errors — YouTube sometimes returns 400/403 with an HTML
+  // body, which used to crash the old extractor silently.
+  if (!response.ok) {
+    let body = '';
+    try { body = (await response.text()).slice(0, 200); } catch (_) {}
+    return {
+      __httpError: true,
+      status: response.status,
+      statusText: response.statusText,
+      bodyPreview: body
+    };
+  }
+
+  try {
+    return await response.json();
+  } catch (err) {
+    return { __parseError: true, message: err.message };
+  }
 }
 
 function extractBestAudio(data) {
+  if (data?.__httpError) {
+    return { error: `InnerTube HTTP ${data.status} ${data.statusText}: ${data.bodyPreview}` };
+  }
+  if (data?.__parseError) {
+    return { error: `InnerTube JSON parse failed: ${data.message}` };
+  }
+  if (!data || typeof data !== 'object') {
+    return { error: 'InnerTube returned empty response' };
+  }
+
   if (data.playabilityStatus?.status !== 'OK') {
-    return { error: data.playabilityStatus?.reason || 'Not playable' };
+    return {
+      error: data.playabilityStatus?.reason
+        || data.playabilityStatus?.errorScreen?.playerErrorMessageRenderer?.reason?.simpleText
+        || `Not playable (${data.playabilityStatus?.status || 'UNKNOWN'})`
+    };
   }
 
   const formats = data.streamingData?.adaptiveFormats || [];
   const audioFormats = formats.filter(f => f.mimeType?.startsWith('audio/'));
 
   if (audioFormats.length === 0) {
-    return { error: 'No audio formats' };
+    return { error: 'No audio formats in adaptiveFormats' };
   }
 
-  // BEST QUALITY: Sort ALL formats by bitrate, take highest
-  // opus/webm typically has higher bitrates (160kbps) vs mp4/aac (128kbps)
+  // BEST QUALITY: Prefer itag 251 (opus 160k) / 140 (aac 128k), then sort by bitrate.
+  // opus/webm typically has higher bitrates (160kbps) vs mp4/aac (128kbps).
   const sortedByQuality = audioFormats.sort((a, b) => (b.bitrate || 0) - (a.bitrate || 0));
   const bestAudio = sortedByQuality[0];
 
@@ -144,7 +211,10 @@ function extractBestAudio(data) {
     bitrate: bestAudio.bitrate,
     contentLength: bestAudio.contentLength,
     quality: bestAudio.audioQuality || 'AUDIO_QUALITY_MEDIUM',
+    itag: bestAudio.itag,
     title: data.videoDetails?.title,
+    author: data.videoDetails?.author,
+    lengthSeconds: data.videoDetails?.lengthSeconds,
   };
 }
 
@@ -168,8 +238,10 @@ export default {
         status: 'ok',
         edge: true,
         clients: CLIENTS.length,
+        clientNames: CLIENTS.map(c => c.name),
+        signatureTimestamp: SIGNATURE_TIMESTAMP,
         r2: !!env.VOYO_AUDIO,
-        version: 'v3'
+        version: 'v7'
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
@@ -369,7 +441,7 @@ export default {
         });
       }
 
-      const errors = [];
+      const attempts = [];
 
       // Try each client until one works
       for (const client of CLIENTS) {
@@ -378,26 +450,33 @@ export default {
           const result = extractBestAudio(data);
 
           if (result.url) {
+            console.log(`[Stream] ${videoId} → ${client.name} OK (itag ${result.itag}, ${result.bitrate}bps)`);
             return new Response(JSON.stringify({
               ...result,
-              client: client.name // Tell us which client worked
+              client: client.name,
+              triedClients: [...attempts.map(a => a.client), client.name]
             }), {
               headers: { ...corsHeaders, 'Content-Type': 'application/json' }
             });
           }
 
-          errors.push({ client: client.name, error: result.error });
+          attempts.push({ client: client.name, error: result.error });
+          console.log(`[Stream] ${videoId} ${client.name} FAIL: ${result.error}`);
         } catch (err) {
-          errors.push({ client: client.name, error: err.message });
+          attempts.push({ client: client.name, error: err.message });
+          console.log(`[Stream] ${videoId} ${client.name} THROW: ${err.message}`);
         }
       }
 
-      // All clients failed
+      // All clients failed — return a populated error body so the client
+      // can log exactly which clients were tried and why each one failed.
       return new Response(JSON.stringify({
-        error: 'All clients failed',
-        attempts: errors
+        error: 'All InnerTube clients failed',
+        videoId,
+        triedClients: attempts.map(a => a.client),
+        attempts
       }), {
-        status: 403,
+        status: 502,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
     }
@@ -418,6 +497,7 @@ export default {
       // Try each client until one works
       let audioUrl = null;
       let mimeType = 'audio/mp4';
+      const extractAttempts = [];
 
       for (const client of CLIENTS) {
         try {
@@ -427,17 +507,25 @@ export default {
           if (result.url) {
             audioUrl = result.url;
             mimeType = result.mimeType || 'audio/mp4';
-            console.log(`[Extract] Success with ${client.name}: ${videoId}`);
+            console.log(`[Extract] ${videoId} → ${client.name} OK (itag ${result.itag})`);
             break;
           }
+          extractAttempts.push({ client: client.name, error: result.error });
+          console.log(`[Extract] ${videoId} ${client.name} FAIL: ${result.error}`);
         } catch (err) {
-          // Try next client
+          extractAttempts.push({ client: client.name, error: err.message });
+          console.log(`[Extract] ${videoId} ${client.name} THROW: ${err.message}`);
         }
       }
 
       if (!audioUrl) {
-        return new Response(JSON.stringify({ error: 'Extraction failed' }), {
-          status: 503,
+        return new Response(JSON.stringify({
+          error: 'All InnerTube clients failed',
+          videoId,
+          triedClients: extractAttempts.map(a => a.client),
+          attempts: extractAttempts
+        }), {
+          status: 502,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
       }
@@ -505,7 +593,7 @@ export default {
         const proxyResponse = await fetch(targetUrl, {
           method: request.method,
           headers: {
-            'User-Agent': 'com.google.android.youtube/19.09.37 (Linux; U; Android 11) gzip',
+            'User-Agent': 'com.google.ios.youtube/19.32.8 (iPhone16,2; U; CPU iOS 17_6_1 like Mac OS X; en_US)',
             'Accept': '*/*',
             'Accept-Language': 'en-US,en;q=0.9',
             'Origin': 'https://www.youtube.com',
@@ -536,10 +624,14 @@ export default {
       }
     }
 
-    // Debug endpoint - test specific client
+    // Debug endpoint — probe EVERY client for a videoId and report
+    // per-client diagnostics. Invaluable when YouTube breaks something.
+    //
+    //   GET /debug?v={id}              → probe all CLIENTS
+    //   GET /debug?v={id}&client=IOS   → probe just one
     if (url.pathname === '/debug') {
       const videoId = url.searchParams.get('v');
-      const clientName = url.searchParams.get('client') || 'ANDROID_TESTSUITE';
+      const only = url.searchParams.get('client');
 
       if (!videoId || !/^[a-zA-Z0-9_-]{11}$/.test(videoId)) {
         return new Response(JSON.stringify({ error: 'Invalid video ID' }), {
@@ -548,29 +640,76 @@ export default {
         });
       }
 
-      const client = CLIENTS.find(c => c.name === clientName) || CLIENTS[0];
+      const targets = only
+        ? CLIENTS.filter(c => c.name === only)
+        : CLIENTS;
 
-      try {
-        const data = await tryClient(videoId, client);
+      if (targets.length === 0) {
         return new Response(JSON.stringify({
-          client: client.name,
-          playabilityStatus: data.playabilityStatus,
-          hasStreamingData: !!data.streamingData,
-          formatCount: data.streamingData?.adaptiveFormats?.length || 0,
-          videoDetails: data.videoDetails ? {
-            title: data.videoDetails.title,
-            author: data.videoDetails.author,
-            lengthSeconds: data.videoDetails.lengthSeconds,
-          } : null
-        }, null, 2), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-        });
-      } catch (err) {
-        return new Response(JSON.stringify({ error: err.message }), {
-          status: 500,
+          error: `Unknown client: ${only}`,
+          available: CLIENTS.map(c => c.name)
+        }), {
+          status: 400,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
       }
+
+      const results = [];
+      for (const client of targets) {
+        const started = Date.now();
+        try {
+          const data = await tryClient(videoId, client);
+          const extracted = extractBestAudio(data);
+
+          results.push({
+            client: client.name,
+            clientVersion: client.context.client.clientVersion,
+            ms: Date.now() - started,
+            httpError: data?.__httpError
+              ? { status: data.status, bodyPreview: data.bodyPreview }
+              : null,
+            playabilityStatus: data?.playabilityStatus?.status || null,
+            playabilityReason: data?.playabilityStatus?.reason || null,
+            hasStreamingData: !!data?.streamingData,
+            formatCount: data?.streamingData?.adaptiveFormats?.length || 0,
+            audioFormatCount: (data?.streamingData?.adaptiveFormats || [])
+              .filter(f => f.mimeType?.startsWith('audio/')).length,
+            extractSuccess: !!extracted.url,
+            extractError: extracted.error || null,
+            bestAudio: extracted.url ? {
+              itag: extracted.itag,
+              mimeType: extracted.mimeType,
+              bitrate: extracted.bitrate,
+              quality: extracted.quality
+            } : null,
+            videoDetails: data?.videoDetails ? {
+              title: data.videoDetails.title,
+              author: data.videoDetails.author,
+              lengthSeconds: data.videoDetails.lengthSeconds,
+            } : null
+          });
+        } catch (err) {
+          results.push({
+            client: client.name,
+            clientVersion: client.context.client.clientVersion,
+            ms: Date.now() - started,
+            throw: err.message
+          });
+        }
+      }
+
+      const winners = results.filter(r => r.extractSuccess).map(r => r.client);
+
+      return new Response(JSON.stringify({
+        videoId,
+        signatureTimestamp: SIGNATURE_TIMESTAMP,
+        totalClients: targets.length,
+        winners,
+        anyWorked: winners.length > 0,
+        results
+      }, null, 2), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
     }
 
     // ========================================
@@ -967,8 +1106,11 @@ export default {
     }
 
     // ========================================
-    // SEARCH - YouTube search via Piped API (replaces Fly.io /api/search)
+    // SEARCH - YouTube search via InnerTube
     // ========================================
+    // Uses WEB client. The ANDROID client was returning 400 on the search
+    // endpoint as of Apr-2026. WEB is the most stable for /search specifically
+    // and supports the videoRenderer shape used by the parser below.
     if (url.pathname === '/api/search') {
       const query = url.searchParams.get('q');
       const limit = parseInt(url.searchParams.get('limit') || '20');
@@ -980,60 +1122,85 @@ export default {
         });
       }
 
+      const webContext = {
+        client: {
+          clientName: 'WEB',
+          clientVersion: '2.20241205.01.00',
+          hl: 'en',
+          gl: 'US',
+          clientFormFactor: 'UNKNOWN_FORM_FACTOR',
+          userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36,gzip(gfe)',
+        }
+      };
+
       try {
-        // Use YouTube Innertube search API directly (same clients as extraction)
+        // Use YouTube Innertube search API directly
         const searchResponse = await fetch(
-          'https://www.youtube.com/youtubei/v1/search?key=AIzaSyA8eiZmM1FaDVjRy-df2KTyQ_vz_yYM39w',
+          `https://www.youtube.com/youtubei/v1/search?key=${INNERTUBE_API_KEY}&prettyPrint=false`,
           {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              'User-Agent': 'com.google.android.youtube/19.09.37 (Linux; U; Android 11) gzip',
-              'X-YouTube-Client-Name': 'ANDROID',
-              'X-YouTube-Client-Version': '19.09.37',
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+              'X-YouTube-Client-Name': '1',
+              'X-YouTube-Client-Version': '2.20241205.01.00',
+              'Origin': 'https://www.youtube.com',
+              'Referer': 'https://www.youtube.com/',
+              'Accept': 'application/json',
+              'Accept-Language': 'en-US,en;q=0.9',
             },
             body: JSON.stringify({
               query: query,
-              context: {
-                client: {
-                  clientName: 'ANDROID',
-                  clientVersion: '19.09.37',
-                  androidSdkVersion: 30,
-                  hl: 'en',
-                  gl: 'US',
-                }
-              },
-              params: 'EgWKAQIIAWoMEA4QChADEAQQCRAF' // Music filter
+              context: webContext,
+              params: 'EgIQAQ%3D%3D' // Filter: videos only (safe default, works across clients)
             })
           }
         );
 
         if (!searchResponse.ok) {
-          return new Response(JSON.stringify({ error: `YouTube search failed: ${searchResponse.status}` }), {
-            status: searchResponse.status,
+          let errBody = '';
+          try { errBody = (await searchResponse.text()).slice(0, 300); } catch (_) {}
+          console.log(`[Search] ${query} → HTTP ${searchResponse.status}: ${errBody}`);
+          return new Response(JSON.stringify({
+            error: `YouTube search failed: ${searchResponse.status}`,
+            bodyPreview: errBody
+          }), {
+            status: 502,
             headers: { ...corsHeaders, 'Content-Type': 'application/json' }
           });
         }
 
         const data = await searchResponse.json();
 
-        // Parse Innertube search results
+        // Parse InnerTube search results. Structure:
+        //  contents.twoColumnSearchResultsRenderer.primaryContents.sectionListRenderer.contents[]
+        //    .itemSectionRenderer.contents[]  ← where videoRenderer lives
         const items = [];
-        const contents = data?.contents?.sectionListRenderer?.contents || [];
-        for (const section of contents) {
+        const primary = data?.contents?.twoColumnSearchResultsRenderer?.primaryContents
+          || data?.contents; // fallback for mobile client shapes
+        const sections = primary?.sectionListRenderer?.contents || [];
+
+        const extractRun = (textObj) =>
+          textObj?.runs?.map(r => r.text).join('') || textObj?.simpleText || '';
+
+        for (const section of sections) {
           const renderers = section?.itemSectionRenderer?.contents || [];
           for (const renderer of renderers) {
-            const video = renderer?.compactVideoRenderer || renderer?.videoWithContextRenderer || renderer?.videoRenderer;
+            const video = renderer?.videoRenderer
+              || renderer?.compactVideoRenderer
+              || renderer?.videoWithContextRenderer;
             if (!video) continue;
-            const videoId = video.videoId || video.navigationEndpoint?.watchEndpoint?.videoId;
+            const videoId = video.videoId
+              || video.navigationEndpoint?.watchEndpoint?.videoId;
             if (!videoId) continue;
 
             items.push({
               id: videoId,
-              title: video.title?.runs?.[0]?.text || video.headline?.runs?.[0]?.text || '',
-              artist: video.longBylineText?.runs?.[0]?.text || video.shortBylineText?.runs?.[0]?.text || '',
+              title: extractRun(video.title) || extractRun(video.headline),
+              artist: extractRun(video.longBylineText) || extractRun(video.shortBylineText) || extractRun(video.ownerText),
               thumbnail: `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
-              duration: video.lengthText?.runs?.[0]?.text || video.lengthText?.simpleText || '',
+              duration: extractRun(video.lengthText),
+              views: extractRun(video.viewCountText),
             });
 
             if (items.length >= limit) break;
@@ -1041,10 +1208,15 @@ export default {
           if (items.length >= limit) break;
         }
 
-        return new Response(JSON.stringify({ items, source: 'innertube' }), {
+        return new Response(JSON.stringify({
+          items,
+          count: items.length,
+          source: 'innertube-web'
+        }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
       } catch (err) {
+        console.log(`[Search] ${query} THROW: ${err.message}`);
         return new Response(JSON.stringify({ error: err.message }), {
           status: 500,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -1092,6 +1264,6 @@ export default {
       }
     }
 
-    return new Response('VOYO Edge Worker v6 - Unified Gateway', { headers: corsHeaders });
+    return new Response('VOYO Edge Worker v7 - Unified Gateway (IOS + ANDROID_VR + WEB_EMBEDDED)', { headers: corsHeaders });
   }
 };

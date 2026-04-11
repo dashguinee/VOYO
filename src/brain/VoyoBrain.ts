@@ -50,6 +50,42 @@ const HOT_BELT_SIZE = 5;
 const DISCOVERY_BELT_SIZE = 5;
 
 // ============================================
+// GEMINI CIRCUIT BREAKER
+// ============================================
+// Without this, every Brain cycle hits Gemini. When the key expires or quota
+// runs out, we spammed console.error on every cycle (noisy + useless). The
+// breaker tracks consecutive failures and puts Gemini in a cool-down window,
+// doubling each time, capped at 60min. Callers get `null` and fall back to
+// pool-based curation silently during the cool-down.
+let geminiFailureCount = 0;
+let geminiDisabledUntil = 0;
+let geminiWarnedForCurrentWindow = false;
+
+function geminiIsDisabled(): boolean {
+  return Date.now() < geminiDisabledUntil;
+}
+
+function recordGeminiFailure(): void {
+  geminiFailureCount++;
+  if (geminiFailureCount >= 3) {
+    // Exponential backoff: 10min -> 20min -> 40min, cap at 60min
+    const steps = Math.floor(geminiFailureCount / 3) - 1;
+    const cooldown = Math.min(10 * 60 * 1000 * Math.pow(2, steps), 60 * 60 * 1000);
+    geminiDisabledUntil = Date.now() + cooldown;
+    if (!geminiWarnedForCurrentWindow) {
+      console.warn(`[Brain] Gemini unavailable, degrading to pool-only recommendations for ${Math.round(cooldown / 60000)}min`);
+      geminiWarnedForCurrentWindow = true;
+    }
+  }
+}
+
+function recordGeminiSuccess(): void {
+  geminiFailureCount = 0;
+  geminiDisabledUntil = 0;
+  geminiWarnedForCurrentWindow = false;
+}
+
+// ============================================
 // TYPES
 // ============================================
 
@@ -152,6 +188,13 @@ class VoyoBrain {
       return this.fallbackCuration(summary);
     }
 
+    // Circuit breaker — if Gemini is cooling down, skip straight to pool-based
+    // fallback. This is silent; the one-time warn happened when the breaker
+    // tripped.
+    if (geminiIsDisabled()) {
+      return this.fallbackCuration(summary);
+    }
+
     this.isProcessing = true;
     devLog('[Brain] Starting curation with', summary.signalCount, 'signals');
 
@@ -159,8 +202,12 @@ class VoyoBrain {
       // Build context from signals and stores
       const context = await this.buildContext(summary);
 
-      // Call Gemini for curation
+      // Call Gemini for curation. Returns null if the Gemini call failed and
+      // the circuit breaker recorded it — in that case, fall back silently.
       const output = await this.callGemini(context);
+      if (!output) {
+        return this.fallbackCuration(summary);
+      }
 
       // Validate and enhance output
       const validated = await this.validateOutput(output);
@@ -170,7 +217,10 @@ class VoyoBrain {
 
       return validated;
     } catch (err) {
-      console.error('[Brain] Curation error:', err);
+      // Non-Gemini error (validation, context build, etc.) — log at devWarn
+      // level so we still see it during development but it's not a hard error
+      // spammed every cycle.
+      devWarn('[Brain] Curation error:', err);
       return this.fallbackCuration(summary);
     } finally {
       this.isProcessing = false;
@@ -329,7 +379,7 @@ USE THESE TRACK IDs WHEN AVAILABLE - they are verified and classified!
   // GEMINI CALL
   // ============================================
 
-  private async callGemini(context: string): Promise<BrainOutput> {
+  private async callGemini(context: string): Promise<BrainOutput | null> {
     const prompt = `You are VOYO DJ, an expert African music curator with deep knowledge of Afrobeats, Amapiano, and global music trends.
 
 ${context}
@@ -447,49 +497,63 @@ CRITICAL RULES:
 7. For mixes, suggest real DJ mix searches that exist on YouTube
 8. Be creative with session names based on time and mood`;
 
-    const response = await fetch(`${GEMINI_API_URL}?key=${GEMINI_API_KEY}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: {
-          temperature: 0.8,
-          topK: 40,
-          topP: 0.95,
-          maxOutputTokens: 8000,
-        },
-        safetySettings: [
-          { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' },
-          { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_NONE' },
-          { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_NONE' },
-          { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' },
-        ],
-        tools: [{
-          googleSearch: {}
-        }]
-      }),
-      // Brain call is the big daddy — longer budget, but still bounded.
-      signal: AbortSignal.timeout(30000),
-    });
+    try {
+      const response = await fetch(`${GEMINI_API_URL}?key=${GEMINI_API_KEY}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: {
+            temperature: 0.8,
+            topK: 40,
+            topP: 0.95,
+            maxOutputTokens: 8000,
+          },
+          safetySettings: [
+            { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' },
+            { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_NONE' },
+            { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_NONE' },
+            { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' },
+          ],
+          tools: [{
+            googleSearch: {}
+          }]
+        }),
+        // Brain call is the big daddy — longer budget, but still bounded.
+        signal: AbortSignal.timeout(30000),
+      });
 
-    if (!response.ok) {
-      throw new Error(`Gemini API error: ${response.status}`);
+      if (!response.ok) {
+        // 400 (expired key), 429 (quota), 5xx — all handled by the breaker.
+        // Don't throw (would spam console.error); just register and return null.
+        recordGeminiFailure();
+        return null;
+      }
+
+      const data = await response.json();
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+
+      if (!text) {
+        recordGeminiFailure();
+        return null;
+      }
+
+      // Extract JSON from response
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) {
+        recordGeminiFailure();
+        return null;
+      }
+
+      const parsed = JSON.parse(jsonMatch[0]) as BrainOutput;
+      recordGeminiSuccess();
+      return parsed;
+    } catch {
+      // Network error, timeout, JSON parse error — all treated as soft
+      // failures that feed the breaker.
+      recordGeminiFailure();
+      return null;
     }
-
-    const data = await response.json();
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-
-    if (!text) {
-      throw new Error('No content in Gemini response');
-    }
-
-    // Extract JSON from response
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      throw new Error('No JSON found in response');
-    }
-
-    return JSON.parse(jsonMatch[0]) as BrainOutput;
   }
 
   // ============================================

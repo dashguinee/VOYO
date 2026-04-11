@@ -151,16 +151,41 @@ export const AudioPlayer = () => {
   const hasTriggered75PercentKeptRef = useRef<boolean>(false); // 75% permanent cache trigger
   const hasTriggered30sListenRef = useRef<boolean>(false); // 30s artist discovery listen tracking
 
-  // Store state
-  const {
-    currentTrack, isPlaying, volume, seekPosition, playbackRate, boostProfile, voyexSpatial,
-    currentTime: savedCurrentTime, playbackSource, progress, queue,
-    setCurrentTime, setDuration, setProgress, clearSeekPosition, togglePlay,
-    nextTrack, predictNextTrack, setBufferHealth, setPlaybackSource,
-  } = usePlayerStore();
+  // Store state — fine-grained selectors so AudioPlayer only re-renders when
+  // fields it actually uses change. A broad destructure would cause a
+  // re-render on every setProgress/setCurrentTime tick (5-10Hz during
+  // playback), which is catastrophic for a 1900-line component with 40+
+  // useEffects.
+  const currentTrack = usePlayerStore(s => s.currentTrack);
+  const isPlaying = usePlayerStore(s => s.isPlaying);
+  const volume = usePlayerStore(s => s.volume);
+  const seekPosition = usePlayerStore(s => s.seekPosition);
+  const playbackRate = usePlayerStore(s => s.playbackRate);
+  const boostProfile = usePlayerStore(s => s.boostProfile);
+  const voyexSpatial = usePlayerStore(s => s.voyexSpatial);
+  const savedCurrentTime = usePlayerStore(s => s.currentTime);
+  const playbackSource = usePlayerStore(s => s.playbackSource);
+  const progress = usePlayerStore(s => s.progress);
+  const queue = usePlayerStore(s => s.queue);
+  const setCurrentTime = usePlayerStore(s => s.setCurrentTime);
+  const setDuration = usePlayerStore(s => s.setDuration);
+  const setProgress = usePlayerStore(s => s.setProgress);
+  const clearSeekPosition = usePlayerStore(s => s.clearSeekPosition);
+  const togglePlay = usePlayerStore(s => s.togglePlay);
+  const nextTrack = usePlayerStore(s => s.nextTrack);
+  const predictNextTrack = usePlayerStore(s => s.predictNextTrack);
+  const setBufferHealth = usePlayerStore(s => s.setBufferHealth);
+  const setPlaybackSource = usePlayerStore(s => s.setPlaybackSource);
 
-  const { startListenSession, endListenSession } = usePreferenceStore();
-  const { initialize: initDownloads, checkCache, cacheTrack, lastBoostCompletion, autoBoostEnabled, downloadSetting } = useDownloadStore();
+  const startListenSession = usePreferenceStore(s => s.startListenSession);
+  const endListenSession = usePreferenceStore(s => s.endListenSession);
+
+  const initDownloads = useDownloadStore(s => s.initialize);
+  const checkCache = useDownloadStore(s => s.checkCache);
+  const cacheTrack = useDownloadStore(s => s.cacheTrack);
+  const lastBoostCompletion = useDownloadStore(s => s.lastBoostCompletion);
+  const autoBoostEnabled = useDownloadStore(s => s.autoBoostEnabled);
+  const downloadSetting = useDownloadStore(s => s.downloadSetting);
 
   // Mini-PiP for background playback
   useMiniPiP();
@@ -1066,8 +1091,9 @@ export const AudioPlayer = () => {
               if (shouldPlay && audioRef.current.paused) {
                 audioContextRef.current?.state === 'suspended' && audioContextRef.current.resume().catch(() => {});
                 // Schedule the fade-in BEFORE play() so the ramp is already
-                // queued when the first sample lands.
-                fadeInMasterGain(80);
+                // queued when the first sample lands. 400ms premium settle-in
+                // so each fresh track eases in smoothly.
+                fadeInMasterGain(400);
                 audioRef.current.play().then(() => {
                   recordPlayEvent();
                   devLog('🔮 [VOYO] Preloaded playback started!');
@@ -1133,12 +1159,13 @@ export const AudioPlayer = () => {
             if ((shouldPlay || shouldAutoResume) && audioRef.current.paused) {
               audioContextRef.current?.state === 'suspended' && audioContextRef.current.resume().catch(() => {});
               // Session resume uses the longer 1.2s fade; normal playback
-              // gets a short 80ms click-kill fade. Both scheduled BEFORE
-              // play() so the ramp is queued when the first sample lands.
+              // gets a 400ms premium settle-in fade on every fresh track.
+              // Both scheduled BEFORE play() so the ramp is queued when the
+              // first sample lands.
               if (shouldAutoResume) {
                 fadeInVolume(1200);
               } else {
-                fadeInMasterGain(80);
+                fadeInMasterGain(400);
               }
               audioRef.current.play().then(() => {
                 recordPlayEvent();
@@ -1203,7 +1230,8 @@ export const AudioPlayer = () => {
                 if (shouldAutoResume) {
                   fadeInVolume(1200);
                 } else {
-                  fadeInMasterGain(80);
+                  // 400ms premium settle-in for every fresh R2 track start.
+                  fadeInMasterGain(400);
                 }
                 audioRef.current.play().then(() => {
                   recordPlayEvent();
@@ -1269,7 +1297,8 @@ export const AudioPlayer = () => {
                   if (shouldAutoResume) {
                     fadeInVolume(1200);
                   } else {
-                    fadeInMasterGain(80);
+                    // 400ms premium settle-in for every fresh edge-stream start.
+                    fadeInMasterGain(400);
                   }
                   audioRef.current.play().then(() => {
                     recordPlayEvent();

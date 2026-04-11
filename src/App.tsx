@@ -1190,6 +1190,27 @@ function App() {
   //   };
   // }, []);
 
+  // FIRST-TIME EXPERIENCE: Prime the player with a curated track on cold boot.
+  // Without this, new users open the app, see an empty player, and bounce. We
+  // load a known-good seed track (Calm Down by Rema — verified video ID) into
+  // currentTrack so the player shows SOMETHING. We do NOT autoplay — browsers
+  // require a user gesture anyway, and we want the user to tap play
+  // deliberately. Only runs if no existing track and no queue.
+  useEffect(() => {
+    const { currentTrack, queue, playTrack, setIsPlaying } = usePlayerStore.getState();
+    if (!currentTrack && queue.length === 0) {
+      const primer = TRACKS.find(t => t.trackId === 'WcIcVapfqXw') || TRACKS[0];
+      if (primer) {
+        playTrack(primer);
+        // Immediately pause — playTrack sets isPlaying=true, but we want the
+        // player primed and ready, not playing. Audio element won't make noise
+        // until the user taps play (browser gesture requirement).
+        setIsPlaying(false);
+        devLog('[VOYO] First-time primer: loaded', primer.title, 'as empty-state track');
+      }
+    }
+  }, []);
+
   // TRACK POOL MAINTENANCE: Start automatic pool management (rescoring every 5 mins)
   useEffect(() => {
     startPoolMaintenance();

@@ -101,6 +101,22 @@ const getCuratedTrendingTracks = (hotPool: any[], limit: number = 15): Track[] =
     .slice(0, limit) as Track[];
 };
 
+// Deterministic seeded shuffle — stable within a session, fresh across sessions.
+// Uses the sessionSeed to rotate which tracks from the pool get surfaced, so
+// every reload / pull-to-refresh feels alive without expensive recomputation.
+const seededShuffle = <T extends Track>(tracks: T[], seed: number): T[] => {
+  if (!tracks.length) return tracks;
+  return [...tracks].sort((a, b) => {
+    const keyA = a.trackId || a.id || '';
+    const keyB = b.trackId || b.id || '';
+    // Mix first two char codes with seed so single-char collisions don't
+    // all land at the same hash bucket.
+    const hashA = ((keyA.charCodeAt(0) || 0) * 31 + (keyA.charCodeAt(1) || 0)) * seed % 1_000_003;
+    const hashB = ((keyB.charCodeAt(0) || 0) * 31 + (keyB.charCodeAt(1) || 0)) * seed % 1_000_003;
+    return hashA - hashB;
+  });
+};
+
 const getRecentlyPlayed = (history: any[], limit: number = 10): Track[] => {
   const seen = new Set<string>();
   const uniqueTracks: Track[] = [];
@@ -1094,6 +1110,10 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
   const hotPool = useTrackPoolStore(s => s.hotPool);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [showNotificationHint, setShowNotificationHint] = useState(false);
+  // Session seed drives shelf rotation — every reload / pull-to-refresh gets
+  // a fresh number, so shelves surface different tracks from the big pool
+  // without losing stability WITHIN a single session.
+  const [sessionSeed, setSessionSeed] = useState(() => Date.now());
 
   // Ref for TIVI+ immersive section (nav hides when in view)
   const tiviBreakRef = useRef<HTMLDivElement>(null);
@@ -1122,6 +1142,8 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
   const handleRefresh = () => {
     setIsRefreshing(true);
     refreshRecommendations();
+    // Bump the session seed so every shelf re-shuffles its pick from the pool.
+    setSessionSeed(Date.now());
     setTimeout(() => setIsRefreshing(false), 500);
   };
 
@@ -1146,7 +1168,9 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
   // local re-sort. Two-tier stable sort: favorites first (by behavior within),
   // non-favorites second (also by behavior within). Preserves both signals.
   const madeForYou = useMemo(() => {
-    const personalizedHot = getPoolAwareHotTracks(15);
+    // Pull a WIDER candidate pool (60) then seeded-shuffle to pick 15 — so
+    // every reload surfaces different tracks from the 324K Supabase pool.
+    const personalizedHot = getPoolAwareHotTracks(60);
     if (hotTracks.length > 0) {
       // OYO DJ tier: artists the user has reacted to before. Empty for new users
       // (set.size === 0 → falls through to plain behavior sort, no change).
@@ -1164,17 +1188,22 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
         // Tier 2 (within): behavior score wins
         return b.score - a.score;
       });
-      return scored.map(s => s.track).slice(0, 15);
+      // Keep the top 30 personalized picks, then seed-shuffle within that band
+      // so favorites still lead but the exact order rotates across sessions.
+      const topBand = scored.map(s => s.track).slice(0, 30);
+      return seededShuffle(topBand, sessionSeed).slice(0, 15);
     }
-    return personalizedHot;
-  }, [hotTracks, trackPreferences]);
+    return seededShuffle(personalizedHot, sessionSeed).slice(0, 15);
+  }, [hotTracks, trackPreferences, sessionSeed]);
 
   // Discover More: Personalized discovery based on current track context
   const discoverMoreTracks = useMemo(() => {
-    // Use discovery engine with user context
+    // Use discovery engine with user context — pull a wider slate (45) then
+    // seed-shuffle so the "discover" shelf actually rotates every reload.
     if (currentTrack) {
       const excludeIds = [...madeForYou.map(t => t.id), currentTrack.id];
-      return getPoolAwareDiscoveryTracks(currentTrack, 15, excludeIds);
+      const candidates = getPoolAwareDiscoveryTracks(currentTrack, 45, excludeIds);
+      return seededShuffle(candidates, sessionSeed).slice(0, 15);
     }
     // Fallback: Use discovery pool scored by behavior, offset from madeForYou
     if (discoverTracks.length > 0) {
@@ -1185,12 +1214,14 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
         score: calculateBehaviorScore(track, trackPreferences)
       }));
       scored.sort((a, b) => b.score - a.score);
-      return scored.map(s => s.track).slice(0, 15);
+      // Keep the top 30 best-scoring candidates, then seed-shuffle for rotation.
+      const topBand = scored.map(s => s.track).slice(0, 30);
+      return seededShuffle(topBand, sessionSeed).slice(0, 15);
     }
-    // Last resort: different slice from pool
-    const allHot = getPoolAwareHotTracks(30);
-    return allHot.slice(15, 30);
-  }, [discoverTracks, currentTrack, madeForYou, trackPreferences]);
+    // Last resort: different slice from pool — seed-shuffle so each reload rotates.
+    const allHot = getPoolAwareHotTracks(60);
+    return seededShuffle(allHot, sessionSeed).slice(0, 15);
+  }, [discoverTracks, currentTrack, madeForYou, trackPreferences, sessionSeed]);
 
   // New Releases: Date-sorted, excluding what's already shown
   const newReleases = useMemo(() => {
@@ -1205,15 +1236,19 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
 
   // African Vibes: West African tags + user's afro-heat preference weighting
   const africanVibes = useMemo(() => {
-    const curated = getWestAfricanTracks(hotPool, 20); // Get more to score
+    // Pull a WIDER candidate pool (60) from the curator tag so the shelf can
+    // rotate through more of the West African catalogue across sessions.
+    const curated = getWestAfricanTracks(hotPool, 60);
     if (curated.length >= 5) {
       // Score by user's engagement with these tracks
       const scored = curated.map(track => ({
         track,
-        score: calculateBehaviorScore(track, trackPreferences) + Math.random() * 5 // Small jitter for variety
+        score: calculateBehaviorScore(track, trackPreferences)
       }));
       scored.sort((a, b) => b.score - a.score);
-      return scored.map(s => s.track).slice(0, 15);
+      // Top 30 by behavior, then seed-shuffle for fresh rotation every reload.
+      const topBand = scored.map(s => s.track).slice(0, 30);
+      return seededShuffle(topBand, sessionSeed).slice(0, 15);
     }
     // Fallback: Get tracks user has engaged with that have afro vibes
     const afroPool = hotPool.filter((t: any) =>
@@ -1222,34 +1257,39 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
       )
     );
     if (afroPool.length >= 5) {
-      return afroPool.slice(0, 15) as Track[];
+      return seededShuffle(afroPool as Track[], sessionSeed).slice(0, 15);
     }
-    return getPoolAwareHotTracks(15);
-  }, [hotPool, trackPreferences]);
+    return seededShuffle(getPoolAwareHotTracks(45), sessionSeed).slice(0, 15);
+  }, [hotPool, trackPreferences, sessionSeed]);
 
   // REMOVED: westAfricanTracks alias - africanVibes is now distinct
 
   const classicsTracks = useMemo(() => {
-    const curated = getClassicsTracks(hotPool, 15);
-    return curated.length >= 5 ? curated : [];
-  }, [hotPool]);
+    // Pull a wider heritage slate (45) then seed-shuffle so the classics shelf
+    // rotates through different oldies every reload instead of the same 15.
+    const curated = getClassicsTracks(hotPool, 45);
+    if (curated.length < 5) return [];
+    return seededShuffle(curated, sessionSeed).slice(0, 15);
+  }, [hotPool, sessionSeed]);
 
-  // Top 10 on VOYO: Trending tracks, excluding what's in personalized sections
+  // Top 10 on VOYO: Trending tracks, excluding what's in personalized sections.
+  // Pulls a wider trending slate then seed-shuffles so the "Top 10" rotates
+  // through the real top ~50 every reload — still trending, just fresh faces.
   const trending = useMemo(() => {
     const usedIds = new Set([
       ...madeForYou.map(t => t.id),
       ...discoverMoreTracks.map(t => t.id),
       ...africanVibes.map(t => t.id),
     ]);
-    const curated = getCuratedTrendingTracks(hotPool, 25);
+    const curated = getCuratedTrendingTracks(hotPool, 50);
     const available = curated.filter(t => !usedIds.has(t.id));
     if (available.length >= 5) {
-      return available.slice(0, 10);
+      return seededShuffle(available, sessionSeed).slice(0, 10);
     }
     // Fallback to poolScore sorted, excluding used
-    const fallback = getTrendingTracks(hotPool, 25).filter(t => !usedIds.has(t.id));
-    return fallback.slice(0, 10);
-  }, [hotPool, madeForYou, discoverMoreTracks, africanVibes]);
+    const fallback = getTrendingTracks(hotPool, 50).filter(t => !usedIds.has(t.id));
+    return seededShuffle(fallback, sessionSeed).slice(0, 10);
+  }, [hotPool, madeForYou, discoverMoreTracks, africanVibes, sessionSeed]);
 
   const greeting = getGreeting();
 
