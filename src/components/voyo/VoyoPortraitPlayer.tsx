@@ -4480,6 +4480,7 @@ export const VoyoPortraitPlayer = ({
         className={`flex flex-col items-center justify-end relative z-10 flex-1 ${
           oyeBarBehavior === 'fade' ? 'pt-12' : 'pt-10'
         }`}
+        style={{ transform: 'translateY(28px)' }}
         onPointerDown={handleCanvasPointerDown}
         onPointerUp={handleCanvasPointerUp}
         onPointerLeave={handleCanvasPointerUp}
