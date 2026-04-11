@@ -85,25 +85,25 @@ const BOOST_PRESETS = {
 export const AudioPlayer = () => {
   const audioRef = useRef<HTMLAudioElement>(null);
   const cachedUrlRef = useRef<string | null>(null);
-  // SILENT AUDIO KEEPER for iframe background play.
+  // SILENT WAV URL for iframe background play.
   //
-  // Problem: during the window between "iframe starts" and "hot-swap
-  // completes", audio comes from the YouTube iframe, not the main audio
-  // element. If the user backgrounds the app during this window, mobile
-  // OS suspends the iframe and audio cuts out.
+  // Problem: during the iframe phase (before hot-swap completes), if the
+  // user locks the phone, iOS/Android suspends the YouTube iframe. Audio
+  // cuts out. The hot-swap to audio element can't complete because JS is
+  // throttled in background.
   //
-  // Trick: a SEPARATE hidden audio element playing a looping silent WAV
-  // keeps the page in "has audio focus" state, which encourages mobile
-  // OS to keep the page alive and the iframe playing. It's a known PWA
-  // pattern for bridging gaps in playback authority.
+  // Solution: reuse the MAIN audio element as a silent keeper during the
+  // iframe phase. Point audioRef.current.src at a silent WAV and call
+  // play() — the main element is already unlocked from any prior track
+  // play (iOS audio unlock is per-element), so no separate priming needed.
+  // The silent audio routes through the Web Audio chain, masterGain is
+  // muted (0) so nothing is audible from the main element — the iframe
+  // provides the audible sound.
   //
-  // The keeper is NOT connected to the Web Audio chain (it's a plain
-  // <audio> element, no createMediaElementSource). It only exists to
-  // keep the HTMLMediaElement.currentlyPlaying flag true on the page.
-  //
-  // volume 0.001 (nearly silent but NOT 0/muted) — some browsers treat
-  // muted=true or volume=0 as "not really playing" and drop audio focus.
-  const silentKeeperRef = useRef<HTMLAudioElement | null>(null);
+  // iOS sees an HTMLMediaElement playing → treats the PWA as having audio
+  // focus → keeps the page alive in background → iframe continues. When
+  // /stream arrives, we swap the main element's src from silent WAV to
+  // the real URL and hot-swap proceeds normally.
   const silentKeeperUrlRef = useRef<string | null>(null);
 
   // Web Audio API refs
@@ -518,13 +518,12 @@ export const AudioPlayer = () => {
     return () => { wakeLockRef.current?.release().catch(e => devWarn('🔒 [WakeLock] Cleanup release failed:', e.name)); };
   }, [isPlaying]);
 
-  // SILENT AUDIO KEEPER — create once on mount.
+  // SILENT WAV GENERATION — once on mount.
   //
-  // Generates a 2-second silent WAV as an in-memory blob, creates a
-  // hidden audio element with loop=true, volume=0.001 (not muted —
-  // some browsers drop audio focus on volume=0). The keeper is only
-  // played during the iframe phase (see effect below). Blob URL is
-  // revoked on unmount to free memory.
+  // Creates a 2-second silent WAV blob and holds the URL in a ref. The
+  // main audio element uses this as its src during iframe phase, so iOS
+  // sees a continuously-playing media element and keeps the page alive
+  // through screen-off. See the iframe-miss branch of loadTrack.
   useEffect(() => {
     // Build a minimal silent WAV (8kHz, 8-bit, mono, 2 seconds ≈ 16KB).
     const sampleRate = 8000;
@@ -549,52 +548,19 @@ export const AudioPlayer = () => {
     dv.setUint16(34, 8, true);        // bits per sample
     writeStr(36, 'data');
     dv.setUint32(40, numSamples, true);
-    // Data region is already zero-filled (silence).
     // 8-bit unsigned PCM uses 128 as silent midpoint — fill with 128.
     for (let i = 0; i < numSamples; i++) dv.setUint8(44 + i, 128);
 
     const blob = new Blob([ab], { type: 'audio/wav' });
-    const url = URL.createObjectURL(blob);
-    silentKeeperUrlRef.current = url;
-
-    const el = new Audio();
-    el.src = url;
-    el.loop = true;
-    el.volume = 0.001;
-    el.preload = 'auto';
-    // Don't autoplay — we .play() it on demand when entering iframe phase.
-    silentKeeperRef.current = el;
+    silentKeeperUrlRef.current = URL.createObjectURL(blob);
 
     return () => {
-      try { el.pause(); } catch {}
       if (silentKeeperUrlRef.current) {
         URL.revokeObjectURL(silentKeeperUrlRef.current);
         silentKeeperUrlRef.current = null;
       }
-      silentKeeperRef.current = null;
     };
   }, []);
-
-  // SILENT KEEPER CONTROL — play/pause based on playbackSource.
-  //
-  // During iframe phase, keep the page alive with the silent keeper so
-  // mobile OS preserves the iframe's audio focus. When hot-swap completes
-  // (source becomes cached/r2), pause the keeper — the main audio element
-  // has its own audio focus now.
-  useEffect(() => {
-    const el = silentKeeperRef.current;
-    if (!el) return;
-    if (playbackSource === 'iframe' && isPlaying) {
-      // Attempt to play — may fail without user gesture on first tap,
-      // but subsequent plays (after the user has interacted) succeed.
-      el.play().catch(() => {
-        // Silent failure — not fatal, hot-swap will still complete
-        // if user stays in foreground.
-      });
-    } else {
-      if (!el.paused) el.pause();
-    }
-  }, [playbackSource, isPlaying]);
 
   // Harmonic exciter curve — MEMOIZED.
   //
@@ -1665,11 +1631,18 @@ export const AudioPlayer = () => {
           //      cacheTrack'd in the background so they hit the R2 path.
           devLog('🎵 [VOYO] R2 miss — starting iframe immediately, will hot-swap to audio element when stream arrives');
 
-          // Pause the audio element and silence the chain so we don't get
-          // any leaked sound from a stale src. The iframe becomes the source.
-          if (audioRef.current) {
-            audioRef.current.pause();
-          }
+          // BACKGROUND-PLAY KEEPER: point the main audio element at a
+          // silent WAV and play it. Web Audio chain stays muted so no
+          // sound leaks from the main element — the iframe provides
+          // audible sound. But iOS sees HTMLMediaElement.playing=true
+          // and keeps the PWA in "has audio focus" state, which holds
+          // the iframe alive when the phone screen turns off.
+          //
+          // The main audio element is already unlocked from any prior
+          // track play (iOS unlock is per-element), so this .play() call
+          // succeeds even though we're outside the user gesture scope.
+          // Need Web Audio context muted first so no silent-WAV artifacts
+          // leak through the chain during the src swap.
           muteMasterGainInstantly();
           isEdgeStreamRef.current = false;
           setPlaybackSource('iframe');
@@ -1677,6 +1650,33 @@ export const AudioPlayer = () => {
           // fire and skip the track while we try to upgrade to audio element.
           clearLoadWatchdog();
           isLoadingTrackRef.current = false;
+
+          // Point main audio element at silent WAV. The source node stays
+          // wired through src changes (Web Audio API design). This triggers
+          // onPause then canplay events — onPause is safe because the
+          // natural-end/load guards handle it.
+          if (audioRef.current && silentKeeperUrlRef.current) {
+            try {
+              audioRef.current.loop = true; // keep silence looping
+              audioRef.current.src = silentKeeperUrlRef.current;
+              audioRef.current.load();
+              // Play on canplay (first readiness, not canplaythrough).
+              // Silent WAV is tiny, will be ready almost immediately.
+              const onCanPlayKeeper = () => {
+                audioRef.current?.removeEventListener('canplay', onCanPlayKeeper);
+                if (isStale()) return;
+                // Only play if we're still in iframe phase (user didn't skip)
+                const ps = usePlayerStore.getState().playbackSource;
+                if (ps !== 'iframe') return;
+                audioRef.current?.play().catch((e) => {
+                  devWarn('[VOYO] silent keeper play failed:', e?.name);
+                });
+              };
+              audioRef.current.addEventListener('canplay', onCanPlayKeeper, { once: true });
+            } catch (e) {
+              devWarn('[VOYO] failed to set silent keeper src:', e);
+            }
+          }
 
           // Parallel stream fetch for hot-swap upgrade.
           try {
@@ -1699,6 +1699,11 @@ export const AudioPlayer = () => {
             setupAudioEnhancement(profile);
 
             if (audioRef.current) {
+              // Guard onPause during the silent-WAV → real-URL src swap.
+              // Setting src fires pause first, and without this guard the
+              // onPause handler would set isPlaying=false in the store.
+              isLoadingTrackRef.current = true;
+              audioRef.current.loop = false; // clear the silent-WAV loop flag
               audioRef.current.volume = 1.0; // Pinned — loudness via masterGain
               audioRef.current.src = streamData.url;
               audioRef.current.load();
