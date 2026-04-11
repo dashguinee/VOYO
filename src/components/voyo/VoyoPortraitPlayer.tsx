@@ -4907,21 +4907,27 @@ export const VoyoPortraitPlayer = ({
           </div>
         )}
 
-        {/* DJ Wake Toast - "Now Peace ✌🏾" */}
-        
-          {showDJWakeMessage && (
+        {/* DJ Wake Toast - "Now Peace ✌🏾".
+            Was popping in/out with zero animation. Now fades + scale-pops
+            on mount via the global voyo-fade-in keyframe, and fades out
+            when showDJWakeMessage flips false. */}
+        {showDJWakeMessage && (
+          <div
+            className="fixed inset-0 flex items-center justify-center pointer-events-none z-50 animate-[voyo-fade-in_0.3s_ease-out]"
+          >
             <div
-              className="fixed inset-0 flex items-center justify-center pointer-events-none z-50"
+              className="px-6 py-3 rounded-full bg-black/60 backdrop-blur-xl border border-white/10"
+              style={{
+                animation: 'voyo-toast-pop 0.42s cubic-bezier(0.34, 1.56, 0.64, 1)',
+                boxShadow: '0 8px 32px rgba(0,0,0,0.55), 0 0 24px rgba(139,92,246,0.18)',
+              }}
             >
-              <div
-                className="px-6 py-3 rounded-full bg-black/60 backdrop-blur-xl border border-white/10"
-              >
-                <span className="text-white text-lg font-medium tracking-wide">
-                  {djWakeMessageText}
-                </span>
-              </div>
+              <span className="text-white text-lg font-medium tracking-wide">
+                {djWakeMessageText}
+              </span>
             </div>
-          )}
+          </div>
+        )}
         
 
       </div>

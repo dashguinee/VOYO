@@ -2093,26 +2093,69 @@ export const AudioPlayer = () => {
   useEffect(() => {
     if (!('mediaSession' in navigator) || !currentTrack || (playbackSource !== 'cached' && playbackSource !== 'r2')) return;
 
+    // Multiple artwork sizes — the OS picks the right one for the lock
+    // screen / notification shade / media widget depending on display
+    // density. Falling back to YouTube's hqdefault if the Edge Worker
+    // art endpoint is empty (both URLs work; OS tries in order).
+    const edgeArt = `https://voyo-edge.dash-webtv.workers.dev/cdn/art/${currentTrack.trackId}?quality=high`;
+    const ytArt = `https://i.ytimg.com/vi/${currentTrack.trackId}/hqdefault.jpg`;
     navigator.mediaSession.metadata = new MediaMetadata({
       title: currentTrack.title,
       artist: currentTrack.artist,
       album: 'VOYO Music',
-      artwork: [{ src: `https://voyo-edge.dash-webtv.workers.dev/cdn/art/${currentTrack.trackId}?quality=high`, sizes: '512x512', type: 'image/jpeg' }]
+      artwork: [
+        // Edge worker (preferred — custom processed art)
+        { src: edgeArt, sizes: '96x96',   type: 'image/jpeg' },
+        { src: edgeArt, sizes: '192x192', type: 'image/jpeg' },
+        { src: edgeArt, sizes: '384x384', type: 'image/jpeg' },
+        { src: edgeArt, sizes: '512x512', type: 'image/jpeg' },
+        // YouTube fallback — if edge worker 404s, the OS walks to this
+        { src: ytArt,   sizes: '480x360', type: 'image/jpeg' },
+      ],
     });
 
     navigator.mediaSession.setActionHandler('play', () => !usePlayerStore.getState().isPlaying && togglePlay());
     navigator.mediaSession.setActionHandler('pause', () => usePlayerStore.getState().isPlaying && togglePlay());
     navigator.mediaSession.setActionHandler('nexttrack', () => nextTrack());
     navigator.mediaSession.setActionHandler('previoustrack', () => usePlayerStore.getState().prevTrack());
+
+    // SEEK FORWARD / BACKWARD — used by headset hardware buttons, car
+    // head units, and the lock-screen 10s skip arrows. Default offset
+    // of 10s matches every major music app. Click-free seek pattern:
+    // mute → seek → fade back in.
+    const seekOffset = (dir: 1 | -1, offset: number) => {
+      if (!audioRef.current) return;
+      const newTime = Math.max(0, Math.min(
+        audioRef.current.duration || 0,
+        audioRef.current.currentTime + dir * offset,
+      ));
+      muteMasterGainInstantly();
+      audioRef.current.currentTime = newTime;
+      setTimeout(() => fadeInMasterGain(80), 30);
+    };
+    navigator.mediaSession.setActionHandler('seekforward', (d) => {
+      seekOffset(1, d.seekOffset || 10);
+    });
+    navigator.mediaSession.setActionHandler('seekbackward', (d) => {
+      seekOffset(-1, d.seekOffset || 10);
+    });
     navigator.mediaSession.setActionHandler('seekto', (d) => {
       if (d.seekTime === undefined || !audioRef.current) return;
-      // Click-free seek: mute → seek → fade back in. Direct currentTime
-      // assignment causes a sample-level discontinuity = audible click.
       muteMasterGainInstantly();
       audioRef.current.currentTime = d.seekTime;
-      // Wait one tick for the seek to settle, then fade back in.
       setTimeout(() => fadeInMasterGain(80), 30);
     });
+
+    // STOP — some OS widgets and Bluetooth controls fire this instead of
+    // pause. Treat it as pause for us (we don't want to destroy the
+    // audio element or clear the queue).
+    try {
+      navigator.mediaSession.setActionHandler('stop', () => {
+        if (usePlayerStore.getState().isPlaying) togglePlay();
+      });
+    } catch {
+      // Some browsers throw on unsupported actions — harmless.
+    }
 
     navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
   }, [currentTrack, isPlaying, playbackSource, togglePlay, nextTrack]);
