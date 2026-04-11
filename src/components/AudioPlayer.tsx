@@ -112,6 +112,9 @@ export const AudioPlayer = () => {
   const multibandLowGainRef = useRef<GainNode | null>(null);
   const multibandMidGainRef = useRef<GainNode | null>(null);
   const multibandHighGainRef = useRef<GainNode | null>(null);
+  // Multiband bypass — root cause fix for muffling on non-VOYEX presets
+  const multibandBypassDirectRef = useRef<GainNode | null>(null);
+  const multibandBypassMbRef = useRef<GainNode | null>(null);
   const audioEnhancedRef = useRef<boolean>(false);
   const currentProfileRef = useRef<BoostPreset>('boosted');
 
@@ -608,12 +611,31 @@ export const AudioPlayer = () => {
       const exciterBypass = ctx.createGain(); exciterBypass.gain.value = 1.0;
       const bandMerger = ctx.createGain(); bandMerger.gain.value = 1.0;
 
-      // Wire multiband
+      // ── MULTIBAND BYPASS GAINS — root-cause fix for muffling on non-VOYEX ──
+      // The multiband chain (16 biquads + comps + harmonic) produces phase
+      // smear at frequencies between crossovers, even when "transparent"
+      // (gains=1, ratio=1). Linkwitz-Riley sums to flat AMPLITUDE but each
+      // band has its own phase response — the cumulative phase distortion
+      // is audible as muffling. Solution: parallel direct path with cross-
+      // fadable gains. Non-VOYEX uses direct (zero phase distortion). VOYEX
+      // uses multiband (mastering character). Cross-fade is click-free via
+      // linearRampToValueAtTime in updateBoostPreset.
+      const multibandBypassDirect = ctx.createGain(); multibandBypassDirect.gain.value = 1; // default: bypass active
+      const multibandBypassMb = ctx.createGain(); multibandBypassMb.gain.value = 0; // default: multiband muted
+      const multibandMix = ctx.createGain(); multibandMix.gain.value = 1;
+      multibandBypassDirectRef.current = multibandBypassDirect;
+      multibandBypassMbRef.current = multibandBypassMb;
+
+      // Wire source → highPass → both paths → mix → subBass
       source.connect(highPass);
+      // Direct bypass path (zero phase distortion)
+      highPass.connect(multibandBypassDirect); multibandBypassDirect.connect(multibandMix);
+      // Multiband path (active only when VOYEX)
       highPass.connect(lowF1); lowF1.connect(lowF2); lowF2.connect(lowGain); lowGain.connect(lowComp); lowComp.connect(harmonic);
       highPass.connect(midHP1); midHP1.connect(midHP2); midHP2.connect(midLP1); midLP1.connect(midLP2); midLP2.connect(midGain); midGain.connect(midComp); midComp.connect(harmonic);
       highPass.connect(highF1); highF1.connect(highF2); highF2.connect(highGain); highGain.connect(highComp); highComp.connect(exciterBypass);
       harmonic.connect(bandMerger); exciterBypass.connect(bandMerger);
+      bandMerger.connect(multibandBypassMb); multibandBypassMb.connect(multibandMix);
 
       // ── STANDARD EQ SECTION (always created, neutral when VOYEX active) ──
       const subBass = ctx.createBiquadFilter(); subBass.type = 'lowshelf'; subBass.frequency.value = 50; subBass.gain.value = 0;
@@ -626,7 +648,7 @@ export const AudioPlayer = () => {
       presenceFilterRef.current = presence;
       const air = ctx.createBiquadFilter(); air.type = 'highshelf'; air.frequency.value = 10000; air.gain.value = 0;
       airFilterRef.current = air;
-      bandMerger.connect(subBass); subBass.connect(bass); bass.connect(warmth); warmth.connect(presence); presence.connect(air);
+      multibandMix.connect(subBass); subBass.connect(bass); bass.connect(warmth); warmth.connect(presence); presence.connect(air);
 
       // ── STEREO WIDENING (always created, delay=0 = transparent) ──
       const stSplitter = ctx.createChannelSplitter(2);
@@ -873,6 +895,19 @@ export const AudioPlayer = () => {
       if (multibandHighCompRef.current) { ramp(multibandHighCompRef.current.threshold, 0); ramp(multibandHighCompRef.current.ratio, 1); }
     };
 
+    // ── BYPASS the multiband entirely (root-cause muffling fix) ──
+    // direct=1, multiband=0 → signal flows highPass → directGain → mix → subBass
+    // multiband path still processes (CPU cost) but its output is muted, so
+    // its phase smear can't reach the output.
+    const useDirectPath = () => {
+      ramp(multibandBypassDirectRef.current?.gain, 1);
+      ramp(multibandBypassMbRef.current?.gain, 0);
+    };
+    const useMultibandPath = () => {
+      ramp(multibandBypassDirectRef.current?.gain, 0);
+      ramp(multibandBypassMbRef.current?.gain, 1);
+    };
+
     const setStandardEqNeutral = () => {
       ramp(subBassFilterRef.current?.gain, 0);
       ramp(bassFilterRef.current?.gain, 0);
@@ -883,6 +918,7 @@ export const AudioPlayer = () => {
 
     // 'off' = RAW AUDIO - everything transparent
     if (preset === 'off') {
+      useDirectPath(); // Bypass multiband entirely
       setMultibandTransparent();
       setStandardEqNeutral();
       if (harmonicExciterRef.current) { harmonicExciterRef.current.curve = null; harmonicExciterRef.current.oversample = 'none'; }
@@ -896,6 +932,7 @@ export const AudioPlayer = () => {
     const s = BOOST_PRESETS[preset] as any;
 
     if (s.multiband) {
+      useMultibandPath(); // Wire multiband INTO the signal path
       // ── VOYEX: Multiband active, standard EQ neutral ──
       ramp(multibandLowGainRef.current?.gain, s.low.gain);
       ramp(multibandMidGainRef.current?.gain, s.mid.gain);
@@ -914,7 +951,8 @@ export const AudioPlayer = () => {
       if (compressorRef.current) { ramp(compressorRef.current.threshold, 0); ramp(compressorRef.current.ratio, 1); } // Multiband handles compression
       ramp(stereoDelayRef.current?.delayTime, s.stereoWidth || 0);
     } else {
-      // ── Standard presets: Multiband transparent, standard EQ active ──
+      // ── Standard presets (boosted/calm): Bypass multiband, standard EQ active ──
+      useDirectPath(); // Skip multiband — root-cause muffling fix
       setMultibandTransparent();
       if (harmonicExciterRef.current) {
         const applyCurve = s.harmonicAmount > 0;
@@ -1576,9 +1614,10 @@ export const AudioPlayer = () => {
       // 2. Anchor gain at silence BEFORE .play() so first samples aren't loud
       // 3. Start playback
       // 4. Ramp gain up to target (60ms) — buries the transient
-      if (audioContextRef.current?.state === 'suspended') {
-        audioContextRef.current.resume().catch(() => {});
-      }
+      // ALWAYS resume — iOS sometimes reports 'running' after a lock-screen
+      // interruption when the context is actually 'interrupted'. resume() is
+      // a no-op when already running, so calling it unconditionally is safe.
+      audioContextRef.current?.resume().catch(() => {});
       if (audioEnhancedRef.current && gainNodeRef.current && audioContextRef.current) {
         const ctx = audioContextRef.current;
         const now = ctx.currentTime;
@@ -1986,6 +2025,36 @@ export const AudioPlayer = () => {
     nextTrack();
   }, [playbackSource, currentTrack?.trackId, checkCache, nextTrack, setPlaybackSource]);
 
+  // ── STALLED RECOVERY ────────────────────────────────────────────────
+  // The audio element fires `stalled` and `waiting` when it can't get more
+  // data — but neither triggers `onError`, so the existing recovery never
+  // runs. The element just sits frozen until the user manually skips.
+  // Solution: track stall state with a 4s timer. If still stalled after 4s,
+  // force the same recovery flow as onError. Per-stall-event timer so a
+  // brief network blip doesn't trigger recovery.
+  const stallTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const handleStalled = useCallback(() => {
+    if (playbackSource !== 'cached' && playbackSource !== 'r2') return;
+    if (stallTimerRef.current) return; // already armed
+    devWarn('⚠️ [VOYO] Audio stalled — armed 4s recovery timer');
+    stallTimerRef.current = setTimeout(() => {
+      stallTimerRef.current = null;
+      const audio = audioRef.current;
+      if (!audio || audio.paused) return;
+      // Still stalled after 4s — synthesize an error event and run recovery.
+      // We can't actually fire onError, so call handleAudioError directly
+      // with a fake event-like object whose currentTarget points at the audio.
+      devWarn('🚨 [VOYO] Stalled >4s — forcing recovery');
+      handleAudioError({ currentTarget: audio } as React.SyntheticEvent<HTMLAudioElement, Event>);
+    }, 4000);
+  }, [playbackSource, handleAudioError]);
+  const clearStallTimer = useCallback(() => {
+    if (stallTimerRef.current) {
+      clearTimeout(stallTimerRef.current);
+      stallTimerRef.current = null;
+    }
+  }, []);
+
   return (
     <audio
       ref={audioRef}
@@ -2014,8 +2083,16 @@ export const AudioPlayer = () => {
         }
         usePlayerStore.getState().setIsPlaying(true);
       }}
-      onPlaying={() => (playbackSource === 'cached' || playbackSource === 'r2') && setBufferHealth(100, 'healthy')}
-      onWaiting={() => (playbackSource === 'cached' || playbackSource === 'r2') && setBufferHealth(50, 'warning')}
+      onPlaying={() => {
+        clearStallTimer();
+        (playbackSource === 'cached' || playbackSource === 'r2') && setBufferHealth(100, 'healthy');
+      }}
+      onWaiting={() => {
+        handleStalled(); // Arm recovery timer — stalled and waiting both signal frozen state
+        (playbackSource === 'cached' || playbackSource === 'r2') && setBufferHealth(50, 'warning');
+      }}
+      onStalled={handleStalled}
+      onSuspend={() => clearStallTimer()}
       onPause={() => {
         // Sync the store to the actual audio state. No more force-resume.
         usePlayerStore.getState().setIsPlaying(false);
