@@ -17,7 +17,12 @@ interface PlaylistModalProps {
 }
 
 export const PlaylistModal = ({ isOpen, onClose, trackId, trackTitle }: PlaylistModalProps) => {
-  const { playlists, createPlaylist, addTrackToPlaylist, removeTrackFromPlaylist, syncToCloud } = usePlaylistStore();
+  // Fine-grained selectors — avoid re-renders on unrelated playlist mutations.
+  const playlists = usePlaylistStore(s => s.playlists);
+  const createPlaylist = usePlaylistStore(s => s.createPlaylist);
+  const addTrackToPlaylist = usePlaylistStore(s => s.addTrackToPlaylist);
+  const removeTrackFromPlaylist = usePlaylistStore(s => s.removeTrackFromPlaylist);
+  const syncToCloud = usePlaylistStore(s => s.syncToCloud);
   const { isLoggedIn, dashId } = useAuth();
 
   const [showCreate, setShowCreate] = useState(false);
@@ -87,7 +92,7 @@ export const PlaylistModal = ({ isOpen, onClose, trackId, trackTitle }: Playlist
           {!showCreate ? (
             <button
               onClick={() => setShowCreate(true)}
-              className="w-full p-4 rounded-xl bg-gradient-to-r from-purple-500/20 to-pink-500/20 border border-purple-500/30 flex items-center gap-3 mb-4 hover:border-purple-500/50 transition-colors"
+              className="w-full p-4 rounded-xl bg-gradient-to-r from-purple-500/20 to-[#D4A053]/20 border border-purple-500/30 flex items-center gap-3 mb-4 hover:border-purple-500/50 transition-colors"
             >
               <div className="w-12 h-12 rounded-xl bg-purple-500/30 flex items-center justify-center">
                 <Plus className="w-6 h-6 text-purple-400" />
@@ -160,7 +165,7 @@ export const PlaylistModal = ({ isOpen, onClose, trackId, trackTitle }: Playlist
                       </p>
                     </div>
                     {playlist.isPublic ? (
-                      <Globe className="w-4 h-4 text-green-400" />
+                      <Globe className="w-4 h-4 text-[#D4A053]" />
                     ) : (
                       <Lock className="w-4 h-4 text-white/30" />
                     )}

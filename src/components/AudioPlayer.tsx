@@ -346,19 +346,21 @@ export const AudioPlayer = () => {
         // Tab hidden - if playing, keep AudioContext running for background playback
         if (shouldPlay && audioRef.current && (playbackSource === 'cached' || playbackSource === 'r2')) {
           if (audioContextRef.current?.state === 'suspended') {
-            audioContextRef.current.resume();
+            // .resume() / .suspend() return promises that can reject on iOS —
+            // catch to avoid unhandled rejection warnings flooding the console.
+            audioContextRef.current.resume().catch(() => {});
           }
           audioRef.current.play().catch(e => devWarn('🎵 [Playback] Background resume failed:', e.name));
         }
         // If NOT playing and tab hidden, suspend AudioContext to save battery
         else if (!shouldPlay && audioContextRef.current?.state === 'running') {
-          audioContextRef.current.suspend();
+          audioContextRef.current.suspend().catch(() => {});
           devLog('🔋 [Battery] AudioContext suspended (tab hidden, not playing)');
         }
       } else {
         // Tab visible - resume AudioContext if it was suspended
         if (audioContextRef.current?.state === 'suspended' && shouldPlay) {
-          audioContextRef.current.resume();
+          audioContextRef.current.resume().catch(() => {});
           devLog('🔋 [Battery] AudioContext resumed (tab visible)');
         }
       }
@@ -997,6 +999,11 @@ export const AudioPlayer = () => {
         // Hold a reference so the timeout doesn't pause a future track
         const audioToFade = audioRef.current;
         await new Promise<void>(resolve => setTimeout(resolve, 25));
+        // STALE GUARD: if another loadTrack started during the 25ms ramp wait,
+        // don't touch the audio element — the newer load owns it now. Without
+        // this guard, pausing or rewinding here can clobber a freshly-loading
+        // track during rapid skips.
+        if (isStale()) { devLog(`[AudioPlayer] cancelled stale load for ${trackId} after fade timeout`); return; }
         if (audioRef.current === audioToFade) {
           audioRef.current.pause();
           audioRef.current.currentTime = 0;
@@ -1049,10 +1056,15 @@ export const AudioPlayer = () => {
             // Since we preloaded, audio should be ready almost instantly
             audioRef.current.oncanplaythrough = () => {
               if (!audioRef.current) return;
+              // STALE GUARD: the canplaythrough callback can fire LATE —
+              // after the user has already skipped to the next track. If we
+              // don't check, we'd start playing the stale preloaded track
+              // on top of whatever the newer loadTrack wired up.
+              if (isStale()) return;
 
               const { isPlaying: shouldPlay } = usePlayerStore.getState();
               if (shouldPlay && audioRef.current.paused) {
-                audioContextRef.current?.state === 'suspended' && audioContextRef.current.resume();
+                audioContextRef.current?.state === 'suspended' && audioContextRef.current.resume().catch(() => {});
                 // Schedule the fade-in BEFORE play() so the ramp is already
                 // queued when the first sample lands.
                 fadeInMasterGain(80);
@@ -1098,6 +1110,9 @@ export const AudioPlayer = () => {
 
           audioRef.current.oncanplaythrough = () => {
             if (!audioRef.current) return;
+            // STALE GUARD: late-firing canplaythrough after a skip would
+            // start the wrong track. Bail before touching play state.
+            if (isStale()) return;
 
             // Restore position on initial load
             if (isInitialLoadRef.current && savedCurrentTime > 5) {
@@ -1116,7 +1131,7 @@ export const AudioPlayer = () => {
             }
 
             if ((shouldPlay || shouldAutoResume) && audioRef.current.paused) {
-              audioContextRef.current?.state === 'suspended' && audioContextRef.current.resume();
+              audioContextRef.current?.state === 'suspended' && audioContextRef.current.resume().catch(() => {});
               // Session resume uses the longer 1.2s fade; normal playback
               // gets a short 80ms click-kill fade. Both scheduled BEFORE
               // play() so the ramp is queued when the first sample lands.
@@ -1167,6 +1182,7 @@ export const AudioPlayer = () => {
 
             audioRef.current.oncanplaythrough = () => {
               if (!audioRef.current) return;
+              if (isStale()) return; // STALE GUARD — see cached path above
 
               // Restore position on initial load
               if (isInitialLoadRef.current && savedCurrentTime > 5) {
@@ -1183,7 +1199,7 @@ export const AudioPlayer = () => {
               }
 
               if ((shouldPlay || shouldAutoResume) && audioRef.current.paused) {
-                audioContextRef.current?.state === 'suspended' && audioContextRef.current.resume();
+                audioContextRef.current?.state === 'suspended' && audioContextRef.current.resume().catch(() => {});
                 if (shouldAutoResume) {
                   fadeInVolume(1200);
                 } else {
@@ -1235,6 +1251,7 @@ export const AudioPlayer = () => {
 
               audioRef.current.oncanplaythrough = () => {
                 if (!audioRef.current) return;
+                if (isStale()) return; // STALE GUARD — late canplaythrough after skip
 
                 if (isInitialLoadRef.current && savedCurrentTime > 5) {
                   audioRef.current.currentTime = savedCurrentTime;
@@ -1248,7 +1265,7 @@ export const AudioPlayer = () => {
                 }
 
                 if ((shouldPlay || shouldAutoResume) && audioRef.current.paused) {
-                  audioContextRef.current?.state === 'suspended' && audioContextRef.current.resume();
+                  audioContextRef.current?.state === 'suspended' && audioContextRef.current.resume().catch(() => {});
                   if (shouldAutoResume) {
                     fadeInVolume(1200);
                   } else {
@@ -1267,8 +1284,13 @@ export const AudioPlayer = () => {
               // BACKGROUND: Download to cache ASAP after playback starts (non-blocking)
               // 3s delay = start caching almost immediately so local fallback is ready fast
               // This prevents stream URL expiration from causing skips/stuttering
+              // STALE GUARD: capture this load's attempt so a late-firing onplay
+              // from a stale track doesn't trigger a cache for a track the user
+              // already skipped past.
               audioRef.current.onplay = () => {
+                if (isStale()) return;
                 setTimeout(() => {
+                  if (isStale()) return;
                   const currentState = usePlayerStore.getState();
                   if (currentState.currentTrack?.trackId === trackId && currentState.isPlaying) {
                     devLog('🎵 [VOYO] Starting aggressive background cache for streaming track');
@@ -1375,10 +1397,18 @@ export const AudioPlayer = () => {
       const { boostProfile: profile } = usePlayerStore.getState();
       setupAudioEnhancement(profile);
 
-      // FIX: Clear dangling handlers before hot-swap to prevent old callbacks interfering
+      // FIX: Clear dangling handlers before hot-swap to prevent old callbacks interfering.
+      // Also clear onplay — the edge-stream loadTrack path sets it, and if we don't
+      // clear it here, it keeps firing against the new src (triggering bogus cache downloads).
       audioRef.current.oncanplaythrough = null;
       audioRef.current.oncanplay = null;
-      audioRef.current.volume = 0;
+      audioRef.current.onplay = null;
+      // FADE: ramp masterGain to silence BEFORE swapping src, instead of setting
+      // audio.volume = 0. audio.volume at the HTML element level is a digital jump
+      // that leaks into the MediaElementAudioSourceNode as a click. The gain ramp
+      // is applied inside the Web Audio chain where it's click-free by design.
+      // audio.volume stays pinned at 1.0 throughout (no HTML-level jumps).
+      muteMasterGainInstantly();
       audioRef.current.src = cachedUrl;
       audioRef.current.load();
 
@@ -1402,19 +1432,22 @@ export const AudioPlayer = () => {
         // FIXED: Only switch playbackSource AFTER audio element is ready
         // This ensures iframe keeps playing until cached audio can take over seamlessly
         if (shouldPlayNow && audioRef.current.paused) {
-          audioContextRef.current?.state === 'suspended' && audioContextRef.current.resume();
+          audioContextRef.current?.state === 'suspended' && audioContextRef.current.resume().catch(() => {});
+          // Schedule fade-in BEFORE .play() so the ramp is queued when the
+          // first sample lands — click-free upgrade from stream to cached.
+          fadeInMasterGain(80);
           audioRef.current.play().then(() => {
             // NOW switch to cached mode - audio is playing from local cache
             isEdgeStreamRef.current = false; // No longer streaming from edge
             setPlaybackSource('cached');
-            audioRef.current!.volume = 1.0;
             devLog('🔄 [VOYO] Hot-swap complete! Now playing boosted audio');
           }).catch((err) => {
             // Play failed - don't switch source, keep iframe playing
             devLog('[VOYO] Hot-swap play failed, keeping iframe:', err);
           });
         } else if (!shouldPlayNow) {
-          // Paused state - switch source but don't play
+          // Paused state - switch source but don't play.
+          // masterGain is muted; play/pause effect will ramp it up on next play.
           setPlaybackSource('cached');
           devLog('🔄 [VOYO] Hot-swap ready (paused state)');
         }
@@ -1451,7 +1484,7 @@ export const AudioPlayer = () => {
       // 3. Start playback
       // 4. Ramp gain up to target (60ms) — buries the transient
       if (audioContextRef.current?.state === 'suspended') {
-        audioContextRef.current.resume();
+        audioContextRef.current.resume().catch(() => {});
       }
       if (audioEnhancedRef.current && gainNodeRef.current && audioContextRef.current) {
         const ctx = audioContextRef.current;
@@ -1532,7 +1565,8 @@ export const AudioPlayer = () => {
     if (!isPlaying && (playbackSource === 'cached' || playbackSource === 'r2')) {
       suspendTimerRef.current = setTimeout(() => {
         if (!usePlayerStore.getState().isPlaying && document.visibilityState === 'hidden') {
-          audioContextRef.current?.suspend();
+          // .suspend() returns a promise that can reject on iOS in some states.
+          audioContextRef.current?.suspend().catch(() => {});
           devLog('🔋 [Battery] AudioContext suspended (paused + hidden)');
         }
         suspendTimerRef.current = null;
@@ -1627,9 +1661,14 @@ export const AudioPlayer = () => {
             devLog('🔄 [VOYO] Emergency cache swap - switching to local cache');
             if (cachedUrlRef.current) URL.revokeObjectURL(cachedUrlRef.current);
             cachedUrlRef.current = cachedUrl;
-            // FIX: Clear dangling handlers before emergency swap
+            // FIX: Clear ALL dangling handlers before emergency swap —
+            // onplay in particular can leak from the edge-stream path.
             audioRef.current.oncanplaythrough = null;
             audioRef.current.oncanplay = null;
+            audioRef.current.onplay = null;
+            // FADE: ramp masterGain to silence before src swap to avoid pop.
+            // audio.volume stays at 1.0; loudness is governed by the Web Audio chain.
+            muteMasterGainInstantly();
             audioRef.current.src = cachedUrl;
             audioRef.current.load();
             audioRef.current.oncanplaythrough = () => {
@@ -1637,7 +1676,8 @@ export const AudioPlayer = () => {
               if (savedPos > 2) audioRef.current.currentTime = savedPos;
               isEdgeStreamRef.current = false;
               setPlaybackSource('cached');
-              audioRef.current.volume = 1.0; // FIX: Ensure volume is restored
+              // Queue the fade-in BEFORE play() so first samples land under ramp.
+              fadeInMasterGain(80);
               audioRef.current.play().catch(() => {});
               devLog('🔄 [VOYO] Emergency cache swap complete');
             };
@@ -1749,10 +1789,16 @@ export const AudioPlayer = () => {
 
     const savedPos = usePlayerStore.getState().currentTime;
 
-    // FIX: Clear dangling handlers before recovery to prevent old callbacks interfering
+    // FIX: Clear ALL dangling handlers before recovery (including onplay which
+    // the edge-stream loadTrack path sets). Also mute masterGain so the Web
+    // Audio chain doesn't pop when the src is swapped out from under it.
+    // audio.volume stays pinned at 1.0 — all loudness is controlled by
+    // masterGain inside the chain.
     if (audioRef.current) {
       audioRef.current.oncanplaythrough = null;
       audioRef.current.oncanplay = null;
+      audioRef.current.onplay = null;
+      muteMasterGainInstantly();
     }
 
     // RECOVERY 1 (FASTEST): Check local cache IMMEDIATELY
@@ -1774,7 +1820,8 @@ export const AudioPlayer = () => {
           if (savedPos > 2) audioRef.current.currentTime = savedPos;
           isEdgeStreamRef.current = false;
           setPlaybackSource('cached');
-          audioRef.current.volume = 1.0; // FIX: Ensure volume is restored during recovery
+          // Fade-in via masterGain — click-free. audio.volume stays at 1.0.
+          fadeInMasterGain(80);
           audioRef.current.play().then(() => {
             const elapsed = performance.now() - recoveryStart;
             devLog(`🔄 [VOYO] Cache recovery complete in ${elapsed.toFixed(0)}ms (swap: ${(performance.now() - swapStart).toFixed(0)}ms)`);
@@ -1797,7 +1844,7 @@ export const AudioPlayer = () => {
           if (savedPos > 2) audioRef.current.currentTime = savedPos;
           isEdgeStreamRef.current = false;
           setPlaybackSource('r2');
-          audioRef.current.volume = 1.0; // FIX: Ensure volume is restored during recovery
+          fadeInMasterGain(80);
           audioRef.current.play().then(() => {
             const elapsed = performance.now() - recoveryStart;
             devLog(`🔄 [VOYO] R2 recovery complete in ${elapsed.toFixed(0)}ms`);
@@ -1810,13 +1857,10 @@ export const AudioPlayer = () => {
     // RECOVERY 3: Re-extract stream URL from Edge Worker (last resort before skip)
     try {
       devLog('🔄 [VOYO] Recovery 3 - re-extracting stream URL');
-      // Use AbortController with 5s timeout to keep recovery fast
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 5000);
+      // Use AbortSignal.timeout for cleanliness — same baseline as api.ts.
       const streamResponse = await fetch(`${EDGE_WORKER_URL}/stream?v=${currentTrack.trackId}`, {
-        signal: controller.signal,
+        signal: AbortSignal.timeout(5000),
       });
-      clearTimeout(timeoutId);
       const streamData = await streamResponse.json();
       if (streamData.url && audioRef.current) {
         audioRef.current.src = streamData.url;
@@ -1826,7 +1870,7 @@ export const AudioPlayer = () => {
           audioRef.current.oncanplay = null;
           if (savedPos > 2) audioRef.current.currentTime = savedPos;
           isEdgeStreamRef.current = true;
-          audioRef.current.volume = 1.0; // FIX: Ensure volume is restored during recovery
+          fadeInMasterGain(80);
           audioRef.current.play().then(() => {
             const elapsed = performance.now() - recoveryStart;
             devLog(`🔄 [VOYO] Stream re-extract recovery complete in ${elapsed.toFixed(0)}ms`);

@@ -142,7 +142,7 @@ const CommunityVibesPanel = ({
         onClick={onToggle}
       >
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
+          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-500 to-[#D4A053] flex items-center justify-center">
             <MessageCircle className="w-4 h-4 text-white" />
           </div>
           <div className="text-left">
@@ -169,7 +169,7 @@ const CommunityVibesPanel = ({
               {reactions.length > 0 ? (
                 reactions.slice(-10).map((reaction) => (
                   <div key={reaction.id} className="flex items-start gap-3">
-                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-600 to-pink-600 flex items-center justify-center flex-shrink-0">
+                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-600 to-purple-800 flex items-center justify-center flex-shrink-0">
                       <User className="w-4 h-4 text-white" />
                     </div>
                     <div className="flex-1">
@@ -186,7 +186,7 @@ const CommunityVibesPanel = ({
               ) : (
                 fallbackComments.map((comment, i) => (
                   <div key={i} className="flex items-start gap-3">
-                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-600 to-pink-600 flex items-center justify-center flex-shrink-0">
+                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-600 to-purple-800 flex items-center justify-center flex-shrink-0">
                       <User className="w-4 h-4 text-white" />
                     </div>
                     <div className="flex-1">
@@ -212,7 +212,7 @@ const CommunityVibesPanel = ({
                 className="flex-1 bg-white/10 rounded-full px-4 py-3 text-sm text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-purple-500/50"
               />
               <button
-                className="w-12 h-12 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 flex items-center justify-center"
+                className="w-12 h-12 rounded-full bg-gradient-to-r from-purple-500 to-[#D4A053] flex items-center justify-center"
                 onClick={handleSubmit}
               >
                 <Send className="w-5 h-5 text-white" />
@@ -234,34 +234,35 @@ interface NowPlayingProps {
 }
 
 export const NowPlaying = ({ isOpen, onClose }: NowPlayingProps) => {
-  const {
-    currentTrack,
-    isPlaying,
-    progress,
-    duration,
-    nextTrack,
-    prevTrack,
-    seekTo,
-    queue,
-    removeFromQueue,
-    videoTarget,
-    setVideoTarget,
-  } = usePlayerStore();
+  // Fine-grained selectors — avoid re-rendering on unrelated store changes
+  const currentTrack = usePlayerStore(s => s.currentTrack);
+  const isPlaying = usePlayerStore(s => s.isPlaying);
+  const progress = usePlayerStore(s => s.progress);
+  const duration = usePlayerStore(s => s.duration);
+  const nextTrack = usePlayerStore(s => s.nextTrack);
+  const prevTrack = usePlayerStore(s => s.prevTrack);
+  const seekTo = usePlayerStore(s => s.seekTo);
+  const queue = usePlayerStore(s => s.queue);
+  const removeFromQueue = usePlayerStore(s => s.removeFromQueue);
+  const videoTarget = usePlayerStore(s => s.videoTarget);
+  const setVideoTarget = usePlayerStore(s => s.setVideoTarget);
 
   // Get current track position for hotspot detection
   const trackPosition = Math.round(progress); // 0-100 percentage
   const { handlePlayPause } = useMobilePlay();
 
-  const { trackPreferences, setExplicitLike } = usePreferenceStore();
-  const isLiked = currentTrack ? trackPreferences[currentTrack.trackId]?.explicitLike === true : false;
+  // Only subscribe to the specific preference field we actually read
+  const explicitLike = usePreferenceStore(
+    s => (currentTrack ? s.trackPreferences[currentTrack.trackId]?.explicitLike : undefined)
+  );
+  const setExplicitLike = usePreferenceStore(s => s.setExplicitLike);
+  const isLiked = explicitLike === true;
 
-  const {
-    createReaction,
-    fetchTrackReactions,
-    fetchTrackStats,
-    trackReactions,
-    trackStats: statsMap,
-  } = useReactionStore();
+  const createReaction = useReactionStore(s => s.createReaction);
+  const fetchTrackReactions = useReactionStore(s => s.fetchTrackReactions);
+  const fetchTrackStats = useReactionStore(s => s.fetchTrackStats);
+  const trackReactions = useReactionStore(s => s.trackReactions);
+  const statsMap = useReactionStore(s => s.trackStats);
   const { dashId } = useAuth();
 
   // State
@@ -614,7 +615,7 @@ export const NowPlaying = ({ isOpen, onClose }: NowPlayingProps) => {
                 {/* Queue Header */}
                 <div className="flex items-center justify-between px-5 py-4 border-b border-white/10">
                   <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
+                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-500 to-[#D4A053] flex items-center justify-center">
                       <ListMusic className="w-4 h-4 text-white" />
                     </div>
                     <div>

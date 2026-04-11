@@ -115,7 +115,7 @@ export const DJTextInput = ({ isOpen, onClose, onSubmit }: DJTextInputProps) => 
                 className="flex-1 px-4 py-3 rounded-full bg-white/5 border border-white/10 text-white placeholder:text-white/30 focus:outline-none focus:border-purple-500/50"
               />
               <button
-                className="p-3 rounded-full bg-gradient-to-r from-purple-500 to-pink-500"
+                className="p-3 rounded-full bg-gradient-to-r from-purple-500 to-[#D4A053]"
                 onClick={handleSubmit}
               >
                 <Send className="w-5 h-5 text-white" />
@@ -139,7 +139,15 @@ interface PortraitVOYOProps {
 }
 
 export const PortraitVOYO = ({ onSearch, onDahub, onHome }: PortraitVOYOProps) => {
-  const { isPlaying, togglePlay, refreshRecommendations, setVolume, volume, voyoActiveTab, setVoyoTab, playTrack } = usePlayerStore();
+  // Fine-grained selectors — avoid re-render on every progress tick.
+  const isPlaying = usePlayerStore(s => s.isPlaying);
+  const togglePlay = usePlayerStore(s => s.togglePlay);
+  const refreshRecommendations = usePlayerStore(s => s.refreshRecommendations);
+  const setVolume = usePlayerStore(s => s.setVolume);
+  const volume = usePlayerStore(s => s.volume);
+  const voyoActiveTab = usePlayerStore(s => s.voyoActiveTab);
+  const setVoyoTab = usePlayerStore(s => s.setVoyoTab);
+  const playTrack = usePlayerStore(s => s.playTrack);
 
   const [djMode, setDjMode] = useState<DJMode>('idle');
   const [djResponse, setDjResponse] = useState<string | null>(null);

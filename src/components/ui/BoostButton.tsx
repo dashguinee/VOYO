@@ -267,13 +267,12 @@ export const BoostButton = ({ variant = 'toolbar', className = '' }: BoostButton
   const boostProfile = usePlayerStore((state) => state.boostProfile) as BoostPreset;
   const setBoostProfile = usePlayerStore((state) => state.setBoostProfile);
 
-  const {
-    boostTrack,
-    getDownloadStatus,
-    downloads,
-    isTrackBoosted,
-    lastBoostCompletion,
-  } = useDownloadStore();
+  // Fine-grained selectors — avoid re-render on every unrelated download state change.
+  const boostTrack = useDownloadStore(s => s.boostTrack);
+  const getDownloadStatus = useDownloadStore(s => s.getDownloadStatus);
+  const downloads = useDownloadStore(s => s.downloads);
+  const isTrackBoosted = useDownloadStore(s => s.isTrackBoosted);
+  const lastBoostCompletion = useDownloadStore(s => s.lastBoostCompletion);
 
   const [isCached, setIsCached] = useState(false);
   const [showSparks, setShowSparks] = useState(false);

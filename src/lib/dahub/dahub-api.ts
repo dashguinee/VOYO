@@ -250,25 +250,29 @@ export const friendsAPI = {
       const accountIds = userServices.map(s => s.account_id).filter(Boolean);
       if (accountIds.length === 0) return [];
 
-      // Step 2: Find other users on the same accounts
-      const { data: sharedMembers, error: membersError } = await ccSupabase
-        .from('user_services')
-        .select(`
-          core_id,
-          account_id,
-          service_type,
-          citizens!inner(core_id, full_name)
-        `)
-        .in('account_id', accountIds)
-        .neq('core_id', userId);
+      // Step 2 + 3 in parallel: these both only need data from Step 1.
+      // Old code ran them serially (~2 RTTs). Now they share one RTT.
+      const [sharedMembersRes, friendshipsRes] = await Promise.all([
+        ccSupabase
+          .from('user_services')
+          .select(`
+            core_id,
+            account_id,
+            service_type,
+            citizens!inner(core_id, full_name)
+          `)
+          .in('account_id', accountIds)
+          .neq('core_id', userId),
+        ccSupabase
+          .from('friendships')
+          .select('friend_id, status')
+          .eq('user_id', userId),
+      ]);
 
+      const { data: sharedMembers, error: membersError } = sharedMembersRes;
       if (membersError || !sharedMembers?.length) return [];
 
-      // Step 3: Get existing friend relationships to determine status
-      const { data: friendships } = await ccSupabase
-        .from('friendships')
-        .select('friend_id, status')
-        .eq('user_id', userId);
+      const { data: friendships } = friendshipsRes;
 
       const friendMap = new Map<string, string>();
       (friendships || []).forEach((f: any) => {

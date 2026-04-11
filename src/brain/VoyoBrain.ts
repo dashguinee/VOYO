@@ -468,6 +468,8 @@ CRITICAL RULES:
           googleSearch: {}
         }]
       }),
+      // Brain call is the big daddy — longer budget, but still bounded.
+      signal: AbortSignal.timeout(30000),
     });
 
     if (!response.ok) {

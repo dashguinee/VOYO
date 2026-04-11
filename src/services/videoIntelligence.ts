@@ -420,7 +420,10 @@ export async function getVideoById(youtubeId: string): Promise<VideoIntelligence
 export async function searchYouTube(query: string): Promise<VideoIntelligence | null> {
   try {
     // Call our server endpoint that uses ytsr
-    const response = await fetch(`/api/youtube/search?q=${encodeURIComponent(query)}`);
+    const response = await fetch(
+      `/api/youtube/search?q=${encodeURIComponent(query)}`,
+      { signal: AbortSignal.timeout(10000) }
+    );
 
     if (!response.ok) {
       devWarn('[VOYO Intelligence] YouTube search failed');
@@ -468,7 +471,10 @@ export interface RelatedVideo {
 export async function getRelatedVideos(videoId: string, limit = 5): Promise<RelatedVideo[]> {
   try {
     const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-    const response = await fetch(`${API_BASE}/related?v=${videoId}&limit=${limit}`);
+    const response = await fetch(
+      `${API_BASE}/related?v=${videoId}&limit=${limit}`,
+      { signal: AbortSignal.timeout(8000) }
+    );
 
     if (!response.ok) {
       devWarn('[VOYO Intelligence] Related videos failed');
@@ -536,15 +542,13 @@ export async function extractVideosFromScreenshot(
   const extractedVideos = parseVideoTitles(ocrResult);
   devLog('[VOYO Intelligence] Parsed videos:', extractedVideos);
 
-  // 3. Find YouTube IDs for each
-  const videoIds: string[] = [];
-
-  for (const video of extractedVideos) {
-    const id = await processExtractedTitle(video, discoveredBy);
-    if (id) {
-      videoIds.push(id);
-    }
-  }
+  // 3. Find YouTube IDs for each (parallel — was serial)
+  const results = await Promise.all(
+    extractedVideos.map(video =>
+      processExtractedTitle(video, discoveredBy).catch(() => null)
+    )
+  );
+  const videoIds: string[] = results.filter((id): id is string => Boolean(id));
 
   devLog('[VOYO Intelligence] Found IDs:', videoIds);
   return videoIds;

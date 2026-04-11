@@ -66,6 +66,7 @@ import { TRACKS } from './data/tracks';
 import { syncManyToDatabase } from './services/databaseSync';
 import { DashAuthBadge } from './lib/dash-auth';
 import { useUniverseStore } from './store/universeStore';
+import * as voyoApi from './lib/voyo-api';
 
 // ============================================
 // ERROR BOUNDARY — catches render crashes, shows fallback instead of white screen
@@ -1289,7 +1290,11 @@ function App() {
     let dmUnsubscribe: (() => void) | null = null;
     const setupDMSubscription = async () => {
       try {
-        const { messagesAPI, isConfigured } = await import('./lib/voyo-api');
+        // Static import — voyo-api is already in the main chunk via other static
+        // importers (Hub.tsx, ProfilePage.tsx, etc.), so a dynamic import here
+        // just triggered a Vite "static and dynamic import" warning without
+        // actually splitting anything off.
+        const { messagesAPI, isConfigured } = voyoApi;
         if (!isConfigured) return;
 
         const dashId = getDashId();

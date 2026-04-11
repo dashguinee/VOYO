@@ -56,7 +56,7 @@ const MessageBubble = memo(({ message, isOwnMessage }: MessageBubbleProps) => {
           <span className="text-white/40 text-[10px]">{time}</span>
           {isOwnMessage && (
             message.read_at ? (
-              <CheckCheck className="w-3 h-3 text-blue-400" />
+              <CheckCheck className="w-3 h-3 text-purple-400" />
             ) : (
               <Check className="w-3 h-3 text-white/40" />
             )

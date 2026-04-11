@@ -24,7 +24,7 @@ interface UniversePanelProps {
 
 export const UniversePanel = ({ isOpen, onClose }: UniversePanelProps) => {
   const { isLoggedIn, dashId, voyoId, displayName, signOut, signIn, isLoading: authLoading, error: authError } = useAuth();
-  const { trackPreferences } = usePreferenceStore();
+  const trackPreferences = usePreferenceStore(s => s.trackPreferences);
 
   // Tab state - show auth if not logged in, stats if logged in
   const [activeTab, setActiveTab] = useState<'auth' | 'stats' | 'profile' | 'portal' | 'discover'>(isLoggedIn ? 'stats' : 'auth');
@@ -332,7 +332,7 @@ export const UniversePanel = ({ isOpen, onClose }: UniversePanelProps) => {
                     </div>
 
                     <div className="p-4 rounded-xl bg-white/5 border border-white/10">
-                      <div className="flex items-center gap-2 text-yellow-400 mb-2">
+                      <div className="flex items-center gap-2 text-[#D4A053] mb-2">
                         <Zap className="w-4 h-4" />
                         <span className="text-xs uppercase tracking-wider">OYEs</span>
                       </div>
@@ -363,7 +363,7 @@ export const UniversePanel = ({ isOpen, onClose }: UniversePanelProps) => {
                   </div>
 
                   {/* Share URL */}
-                  <div className="p-4 rounded-xl bg-gradient-to-r from-purple-500/10 to-pink-500/10 border border-purple-500/20">
+                  <div className="p-4 rounded-xl bg-gradient-to-r from-purple-500/10 to-[#D4A053]/10 border border-purple-500/20">
                     <p className="text-white/50 text-xs mb-2">Your Verse URL</p>
                     <div className="flex items-center gap-2">
                       <code className="flex-1 text-white text-sm">
@@ -473,7 +473,7 @@ export const UniversePanel = ({ isOpen, onClose }: UniversePanelProps) => {
               {/* PORTAL TAB */}
               {activeTab === 'portal' && isLoggedIn && (
                 <div className="space-y-4">
-                  <div className="p-4 rounded-xl bg-gradient-to-r from-purple-500/10 to-pink-500/10 border border-purple-500/20">
+                  <div className="p-4 rounded-xl bg-gradient-to-r from-purple-500/10 to-[#D4A053]/10 border border-purple-500/20">
                     <h3 className="text-white font-semibold mb-2">What is a Portal?</h3>
                     <p className="text-white/70 text-sm">
                       Open your portal to let friends join your listening session in real-time.

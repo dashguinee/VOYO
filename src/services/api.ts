@@ -113,6 +113,10 @@ export async function tryEdgeExtraction(voyoId: string): Promise<EdgeStreamResul
       signal: AbortSignal.timeout(8000)
     });
 
+    // Guard against non-2xx responses that return HTML or empty bodies —
+    // calling .json() on those throws and we want to return null cleanly.
+    if (!response.ok) return null;
+
     const data = await response.json();
 
     if (data.url) {
@@ -333,6 +337,8 @@ export async function getVideoDetails(videoId: string): Promise<any> {
     const response = await fetch(`${API_URL}/stream?v=${videoId}`, {
       signal: AbortSignal.timeout(10000),
     });
+    // Guard — calling .json() on a non-ok/empty response throws.
+    if (!response.ok) return null;
     return response.json();
   } catch (error) {
     return null;
@@ -406,6 +412,7 @@ export async function isDownloaded(trackId: string): Promise<boolean> {
     const response = await fetch(`${API_URL}/downloaded`, {
       signal: AbortSignal.timeout(5000),
     });
+    if (!response.ok) return false;
     const data = await response.json();
     return (data.downloads || []).includes(trackId);
   } catch {

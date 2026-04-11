@@ -67,6 +67,7 @@ export async function getLyrics(
       headers: {
         'User-Agent': 'VOYO Music/1.0 (https://voyomusic.com)',
       },
+      signal: AbortSignal.timeout(8000),
     });
 
     if (!response.ok) {
@@ -115,6 +116,7 @@ export async function searchLyrics(
       headers: {
         'User-Agent': 'VOYO Music/1.0 (https://voyomusic.com)',
       },
+      signal: AbortSignal.timeout(8000),
     });
 
     if (!response.ok) {

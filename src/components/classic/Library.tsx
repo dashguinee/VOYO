@@ -213,12 +213,12 @@ const SongRow = ({
         <div className="flex items-center gap-2">
           <p className="text-white/50 text-sm truncate">{track.artist}</p>
           {cacheQuality === 'boosted' && (
-            <span className="text-xs text-yellow-400 font-medium">
+            <span className="text-xs text-[#D4A053] font-medium">
               HD
             </span>
           )}
           {cacheQuality === 'standard' && (
-            <span className="text-xs text-emerald-400 font-medium">
+            <span className="text-xs text-white/60 font-medium">
               Offline
             </span>
           )}
@@ -272,10 +272,11 @@ export const Library = ({ onTrackClick }: LibraryProps) => {
   const addToQueue = usePlayerStore(s => s.addToQueue);
   const queue = usePlayerStore(s => s.queue);
   const history = usePlayerStore(s => s.history);
-  const { playlists } = usePlaylistStore();
+  const playlists = usePlaylistStore(s => s.playlists);
 
   // Get liked tracks from preference store (persisted to localStorage)
-  const { trackPreferences, setExplicitLike } = usePreferenceStore();
+  const trackPreferences = usePreferenceStore(s => s.trackPreferences);
+  const setExplicitLike = usePreferenceStore(s => s.setExplicitLike);
 
   // Build dynamic filter tabs: base + playlists
   const filters = useMemo(() => {
@@ -298,8 +299,10 @@ export const Library = ({ onTrackClick }: LibraryProps) => {
     return liked;
   }, [trackPreferences]);
 
-  // Get boosted tracks from download store
-  const { cachedTracks, initialize: initDownloads, isInitialized } = useDownloadStore();
+  // Get boosted tracks from download store (fine-grained selectors)
+  const cachedTracks = useDownloadStore(s => s.cachedTracks);
+  const initDownloads = useDownloadStore(s => s.initialize);
+  const isInitialized = useDownloadStore(s => s.isInitialized);
 
   // Initialize download store on mount
   useEffect(() => {

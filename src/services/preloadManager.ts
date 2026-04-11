@@ -136,7 +136,13 @@ export async function preloadNextTrack(
       await waitForAudioReady(audioEl, signal);
 
       if (signal.aborted) {
+        // FIX: remove the half-baked entry from the map too. Previously
+        // aborted preloads left zombie entries that would be returned by
+        // isPreloaded()/getPreloadedTrack() (isReady=false) forever.
         audioEl.src = '';
+        audioEl.pause();
+        state.preloadedTracks.delete(normalizedId);
+        trackAbortControllers.delete(normalizedId);
         return null;
       }
 
@@ -150,7 +156,10 @@ export async function preloadNextTrack(
     // STEP 2: Check R2 collective cache
     const r2Result = await checkR2Cache(normalizedId);
 
-    if (signal.aborted) return null;
+    if (signal.aborted) {
+      trackAbortControllers.delete(normalizedId);
+      return null;
+    }
 
     if (r2Result.exists && r2Result.url) {
       devLog('🔮 [Preload] Found in R2, preloading audio element');
@@ -174,6 +183,9 @@ export async function preloadNextTrack(
 
       if (signal.aborted) {
         audioEl.src = '';
+        audioEl.pause();
+        state.preloadedTracks.delete(normalizedId);
+        trackAbortControllers.delete(normalizedId);
         return null;
       }
 
@@ -208,9 +220,17 @@ export async function preloadNextTrack(
         { signal: combinedSignal },
       );
 
-      if (signal.aborted) return null;
+      if (signal.aborted) {
+        trackAbortControllers.delete(normalizedId);
+        return null;
+      }
 
       const streamData = await streamResponse.json();
+
+      if (signal.aborted) {
+        trackAbortControllers.delete(normalizedId);
+        return null;
+      }
 
       if (!streamData.url) {
         devWarn('🔮 [Preload] No stream URL available for:', normalizedId);
@@ -239,6 +259,9 @@ export async function preloadNextTrack(
 
       if (signal.aborted) {
         audioEl.src = '';
+        audioEl.pause();
+        state.preloadedTracks.delete(normalizedId);
+        trackAbortControllers.delete(normalizedId);
         return null;
       }
 
@@ -381,6 +404,11 @@ export function cleanupPreloaded(): void {
 
 /**
  * Cancel any in-progress preloads
+ *
+ * Also sweeps the preloadedTracks map for half-baked (isReady=false) entries
+ * whose audio elements were just orphaned by the abort. Without this sweep,
+ * repeated cancellations (e.g. rapid track-skipping) would leave zombie
+ * entries in the map with dead audio elements, slowly leaking memory.
  */
 export function cancelPreload(): void {
   if (preloadAbortController) {
@@ -388,10 +416,21 @@ export function cancelPreload(): void {
     preloadAbortController = null;
   }
   // Cancel all track-specific abort controllers
-  for (const [key, ctrl] of trackAbortControllers) {
+  for (const [, ctrl] of trackAbortControllers) {
     ctrl.abort();
   }
   trackAbortControllers.clear();
+  // Sweep non-ready entries from the multi-track cache.
+  for (const [key, entry] of state.preloadedTracks) {
+    if (!entry.isReady) {
+      if (entry.audioElement) {
+        try { entry.audioElement.pause(); } catch {}
+        entry.audioElement.src = '';
+        entry.audioElement = null;
+      }
+      state.preloadedTracks.delete(key);
+    }
+  }
   state.isPreloading = false;
 }
 

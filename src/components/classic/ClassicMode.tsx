@@ -44,7 +44,7 @@ const MiniPlayer = ({ onVOYOClick, onOpenFull }: { onVOYOClick: () => void; onOp
   const repeatMode = usePlayerStore(s => s.repeatMode);
   const toggleShuffle = usePlayerStore(s => s.toggleShuffle);
   const cycleRepeat = usePlayerStore(s => s.cycleRepeat);
-  const { createReaction } = useReactionStore();
+  const createReaction = useReactionStore(s => s.createReaction);
   const { dashId } = useAuth();
   const [shouldScroll, setShouldScroll] = useState(false);
   const [swipeDirection, setSwipeDirection] = useState<'left' | 'right' | null>(null);

@@ -95,7 +95,10 @@ const WaveformBars = ({ isPlaying }: { isPlaying: boolean }) => {
 // Main Play Circle (landscape)
 // Triple-tap = Video Mode, Hold (500ms) = DJ Mode
 const PlayCircle = ({ onTripleTap, onHold }: { onTripleTap: () => void; onHold: () => void }) => {
-  const { isPlaying, togglePlay, progress } = usePlayerStore();
+  // Fine-grained selectors — avoid full destructure re-renders.
+  const isPlaying = usePlayerStore(s => s.isPlaying);
+  const togglePlay = usePlayerStore(s => s.togglePlay);
+  const progress = usePlayerStore(s => s.progress);
   const tapCountRef = useRef(0);
   const tapTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const holdTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -159,11 +162,11 @@ const PlayCircle = ({ onTripleTap, onHold }: { onTripleTap: () => void; onHold: 
     <button
       className="relative w-36 h-36 rounded-full flex items-center justify-center"
       style={{
-        background: 'conic-gradient(from 0deg, #a855f7, #ec4899, #a855f7)',
+        background: 'conic-gradient(from 0deg, #8b5cf6, #D4A053, #8b5cf6)',
         padding: '3px',
         boxShadow: isPlaying
-          ? '0 0 60px rgba(168, 85, 247, 0.6), 0 0 100px rgba(236, 72, 153, 0.3)'
-          : '0 0 30px rgba(168, 85, 247, 0.3)',
+          ? '0 0 60px rgba(139, 92, 246, 0.6), 0 0 100px rgba(212, 160, 83, 0.3)'
+          : '0 0 30px rgba(139, 92, 246, 0.3)',
         transition: 'box-shadow 0.3s ease',
       }}
       onPointerDown={handlePointerDown}
@@ -371,7 +374,7 @@ const YouTubeInterceptor = ({ onVideoExtracted }: InterceptorProps) => {
                   boxShadow: '0 0 0 2px rgba(147, 51, 234, 0.6), 0 0 20px rgba(147, 51, 234, 0.3)',
                 }}
               />
-              <div className="relative bg-gradient-to-r from-purple-600 to-pink-600 px-8 py-4 rounded-xl border-4 border-white/30">
+              <div className="relative bg-gradient-to-r from-purple-600 to-[#D4A053] px-8 py-4 rounded-xl border-4 border-white/30">
                 {isProcessing ? (
                   <div className="flex items-center gap-3">
                     <Loader2 className="w-6 h-6 text-white animate-spin" />
@@ -397,7 +400,7 @@ const YouTubeInterceptor = ({ onVideoExtracted }: InterceptorProps) => {
             >
               {/* Rotating border effect */}
               <div
-                className="absolute -inset-1 rounded-lg bg-gradient-to-r from-purple-500 via-pink-500 to-purple-500"
+                className="absolute -inset-1 rounded-lg bg-gradient-to-r from-purple-500 via-[#D4A053] to-purple-500"
                 style={{ backgroundSize: '200% 200%', animation: 'voyo-gradient-shift 3s linear infinite' }}
               />
               <div className="relative bg-black px-8 py-4 rounded-lg m-[3px]">
@@ -454,7 +457,7 @@ const YouTubeInterceptor = ({ onVideoExtracted }: InterceptorProps) => {
         <div
           className="absolute bottom-24 left-1/2 -translate-x-1/2 z-50 animate-[voyo-scale-in_0.2s_ease]"
         >
-          <div className="bg-gradient-to-r from-purple-600 to-pink-600 text-white px-5 py-2.5 rounded-full text-sm font-bold shadow-xl flex items-center gap-2">
+          <div className="bg-gradient-to-r from-purple-600 to-[#D4A053] text-white px-5 py-2.5 rounded-full text-sm font-bold shadow-xl flex items-center gap-2">
             <span>{feedback}</span>
           </div>
         </div>
@@ -464,26 +467,26 @@ const YouTubeInterceptor = ({ onVideoExtracted }: InterceptorProps) => {
 };
 
 export const LandscapeVOYO = ({ onVideoMode }: LandscapeVOYOProps) => {
-  const {
-    currentTrack,
-    history,
-    queue,
-    hotTracks,
-    discoverTracks,
-    nextTrack,
-    prevTrack,
-    playTrack,
-    addToQueue,
-    addReaction,
-    volume,
-    refreshRecommendations,
-    isPlaying,
-    togglePlay,
-    playbackSource,
-    setPlaybackSource,
-    currentTime,
-    setVideoTarget,
-  } = usePlayerStore();
+  // Fine-grained selectors — huge landscape view, must avoid full re-render
+  // on every progress/currentTime tick.
+  const currentTrack = usePlayerStore(s => s.currentTrack);
+  const history = usePlayerStore(s => s.history);
+  const queue = usePlayerStore(s => s.queue);
+  const hotTracks = usePlayerStore(s => s.hotTracks);
+  const discoverTracks = usePlayerStore(s => s.discoverTracks);
+  const nextTrack = usePlayerStore(s => s.nextTrack);
+  const prevTrack = usePlayerStore(s => s.prevTrack);
+  const playTrack = usePlayerStore(s => s.playTrack);
+  const addToQueue = usePlayerStore(s => s.addToQueue);
+  const addReaction = usePlayerStore(s => s.addReaction);
+  const volume = usePlayerStore(s => s.volume);
+  const refreshRecommendations = usePlayerStore(s => s.refreshRecommendations);
+  const isPlaying = usePlayerStore(s => s.isPlaying);
+  const togglePlay = usePlayerStore(s => s.togglePlay);
+  const playbackSource = usePlayerStore(s => s.playbackSource);
+  const setPlaybackSource = usePlayerStore(s => s.setPlaybackSource);
+  const currentTime = usePlayerStore(s => s.currentTime);
+  const setVideoTarget = usePlayerStore(s => s.setVideoTarget);
 
   // Set video target to landscape on mount, hidden on unmount
   useEffect(() => {
@@ -685,7 +688,7 @@ export const LandscapeVOYO = ({ onVideoMode }: LandscapeVOYOProps) => {
               {/* Left Reactions */}
               <div className="flex flex-col gap-2">
                 <button
-                  className="px-3 py-1.5 rounded-full bg-white/10 backdrop-blur-sm border border-yellow-500/40 text-white text-sm"
+                  className="px-3 py-1.5 rounded-full bg-white/10 backdrop-blur-sm border border-[#D4A053]/40 text-white text-sm"
                   onClick={() => { addReaction({ type: 'oyo', multiplier: 1, text: 'OYO', emoji: '🔥', x: 50, y: 50, userId: 'user' }); startHideTimer(); }}
                 >
                   OYO 🔥
@@ -729,7 +732,7 @@ export const LandscapeVOYO = ({ onVideoMode }: LandscapeVOYOProps) => {
               {/* Right Reactions */}
               <div className="flex flex-col gap-2">
                 <button
-                  className="px-3 py-1.5 rounded-full bg-white/10 backdrop-blur-sm border border-cyan-500/40 text-white text-sm"
+                  className="px-3 py-1.5 rounded-full bg-white/10 backdrop-blur-sm border border-white/20 text-white text-sm"
                   onClick={() => { addReaction({ type: 'wazzguan', multiplier: 1, text: 'Wazzguán', emoji: '👋', x: 50, y: 50, userId: 'user' }); startHideTimer(); }}
                 >
                   Wazzguán 👋
@@ -746,7 +749,7 @@ export const LandscapeVOYO = ({ onVideoMode }: LandscapeVOYOProps) => {
               <div className="ml-4">
                 <BoostButton variant="toolbar" />
                 {playbackSource === 'cached' && (
-                  <span className="block text-[10px] text-yellow-400 text-center mt-1">HD Audio</span>
+                  <span className="block text-[10px] text-[#D4A053] text-center mt-1">HD Audio</span>
                 )}
               </div>
             </div>

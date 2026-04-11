@@ -143,6 +143,7 @@ export async function transcribeAudio(
       'Authorization': `Bearer ${OPENAI_API_KEY}`,
     },
     body: formData,
+    signal: AbortSignal.timeout(60000), // Whisper can be slow for longer audio
   });
 
   if (!response.ok) {
@@ -331,7 +332,9 @@ export async function generatePhoneticLyrics(
   devLog(`[Whisper] Generating phonetic lyrics for: ${trackTitle || trackId}`);
 
   // Fetch audio from URL
-  const response = await fetch(audioUrl);
+  const response = await fetch(audioUrl, {
+    signal: AbortSignal.timeout(30000),
+  });
   if (!response.ok) {
     throw new Error(`Failed to fetch audio: ${response.statusText}`);
   }

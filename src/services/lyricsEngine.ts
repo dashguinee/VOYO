@@ -334,21 +334,26 @@ export async function generateLyrics(
 
   try {
     // =====================================
-    // PRIORITY 0: SYNCED LYRICS BACKEND (Best African coverage)
+    // PRIORITY 0+1: SYNCED LYRICS BACKEND + LRCLIB (parallel race)
+    // Both are free, independent, and fast. Fire them together and prefer
+    // syncedlyrics when it wins (better African coverage), otherwise fall
+    // back to LRCLIB. This avoids the old serial waterfall that would
+    // wait ~15s for syncedlyrics to time out before even asking LRCLIB.
     // =====================================
-    updateProgress('fetching', 5, 'Checking syncedlyrics (community sources)...');
-    const syncedResult = await fetchSyncedLyrics(track.id, track.title, track.artist);
+    updateProgress('fetching', 5, 'Checking syncedlyrics + LRCLIB in parallel...');
+    const [syncedSettled, lrcSettled] = await Promise.allSettled([
+      fetchSyncedLyrics(track.id, track.title, track.artist),
+      getLRCLibLyrics(track.title, track.artist, track.duration),
+    ]);
+    const syncedResult = syncedSettled.status === 'fulfilled' ? syncedSettled.value : null;
+    const lrcResult = lrcSettled.status === 'fulfilled'
+      ? lrcSettled.value
+      : { found: false as const, source: 'lrclib' as const };
 
-    if (syncedResult.found && syncedResult.lines.length > 0) {
+    if (syncedResult && syncedResult.found && syncedResult.lines.length > 0) {
       updateProgress('complete', 100, `Found via syncedlyrics! ${syncedResult.lines.length} synced lines`);
       return syncedResultToEnriched(syncedResult, track);
     }
-
-    // =====================================
-    // PRIORITY 1: LRCLIB (FREE, INSTANT!)
-    // =====================================
-    updateProgress('fetching', 10, 'Checking LRCLIB (free lyrics database)...');
-    const lrcResult = await getLRCLibLyrics(track.title, track.artist, track.duration);
 
     if (lrcResult.found && lrcResult.lines) {
       updateProgress('complete', 100, `Found in LRCLIB! ${lrcResult.lines.length} synced lines`);
@@ -458,7 +463,9 @@ export async function generateLyrics(
 
     // Stage 1: Fetch audio
     updateProgress('fetching', 10, 'Fetching audio for Whisper transcription...');
-    const audioResponse = await fetch(audioUrl);
+    const audioResponse = await fetch(audioUrl, {
+      signal: AbortSignal.timeout(30000),
+    });
     if (!audioResponse.ok) {
       throw new Error(`Failed to fetch audio: ${audioResponse.statusText}`);
     }

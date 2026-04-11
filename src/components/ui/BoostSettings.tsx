@@ -20,17 +20,16 @@ interface BoostSettingsProps {
 }
 
 export const BoostSettings = ({ isOpen, onClose }: BoostSettingsProps) => {
-  const {
-    autoBoostEnabled,
-    enableAutoBoost,
-    disableAutoBoost,
-    downloadSetting,
-    updateSetting,
-    cachedTracks,
-    cacheSize,
-    clearAllDownloads,
-    manualBoostCount,
-  } = useDownloadStore();
+  // Fine-grained selectors — avoid re-render on every download progress tick.
+  const autoBoostEnabled = useDownloadStore(s => s.autoBoostEnabled);
+  const enableAutoBoost = useDownloadStore(s => s.enableAutoBoost);
+  const disableAutoBoost = useDownloadStore(s => s.disableAutoBoost);
+  const downloadSetting = useDownloadStore(s => s.downloadSetting);
+  const updateSetting = useDownloadStore(s => s.updateSetting);
+  const cachedTracks = useDownloadStore(s => s.cachedTracks);
+  const cacheSize = useDownloadStore(s => s.cacheSize);
+  const clearAllDownloads = useDownloadStore(s => s.clearAllDownloads);
+  const manualBoostCount = useDownloadStore(s => s.manualBoostCount);
 
   // Battery fix: fine-grained selectors to avoid re-render on progress/currentTime changes
   const boostProfile = usePlayerStore(s => s.boostProfile);

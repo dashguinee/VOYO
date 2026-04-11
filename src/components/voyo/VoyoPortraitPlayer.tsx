@@ -77,11 +77,12 @@ const ProgressSlider = memo(({ isScrubbing }: { isScrubbing: boolean }) => {
       <div className="absolute left-0 right-0 h-[1px] bg-white/15 rounded-full" />
       {/* No seek input - VOYO is music, not video. You feel it, you don't scrub it. */}
       <div
-        className="absolute w-[5px] h-[5px] rounded-full bg-red-500/90"
+        className="absolute w-[5px] h-[5px] rounded-full"
         style={{
           left: `${duration > 0 ? (currentTime / duration) * 100 : 0}%`,
           transform: 'translateX(-50%)',
-          boxShadow: isScrubbing ? '0 0 10px rgba(239,68,68,0.9)' : '0 0 4px rgba(239,68,68,0.4)',
+          background: '#B54A2E',
+          boxShadow: isScrubbing ? '0 0 10px rgba(181,74,46,0.9)' : '0 0 4px rgba(181,74,46,0.4)',
           }}
       />
     </div>
@@ -1005,7 +1006,8 @@ const RightToolbar = memo(({ onSettingsClick }: { onSettingsClick: () => void })
   const currentTrack = usePlayerStore(state => state.currentTrack);
 
   // Get like state from preference store (persisted)
-  const { trackPreferences, setExplicitLike } = usePreferenceStore();
+  const trackPreferences = usePreferenceStore(s => s.trackPreferences);
+  const setExplicitLike = usePreferenceStore(s => s.setExplicitLike);
   const isLiked = currentTrack?.trackId ? trackPreferences[currentTrack.trackId]?.explicitLike === true : false;
 
   const handleLike = () => {
@@ -1252,13 +1254,13 @@ const PortalBelt = memo(({ tracks, onTap, onTeaser, onQueueAdd, playedTrackIds, 
   // Calculate entrance effect based on position and direction
   const getEntranceStyle = (x: number, containerWidth: number) => {
     if (isHot) {
-      // HOT: Cards enter from LEFT (x near 0), add red glow fade-in
+      // HOT: Cards enter from LEFT (x near 0), add rust ember glow fade-in
       const entranceZone = cardWidth * 1.5;
       if (x < entranceZone) {
         const progress = Math.max(0, x / entranceZone);
         return {
           opacity: 0.4 + progress * 0.6,
-          filter: `drop-shadow(0 0 ${(1 - progress) * 8}px rgba(239, 68, 68, 0.6))`,
+          filter: `drop-shadow(0 0 ${(1 - progress) * 8}px rgba(181, 74, 46, 0.6))`,
         };
       }
     } else {
@@ -1630,7 +1632,7 @@ const BigCenterCard = memo(({ track, onExpandVideo, onShowLyrics, hideThumb }: {
       <SmartImage
         src={getTrackThumbnailUrl(track, 'high')}
         alt={`${track.title} by ${track.artist}`}
-        className="w-full h-full object-cover transition-transform duration-700 scale-110 group-hover:scale-125"
+        className="w-full h-full object-cover transition-transform duration-700 scale-[1.3] group-hover:scale-[1.4]"
         trackId={track.trackId}
         artist={track.artist}
         title={track.title}
@@ -3285,14 +3287,14 @@ export const VoyoPortraitPlayer = ({
   const { handlePlayPause } = useMobilePlay();
 
   // ====== REACTION SYSTEM - Community Spine ======
-  const {
-    createReaction,
-    categoryPulse,
-    subscribeToReactions,
-    isSubscribed,
-    recentReactions,
-    fetchRecentReactions
-  } = useReactionStore();
+  // Fine-grained selectors — broad destructure caused re-render when any
+  // reaction field changed (very noisy, realtime socket).
+  const createReaction = useReactionStore(s => s.createReaction);
+  const categoryPulse = useReactionStore(s => s.categoryPulse);
+  const subscribeToReactions = useReactionStore(s => s.subscribeToReactions);
+  const isSubscribed = useReactionStore(s => s.isSubscribed);
+  const recentReactions = useReactionStore(s => s.recentReactions);
+  const fetchRecentReactions = useReactionStore(s => s.fetchRecentReactions);
   const { dashId, isLoggedIn } = useAuth();
 
   // Subscribe to realtime reactions on mount
@@ -3676,7 +3678,7 @@ export const VoyoPortraitPlayer = ({
   // Calculate "Your Vibes" color - weighted average of boosted mode colors
   const getVibesColor = useCallback(() => {
     const modeColors: Record<string, { r: number; g: number; b: number }> = {
-      'afro-heat': { r: 239, g: 68, b: 68 },      // Red
+      'afro-heat': { r: 181, g: 74, b: 46 },      // Rust ember (deep, premium)
       'chill-vibes': { r: 59, g: 130, b: 246 },   // Blue
       'party-mode': { r: 167, g: 139, b: 250 },   // Purple-light
       'late-night': { r: 139, g: 92, b: 246 },    // Purple
@@ -4496,33 +4498,30 @@ export const VoyoPortraitPlayer = ({
 
         {/* Stream Labels - Enhanced Neon Style with Glow */}
         <div className="flex justify-between px-6 mb-3">
-          {/* HOT Label - Red Neon */}
+          {/* HOT Label — deep rust ember (mature, aged, premium) */}
           <button
             onClick={handleToggleHotBelt}
             className="flex items-center gap-1.5 px-2 py-1 rounded relative overflow-hidden"
             style={{
-              background: 'rgba(239,68,68,0.1)',
+              background: 'rgba(181,74,46,0.10)',
               boxShadow: isHotBeltActive
-                ? '0 0 15px rgba(239,68,68,0.4), inset 0 0 10px rgba(239,68,68,0.2)'
-                : '0 0 8px rgba(239,68,68,0.2)'
+                ? '0 0 15px rgba(181,74,46,0.4), inset 0 0 10px rgba(181,74,46,0.2)'
+                : '0 0 8px rgba(181,74,46,0.2)'
                 }}
           >
-            <div
-            >
-              <Flame size={12} className="text-rose-500" />
+            <div>
+              <Flame size={12} style={{ color: '#B54A2E' }} />
             </div>
             <span
               className="text-[11px] font-black tracking-[0.15em] uppercase"
-              style={{
-                color: '#ef4444',
-                }}
+              style={{ color: '#C86B3F' }}
             >
               HOT
             </span>
             {isHotBeltActive && (
               <span
                 className="text-[6px] font-bold ml-0.5"
-                style={{ color: '#fca5a5' }}
+                style={{ color: '#D8825A' }}
               >
                 ●
               </span>
@@ -4565,35 +4564,37 @@ export const VoyoPortraitPlayer = ({
 
           {/* ========== HOT ZONE (Left side) ========== */}
           <div className="flex-1 flex items-center relative h-full">
-            {/* Red Portal Line (left edge of HOT zone) - CLICKABLE SCROLL CONTROL */}
+            {/* Rust Portal Line (left edge of HOT zone) — deep ember, premium */}
             <button
               onClick={() => {
                 setHotScrollTrigger(prev => prev + 1);
                 setIsHotBeltActive(true);
-                // Trigger glow effect
                 setHotPortalGlow(true);
                 setTimeout(() => setHotPortalGlow(false), 800);
                 }}
               className="flex-shrink-0 w-5 h-20 relative z-20 ml-1 touch-manipulation"
               aria-label="Scroll HOT belt outward"
             >
-              {/* Portal line */}
+              {/* Portal line — deep rust gradient */}
               <div
                 className="h-full w-1.5 mx-auto rounded-full"
                 style={{
                   background: hotPortalGlow
-                    ? 'linear-gradient(180deg, #ff6b6b, #ff4444, #ff6b6b)'
-                    : 'linear-gradient(180deg, rgba(239,68,68,0.3), rgb(239,68,68), rgba(239,68,68,0.3))',
-                  boxShadow: hotPortalGlow ? '0 0 30px #ff4444' : '0 0 10px #ff4444',
+                    ? 'linear-gradient(180deg, #D8825A, #B54A2E, #D8825A)'
+                    : 'linear-gradient(180deg, rgba(181,74,46,0.3), rgb(181,74,46), rgba(181,74,46,0.3))',
+                  boxShadow: hotPortalGlow ? '0 0 30px #B54A2E' : '0 0 10px #B54A2E',
                 }}
               />
               {/* Ambient glow - always visible */}
-              <div className={`absolute inset-0 bg-red-500 blur-lg transition-opacity duration-300 ${hotPortalGlow ? 'opacity-100' : 'opacity-40'}`} />
+              <div
+                className={`absolute inset-0 blur-lg transition-opacity duration-300 ${hotPortalGlow ? 'opacity-100' : 'opacity-40'}`}
+                style={{ background: '#B54A2E' }}
+              />
               {/* Pulse ring on glow */}
-              
                 {hotPortalGlow && (
                   <div
-                    className="absolute inset-0 rounded-full border-2 border-red-400"
+                    className="absolute inset-0 rounded-full border-2"
+                    style={{ borderColor: '#D8825A' }}
                   />
                 )}
               
@@ -4627,20 +4628,20 @@ export const VoyoPortraitPlayer = ({
               className="absolute left-0 top-1/2 -translate-y-1/2 w-16 h-28 -translate-x-12 pointer-events-none"
               style={{ background: 'linear-gradient(to right, #08080a 0%, #08080a 30%, transparent 100%)' }}
             />
-            {/* Left glow (red) - always visible, breathing when active */}
+            {/* Left glow — rust ember (HOT side) */}
             <div
               className="absolute left-0 top-1/2 -translate-y-1/2 w-12 h-20 -translate-x-8 pointer-events-none"
-              style={{ background: 'radial-gradient(ellipse at right, rgba(239,68,68,0.5) 0%, transparent 70%)' }}
+              style={{ background: 'radial-gradient(ellipse at right, rgba(181,74,46,0.5) 0%, transparent 70%)' }}
             />
             {/* Right fade - covers track overflow with dark gradient */}
             <div
               className="absolute right-0 top-1/2 -translate-y-1/2 w-16 h-28 translate-x-12 pointer-events-none"
               style={{ background: 'linear-gradient(to left, #08080a 0%, #08080a 30%, transparent 100%)' }}
             />
-            {/* Right glow (blue) - always visible, breathing when active */}
+            {/* Right glow — bronze (DISCOVERY side) */}
             <div
               className="absolute right-0 top-1/2 -translate-y-1/2 w-12 h-20 translate-x-8 pointer-events-none"
-              style={{ background: 'radial-gradient(ellipse at left, rgba(59,130,246,0.5) 0%, transparent 70%)' }}
+              style={{ background: 'radial-gradient(ellipse at left, rgba(212,160,83,0.5) 0%, transparent 70%)' }}
             />
 
             {/* VOYO Portal Button - Premium stale, enhanced active */}
@@ -4650,26 +4651,25 @@ export const VoyoPortraitPlayer = ({
               style={{
                 background: 'radial-gradient(circle at center, #1a1a2e 0%, #0f0f16 100%)',
                 boxShadow: (isHotBeltActive || isDiscoveryBeltActive)
-                  ? '-8px 0 25px rgba(239,68,68,0.5), 8px 0 25px rgba(59,130,246,0.5), 0 0 20px rgba(147,51,234,0.3)'
+                  ? '-8px 0 25px rgba(181,74,46,0.5), 8px 0 25px rgba(212,160,83,0.5), 0 0 20px rgba(139,92,246,0.3)'
                   : '0 0 12px rgba(139,92,246,0.15)',
               }}
             >
-              {/* Stale: Subtle VOYO brand gradient ring */}
+              {/* Stale: VOYO brand gradient ring — purple + bronze (no pink) */}
               <div
                 className="absolute inset-0 rounded-full pointer-events-none"
                 style={{
-                  background: 'linear-gradient(#0f0f16, #0f0f16) padding-box, linear-gradient(135deg, rgba(139,92,246,0.3), rgba(236,72,153,0.2), rgba(139,92,246,0.3)) border-box',
+                  background: 'linear-gradient(#0f0f16, #0f0f16) padding-box, linear-gradient(135deg, rgba(139,92,246,0.3), rgba(212,160,83,0.2), rgba(139,92,246,0.3)) border-box',
                   border: '1.5px solid transparent',
                   }}
               />
 
-              {/* Active: Outer rotating ring */}
-              
+              {/* Active: Outer rotating ring — rust → purple → bronze */}
                 {(isHotBeltActive || isDiscoveryBeltActive) && (
                   <div
                     className="absolute inset-[-4px] rounded-full border-2 border-transparent pointer-events-none"
                     style={{
-                      background: 'linear-gradient(90deg, rgba(239,68,68,0.6), transparent, rgba(59,130,246,0.6)) padding-box, linear-gradient(90deg, #ef4444, #8b5cf6, #3b82f6) border-box',
+                      background: 'linear-gradient(90deg, rgba(181,74,46,0.6), transparent, rgba(212,160,83,0.6)) padding-box, linear-gradient(90deg, #B54A2E, #8b5cf6, #D4A053) border-box',
                       }}
                   />
                 )}
@@ -5007,16 +5007,16 @@ export const VoyoPortraitPlayer = ({
                   <span
                     className="text-xs px-2 py-0.5 rounded-full"
                     style={{
-                      background: signalCategory === 'afro-heat' ? 'rgba(239,68,68,0.2)' :
-                                 signalCategory === 'chill-vibes' ? 'rgba(59,130,246,0.2)' :
-                                 signalCategory === 'party-mode' ? 'rgba(167,139,250,0.2)' :
+                      background: signalCategory === 'afro-heat' ? 'rgba(181,74,46,0.2)' :
+                                 signalCategory === 'chill-vibes' ? 'rgba(167,139,250,0.2)' :
+                                 signalCategory === 'party-mode' ? 'rgba(212,160,83,0.2)' :
                                  signalCategory === 'late-night' ? 'rgba(139,92,246,0.2)' :
                                  'rgba(124,58,237,0.2)',
-                      color: signalCategory === 'afro-heat' ? '#ef4444' :
-                             signalCategory === 'chill-vibes' ? '#3b82f6' :
-                             signalCategory === 'party-mode' ? '#a78bfa' :
+                      color: signalCategory === 'afro-heat' ? '#C86B3F' :
+                             signalCategory === 'chill-vibes' ? '#a78bfa' :
+                             signalCategory === 'party-mode' ? '#D4A053' :
                              signalCategory === 'late-night' ? '#8b5cf6' :
-                             '#7c3aed',
+                             '#a78bfa',
                              }}
                   >
                     {signalCategory.replace('-', ' ')}

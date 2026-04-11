@@ -258,7 +258,7 @@ export const PortalChat = memo(({ portalOwner, currentUser, isPortalOpen, onClos
         {/* Connection indicator */}
         <span
           className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-black ${
-            isConnected ? 'bg-green-500' : 'bg-yellow-500'
+            isConnected ? 'bg-green-500' : 'bg-[#D4A053]'
           }`}
         />
       </button>

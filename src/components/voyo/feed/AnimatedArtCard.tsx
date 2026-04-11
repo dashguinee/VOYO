@@ -119,7 +119,7 @@ export const AnimatedArtCard = ({
                 lazy={false}
               />
             ) : (
-              <div className="w-full h-full bg-gradient-to-br from-purple-900 to-pink-900 flex items-center justify-center">
+              <div className="w-full h-full bg-gradient-to-br from-purple-900 to-[#1c1c22] flex items-center justify-center">
                 <Disc3 className="w-20 h-20 text-white/30" />
               </div>
             )}
@@ -234,7 +234,7 @@ export const AnimatedArtCard = ({
                   lazy={false}
                 />
               ) : (
-                <div className="w-full h-full bg-gradient-to-br from-purple-900 to-pink-900" />
+                <div className="w-full h-full bg-gradient-to-br from-purple-900 to-[#1c1c22]" />
               )}
             </div>
 
@@ -306,7 +306,7 @@ export const AnimatedArtCard = ({
             />
           </div>
         ) : (
-          <div className="w-full h-full bg-gradient-to-br from-purple-900 to-pink-900 flex items-center justify-center">
+          <div className="w-full h-full bg-gradient-to-br from-purple-900 to-[#1c1c22] flex items-center justify-center">
             <Disc3 className="w-32 h-32 text-white/30" />
           </div>
         )}

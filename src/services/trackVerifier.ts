@@ -412,7 +412,8 @@ async function verifyContentMatch(
 
   try {
     const response = await fetch(
-      `https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${ytId}&format=json`
+      `https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${ytId}&format=json`,
+      { signal: AbortSignal.timeout(5000) }
     );
 
     if (!response.ok) {
@@ -525,16 +526,20 @@ export async function validateBeforePool(
   title: string
 ): Promise<{ valid: boolean; verifiedId?: string; thumbnail?: string; mismatch?: string }> {
   const thumbnailUrl = getThumb(trackId);
-  const thumbnailValid = await isThumbnailValid(thumbnailUrl);
+
+  // Thumbnail check (image probe) and content check (YouTube oEmbed) are
+  // independent. Run them in parallel so we cut one RTT from every track
+  // that enters the pool.
+  const [thumbnailValid, contentCheck] = await Promise.all([
+    isThumbnailValid(thumbnailUrl),
+    verifyContentMatch(trackId, artist, title),
+  ]);
 
   if (!thumbnailValid) {
     // Thumbnail doesn't load, definitely need to verify
     devLog(`[TrackVerifier] 🔍 Thumbnail failed, verifying: ${artist} - ${title}`);
     return await findCorrectTrack(artist, title);
   }
-
-  // Thumbnail loads, but does CONTENT match?
-  const contentCheck = await verifyContentMatch(trackId, artist, title);
 
   if (!contentCheck.valid) {
     // CONTENT MISMATCH! Wrong video ID (like Gobe → Fleetwood Mac)
@@ -610,10 +615,16 @@ export async function safeAddManyToPool(
   tracks: Track[],
   source: PooledTrack['source']
 ): Promise<number> {
+  // Run validations in parallel with bounded concurrency so we don't
+  // melt the YouTube oEmbed endpoint when bulk-seeding.
+  const CONCURRENCY = 5;
   let added = 0;
-  for (const track of tracks) {
-    const wasAdded = await safeAddToPool(track, source);
-    if (wasAdded) added++;
+  for (let i = 0; i < tracks.length; i += CONCURRENCY) {
+    const batch = tracks.slice(i, i + CONCURRENCY);
+    const results = await Promise.all(
+      batch.map(track => safeAddToPool(track, source).catch(() => false))
+    );
+    added += results.filter(Boolean).length;
   }
   return added;
 }

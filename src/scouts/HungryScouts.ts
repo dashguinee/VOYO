@@ -481,13 +481,14 @@ export class HungryScout {
     devLog(`[Scout:${this.config.name}] Starting hunt...`);
 
     try {
-      // For each search query, fetch results
-      for (const query of this.config.searchQueries) {
-        const tracks = await this.searchYouTube(query);
+      // Run all queries for this scout in parallel (was serial with 100ms sleeps).
+      // Each scout only has a few queries; the manager already throttles
+      // across scouts, so this stays polite to the YouTube API.
+      const queryResults = await Promise.all(
+        this.config.searchQueries.map(query => this.searchYouTube(query))
+      );
+      for (const tracks of queryResults) {
         discoveredTracks.push(...tracks);
-
-        // Small delay between searches to be nice
-        await new Promise(r => setTimeout(r, 100));
       }
 
       this.tracksFound += discoveredTracks.length;
@@ -526,7 +527,8 @@ export class HungryScout {
       const response = await fetch(
         `https://www.googleapis.com/youtube/v3/search?` +
         `part=snippet&type=video&videoCategoryId=10&maxResults=25&` +
-        `q=${encodeURIComponent(query)}&key=${import.meta.env.VITE_YOUTUBE_API_KEY}`
+        `q=${encodeURIComponent(query)}&key=${import.meta.env.VITE_YOUTUBE_API_KEY}`,
+        { signal: AbortSignal.timeout(12000) }
       );
 
       if (!response.ok) return tracks;

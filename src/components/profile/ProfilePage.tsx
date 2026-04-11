@@ -207,7 +207,7 @@ export const ProfilePage = () => {
           </p>
           <button
             onClick={() => navigate('/')}
-            className="px-6 py-3 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 text-white font-semibold"
+            className="px-6 py-3 rounded-full bg-gradient-to-r from-purple-500 to-[#D4A053] text-white font-semibold"
           >
             Open VOYO
           </button>
@@ -250,7 +250,7 @@ export const ProfilePage = () => {
                 className="w-28 h-28 rounded-full object-cover ring-4 ring-purple-500/30"
               />
             ) : (
-              <div className="w-28 h-28 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center ring-4 ring-purple-500/30">
+              <div className="w-28 h-28 rounded-full bg-gradient-to-br from-purple-500 to-[#D4A053] flex items-center justify-center ring-4 ring-purple-500/30">
                 <span className="text-4xl font-bold text-white">
                   {displayName?.charAt(0)?.toUpperCase() || 'V'}
                 </span>
@@ -308,7 +308,7 @@ export const ProfilePage = () => {
                     className={`px-5 py-2 rounded-full font-semibold text-sm flex items-center gap-2 ${
                       isFollowing
                         ? 'bg-white/10 text-white border border-white/20'
-                        : 'bg-gradient-to-r from-purple-500 to-pink-500 text-white'
+                        : 'bg-gradient-to-r from-purple-500 to-[#D4A053] text-white'
                     }`}
                   >
                     {isFollowLoading ? (
@@ -397,7 +397,7 @@ export const ProfilePage = () => {
                     <div className="space-y-1">
                       <div className="h-1 bg-white/10 rounded-full overflow-hidden">
                         <div
-                          className="h-full bg-gradient-to-r from-purple-500 to-pink-500"
+                          className="h-full bg-gradient-to-r from-purple-500 to-[#D4A053]"
                           style={{ width: `${(nowPlaying.currentTime / nowPlaying.duration) * 100}%` }}
                         />
                       </div>
@@ -536,7 +536,7 @@ export const ProfilePage = () => {
                 <button
                   onClick={handlePinLogin}
                   disabled={pin.length !== 6 || isLoading}
-                  className="flex-1 py-3 rounded-xl bg-gradient-to-r from-purple-500 to-pink-500 text-white font-semibold disabled:opacity-50"
+                  className="flex-1 py-3 rounded-xl bg-gradient-to-r from-purple-500 to-[#D4A053] text-white font-semibold disabled:opacity-50"
                 >
                   {isLoading ? 'Verifying...' : 'Unlock'}
                 </button>
@@ -571,7 +571,7 @@ export const ProfilePage = () => {
               </button>
 
               <div className="text-center mb-6">
-                <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
+                <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-gradient-to-br from-purple-500 to-[#D4A053] flex items-center justify-center">
                   <QrCode className="w-8 h-8 text-white" />
                 </div>
                 <h2 className="text-xl font-bold text-white mb-1">Share Profile</h2>
@@ -627,7 +627,7 @@ export const ProfilePage = () => {
                       });
                     }
                     }}
-                  className="py-3 rounded-xl bg-gradient-to-r from-purple-500 to-pink-500 text-white font-semibold flex items-center justify-center gap-2"
+                  className="py-3 rounded-xl bg-gradient-to-r from-purple-500 to-[#D4A053] text-white font-semibold flex items-center justify-center gap-2"
                 >
                   <Share2 className="w-4 h-4" />
                   Share
@@ -640,7 +640,7 @@ export const ProfilePage = () => {
 
       {/* Footer */}
       <div className="px-5 py-8 text-center border-t border-white/5">
-        <p className="text-2xl font-black bg-gradient-to-r from-purple-400 via-pink-500 to-purple-600 bg-clip-text text-transparent mb-2">
+        <p className="text-2xl font-black bg-gradient-to-r from-purple-400 via-[#D4A053] to-purple-600 bg-clip-text text-transparent mb-2">
           VOYO
         </p>
         <p className="text-white/30 text-xs">The African Music Experience</p>

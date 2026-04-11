@@ -211,12 +211,17 @@ export async function downloadTrack(
 ): Promise<boolean> {
   try {
     // Fetch with retry logic for rate limiting (429)
+    // Each attempt gets a 60s hard timeout so a silently-hung fetch (slow Edge
+    // Worker, stalled TCP connection, etc.) can't pile up and drain the
+    // connection pool across many tracks. Without this, the background
+    // auto-cache triggered on every streaming track could accumulate stuck
+    // requests indefinitely.
     let response: Response | null = null;
     const MAX_RETRIES = 3;
     let retryDelay = 2000; // Start with 2 seconds
 
     for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-      response = await fetch(audioUrl);
+      response = await fetch(audioUrl, { signal: AbortSignal.timeout(60000) });
 
       if (response.status === 429) {
         // Rate limited - exponential backoff

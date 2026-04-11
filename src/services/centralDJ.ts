@@ -361,10 +361,15 @@ export async function saveVerifiedTracks(
   vibe: VibeProfile,
   discoveredBy: 'gemini' | 'user_search' | 'related' | 'seed' = 'gemini'
 ): Promise<number> {
+  // Parallel saves with bounded concurrency so we don't flood Supabase.
+  const CONCURRENCY = 8;
   let saved = 0;
-  for (const track of tracks) {
-    const success = await saveVerifiedTrack(track, vibe, discoveredBy);
-    if (success) saved++;
+  for (let i = 0; i < tracks.length; i += CONCURRENCY) {
+    const batch = tracks.slice(i, i + CONCURRENCY);
+    const results = await Promise.all(
+      batch.map(t => saveVerifiedTrack(t, vibe, discoveredBy).catch(() => false))
+    );
+    saved += results.filter(Boolean).length;
   }
   return saved;
 }
@@ -614,10 +619,15 @@ export async function syncSeedTracks(tracks: Track[]): Promise<number> {
 
   devLog(`[Central DJ] 🌱 Syncing ${tracks.length} seed tracks to Supabase...`);
 
+  // Parallel seed sync with bounded concurrency.
+  const CONCURRENCY = 8;
   let synced = 0;
-  for (const track of tracks) {
-    const success = await saveVerifiedTrack(track, undefined, 'seed');
-    if (success) synced++;
+  for (let i = 0; i < tracks.length; i += CONCURRENCY) {
+    const batch = tracks.slice(i, i + CONCURRENCY);
+    const results = await Promise.all(
+      batch.map(t => saveVerifiedTrack(t, undefined, 'seed').catch(() => false))
+    );
+    synced += results.filter(Boolean).length;
   }
 
   // Mark as synced

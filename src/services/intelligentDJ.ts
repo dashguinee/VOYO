@@ -350,6 +350,8 @@ async function callGeminiDJ(prompt: string): Promise<DJResponse | null> {
           { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' },
         ],
       }),
+      // Gemini can stall; give it 25s then abort.
+      signal: AbortSignal.timeout(25000),
     });
 
     if (!response.ok) {
@@ -420,18 +422,20 @@ function suggestionToTrack(suggestion: DJSuggestion, youtubeId: string): Track {
  * Every verified track gets saved to Central DB → Next user gets it FREE
  */
 async function processSuggestions(suggestions: DJSuggestion[], dominantMode?: MixBoardMode): Promise<number> {
+  // Run suggestions in parallel batches. Each suggestion does:
+  //   searchMusic → safeAddToPool → saveVerifiedTrack (fire-and-forget)
+  // The old code was serial with a 150ms sleep between suggestions, so
+  // 8 suggestions = ~1.2s of pure waiting. Now they overlap.
+  const CONCURRENCY = 4;
   let added = 0;
 
-  for (const suggestion of suggestions) {
-    // STEP 1: ALWAYS verify via backend search (Gemini might hallucinate URLs)
-    // Search for "artist - title" to find the REAL YouTube ID
+  const processOne = async (suggestion: DJSuggestion): Promise<boolean> => {
     const searchQuery = `${suggestion.artist} ${suggestion.title}`;
 
     try {
       const searchResults = await searchMusic(searchQuery, 3);
 
       if (searchResults.length > 0) {
-        // Use the VERIFIED result from our backend
         const verified = searchResults[0];
 
         const track: Track = {
@@ -449,12 +453,9 @@ async function processSuggestions(suggestions: DJSuggestion[], dominantMode?: Mi
           createdAt: new Date().toISOString(),
         };
 
-        // GATE: Validate thumbnail BEFORE adding to pool
         const wasAdded = await safeAddToPool(track, 'llm');
         if (wasAdded) {
-          added++;
-
-          // THE FLYWHEEL: Save to Central DB!
+          // THE FLYWHEEL: Save to Central DB (fire-and-forget)
           saveVerifiedTrack(track, undefined, 'gemini').then(saved => {
             if (saved) {
               devLog(`[Intelligent DJ] 💾 Saved to Central DB for future users!`);
@@ -462,20 +463,25 @@ async function processSuggestions(suggestions: DJSuggestion[], dominantMode?: Mi
           }).catch(() => {});
 
           devLog(`[Intelligent DJ] ✅ VERIFIED: ${suggestion.artist} - ${suggestion.title}`);
+          return true;
         } else {
           devWarn(`[Intelligent DJ] ❌ Thumbnail validation failed: ${suggestion.artist} - ${suggestion.title}`);
+          return false;
         }
       } else {
-        // NO fallback to unverified Gemini IDs - we only accept verified tracks
         devWarn(`[Intelligent DJ] ❌ Could not verify: ${suggestion.artist} - ${suggestion.title}`);
+        return false;
       }
     } catch (error) {
-      // Search failed - DO NOT use unverified Gemini IDs
       devWarn(`[Intelligent DJ] ❌ Search failed for: ${suggestion.artist} - ${suggestion.title}`);
+      return false;
     }
+  };
 
-    // Small delay between searches to avoid hammering the API
-    await new Promise(r => setTimeout(r, 150));
+  for (let i = 0; i < suggestions.length; i += CONCURRENCY) {
+    const batch = suggestions.slice(i, i + CONCURRENCY);
+    const results = await Promise.all(batch.map(processOne));
+    added += results.filter(Boolean).length;
   }
 
   return added;
@@ -551,10 +557,14 @@ export async function runDJ(): Promise<number> {
     const tracks = centralToTracks(centralTracks);
     let addedCount = 0;
 
-    // GATE: Still validate each track from Central DB before adding
-    for (const track of tracks) {
-      const wasAdded = await safeAddToPool(track, 'related');
-      if (wasAdded) addedCount++;
+    // Validate in parallel batches (was serial).
+    const CONCURRENCY = 5;
+    for (let i = 0; i < tracks.length; i += CONCURRENCY) {
+      const batch = tracks.slice(i, i + CONCURRENCY);
+      const results = await Promise.all(
+        batch.map(t => safeAddToPool(t, 'related').catch(() => false))
+      );
+      addedCount += results.filter(Boolean).length;
     }
 
     devLog(`[Intelligent DJ] ✨ Added ${addedCount}/${tracks.length} validated tracks from Central DB`);
@@ -631,26 +641,30 @@ async function fallbackToSearch(context: ListeningContext): Promise<number> {
   try {
     const results = await searchMusic(query, 10);
 
-    let added = 0;
-    for (const result of results) {
-      const track: Track = {
-        id: result.voyoId,
-        title: result.title,
-        artist: result.artist,
-        album: 'VOYO',
-        trackId: result.voyoId,
-        coverUrl: result.thumbnail,
-        duration: result.duration,
-        tags: ['fallback'],
-        mood: 'afro',
-        region: 'NG',
-        oyeScore: result.views || 0,
-        createdAt: new Date().toISOString(),
-      };
+    const tracks: Track[] = results.map(result => ({
+      id: result.voyoId,
+      title: result.title,
+      artist: result.artist,
+      album: 'VOYO',
+      trackId: result.voyoId,
+      coverUrl: result.thumbnail,
+      duration: result.duration,
+      tags: ['fallback'],
+      mood: 'afro' as const,
+      region: 'NG',
+      oyeScore: result.views || 0,
+      createdAt: new Date().toISOString(),
+    }));
 
-      // GATE: Validate before adding
-      const wasAdded = await safeAddToPool(track, 'related');
-      if (wasAdded) added++;
+    // Parallel validation, was serial.
+    const CONCURRENCY = 5;
+    let added = 0;
+    for (let i = 0; i < tracks.length; i += CONCURRENCY) {
+      const batch = tracks.slice(i, i + CONCURRENCY);
+      const addedResults = await Promise.all(
+        batch.map(t => safeAddToPool(t, 'related').catch(() => false))
+      );
+      added += addedResults.filter(Boolean).length;
     }
 
     return added;
@@ -709,6 +723,7 @@ export async function testConnection(): Promise<boolean> {
         contents: [{ parts: [{ text: 'Say "VOYO DJ ready" and nothing else.' }] }],
         generationConfig: { maxOutputTokens: 20 },
       }),
+      signal: AbortSignal.timeout(8000),
     });
 
     if (!response.ok) {

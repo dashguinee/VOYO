@@ -30,6 +30,7 @@ async function searchGenius(query: string): Promise<string | null> {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
       },
+      signal: AbortSignal.timeout(10000),
     });
 
     if (!response.ok) return null;
@@ -53,7 +54,9 @@ async function searchGenius(query: string): Promise<string | null> {
 async function scrapeLyrics(geniusUrl: string): Promise<string | null> {
   try {
     const url = `${CORS_PROXY}${encodeURIComponent(geniusUrl)}`;
-    const response = await fetch(url);
+    const response = await fetch(url, {
+      signal: AbortSignal.timeout(15000),
+    });
 
     if (!response.ok) return null;
 

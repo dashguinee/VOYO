@@ -309,14 +309,17 @@ export async function searchAndFeed(query: string, limit: number = 15): Promise<
  * Feed a list of queries (for manual bulk discovery)
  */
 export async function bulkSearchAndFeed(queries: string[]): Promise<number> {
+  // Parallel batches with bounded concurrency (was serial with 500ms sleeps).
+  // Cap at 3 concurrent to stay polite to the VOYO edge worker.
+  const CONCURRENCY = 3;
   let totalFed = 0;
 
-  for (const query of queries) {
-    const fed = await searchAndFeed(query);
-    totalFed += fed;
-
-    // Small delay between searches
-    await new Promise(r => setTimeout(r, 500));
+  for (let i = 0; i < queries.length; i += CONCURRENCY) {
+    const batch = queries.slice(i, i + CONCURRENCY);
+    const results = await Promise.all(
+      batch.map(q => searchAndFeed(q).catch(() => 0))
+    );
+    totalFed += results.reduce((a, b) => a + b, 0);
   }
 
   devLog(`[Feeder] Bulk search complete: ${totalFed} total tracks fed`);

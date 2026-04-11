@@ -180,26 +180,35 @@ export async function bootstrapPool(forceFresh: boolean = false): Promise<number
   // Shuffle queries and take first 5 for variety
   const shuffledQueries = [...BOOTSTRAP_QUERIES].sort(() => Math.random() - 0.5).slice(0, 5);
 
-  for (const query of shuffledQueries) {
-    try {
-      const results = await searchMusic(query, TRACKS_PER_SEARCH);
-      const tracks = results.map(r => searchResultToTrack(r));
-
-      // GATE: Validate each track BEFORE adding to pool
-      let addedFromQuery = 0;
-      for (const track of tracks) {
-        const added = await safeAddToPool(track, 'trending');
-        if (added) addedFromQuery++;
+  // Fire all queries in parallel - our backend handles concurrent requests.
+  // This replaces a serial loop that took ~5s+ (5 queries x 1s each) with
+  // a single parallel batch.
+  const queryResults = await Promise.all(
+    shuffledQueries.map(async (query) => {
+      try {
+        const results = await searchMusic(query, TRACKS_PER_SEARCH);
+        return { query, tracks: results.map(r => searchResultToTrack(r)) };
+      } catch (error) {
+        devWarn(`[Pool Curator] Query failed: "${query}"`, error);
+        return { query, tracks: [] as Track[] };
       }
+    })
+  );
 
-      totalAdded += addedFromQuery;
-      devLog(`[Pool Curator] ✅ "${query}" → ${addedFromQuery}/${tracks.length} tracks (validated)`);
-
-      // Small delay to avoid hammering the API
-      await new Promise(r => setTimeout(r, 200));
-    } catch (error) {
-      devWarn(`[Pool Curator] Query failed: "${query}"`, error);
+  // Validate all tracks in parallel (bounded concurrency inside safeAddManyToPool equivalent)
+  for (const { query, tracks } of queryResults) {
+    if (tracks.length === 0) continue;
+    const CONCURRENCY = 5;
+    let addedFromQuery = 0;
+    for (let i = 0; i < tracks.length; i += CONCURRENCY) {
+      const batch = tracks.slice(i, i + CONCURRENCY);
+      const results = await Promise.all(
+        batch.map(t => safeAddToPool(t, 'trending').catch(() => false))
+      );
+      addedFromQuery += results.filter(Boolean).length;
     }
+    totalAdded += addedFromQuery;
+    devLog(`[Pool Curator] ✅ "${query}" → ${addedFromQuery}/${tracks.length} tracks (validated)`);
   }
 
   isBootstrapped = true;
@@ -341,19 +350,27 @@ export async function expandPool(): Promise<number> {
   const poolStore = useTrackPoolStore.getState();
   let totalAdded = 0;
 
-  for (const query of queries) {
-    try {
-      const results = await searchMusic(query, TRACKS_PER_SEARCH);
-      const tracks = results.map(r => searchResultToTrack(r));
-
-      // GATE: Validate each track BEFORE adding to pool
-      for (const track of tracks) {
-        const added = await safeAddToPool(track, 'related');
-        if (added) totalAdded++;
+  // Fire all queries in parallel, then validate tracks in parallel batches.
+  const queryResults = await Promise.all(
+    queries.map(async (query) => {
+      try {
+        const results = await searchMusic(query, TRACKS_PER_SEARCH);
+        return results.map(r => searchResultToTrack(r));
+      } catch (error) {
+        devWarn(`[Pool Curator] Expansion query failed: "${query}"`);
+        return [] as Track[];
       }
-    } catch (error) {
-      devWarn(`[Pool Curator] Expansion query failed: "${query}"`);
-    }
+    })
+  );
+
+  const allTracks = queryResults.flat();
+  const CONCURRENCY = 5;
+  for (let i = 0; i < allTracks.length; i += CONCURRENCY) {
+    const batch = allTracks.slice(i, i + CONCURRENCY);
+    const results = await Promise.all(
+      batch.map(t => safeAddToPool(t, 'related').catch(() => false))
+    );
+    totalAdded += results.filter(Boolean).length;
   }
 
   devLog(`[Pool Curator] ✅ Expanded pool with ${totalAdded} validated tracks`);
@@ -438,21 +455,31 @@ export async function curateSection(section: 'west-african' | 'classics' | 'tren
   // Pick 5 random queries from the section
   const shuffled = [...queries].sort(() => Math.random() - 0.5).slice(0, 5);
 
-  for (const query of shuffled) {
-    try {
-      const results = await searchMusic(query, TRACKS_PER_SEARCH);
-      const tracks = results.map(r => searchResultToTrack(r, sectionTag));
-
-      for (const track of tracks) {
-        const added = await safeAddToPool(track, 'trending');
-        if (added) totalAdded++;
+  // All 5 searches fire in parallel (was serial with 300ms delays = ~3s+ floor).
+  const queryResults = await Promise.all(
+    shuffled.map(async (query) => {
+      try {
+        const results = await searchMusic(query, TRACKS_PER_SEARCH);
+        return { query, tracks: results.map(r => searchResultToTrack(r, sectionTag)) };
+      } catch (error) {
+        devWarn(`[Pool Curator] Section query failed: "${query}"`);
+        return { query, tracks: [] as Track[] };
       }
+    })
+  );
 
-      devLog(`[Pool Curator] ✅ "${query}" → added tracks`);
-      await new Promise(r => setTimeout(r, 300));
-    } catch (error) {
-      devWarn(`[Pool Curator] Section query failed: "${query}"`);
+  // Validate and add in parallel batches
+  const CONCURRENCY = 5;
+  for (const { query, tracks } of queryResults) {
+    if (tracks.length === 0) continue;
+    for (let i = 0; i < tracks.length; i += CONCURRENCY) {
+      const batch = tracks.slice(i, i + CONCURRENCY);
+      const results = await Promise.all(
+        batch.map(t => safeAddToPool(t, 'trending').catch(() => false))
+      );
+      totalAdded += results.filter(Boolean).length;
     }
+    devLog(`[Pool Curator] ✅ "${query}" → added tracks`);
   }
 
   devLog(`[Pool Curator] 🎉 "${section}" section: ${totalAdded} fresh tracks`);
@@ -467,9 +494,12 @@ export async function curateSection(section: 'west-african' | 'classics' | 'tren
 export async function curateAllSections(): Promise<void> {
   devLog('[Pool Curator] 🚀 Curating all sections...');
 
-  await curateSection('west-african');
-  await curateSection('classics');
-  await curateSection('trending');
+  // Independent sections → run in parallel (was ~3x slower serial).
+  await Promise.all([
+    curateSection('west-african'),
+    curateSection('classics'),
+    curateSection('trending'),
+  ]);
 
   devLog('[Pool Curator] ✅ All sections curated');
 }

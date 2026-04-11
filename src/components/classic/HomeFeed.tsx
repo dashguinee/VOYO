@@ -383,11 +383,11 @@ interface TrackCardProps {
   showBoostBadge?: boolean;
 }
 
-const TrackCard = ({ track, onPlay, showBoostBadge = false }: TrackCardProps) => {
+const TrackCard = memo(({ track, onPlay, showBoostBadge = false }: TrackCardProps) => {
   const [isHovered, setIsHovered] = useState(false);
   const [oyeActive, setOyeActive] = useState(false);
-  const { createReaction } = useReactionStore();
-  const { boostTrack } = useDownloadStore();
+  const createReaction = useReactionStore(s => s.createReaction);
+  const boostTrack = useDownloadStore(s => s.boostTrack);
 
   const handleOye = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -458,17 +458,18 @@ const TrackCard = ({ track, onPlay, showBoostBadge = false }: TrackCardProps) =>
       <p className="text-white/50 text-[11px] truncate">{track.artist}</p>
     </button>
   );
-};
+});
+TrackCard.displayName = 'TrackCard';
 
 // ============================================
 // WIDE TRACK CARD - 16:9 for Continue Listening
 // ============================================
 
-const WideTrackCard = ({ track, onPlay }: TrackCardProps) => {
+const WideTrackCard = memo(({ track, onPlay }: TrackCardProps) => {
   const [isHovered, setIsHovered] = useState(false);
   const [oyeActive, setOyeActive] = useState(false);
-  const { createReaction } = useReactionStore();
-  const { boostTrack } = useDownloadStore();
+  const createReaction = useReactionStore(s => s.createReaction);
+  const boostTrack = useDownloadStore(s => s.boostTrack);
   const thumbnailUrl = getThumb(track.trackId, 'high');
 
   const handleOye = (e: React.MouseEvent) => {
@@ -534,7 +535,8 @@ const WideTrackCard = ({ track, onPlay }: TrackCardProps) => {
       <p className="text-white/60 text-[11px] truncate">{track.artist}</p>
     </div>
   );
-};
+});
+WideTrackCard.displayName = 'WideTrackCard';
 
 // ============================================
 // ARTIST CARD COMPONENT
@@ -545,7 +547,7 @@ interface ArtistCardProps {
   onPlay: (track: Track) => void;
 }
 
-const ArtistCard = ({ artist, onPlay }: ArtistCardProps) => {
+const ArtistCard = memo(({ artist, onPlay }: ArtistCardProps) => {
   const firstTrack = artist.tracks[0];
 
   return (
@@ -575,7 +577,8 @@ const ArtistCard = ({ artist, onPlay }: ArtistCardProps) => {
       <p className="text-white/40 text-[10px] truncate text-center">{artist.tracks.length} tracks</p>
     </button>
   );
-};
+});
+ArtistCard.displayName = 'ArtistCard';
 
 // ============================================
 // AFRICAN VIBES VIDEO CARD - With golden glow & video
@@ -1088,7 +1091,7 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
   const hotTracks = usePlayerStore(s => s.hotTracks);
   const discoverTracks = usePlayerStore(s => s.discoverTracks);
   const refreshRecommendations = usePlayerStore(s => s.refreshRecommendations);
-  const { hotPool } = useTrackPoolStore();
+  const hotPool = useTrackPoolStore(s => s.hotPool);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [showNotificationHint, setShowNotificationHint] = useState(false);
 
