@@ -400,10 +400,13 @@ interface MomentCardProps {
   onToggleMute: () => void;
   onPlayTrack?: () => void;
   onArtistTap?: (artistName: string) => void;
-  widgetsVisible: boolean;
+  showOrb: boolean;
+  showName: boolean;
+  showTitle: boolean;
+  showBioBody: boolean;
 }
 
-const MomentCard = memo(({ moment, isOyed, onOye, isActive, isMuted, onToggleMute, onPlayTrack, onArtistTap, widgetsVisible }: MomentCardProps) => {
+const MomentCard = memo(({ moment, isOyed, onOye, isActive, isMuted, onToggleMute, onPlayTrack, onArtistTap, showOrb, showName, showTitle, showBioBody }: MomentCardProps) => {
   // Bio expand state — collapsed by default (~2 lines visible with bottom fade),
   // tap to expand and scroll the rest of the description.
   const [bioExpanded, setBioExpanded] = useState(false);
@@ -541,24 +544,34 @@ const MomentCard = memo(({ moment, isOyed, onOye, isActive, isMuted, onToggleMut
       </div>
 
       {/* CREATOR BLOCK — single positioned container, stacked layout:
-          orb + name on top, glass bio card below. Bio is collapsed by
-          default (~2 lines with bottom fade), tap to expand and scroll. */}
-      <div
-        style={{
-          ...S.creatorBlock,
-          opacity: widgetsVisible ? 1 : 0,
-          transform: widgetsVisible ? 'translateY(0)' : 'translateY(8px)',
-          pointerEvents: widgetsVisible ? 'auto' : 'none',
-        }}
-      >
-        <div style={S.creatorOrbWrap}>
+          orb + name on top, glass bio card below. Staged fade choreography:
+          bio body fades first (2s), then title (4s), then orb paint-out (6s).
+          Each stage has its own transition. Tap restarts everything. */}
+      <div style={S.creatorBlock}>
+        <div
+          style={{
+            ...S.creatorOrbWrap,
+            opacity: showOrb ? 1 : 0,
+            transform: showOrb ? 'translateY(0)' : 'translateY(-4px)',
+            transition: 'opacity 0.9s cubic-bezier(0.16, 1, 0.3, 1), transform 0.9s cubic-bezier(0.16, 1, 0.3, 1)',
+            // Paint-sweep dissolve when orb fades out (stage 3)
+            animation: !showOrb ? 'voyo-paint-out 0.9s ease-out forwards' : undefined,
+            pointerEvents: showOrb ? 'auto' : 'none',
+          }}
+        >
           <div style={S.creatorOrb}>{initial}</div>
-          <span style={S.creatorOrbName}>@{creator}</span>
+          {showName && <span style={S.creatorOrbName}>@{creator}</span>}
         </div>
 
-        {(moment.title || moment.description) && (
+        {(moment.title || moment.description) && showTitle && (
           <div
-            style={S.bioCard}
+            style={{
+              ...S.bioCard,
+              opacity: showTitle ? 1 : 0,
+              transform: showTitle ? 'translateY(0)' : 'translateY(6px)',
+              transition: 'opacity 0.7s cubic-bezier(0.16, 1, 0.3, 1), transform 0.7s cubic-bezier(0.16, 1, 0.3, 1), max-height 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
+              pointerEvents: showTitle ? 'auto' : 'none',
+            }}
             onClick={(e) => { e.stopPropagation(); setBioExpanded(p => !p); }}
           >
             {/* Glossy top highlight */}
@@ -568,9 +581,13 @@ const MomentCard = memo(({ moment, isOyed, onOye, isActive, isMuted, onToggleMut
               pointerEvents: 'none',
             }} />
             <div style={S.bioTitle}>{moment.title}</div>
-            {moment.description && (
+            {moment.description && showBioBody && (
               <div
-                style={bioExpanded ? S.bioBodyExpanded : S.bioBodyCollapsed}
+                style={{
+                  ...(bioExpanded ? S.bioBodyExpanded : S.bioBodyCollapsed),
+                  opacity: showBioBody ? 1 : 0,
+                  transition: 'opacity 0.5s cubic-bezier(0.16, 1, 0.3, 1)',
+                }}
                 className="scrollbar-hide"
               >
                 {moment.description}
@@ -786,9 +803,24 @@ export const VoyoMoments: React.FC<VoyoMomentsProps> = ({ onPlayFullTrack, onArt
   //   'immersive'   — header faded, only video visible. Bio card and creator
   //                   orb auto-fade after 3s of inactivity. Tap restores.
   const [uiPhase, setUiPhase] = useState<'idle' | 'transition' | 'immersive'>('idle');
-  // 3-second widget visibility timer (only active in 'immersive' phase)
-  const [widgetsVisible, setWidgetsVisible] = useState(true);
-  const widgetFadeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Header visibility — independent of uiPhase so we can wake it back on
+  // tap without re-triggering the gold transition word reveal. The header
+  // is visible when EITHER uiPhase is not 'immersive' OR headerVisible is
+  // explicitly true (set by tap-to-wake).
+  const [headerVisible, setHeaderVisible] = useState(true);
+  const headerHideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // STAGED WIDGET VISIBILITY — choreographed fade for immersion.
+  //
+  //   stage 0  full       = orb + name + title + bio body all visible
+  //   stage 1  compact    = orb + name + title  (bio body fades out at ~2s)
+  //   stage 2  minimal    = orb + name only     (title fades at ~4s)
+  //   stage 3  immersive  = nothing             (orb paint-dissolves at ~6s)
+  //
+  // Each tap on the screen resets to stage 0 and restarts the timer.
+  // Single tap → restart from stage 0 (full read).
+  const [widgetStage, setWidgetStage] = useState<0 | 1 | 2 | 3>(0);
+  const stageTimers = useRef<Array<ReturnType<typeof setTimeout>>>([]);
   const transitionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Trigger the transition reveal on first scroll, then enter immersive mode.
@@ -801,25 +833,35 @@ export const VoyoMoments: React.FC<VoyoMomentsProps> = ({ onPlayFullTrack, onArt
     }, 1400);
   }, [uiPhase]);
 
-  // Restart the 3-second widget visibility timer (called on tap)
+  // Restart the staged fade — stage 0 → 1 → 2 → 3 over 6 seconds.
+  // Bio body fades first, then title, then the orb paint-dissolves last.
+  // Also restores the HEADER (axis tabs + compass arc) and starts a 5s
+  // timer to hide it again — so the modes widget is reachable on every tap.
   const pingWidgets = useCallback(() => {
-    setWidgetsVisible(true);
-    if (widgetFadeTimer.current) clearTimeout(widgetFadeTimer.current);
-    widgetFadeTimer.current = setTimeout(() => setWidgetsVisible(false), 3000);
+    setWidgetStage(0);
+    setHeaderVisible(true);
+    stageTimers.current.forEach(t => clearTimeout(t));
+    stageTimers.current = [
+      setTimeout(() => setWidgetStage(1), 2000),  // bio body fades at 2s
+      setTimeout(() => setWidgetStage(2), 4000),  // title fades at 4s
+      setTimeout(() => setWidgetStage(3), 6000),  // orb paint-dissolves at 6s
+    ];
+    if (headerHideTimer.current) clearTimeout(headerHideTimer.current);
+    headerHideTimer.current = setTimeout(() => setHeaderVisible(false), 5000);
   }, []);
 
-  // Auto-fade widgets on entering immersive phase, and on every new moment
+  // Auto-fade on entering immersive phase, and on every new moment
   useEffect(() => {
     if (uiPhase === 'immersive') {
       pingWidgets();
     }
     return () => {
-      if (widgetFadeTimer.current) clearTimeout(widgetFadeTimer.current);
+      stageTimers.current.forEach(t => clearTimeout(t));
     };
   }, [uiPhase, pingWidgets]);
 
-  // Restart the fade timer whenever the moment changes (user gets 3s to read
-  // the new bio, then it fades for immersion).
+  // Restart the fade timer whenever the moment changes (user gets the full
+  // read window on the new moment).
   useEffect(() => {
     if (uiPhase === 'immersive') pingWidgets();
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -832,6 +874,11 @@ export const VoyoMoments: React.FC<VoyoMomentsProps> = ({ onPlayFullTrack, onArt
 
   // Backward-compat: code below still references hasInteracted
   const hasInteracted = uiPhase === 'immersive';
+  // Visibility flags derived from the staged fade
+  const showOrb = widgetStage < 3;
+  const showName = widgetStage < 3;
+  const showTitle = widgetStage < 2;
+  const showBioBody = widgetStage < 1;
 
   // ============================================
   // MIX MODE — multi-category blended feed
@@ -1142,14 +1189,14 @@ export const VoyoMoments: React.FC<VoyoMomentsProps> = ({ onPlayFullTrack, onArt
       <div style={S.sideShadowL} />
       <div style={S.sideShadowR} />
 
-      {/* TOP BAR — unified gradient surface, glides out after first interaction.
-          Tap the gradient area itself to bring it back if it's hidden. */}
+      {/* TOP BAR — unified gradient surface. Visible when uiPhase isn't
+          immersive OR when headerVisible is true (set by tap-to-wake). */}
       <div
         style={{
           ...S.topBar,
-          opacity: hasInteracted ? 0 : 1,
-          transform: hasInteracted ? 'translateY(-12px)' : 'translateY(0)',
-          pointerEvents: hasInteracted ? 'none' : 'auto',
+          opacity: (!hasInteracted || headerVisible) ? 1 : 0,
+          transform: (!hasInteracted || headerVisible) ? 'translateY(0)' : 'translateY(-12px)',
+          pointerEvents: (!hasInteracted || headerVisible) ? 'auto' : 'none',
         }}
       >
         <div style={S.axisTabs}>
@@ -1262,7 +1309,10 @@ export const VoyoMoments: React.FC<VoyoMomentsProps> = ({ onPlayFullTrack, onArt
               artist: currentMoment.parent_track_artist || 'Unknown Artist',
             }) : undefined}
             onArtistTap={onArtistTap}
-            widgetsVisible={widgetsVisible}
+            showOrb={showOrb}
+            showName={showName}
+            showTitle={showTitle}
+            showBioBody={showBioBody}
           />
         </div>
       ) : (
