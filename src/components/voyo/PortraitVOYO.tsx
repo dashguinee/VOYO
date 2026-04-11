@@ -342,9 +342,15 @@ export const PortraitVOYO = ({ onSearch, onDahub, onHome }: PortraitVOYOProps) =
           </Suspense>
         </div>
 
-        {/* LAYER 5: BOTTOM NAVIGATION (Hidden when Hub is shown - Hub has its own nav) */}
+        {/* LAYER 5: BOTTOM NAVIGATION (Hidden when Hub is shown - Hub has its own nav)
+            In music tab, the nav runs in playerMode — hidden by default,
+            transparent pill, only revealed when content is scrolled past 75%. */}
         {voyoActiveTab !== 'dahub' && (
-          <VoyoBottomNav onDahub={onDahub} onHome={onHome} />
+          <VoyoBottomNav
+            onDahub={onDahub}
+            onHome={onHome}
+            playerMode={voyoActiveTab === 'music'}
+          />
         )}
 
       </div>

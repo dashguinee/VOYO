@@ -9,7 +9,7 @@
  * - Tap to play, opens Classic Now Playing
  */
 
-import { useState, useRef, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Search, Heart, Music, Clock, MoreVertical, Play, ListPlus, Plus } from 'lucide-react';
 import { usePlayerStore } from '../../store/playerStore';
 import { useDownloadStore } from '../../store/downloadStore';
@@ -18,7 +18,6 @@ import { usePlaylistStore } from '../../store/playlistStore';
 import { getYouTubeThumbnail, TRACKS } from '../../data/tracks';
 import { SmartImage } from '../ui/SmartImage';
 import { Track } from '../../types';
-import { getAudioStream } from '../../services/api';
 import { PlaylistModal } from '../playlist/PlaylistModal';
 
 // Base filter tabs
@@ -51,107 +50,18 @@ const SongRow = ({
   onAddToPlaylist: () => void;
 }) => {
   const [isHovered, setIsHovered] = useState(false);
-  const [teaserState, setTeaserState] = useState<'idle' | 'playing' | 'played'>('idle');
-  const teaserAudioRef = useRef<HTMLAudioElement | null>(null);
-  const teaserTimeoutRef = useRef<number | null>(null);
-  const hasInteractedRef = useRef(false);
   const currentTrack = usePlayerStore(s => s.currentTrack);
-  const mainIsPlaying = usePlayerStore(s => s.isPlaying);
-  const addToQueue = usePlayerStore(s => s.addToQueue);
 
   // Detect if device has hover capability (desktop)
   const hasHover = window.matchMedia('(hover: hover) and (pointer: fine)').matches;
 
-  // Cleanup teaser on unmount
-  useEffect(() => {
-    return () => {
-      if (teaserAudioRef.current) {
-        teaserAudioRef.current.pause();
-        teaserAudioRef.current.src = '';
-      }
-      if (teaserTimeoutRef.current) {
-        clearTimeout(teaserTimeoutRef.current);
-      }
-    };
-  }, []);
-
-  // Stop teaser when hovering out
-  useEffect(() => {
-    if (!isHovered && teaserState === 'playing') {
-      stopTeaser();
-    }
-  }, [isHovered, teaserState]);
-
-  const stopTeaser = () => {
-    if (teaserAudioRef.current) {
-      teaserAudioRef.current.pause();
-      teaserAudioRef.current.currentTime = 0;
-    }
-    if (teaserTimeoutRef.current) {
-      clearTimeout(teaserTimeoutRef.current);
-    }
-    setTeaserState('idle');
-  };
-
-  const startTeaser = async () => {
-    // Don't start teaser if already playing or played, or if this is the current track
-    if (teaserState !== 'idle' || currentTrack?.id === track.id) return;
-
-    try {
-      setTeaserState('playing');
-
-      // Create or reuse audio element
-      if (!teaserAudioRef.current) {
-        teaserAudioRef.current = new Audio();
-        teaserAudioRef.current.volume = 0.3; // Lower volume for preview
-      }
-
-      // Load audio stream
-      const streamUrl = await getAudioStream(track.trackId);
-      if (streamUrl && teaserAudioRef.current) {
-        teaserAudioRef.current.src = streamUrl;
-        await teaserAudioRef.current.play();
-
-        // Stop after 30 seconds
-        teaserTimeoutRef.current = setTimeout(() => {
-          stopTeaser();
-          setTeaserState('played');
-        }, 30000);
-      }
-    } catch (error) {
-      setTeaserState('idle');
-    }
-  };
-
+  // Tap = play the full track immediately. (30s teaser preview removed.)
   const handleClick = () => {
-    // If teaser is playing and user hasn't interacted yet, stop teaser and play full
-    if (teaserState === 'playing' && !hasInteractedRef.current) {
-      stopTeaser();
-      hasInteractedRef.current = true;
-      onClick(); // Play full track
-      return;
-    }
-
-    // If teaser was played (30s preview), or already interacted, play full track
-    if (teaserState === 'played' || hasInteractedRef.current) {
-      onClick();
-      return;
-    }
-
-    // First interaction - if nothing is playing, play full track immediately
-    if (!mainIsPlaying) {
-      onClick();
-      return;
-    }
-
-    // Something is playing - start teaser
-    hasInteractedRef.current = true;
-    startTeaser();
+    onClick();
   };
 
   const handleAddToQueue = (e: React.MouseEvent) => {
     e.stopPropagation();
-    stopTeaser();
     onAddToQueue();
   };
 
@@ -221,9 +131,6 @@ const SongRow = ({
             <span className="text-xs text-white/60 font-medium">
               Offline
             </span>
-          )}
-          {teaserState === 'playing' && (
-            <span className="text-xs text-purple-400 font-medium">Previewing...</span>
           )}
         </div>
       </button>

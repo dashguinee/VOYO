@@ -18,7 +18,7 @@
 
 import { buildConsciousnessBlock } from '../consciousness';
 import { buildSoussouBlock } from './soussou';
-import type { OyoConsciousness, OyoContext } from '../schema';
+import type { OyoConsciousness, OyoContext, OyoReveal } from '../schema';
 
 // ---------------------------------------------------------------------------
 // Core character — the stable base
@@ -119,6 +119,79 @@ function buildContextBlock(ctx: OyoContext | undefined): string {
 }
 
 // ---------------------------------------------------------------------------
+// Reveal block — gap reasoning context (Phase 2.5)
+// ---------------------------------------------------------------------------
+
+function buildRevealBlock(reveal: OyoReveal | undefined): string {
+  if (!reveal) return '';
+
+  const lines: string[] = ['=== THIS INVOCATION ==='];
+
+  // Time gap framing
+  if (reveal.gap === 'firstmeet') {
+    lines.push("This is the FIRST time the listener has talked to you. Be welcoming, curious about their taste, light. Don't overwhelm.");
+  } else if (reveal.gap === 'instant') {
+    lines.push(`Continuing a conversation from <1 minute ago. Skip the pleasantries — pick up the thread.`);
+  } else if (reveal.gap === 'quick') {
+    lines.push(`The listener was just here a few minutes ago (${reveal.gapMinutes}min gap). Brief return — no big greeting.`);
+  } else if (reveal.gap === 'short') {
+    lines.push(`You last talked ~${reveal.gapMinutes}min ago. Casual return tone.`);
+  } else if (reveal.gap === 'medium') {
+    const hours = Math.round(reveal.gapMinutes / 60);
+    lines.push(`You last talked ${hours}h ago. Welcoming back vibe but not over-the-top.`);
+  } else if (reveal.gap === 'long') {
+    const hours = Math.round(reveal.gapMinutes / 60);
+    lines.push(`It's been ${hours}h since you last talked. Warm "you're back" energy.`);
+  } else if (reveal.gap === 'cold') {
+    const days = Math.round(reveal.gapMinutes / (60 * 24));
+    lines.push(`It's been ${days} days since you last talked. "It's been a minute" energy. Catch up but don't smother.`);
+  }
+
+  // Signal-driven context — what the listener did while OYO was away
+  const sig = reveal.gapSignals;
+  const sigParts: string[] = [];
+  if (sig.played > 0) sigParts.push(`played ${sig.played}`);
+  if (sig.completed > 0) sigParts.push(`completed ${sig.completed}`);
+  if (sig.skipped > 0) sigParts.push(`SKIPPED ${sig.skipped}`);
+  if (sig.reacted > 0) sigParts.push(`OYÉ'd ${sig.reacted}`);
+  if (sig.searched > 0) sigParts.push(`searched ${sig.searched}`);
+  if (sig.queueAdded > 0) sigParts.push(`queued ${sig.queueAdded}`);
+
+  if (sigParts.length > 0) {
+    lines.push(`Since we last talked, the listener: ${sigParts.join(', ')}.`);
+  }
+
+  // Behavior reads — give OYO a hint about how to interpret the signals
+  if (sig.skipped >= 4 && sig.played < 3) {
+    lines.push(`READ: Lots of skips. They're not finding the vibe. Acknowledge it directly and offer to switch direction.`);
+  } else if (sig.reacted >= 3) {
+    lines.push(`READ: They've been loving the run. Match their energy and extend the vibe.`);
+  } else if (sig.completed >= 5 && sig.skipped === 0) {
+    lines.push(`READ: Clean run, full trust in the queue. Honor that — keep the thread.`);
+  } else if (sig.searched >= 2 && sig.played === 0) {
+    lines.push(`READ: They were searching but didn't commit. Ask what they're chasing.`);
+  }
+
+  // Suggested opening — OYO can use this verbatim or paraphrase
+  if (reveal.greeting) {
+    lines.push(`OPENING SUGGESTION (use verbatim or rewrite in your voice): "${reveal.greeting}"`);
+  }
+
+  // Reveal mode hint
+  lines.push(`UI mode: ${reveal.mode} — ${
+    reveal.mode === 'full-summon'
+      ? 'full reveal moment, take the stage'
+      : reveal.mode === 'side-companion'
+      ? 'casual mid-music check-in, music is still running visually'
+      : reveal.mode === 'whisper'
+      ? 'quick drive-by thought, will auto-dismiss'
+      : 'ambient hint, listener may not engage at all'
+  }.`);
+
+  return lines.join('\n');
+}
+
+// ---------------------------------------------------------------------------
 // Full system prompt builder
 // ---------------------------------------------------------------------------
 
@@ -126,6 +199,7 @@ export interface CharacterPromptInput {
   consciousness: OyoConsciousness;
   context?: OyoContext;
   locale?: string;
+  reveal?: OyoReveal;
 }
 
 export function buildCharacterPrompt(input: CharacterPromptInput): string {
@@ -136,6 +210,9 @@ export function buildCharacterPrompt(input: CharacterPromptInput): string {
 
   const soussouBlock = buildSoussouBlock(input.locale || input.consciousness.essence.locale);
   if (soussouBlock) parts.push(soussouBlock);
+
+  const revealBlock = buildRevealBlock(input.reveal);
+  if (revealBlock) parts.push(revealBlock);
 
   const contextBlock = buildContextBlock(input.context);
   if (contextBlock) parts.push(contextBlock);

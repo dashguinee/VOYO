@@ -768,6 +768,22 @@ input[type="range"]:focus::-moz-range-thumb {
   100% { transform: translateX(100%); }
 }
 
+/* Orb blink — periodic spark sweep across the VOYO orb so even
+   while the nav is "asleep" the listener sees a faint sign of
+   presence. Stays quiet most of the cycle, sweeps in a brief flash. */
+@keyframes voyo-orb-blink {
+  0%, 88%, 100% { opacity: 0; transform: translateX(-110%); }
+  91%           { opacity: 0.85; transform: translateX(0%); }
+  95%           { opacity: 0; transform: translateX(110%); }
+}
+
+/* Orb glow pulse — slow ambient throb on the orb halo, paired with
+   the blink so the sign-of-life feels alive, not mechanical. */
+@keyframes voyo-orb-pulse {
+  0%, 100% { box-shadow: 0 0 16px rgba(139, 92, 246, 0.30), 0 4px 16px rgba(0,0,0,0.4); }
+  50%      { box-shadow: 0 0 26px rgba(212, 160, 83, 0.40), 0 4px 18px rgba(0,0,0,0.4); }
+}
+
 /* === SPRING-LIKE MOTION (Bounce easing via CSS) === */
 @keyframes voyo-spring-in {
   0% { transform: translateY(100%); }

@@ -31,6 +31,10 @@ const ClassicMode = lazy(() => import('./components/classic/ClassicMode'));
 const SearchOverlay = lazy(() => import('./components/search/SearchOverlayV2'));
 const ArtistPage = lazy(() => import('./components/voyo/ArtistPage'));
 const UniversePanel = lazy(() => import('./components/universe/UniversePanel').then(m => ({ default: m.UniversePanel })));
+// OYO ambient AI invocation overlay — Phase 2. Lazy so the mercury SVG +
+// chat layer don't bloat the initial bundle. Only loads the first time
+// the user long-presses the VOYO orb to summon OYO.
+const OyoInvocation = lazy(() => import('./oyo-ui/OyoInvocation').then(m => ({ default: m.OyoInvocation })));
 import { useReactionStore } from './store/reactionStore';
 import { devLog, devWarn } from './utils/logger';
 import { AuthProvider } from './providers/AuthProvider';
@@ -1569,6 +1573,12 @@ function App() {
 
       {/* Audio Player - Boost (cached audio) handles playback */}
       <AudioPlayer />
+
+      {/* OYO Ambient AI Overlay — Phase 2. Mounted once at root, reads
+          isInvoked from oyoStore. Long-press the VOYO orb to summon. */}
+      <Suspense fallback={null}>
+        <OyoInvocation />
+      </Suspense>
 
       {/* YouTube Iframe - GLOBAL for all modes (Classic needs it for streaming) */}
       <YouTubeIframe />

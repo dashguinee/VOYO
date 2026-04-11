@@ -1147,7 +1147,6 @@ const DashPlaceholder = memo(({ onClick, label }: { onClick?: () => void; label:
 interface PortalBeltProps {
   tracks: Track[];
   onTap: (track: Track) => void;
-  onTeaser?: (track: Track) => void;
   onQueueAdd?: (track: Track) => void; // Track queue additions for MixBoard
   playedTrackIds: Set<string>;
   type: 'hot' | 'discovery';
@@ -1158,7 +1157,7 @@ interface PortalBeltProps {
   scrollOutwardTrigger?: number; // Increment to trigger outward scroll
 }
 
-const PortalBelt = memo(({ tracks, onTap, onTeaser, onQueueAdd, playedTrackIds, type, mixModes, modeBoosts, isActive, scrollOutwardTrigger = 0 }: PortalBeltProps) => {
+const PortalBelt = memo(({ tracks, onTap, onQueueAdd, playedTrackIds, type, mixModes, modeBoosts, isActive, scrollOutwardTrigger = 0 }: PortalBeltProps) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [offset, setOffset] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
@@ -1312,7 +1311,6 @@ const PortalBelt = memo(({ tracks, onTap, onTeaser, onQueueAdd, playedTrackIds, 
               <StreamCard
                 track={track}
                 onTap={() => onTap(track)}
-                onTeaser={onTeaser}
                 onQueueAdd={onQueueAdd}
                 isPlayed={playedTrackIds.has(track.id)}
                 modeColor={mixModes ? getTrackModeColor(track.title, track.artist, mixModes, modeBoosts) : null}
@@ -1436,65 +1434,42 @@ const PortalBelt = memo(({ tracks, onTap, onTeaser, onQueueAdd, playedTrackIds, 
 
 // ============================================
 // STREAM CARD (Horizontal scroll - HOT/DISCOVERY - with VOYO brand tint)
-// Now with MOBILE TAP-TO-TEASER (30s preview) + DRAG-TO-QUEUE
+// Tap = play full track immediately. Drag = add to queue.
 // ============================================
-const StreamCard = memo(({ track, onTap, isPlayed, onTeaser, modeColor, onQueueAdd }: {
+const StreamCard = memo(({ track, onTap, isPlayed, modeColor, onQueueAdd }: {
   track: Track;
   onTap: () => void;
   isPlayed?: boolean;
-  onTeaser?: (track: Track) => void;
   modeColor?: { neon: string; glow: string; intensity: number } | null; // From MixBoard mode matching
   onQueueAdd?: (track: Track) => void; // Callback when track is added to queue (for MixBoard tracking)
 }) => {
   const addToQueue = usePlayerStore(state => state.addToQueue);
   const [showQueueFeedback, setShowQueueFeedback] = useState(false);
-  const [showTeaserFeedback, setShowTeaserFeedback] = useState(false);
-  const [isTouchDevice, setIsTouchDevice] = useState(false);
   const [wasDragged, setWasDragged] = useState(false);
   const [isFlying, setIsFlying] = useState(false); // Card flying to queue animation
 
   // Timeout refs for cleanup - prevents memory leaks on rapid scrolling
-  const teaserTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const queueTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dragTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const flyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Detect touch device
-  useEffect(() => {
-    const checkTouch = () => {
-      setIsTouchDevice('ontouchstart' in window || navigator.maxTouchPoints > 0);
-    };
-    checkTouch();
-  }, []);
-
   // Cleanup timeouts on unmount
   useEffect(() => {
     return () => {
-      if (teaserTimeoutRef.current) clearTimeout(teaserTimeoutRef.current);
       if (queueTimeoutRef.current) clearTimeout(queueTimeoutRef.current);
       if (dragTimeoutRef.current) clearTimeout(dragTimeoutRef.current);
       if (flyTimeoutRef.current) clearTimeout(flyTimeoutRef.current);
     };
   }, []);
 
-  // Handle tap - on mobile plays teaser, on desktop plays full
+  // Handle tap - play the full track immediately on any device.
   const handleTap = () => {
     // If was dragging, don't trigger tap
     if (wasDragged) {
       setWasDragged(false);
       return;
     }
-
-    // On mobile: tap = teaser preview (30s)
-    if (isTouchDevice && onTeaser) {
-      onTeaser(track);
-      setShowTeaserFeedback(true);
-      if (teaserTimeoutRef.current) clearTimeout(teaserTimeoutRef.current);
-      teaserTimeoutRef.current = setTimeout(() => setShowTeaserFeedback(false), 2000);
-    } else {
-      // On desktop: click = full play
-      onTap();
-    }
+    onTap();
   };
 
   return (
@@ -1524,17 +1499,6 @@ const StreamCard = memo(({ track, onTap, isPlayed, onTeaser, modeColor, onQueueA
             className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none"
           >
             <div className="w-14 h-14 rounded-xl bg-gradient-to-r from-purple-500/40 to-violet-600/40 blur-md" />
-          </div>
-        )}
-      
-
-      {/* Teaser Feedback Indicator */}
-      
-        {showTeaserFeedback && (
-          <div
-            className="absolute -top-8 left-1/2 -translate-x-1/2 z-50 bg-purple-500 text-white text-[9px] font-bold px-3 py-1.5 rounded-full shadow-lg whitespace-nowrap flex items-center gap-1"
-          >
-            <Play size={10} fill="white" /> 30s Preview
           </div>
         )}
       
@@ -3745,6 +3709,103 @@ export const VoyoPortraitPlayer = ({
   const didHoldRef = useRef(false);
   const djWakeCountRef = useRef(0); // Track how many times DJ mode was activated
 
+  // ===== CUBE DOCK — inline OYO DJ chat that expands from the carousel cube =====
+  // Hold the cube (~500ms) → footer expands → subtle chat dock slides in.
+  // Cube morphs into the animated orb form during the hold + while open.
+  // This is the side-companion mode anchored on the music control surface.
+  const [cubeDockOpen, setCubeDockOpen] = useState(false);
+  const [cubeHolding, setCubeHolding] = useState(false); // pulse during the press
+  const [cubeOyoLine, setCubeOyoLine] = useState<string | null>(null);
+  const [cubeOyoThinking, setCubeOyoThinking] = useState(false);
+  const [cubeInput, setCubeInput] = useState('');
+  const cubeHoldTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cubeAutoCloseRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cubeOyoLineFadeRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const armCubeAutoClose = useCallback(() => {
+    if (cubeAutoCloseRef.current) clearTimeout(cubeAutoCloseRef.current);
+    cubeAutoCloseRef.current = setTimeout(() => {
+      setCubeDockOpen(false);
+      setCubeOyoLine(null);
+    }, 12000);
+  }, []);
+
+  const openCubeDock = useCallback(() => {
+    setCubeDockOpen(true);
+    setCubeHolding(false);
+    haptics.medium();
+    armCubeAutoClose();
+  }, [armCubeAutoClose]);
+
+  const closeCubeDock = useCallback(() => {
+    setCubeDockOpen(false);
+    setCubeHolding(false);
+    setCubeOyoLine(null);
+    setCubeInput('');
+    if (cubeHoldTimerRef.current) clearTimeout(cubeHoldTimerRef.current);
+    if (cubeAutoCloseRef.current) clearTimeout(cubeAutoCloseRef.current);
+    if (cubeOyoLineFadeRef.current) clearTimeout(cubeOyoLineFadeRef.current);
+  }, []);
+
+  const handleCubePointerDown = useCallback(() => {
+    if (cubeDockOpen) return; // already open, normal click flow handles dismiss
+    didHoldRef.current = false;
+    setCubeHolding(true);
+    if (cubeHoldTimerRef.current) clearTimeout(cubeHoldTimerRef.current);
+    cubeHoldTimerRef.current = setTimeout(() => {
+      didHoldRef.current = true;
+      openCubeDock();
+    }, 500);
+  }, [cubeDockOpen, openCubeDock]);
+
+  const handleCubePointerUpOrLeave = useCallback(() => {
+    if (cubeHoldTimerRef.current) {
+      clearTimeout(cubeHoldTimerRef.current);
+      cubeHoldTimerRef.current = null;
+    }
+    setCubeHolding(false);
+  }, []);
+
+  const submitCubePrompt = useCallback(async (text: string) => {
+    const message = text.trim();
+    if (!message || cubeOyoThinking) return;
+    setCubeInput('');
+    setCubeOyoThinking(true);
+    setCubeOyoLine(null);
+    armCubeAutoClose();
+    try {
+      const { oyo } = await import('../../oyo');
+      const out = await oyo.think({
+        userMessage: message,
+        surface: 'player',
+        explicit: false,
+        context: {
+          currentTrack: currentTrack
+            ? { trackId: currentTrack.id, title: currentTrack.title, artist: currentTrack.artist }
+            : undefined,
+        },
+      });
+      setCubeOyoLine(out.response);
+      // Fade the line after 6s but keep dock open in case user wants to follow up.
+      if (cubeOyoLineFadeRef.current) clearTimeout(cubeOyoLineFadeRef.current);
+      cubeOyoLineFadeRef.current = setTimeout(() => setCubeOyoLine(null), 6000);
+    } catch (err) {
+      devLog('[Cube Dock] OYO think failed', err);
+      setCubeOyoLine("My brain just lagged. Try again in a sec.");
+    } finally {
+      setCubeOyoThinking(false);
+    }
+  }, [armCubeAutoClose, cubeOyoThinking, currentTrack]);
+
+  // Cleanup cube timers on unmount
+  useEffect(() => {
+    return () => {
+      if (cubeHoldTimerRef.current) clearTimeout(cubeHoldTimerRef.current);
+      if (cubeAutoCloseRef.current) clearTimeout(cubeAutoCloseRef.current);
+      if (cubeOyoLineFadeRef.current) clearTimeout(cubeOyoLineFadeRef.current);
+    };
+  }, []);
+
   // Quick controls - now using store (shuffleMode, repeatMode, toggleShuffle, cycleRepeat)
 
   // Tutorial messages for DJ wake - rotates through different messages
@@ -4086,47 +4147,8 @@ export const VoyoPortraitPlayer = ({
     } as any);
   };
 
-  // ============================================
-  // MOBILE TEASER PREVIEW (30 seconds at 30% volume)
-  // ============================================
-  const [teaserTrack, setTeaserTrack] = useState<Track | null>(null);
-  const [isTeaserPlaying, setIsTeaserPlaying] = useState(false);
-  const teaserAudioRef = useRef<HTMLAudioElement | null>(null);
-  const teaserTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // Handle teaser playback for mobile tap
-  const handleTeaser = useCallback((track: Track) => {
-    // Stop any existing teaser
-    if (teaserAudioRef.current) {
-      teaserAudioRef.current.pause();
-      teaserAudioRef.current = null;
-    }
-    if (teaserTimeoutRef.current) {
-      clearTimeout(teaserTimeoutRef.current);
-    }
-
-    // Create audio element for teaser preview
-    // Note: In production, this would use the actual audio source
-    // For now, we'll set the current track and auto-stop after 30s
-    setTeaserTrack(track);
-    setIsTeaserPlaying(true);
-    playTrack(track);
-
-    // Auto-stop after 30 seconds
-    teaserTimeoutRef.current = setTimeout(() => {
-      setIsTeaserPlaying(false);
-      setTeaserTrack(null);
-      // Don't auto-pause - let user decide
-    }, 30000);
-  }, [playTrack]);
-
-  // Cleanup teaser on unmount
-  useEffect(() => {
-    return () => {
-      if (teaserTimeoutRef.current) clearTimeout(teaserTimeoutRef.current);
-      if (teaserAudioRef.current) teaserAudioRef.current.pause();
-    };
-  }, []);
+  // (30s teaser preview removed — tap on a stream card now plays the
+  // full track immediately on every device.)
 
   return (
     <div
@@ -4184,34 +4206,6 @@ export const VoyoPortraitPlayer = ({
           }
           }}
       />
-
-      {/* TEASER PREVIEW INDICATOR - Shows when 30s preview is active */}
-      
-        {isTeaserPlaying && teaserTrack && (
-          <div
-            className="absolute top-4 left-1/2 -translate-x-1/2 z-[60] flex items-center gap-2 px-4 py-2 rounded-full bg-purple-500/90 backdrop-blur-sm border border-purple-400/50 shadow-lg"
-          >
-            <div
-              className="w-2 h-2 rounded-full bg-white"
-            />
-            <span className="text-white text-xs font-bold">30s Preview</span>
-            <button
-              className="ml-1 p-1 rounded-full bg-white/20 hover:bg-white/30 transition-colors"
-              onClick={() => {
-                setIsTeaserPlaying(false);
-                setTeaserTrack(null);
-                if (teaserTimeoutRef.current) {
-                  clearTimeout(teaserTimeoutRef.current);
-                }
-                }}
-            >
-              <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
-              </svg>
-            </button>
-          </div>
-        )}
-      
 
       {/* FULLSCREEN VIDEO PLAYER - Shows when expand button clicked */}
       
@@ -4490,13 +4484,119 @@ export const VoyoPortraitPlayer = ({
 
       </div>
 
-      {/* --- BOTTOM SECTION: DASHBOARD / MIX BOARD --- */}
-      {/* Fade mode: min-h for scroll | Disappear mode: auto-fit (State 0) */}
+      {/* --- BOTTOM SECTION: DASHBOARD / MIX BOARD ---
+          The "music control surface". Slightly concave Surface-Pro feel —
+          elliptical top curve + inset shadow + a thin rim highlight giving
+          the impression that the HOT/DISCOVERY rail is recessed into a
+          shallow lensed dish, not stacked on a flat panel.
+          When the cube dock is open, the min-height grows so the chat
+          space slides in without pushing the rail offscreen. */}
       <div
-        className={`flex-shrink-0 w-full bg-[#08080a]/95 backdrop-blur-2xl rounded-t-[2.5rem] border-t border-white/5 relative z-40 flex flex-col pt-2 pb-6 shadow-[0_-20px_60px_-10px_rgba(0,0,0,1)] ${
-          oyeBarBehavior === 'fade' ? 'min-h-[325px]' : ''
+        className={`flex-shrink-0 w-full backdrop-blur-2xl relative z-40 flex flex-col pt-2 pb-6 transition-[min-height] duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+          cubeDockOpen ? 'min-h-[440px]' : oyeBarBehavior === 'fade' ? 'min-h-[325px]' : ''
         }`}
+        style={{
+          background: 'linear-gradient(180deg, rgba(15,15,22,0.92) 0%, rgba(8,8,10,0.97) 28%, rgba(8,8,10,0.99) 100%)',
+          // Elliptical top curve — wider in the middle than the corners
+          // (the cube sits at the deepest part of the shallow dish).
+          borderTopLeftRadius: '36px 28px',
+          borderTopRightRadius: '36px 28px',
+          // Concave depth: inset top shadow gives the recessed feel,
+          // inset bottom highlight bounces a hint of light back up.
+          boxShadow: [
+            '0 -20px 60px -10px rgba(0,0,0,1)',
+            'inset 0 14px 40px -14px rgba(0,0,0,0.85)',
+            'inset 0 1px 0 rgba(255,255,255,0.06)',
+            'inset 0 -1px 0 rgba(139,92,246,0.04)',
+          ].join(', '),
+          borderTop: '1px solid rgba(255,255,255,0.05)',
+        }}
       >
+        {/* Rim highlight — a thin gradient running along the curved top edge
+            that catches "light" and sells the projected-on-glass feel. */}
+        <div
+          className="absolute top-0 left-0 right-0 h-px pointer-events-none"
+          style={{
+            background: 'linear-gradient(90deg, transparent 0%, rgba(212,160,83,0.18) 30%, rgba(139,92,246,0.22) 50%, rgba(212,160,83,0.18) 70%, transparent 100%)',
+            borderTopLeftRadius: '36px',
+            borderTopRightRadius: '36px',
+          }}
+        />
+
+        {/* ===== CUBE DOCK — inline OYO DJ chat space =====
+            Slides in above the rail when the cube is held. Subtle, contained,
+            does not take over the screen. Cube morphs into the orb form
+            (handled at the cube button itself). */}
+        <div
+          className="overflow-hidden transition-[max-height,opacity] duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]"
+          style={{
+            maxHeight: cubeDockOpen ? '160px' : '0px',
+            opacity: cubeDockOpen ? 1 : 0,
+          }}
+        >
+          <div className="px-5 pt-3 pb-2 relative">
+            {/* OYO line — bronze-glow text, no bubble */}
+            <div
+              className="text-center text-[12px] leading-snug min-h-[16px] mb-2 transition-opacity duration-500"
+              style={{
+                color: '#E6B865',
+                textShadow: '0 0 12px rgba(212,160,83,0.5)',
+                opacity: cubeOyoLine ? 1 : cubeOyoThinking ? 0.6 : 0.35,
+              }}
+            >
+              {cubeOyoLine || (cubeOyoThinking ? 'thinking…' : 'Talk to OYO — what\'s the vibe?')}
+            </div>
+
+            {/* Quick prompt chips */}
+            <div className="flex flex-wrap justify-center gap-1.5 mb-2">
+              {['More like this', 'Switch it up', 'Slower', 'More energy'].map((p) => (
+                <button
+                  key={p}
+                  onClick={() => submitCubePrompt(p)}
+                  disabled={cubeOyoThinking}
+                  className="px-2.5 py-1 rounded-full text-[10px] text-white/70 border border-white/10 active:scale-95 transition-transform"
+                  style={{ background: 'rgba(139,92,246,0.08)' }}
+                >
+                  {p}
+                </button>
+              ))}
+            </div>
+
+            {/* Input row */}
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                value={cubeInput}
+                onChange={(e) => setCubeInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') submitCubePrompt(cubeInput);
+                  if (e.key === 'Escape') closeCubeDock();
+                }}
+                onFocus={armCubeAutoClose}
+                placeholder="Ask OYO…"
+                disabled={cubeOyoThinking}
+                className="flex-1 px-3 py-2 rounded-full bg-white/5 border border-white/10 text-white text-[12px] placeholder:text-white/30 focus:outline-none focus:border-purple-500/40"
+              />
+              <button
+                onClick={() => submitCubePrompt(cubeInput)}
+                disabled={cubeOyoThinking || !cubeInput.trim()}
+                className="px-3 py-2 rounded-full text-[11px] font-semibold text-white disabled:opacity-40 active:scale-95 transition-transform"
+                style={{ background: 'linear-gradient(135deg, #8b5cf6, #D4A053)' }}
+              >
+                Send
+              </button>
+              <button
+                onClick={closeCubeDock}
+                aria-label="Close OYO dock"
+                className="p-1.5 rounded-full text-white/40 hover:text-white/70 transition-colors"
+              >
+                <X size={14} />
+              </button>
+            </div>
+          </div>
+        </div>
+
+
 
         {/* Stream Labels - Enhanced Neon Style with Glow */}
         <div className="flex justify-between px-6 mb-3">
@@ -4612,7 +4712,6 @@ export const VoyoPortraitPlayer = ({
             <PortalBelt
               tracks={hotTracks.slice(0, 8)}
               onTap={playTrack}
-              onTeaser={handleTeaser}
               onQueueAdd={trackQueueAddition}
               playedTrackIds={playedTrackIds}
               type="hot"
@@ -4646,16 +4745,40 @@ export const VoyoPortraitPlayer = ({
               style={{ background: 'radial-gradient(ellipse at left, rgba(212,160,83,0.5) 0%, transparent 70%)' }}
             />
 
-            {/* VOYO Portal Button - Premium stale, enhanced active */}
+            {/* VOYO Portal Button (the CUBE) - tap = onVoyoFeed, hold = OYO chat dock.
+                When held / open, it morphs into the animated orb form
+                (toy-orb effects: gradient ring, halo, pulse). */}
             <button
-              onClick={onVoyoFeed}
+              onClick={() => {
+                // Suppress the click that comes after a long-press release
+                if (didHoldRef.current) {
+                  didHoldRef.current = false;
+                  return;
+                }
+                if (cubeDockOpen) {
+                  closeCubeDock();
+                  return;
+                }
+                onVoyoFeed();
+              }}
+              onPointerDown={handleCubePointerDown}
+              onPointerUp={handleCubePointerUpOrLeave}
+              onPointerLeave={handleCubePointerUpOrLeave}
+              onPointerCancel={handleCubePointerUpOrLeave}
               className="relative w-14 h-14 rounded-full flex flex-col items-center justify-center"
               style={{
                 background: 'radial-gradient(circle at center, #1a1a2e 0%, #0f0f16 100%)',
-                boxShadow: (isHotBeltActive || isDiscoveryBeltActive)
+                boxShadow: cubeDockOpen
+                  ? '0 0 30px rgba(139,92,246,0.55), 0 0 60px rgba(212,160,83,0.25), inset 0 0 20px rgba(139,92,246,0.15)'
+                  : cubeHolding
+                  ? '0 0 22px rgba(139,92,246,0.45), 0 0 40px rgba(212,160,83,0.18)'
+                  : (isHotBeltActive || isDiscoveryBeltActive)
                   ? '-8px 0 25px rgba(181,74,46,0.5), 8px 0 25px rgba(212,160,83,0.5), 0 0 20px rgba(139,92,246,0.3)'
                   : '0 0 12px rgba(139,92,246,0.15)',
+                transform: cubeDockOpen ? 'scale(1.08)' : cubeHolding ? 'scale(1.04)' : 'scale(1)',
+                transition: 'transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.4s ease',
               }}
+              aria-label="VOYO — tap for feed, hold for OYO DJ"
             >
               {/* Stale: VOYO brand gradient ring — purple + bronze (no pink) */}
               <div
@@ -4711,7 +4834,6 @@ export const VoyoPortraitPlayer = ({
             <PortalBelt
               tracks={discoverTracks.slice(0, 8)}
               onTap={playTrack}
-              onTeaser={handleTeaser}
               onQueueAdd={trackQueueAddition}
               playedTrackIds={playedTrackIds}
               type="discovery"

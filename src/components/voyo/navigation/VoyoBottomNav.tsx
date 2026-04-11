@@ -16,13 +16,26 @@ import { House, ChatCircle } from '@phosphor-icons/react';
 import { usePlayerStore } from '../../../store/playerStore';
 import { useAuth } from '../../../hooks/useAuth';
 import { messagesAPI } from '../../../lib/voyo-api';
+import { useOyoInvocation } from '../../../oyo-ui/useOyoInvocation';
+import type { InvocationSurface } from '../../../store/oyoStore';
 
 interface VoyoBottomNavProps {
   onDahub?: () => void;
   onHome?: () => void;
+  /** Surface to invoke OYO under when the VOYO orb gets long-pressed. */
+  oyoSurface?: InvocationSurface;
+  /**
+   * Player mode — when true, the bottom nav drops the central VOYO orb
+   * (the carousel cube IS the player's VOYO control) and renders Home /
+   * Dahub as floating corner buttons on the bottom edge of the screen.
+   * Background is barely-there (7% on the chips themselves), and the nav
+   * stays hidden by default — only revealed at the bottom of a scrollable
+   * container, or briefly on touch wake.
+   */
+  playerMode?: boolean;
 }
 
-export const VoyoBottomNav = ({ onDahub, onHome }: VoyoBottomNavProps) => {
+export const VoyoBottomNav = ({ onDahub, onHome, oyoSurface = 'home', playerMode = false }: VoyoBottomNavProps) => {
   // Fine-grained selectors (battery fix)
   const voyoActiveTab = usePlayerStore(s => s.voyoActiveTab);
   const setVoyoTab = usePlayerStore(s => s.setVoyoTab);
@@ -33,74 +46,78 @@ export const VoyoBottomNav = ({ onDahub, onHome }: VoyoBottomNavProps) => {
   const [promptCount, setPromptCount] = useState(0);
   const [unreadDMs, setUnreadDMs] = useState(0);
 
-  // -- 3-tier fade (from Tivi+) --
-  const fadeRef = useRef<'full' | 'dim' | 'ghost'>('full');
-  const [navOpacity, setNavOpacity] = useState<'full' | 'dim' | 'ghost'>('full');
-  const dimTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
-  const ghostTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  // -- Visibility model.
+  //    STANDARD mode (home/feed/dahub): always visible, classic pill look.
+  //    PLAYER mode: hidden by default, only revealed when the user has
+  //                 scrolled past 75% of any scrollable container. When
+  //                 revealed, the pill background dims (more translucent)
+  //                 but the buttons themselves stay clear. No touch wake.
+  const [navState, setNavState] = useState<'full' | 'fade'>('full');
+  // promptState changes mid-effect — track via ref so the wake/fade
+  // closures don't have to re-bind every time it shifts.
+  const promptActiveRef = useRef(false);
 
   useEffect(() => {
-    const onScroll = () => {
-      clearTimeout(dimTimer.current);
-      clearTimeout(ghostTimer.current);
-
-      if (window.scrollY < 80) {
-        if (fadeRef.current !== 'full') {
-          fadeRef.current = 'full';
-          setNavOpacity('full');
-        }
-        return;
-      }
-
-      // Scrolling -> dim (30%)
-      if (fadeRef.current !== 'dim') {
-        fadeRef.current = 'dim';
-        setNavOpacity('dim');
-      }
-
-      // Idle 2s -> full
-      dimTimer.current = setTimeout(() => {
-        fadeRef.current = 'full';
-        setNavOpacity('full');
-
-        // Idle 5s more -> ghost (12%)
-        ghostTimer.current = setTimeout(() => {
-          if (window.scrollY > 80) {
-            fadeRef.current = 'ghost';
-            setNavOpacity('ghost');
-          }
-        }, 5000);
-      }, 2000);
-    };
-
-    window.addEventListener('scroll', onScroll, { passive: true });
-    return () => {
-      window.removeEventListener('scroll', onScroll);
-      clearTimeout(dimTimer.current);
-      clearTimeout(ghostTimer.current);
-    };
-  }, []);
-
-  // Wake from ghost on any tap
-  const wakeNav = useCallback(() => {
-    clearTimeout(ghostTimer.current);
-    if (fadeRef.current !== 'full') {
-      fadeRef.current = 'full';
-      setNavOpacity('full');
+    promptActiveRef.current = promptState !== 'clean';
+    // If a prompt animation just started, force full visibility.
+    if (promptState !== 'clean') {
+      setNavState('full');
     }
-    // Re-arm ghost
-    ghostTimer.current = setTimeout(() => {
-      if (window.scrollY > 80) {
-        fadeRef.current = 'ghost';
-        setNavOpacity('ghost');
-      }
-    }, 7000);
+  }, [promptState]);
+
+  // PLAYER MODE — listen for scroll on any descendant container, reveal
+  // the nav once scroll progress passes 75%. Document-level capture means
+  // we catch the scrollable areas inside the player without having to
+  // know which one the user is on.
+  useEffect(() => {
+    if (!playerMode) {
+      setNavState('full'); // standard mode is always visible
+      return;
+    }
+
+    setNavState('fade'); // start hidden in player mode
+
+    const onScroll = (e: Event) => {
+      if (promptActiveRef.current) return;
+      const target = e.target as HTMLElement | Document | null;
+      const el = target instanceof Document ? document.documentElement : (target as HTMLElement | null);
+      if (!el) return;
+      const max = el.scrollHeight - el.clientHeight;
+      if (max <= 0) return; // not scrollable
+      const pct = el.scrollTop / max;
+      // Hysteresis — reveal at 75%, hide back at 70% so the nav doesn't
+      // strobe right at the threshold.
+      setNavState((prev) => {
+        if (pct >= 0.75) return 'full';
+        if (pct < 0.7) return 'fade';
+        return prev;
+      });
+    };
+
+    document.addEventListener('scroll', onScroll, { capture: true, passive: true });
+    return () => {
+      document.removeEventListener('scroll', onScroll, { capture: true } as EventListenerOptions);
+    };
+  }, [playerMode]);
+
+  // Public wake — kept as a no-op shim so existing button handlers don't
+  // need to be edited. In standard mode there's nothing to wake; in player
+  // mode the scroll-percentage logic owns visibility.
+  const wakeNav = useCallback(() => {
+    /* visibility is owned by scroll/promptState in this model */
   }, []);
 
   // -- Tap feedback --
   const [pressedBtn, setPressedBtn] = useState<string | null>(null);
   const handlePointerDown = (id: string) => setPressedBtn(id);
   const handlePointerUp = () => setPressedBtn(null);
+
+  // -- OYO long-press summon (Phase 2) --
+  // Auto-pick the surface from current playback context if caller didn't override.
+  const inferredSurface: InvocationSurface =
+    oyoSurface !== 'home' ? oyoSurface : isPlaying ? 'player' : 'home';
+  const { bindLongPress } = useOyoInvocation();
+  const oyoBindings = bindLongPress(inferredSurface);
 
   // -- Unread DM count --
   useEffect(() => {
@@ -176,14 +193,13 @@ export const VoyoBottomNav = ({ onDahub, onHome }: VoyoBottomNavProps) => {
     onDahub?.();
   };
 
-  // Opacity values matching Tivi+ (dim=30%, ghost=12%, full=100%)
-  const opacityValue = navOpacity === 'dim' ? 0.3 : navOpacity === 'ghost' ? 0.12 : 1;
+  // 2-state ambient nav: full (100%) or fade (~6% — barely visible hint).
+  // The fade-in is fast (responsive to touch), the fade-out is slow (graceful).
+  const opacityValue = navState === 'fade' ? 0.06 : 1;
   const opacityTransition =
-    navOpacity === 'dim'
-      ? 'opacity 0.8s cubic-bezier(0.16, 1, 0.3, 1)'
-      : navOpacity === 'ghost'
-        ? 'opacity 2s cubic-bezier(0.16, 1, 0.3, 1)'
-        : 'opacity 0.4s ease-out';
+    navState === 'fade'
+      ? 'opacity 1.2s cubic-bezier(0.16, 1, 0.3, 1)'
+      : 'opacity 0.35s ease-out';
 
   return (
     <div
@@ -197,13 +213,23 @@ export const VoyoBottomNav = ({ onDahub, onHome }: VoyoBottomNavProps) => {
     >
       <div
         className="pointer-events-auto max-w-[280px] mx-auto h-[54px] rounded-full flex items-center justify-around px-3"
-        style={{
-          background: 'rgba(10, 10, 15, 0.65)',
-          backdropFilter: 'blur(16px) saturate(150%)',
-          WebkitBackdropFilter: 'blur(16px) saturate(150%)',
-          border: '1px solid rgba(139, 92, 246, 0.08)',
-          boxShadow: '0 4px 24px rgba(0,0,0,0.5), 0 0 20px rgba(139,92,246,0.04)',
-        }}
+        style={
+          playerMode
+            ? {
+                // Player mode: fully transparent — only the buttons themselves
+                // signal where the nav lives. No pill chrome at all.
+                background: 'transparent',
+                border: 'none',
+                boxShadow: 'none',
+              }
+            : {
+                background: 'rgba(10, 10, 15, 0.65)',
+                backdropFilter: 'blur(16px) saturate(150%)',
+                WebkitBackdropFilter: 'blur(16px) saturate(150%)',
+                border: '1px solid rgba(139, 92, 246, 0.08)',
+                boxShadow: '0 4px 24px rgba(0,0,0,0.5), 0 0 20px rgba(139,92,246,0.04)',
+              }
+        }
       >
         {/* LEFT: HOME */}
         <button
@@ -228,24 +254,58 @@ export const VoyoBottomNav = ({ onDahub, onHome }: VoyoBottomNavProps) => {
           </div>
         </button>
 
-        {/* CENTER: VOYO ORB */}
+        {/* CENTER: VOYO ORB
+            Long-press (600ms) summons OYO via the bindLongPress() handlers.
+            Short tap continues to fire handleVoyoToggle (existing behaviour).
+            The onClickCapture inside oyoBindings will swallow the click if
+            the long-press threshold was crossed. */}
         <button
           className="relative flex items-center justify-center"
-          onPointerDown={() => handlePointerDown('voyo')}
-          onPointerUp={handlePointerUp}
-          onPointerLeave={handlePointerUp}
+          onPointerDown={(e) => {
+            handlePointerDown('voyo');
+            oyoBindings.onPointerDown(e);
+          }}
+          onPointerUp={(e) => {
+            handlePointerUp();
+            oyoBindings.onPointerUp(e);
+          }}
+          onPointerLeave={(e) => {
+            handlePointerUp();
+            oyoBindings.onPointerLeave(e);
+          }}
+          onPointerCancel={(e) => {
+            handlePointerUp();
+            oyoBindings.onPointerCancel(e);
+          }}
+          onClickCapture={oyoBindings.onClickCapture}
           onClick={handleVoyoToggle}
           style={{ flex: '0 0 auto' }}
+          aria-label="VOYO — tap to play, long-press to summon OYO"
         >
           <div
-            className="relative w-12 h-12 rounded-full flex flex-col items-center justify-center overflow-hidden"
+            className="relative w-12 h-12 flex flex-col items-center justify-center overflow-hidden"
             style={{
               background: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 50%, #6d28d9 100%)',
-              boxShadow: '0 0 20px rgba(139, 92, 246, 0.35), 0 4px 16px rgba(0,0,0,0.4)',
-              transform: pressedBtn === 'voyo' ? 'scale(0.95)' : 'scale(1)',
-              transition: 'transform 80ms ease-out, box-shadow 0.3s ease',
+              // Square morph: while pressed, the round orb "squares up"
+              // — OYO is forming. The full long-press fire still launches
+              // the actual OYO summon overlay; this is the entrance gesture.
+              borderRadius: pressedBtn === 'voyo' ? '14px' : '999px',
+              transform: pressedBtn === 'voyo' ? 'scale(1.08)' : 'scale(1)',
+              transition: 'border-radius 0.45s cubic-bezier(0.16, 1, 0.3, 1), transform 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
+              // Slow ambient halo throb so the orb feels alive even at rest.
+              animation: 'voyo-orb-pulse 4.5s ease-in-out infinite',
             }}
           >
+            {/* Periodic spark sweep — "I'm still here" sign of life that
+                blinks across the orb at long, quiet intervals. */}
+            <div
+              className="absolute inset-0 pointer-events-none"
+              style={{
+                background: 'linear-gradient(110deg, transparent 35%, rgba(255,255,255,0.55) 50%, transparent 65%)',
+                animation: 'voyo-orb-blink 7.3s ease-in-out infinite',
+                mixBlendMode: 'screen',
+              }}
+            />
             {/* Base: VOYO text */}
             <div
               className="flex flex-col items-center"
@@ -277,11 +337,12 @@ export const VoyoBottomNav = ({ onDahub, onHome }: VoyoBottomNavProps) => {
 
             {/* Prompt: "Keep Playing" fills the orb */}
             <div
-              className="absolute inset-0 flex flex-col items-center justify-center rounded-full"
+              className="absolute inset-0 flex flex-col items-center justify-center"
               style={{
                 background: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)',
+                borderRadius: pressedBtn === 'voyo' ? '14px' : '999px',
                 opacity: promptState === 'keep' ? 1 : 0,
-                transition: 'opacity 0.3s ease',
+                transition: 'opacity 0.3s ease, border-radius 0.45s cubic-bezier(0.16, 1, 0.3, 1)',
                 pointerEvents: promptState === 'keep' ? 'auto' : 'none',
               }}
             >

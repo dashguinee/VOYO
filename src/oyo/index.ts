@@ -35,12 +35,14 @@ import {
   searchEssences,
   listEssences,
   clearMemory,
+  listSignals,
 } from './memory';
 import { getSession, resetSession } from './session';
 import { resetConsciousness } from './consciousness';
 import { consolidate } from './essence';
 import { isGeminiAvailable } from './providers/gemini';
 import { clearCache } from './cache';
+import { computeReveal } from './gap';
 
 // ---------------------------------------------------------------------------
 // think()
@@ -107,11 +109,26 @@ async function getState(): Promise<OyoState> {
   const session = getSession();
   const essences = await listEssences();
 
+  // Compute the *current* gap snapshot — UI can use this for ambient
+  // hint pulses ("OYO has something to say"), badge counts, etc., without
+  // having to actually invoke think().
+  let lastGap;
+  try {
+    const recentSignals = await listSignals(200);
+    lastGap = computeReveal({
+      signals: recentSignals,
+      consciousness,
+    });
+  } catch {
+    /* non-fatal */
+  }
+
   return {
     consciousness,
     session,
     essenceCount: essences.length,
     signalCount: consciousness.signals.totalSignals,
+    lastGap,
   };
 }
 

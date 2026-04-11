@@ -43,6 +43,8 @@ import { executeTools } from './tools/registry';
 import { callGemini } from './providers/gemini';
 import { digest } from './essence';
 import { snapshot, currentTimeOfDay } from './pattern';
+import { computeReveal, markInteraction } from './gap';
+import { listSignals } from './memory';
 
 // ---------------------------------------------------------------------------
 // Main think cycle
@@ -61,6 +63,26 @@ export async function runThoughtCycle(input: OyoThinkInput): Promise<OyoThinkOut
     /* non-fatal */
   }
 
+  // 2.5. GAP REASONING — compute reveal BEFORE we mark this turn as the
+  //      "last interaction." This way the gap is between the previous turn
+  //      and now, not zero. computeReveal returns mode + greeting + signals.
+  let reveal: import('./schema').OyoReveal | undefined;
+  try {
+    const recentSignals = await listSignals(200);
+    reveal = computeReveal({
+      signals: recentSignals,
+      consciousness,
+      surface: input.surface,
+      explicit: input.explicit,
+      isPlaying: !!input.context?.currentTrack,
+      currentTrack: input.context?.currentTrack
+        ? { title: input.context.currentTrack.title, artist: input.context.currentTrack.artist }
+        : undefined,
+    });
+  } catch {
+    /* gap reasoning is non-fatal */
+  }
+
   // 3. Append user turn to session
   const userTurn = appendUserTurn(input.userMessage);
 
@@ -74,6 +96,7 @@ export async function runThoughtCycle(input: OyoThinkInput): Promise<OyoThinkOut
     consciousness,
     context: enrichedContext,
     locale,
+    reveal,
   });
 
   // 5. Call Gemini
@@ -128,11 +151,17 @@ export async function runThoughtCycle(input: OyoThinkInput): Promise<OyoThinkOut
   const _debugSummary = formatToolResults(toolResults);
   void _debugSummary;
 
+  // 12. Mark this turn as the new "last interaction" — next gap reasoning
+  //     will compute the delta from THIS moment. Done last so a crash
+  //     mid-cycle doesn't poison the gap state.
+  markInteraction();
+
   return {
     response: finalText,
     toolCalls: oyoToolCalls,
     mood: mood || undefined,
     newMemories,
+    reveal,
   };
 }
 
