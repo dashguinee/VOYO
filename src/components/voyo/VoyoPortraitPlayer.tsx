@@ -4371,7 +4371,7 @@ export const VoyoPortraitPlayer = ({
           ╚═════════════════════════════════════════════════════════════╝ */}
       <div
         className="sticky top-0 z-20 flex flex-col flex-shrink-0"
-        style={{ height: 'calc(100% - 282px)' }}
+        style={{ height: 'calc(100% - 264px)' }}
       >
 
       {/* --- TOP SECTION (History/Queue) --- Part of the anchor.
