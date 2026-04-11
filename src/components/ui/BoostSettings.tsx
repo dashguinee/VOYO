@@ -9,10 +9,9 @@
  */
 
 import { useState } from 'react';
-import { Zap, Wifi, WifiOff, Trash2, X, HardDrive, Download, Settings, Sliders, Eye, EyeOff } from 'lucide-react';
+import { Zap, Trash2, X, HardDrive, Settings, Sliders, Eye, EyeOff, Flame, Sparkles } from 'lucide-react';
 import { useDownloadStore } from '../../store/downloadStore';
 import { usePlayerStore } from '../../store/playerStore';
-import { LottieIcon } from './LottieIcon';
 
 interface BoostSettingsProps {
   isOpen: boolean;
@@ -24,8 +23,6 @@ export const BoostSettings = ({ isOpen, onClose }: BoostSettingsProps) => {
   const autoBoostEnabled = useDownloadStore(s => s.autoBoostEnabled);
   const enableAutoBoost = useDownloadStore(s => s.enableAutoBoost);
   const disableAutoBoost = useDownloadStore(s => s.disableAutoBoost);
-  const downloadSetting = useDownloadStore(s => s.downloadSetting);
-  const updateSetting = useDownloadStore(s => s.updateSetting);
   const cachedTracks = useDownloadStore(s => s.cachedTracks);
   const cacheSize = useDownloadStore(s => s.cacheSize);
   const clearAllDownloads = useDownloadStore(s => s.clearAllDownloads);
@@ -94,7 +91,9 @@ export const BoostSettings = ({ isOpen, onClose }: BoostSettingsProps) => {
 
         {/* Content - Scrollable */}
         <div className="px-6 pb-24 space-y-4 overflow-y-auto flex-1">
-          {/* Audio Enhancement Preset */}
+          {/* Audio Enhancement Preset — three brand-matching lucide icons.
+              Lottie was rendering inconsistently; lucide ships with Vite,
+              looks crisp at 22px, and matches the rest of the app. */}
           <div className="bg-white/5 rounded-2xl p-4">
             <div className="text-sm font-medium text-white mb-3">Audio Enhancement</div>
             <div className="grid grid-cols-3 gap-2">
@@ -102,45 +101,81 @@ export const BoostSettings = ({ isOpen, onClose }: BoostSettingsProps) => {
                 onClick={() => setBoostProfile('boosted')}
                 className={`flex flex-col items-center gap-1 p-3 rounded-xl border transition-all voyo-tap-scale ${
                   boostProfile === 'boosted'
-                    ? 'bg-gradient-to-br from-purple-500/20 to-violet-500/20 border-purple-500/30 text-purple-300'
-                    : 'bg-white/5 border-white/10 text-gray-400 hover:bg-white/10'
+                    ? 'bg-gradient-to-br from-[#D4A053]/15 to-[#B17C2A]/10 border-[#D4A053]/35'
+                    : 'bg-white/5 border-white/10 hover:bg-white/10'
                 }`}
               >
-                <LottieIcon lottieUrl="/lottie/fire.json" fallbackEmoji="fire" size={22} />
-                <span className="text-[11px] font-bold">Warm</span>
-                <span className="text-[9px] opacity-70">Bass Boost</span>
+                <Flame
+                  size={22}
+                  strokeWidth={1.6}
+                  style={{
+                    color: boostProfile === 'boosted' ? '#E6B865' : 'rgba(212,160,83,0.55)',
+                    filter: boostProfile === 'boosted' ? 'drop-shadow(0 0 6px rgba(212,160,83,0.7))' : 'none',
+                  }}
+                />
+                <span
+                  className="text-[11px] font-bold"
+                  style={{ color: boostProfile === 'boosted' ? '#E6B865' : 'rgba(255,255,255,0.55)' }}
+                >
+                  Warm
+                </span>
+                <span className="text-[9px] opacity-60 text-white">Bass Boost</span>
               </button>
 
               <button
                 onClick={() => setBoostProfile('calm')}
                 className={`flex flex-col items-center gap-1 p-3 rounded-xl border transition-all voyo-tap-scale ${
                   boostProfile === 'calm'
-                    ? 'bg-gradient-to-br from-[#D4A053]/20 to-[#C4943D]/20 border-[#D4A053]/30 text-[#D4A053]'
-                    : 'bg-white/5 border-white/10 text-gray-400 hover:bg-white/10'
+                    ? 'bg-gradient-to-br from-purple-400/15 to-violet-500/10 border-purple-400/35'
+                    : 'bg-white/5 border-white/10 hover:bg-white/10'
                 }`}
               >
-                <LottieIcon lottieUrl="/lottie/sunrise.json" fallbackEmoji="sunrise" size={22} speed={0.5} />
-                <span className="text-[11px] font-bold">Cool</span>
-                <span className="text-[9px] opacity-70">Balanced</span>
+                <Sparkles
+                  size={22}
+                  strokeWidth={1.6}
+                  style={{
+                    color: boostProfile === 'calm' ? '#c4b5fd' : 'rgba(196,181,253,0.55)',
+                    filter: boostProfile === 'calm' ? 'drop-shadow(0 0 6px rgba(196,181,253,0.7))' : 'none',
+                  }}
+                />
+                <span
+                  className="text-[11px] font-bold"
+                  style={{ color: boostProfile === 'calm' ? '#c4b5fd' : 'rgba(255,255,255,0.55)' }}
+                >
+                  Cool
+                </span>
+                <span className="text-[9px] opacity-60 text-white">Balanced</span>
               </button>
 
               <button
                 onClick={() => setBoostProfile('voyex')}
                 className={`flex flex-col items-center gap-1 p-3 rounded-xl border transition-all relative voyo-tap-scale ${
                   boostProfile === 'voyex'
-                    ? 'bg-gradient-to-br from-purple-500/20 to-violet-600/20 border-purple-500/30 text-purple-300'
-                    : 'bg-white/5 border-white/10 text-gray-400 hover:bg-white/10'
+                    ? 'bg-gradient-to-br from-purple-500/15 to-violet-700/10 border-purple-500/35'
+                    : 'bg-white/5 border-white/10 hover:bg-white/10'
                 }`}
               >
-                <Sliders size={22} className={boostProfile === 'voyex' ? 'text-purple-300' : ''} />
-                <span className="text-[11px] font-bold">VOYEX</span>
-                <span className="text-[9px] opacity-70">Studio</span>
+                <Sliders
+                  size={22}
+                  strokeWidth={1.6}
+                  style={{
+                    color: boostProfile === 'voyex' ? '#a78bfa' : 'rgba(167,139,250,0.55)',
+                    filter: boostProfile === 'voyex' ? 'drop-shadow(0 0 6px rgba(139,92,246,0.7))' : 'none',
+                  }}
+                />
+                <span
+                  className="text-[11px] font-bold"
+                  style={{ color: boostProfile === 'voyex' ? '#a78bfa' : 'rgba(255,255,255,0.55)' }}
+                >
+                  VOYEX
+                </span>
+                <span className="text-[9px] opacity-60 text-white">Studio</span>
               </button>
             </div>
             <div className="text-[10px] text-gray-500 mt-3 text-center">
-              {boostProfile === 'boosted' && 'Warm bass boost with speaker protection'}
-              {boostProfile === 'calm' && 'Soft bronze — balanced warmth'}
-              {boostProfile === 'voyex' && 'Studio energy — purple power'}
+              {boostProfile === 'boosted' && 'Warm bass with speaker protection'}
+              {boostProfile === 'calm' && 'Cool clarity — balanced air'}
+              {boostProfile === 'voyex' && 'Studio energy — full immersion'}
             </div>
           </div>
 
@@ -167,25 +202,75 @@ export const BoostSettings = ({ isOpen, onClose }: BoostSettingsProps) => {
             </div>
           )}
 
-          {/* Auto-Boost Toggle */}
-          <div className="bg-white/5 rounded-2xl p-4">
-            <div className="flex items-center justify-between mb-3">
+          {/* Auto-Boost — the smart silent rule.
+              No "Download When" choice anymore. Listen past the threshold,
+              the track is marked Boosted (protected from cache eviction).
+              Skip too fast, the track stays in scratch cache and gets
+              evicted upstream by the LRU. You don't manage downloads —
+              the AI manages them for you. */}
+          <div className="bg-white/5 rounded-2xl p-4 relative overflow-hidden">
+            {/* AI silver chip — top-right indicator that this is AI-driven */}
+            <div
+              className="absolute top-3 right-3 px-2 py-0.5 rounded-full text-[8px] font-black tracking-[0.2em]"
+              style={{
+                background: 'linear-gradient(135deg, rgba(220,220,230,0.18), rgba(170,175,190,0.10))',
+                border: '1px solid rgba(220,220,230,0.22)',
+                color: '#E0E2E8',
+                textShadow: '0 0 6px rgba(220,220,230,0.4)',
+                boxShadow: '0 0 10px rgba(220,220,230,0.08), inset 0 0 8px rgba(220,220,230,0.04)',
+              }}
+            >
+              AI
+            </div>
+
+            <div className="flex items-center justify-between mb-3 pr-10">
               <div className="flex items-center gap-3">
                 <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
-                  autoBoostEnabled ? 'bg-purple-500/20' : 'bg-white/5'
-                }`}>
-                  <Download size={16} className={autoBoostEnabled ? 'text-purple-400' : 'text-gray-500'} />
+                  autoBoostEnabled ? '' : 'bg-white/5'
+                }`}
+                style={autoBoostEnabled ? {
+                  background: 'linear-gradient(135deg, rgba(212,160,83,0.22), rgba(177,124,42,0.12))',
+                  boxShadow: '0 0 12px rgba(212,160,83,0.25)',
+                } : undefined}>
+                  <Zap
+                    size={16}
+                    strokeWidth={2}
+                    style={{
+                      color: autoBoostEnabled ? '#E6B865' : 'rgba(255,255,255,0.35)',
+                      filter: autoBoostEnabled ? 'drop-shadow(0 0 4px rgba(212,160,83,0.6))' : 'none',
+                    }}
+                  />
                 </div>
                 <div>
-                  <div className="text-sm font-medium text-white">Auto-Boost</div>
-                  <div className="text-[10px] text-gray-500">Download tracks as you play</div>
+                  {/* "Boost" word gets the golden bronze treatment — same
+                      tone as the cube ring + the bronze portal line. */}
+                  <div className="text-sm font-medium">
+                    <span className="text-white">Auto-</span>
+                    <span
+                      className="font-bold"
+                      style={{
+                        background: 'linear-gradient(135deg, #E6B865 0%, #D4A053 50%, #B17C2A 100%)',
+                        WebkitBackgroundClip: 'text',
+                        WebkitTextFillColor: 'transparent',
+                        backgroundClip: 'text',
+                        textShadow: '0 0 12px rgba(212,160,83,0.35)',
+                      }}
+                    >
+                      Boost
+                    </span>
+                  </div>
+                  <div className="text-[10px] text-gray-500 mt-0.5">Download tracks you love as you go</div>
                 </div>
               </div>
               <button
                 onClick={() => autoBoostEnabled ? disableAutoBoost() : enableAutoBoost()}
-                className={`w-12 h-7 rounded-full transition-colors relative ${
-                  autoBoostEnabled ? 'bg-purple-500' : 'bg-white/10'
-                }`}
+                className="w-12 h-7 rounded-full transition-colors relative"
+                style={{
+                  background: autoBoostEnabled
+                    ? 'linear-gradient(135deg, #D4A053, #B17C2A)'
+                    : 'rgba(255,255,255,0.10)',
+                  boxShadow: autoBoostEnabled ? '0 0 12px rgba(212,160,83,0.4)' : 'none',
+                }}
               >
                 <div
                   className="absolute top-1 w-5 h-5 rounded-full bg-white shadow-md voyo-transition-all"
@@ -194,32 +279,9 @@ export const BoostSettings = ({ isOpen, onClose }: BoostSettingsProps) => {
               </button>
             </div>
             <div className="text-[10px] text-gray-500">
-              {manualBoostCount} manual boosts so far
-            </div>
-          </div>
-
-          {/* Download Setting */}
-          <div className="bg-white/5 rounded-2xl p-4">
-            <div className="text-sm font-medium text-white mb-3">Download When</div>
-            <div className="grid grid-cols-3 gap-2">
-              {[
-                { value: 'always', label: 'Always', icon: Download },
-                { value: 'wifi-only', label: 'WiFi Only', icon: Wifi },
-                { value: 'never', label: 'Never', icon: WifiOff },
-              ].map(({ value, label, icon: Icon }) => (
-                <button
-                  key={value}
-                  onClick={() => updateSetting(value as any)}
-                  className={`flex flex-col items-center gap-1.5 p-3 rounded-xl border transition-all ${
-                    downloadSetting === value
-                      ? 'bg-purple-500/20 border-purple-500/30 text-purple-300'
-                      : 'bg-white/5 border-white/10 text-gray-400 hover:bg-white/10'
-                  }`}
-                >
-                  <Icon size={18} />
-                  <span className="text-[10px] font-medium">{label}</span>
-                </button>
-              ))}
+              {manualBoostCount > 0
+                ? `${manualBoostCount} ${manualBoostCount === 1 ? 'track' : 'tracks'} boosted manually`
+                : 'Listen past a few seconds → kept for keeps'}
             </div>
           </div>
 

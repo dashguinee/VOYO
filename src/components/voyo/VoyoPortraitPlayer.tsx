@@ -3678,22 +3678,59 @@ export const VoyoPortraitPlayer = ({
 
   const vibesColor = getVibesColor();
 
-  // HEADER SCROLL BEHAVIOR - fade out on scroll down, fade in on scroll up
-  const [headerVisible, setHeaderVisible] = useState(true);
+  // PORTAL SCROLL — the layered scroll model.
+  //
+  // Three layers stack inside the player:
+  //   A) ANCHOR (top history/queue bubbles + center hero) — sticky, always
+  //      visible, never moves
+  //   B) MUSIC SHELF (HOT/DISCOVERY rail + MIX BOARD) — fades out as the
+  //      user scrolls down
+  //   C) AMBIENT CANVAS (vibes cards + OYO dock) — fades in as Layer B
+  //      fades out, becomes the dominant surface at deep scroll
+  //
+  // Reverse scroll = simple fade back. Fast upward scroll = wheel-spin
+  // reset (snaps the canvas closed and returns to home). Fast scroll
+  // detection compares dy/dt against a velocity threshold.
+  const [portalProgress, setPortalProgress] = useState(0); // 0 = home, 1 = full canvas
   const lastScrollY = useRef(0);
+  const lastScrollAt = useRef(0);
+  const wheelResetting = useRef(false);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   const handleHeaderScroll = useCallback(() => {
     const container = scrollContainerRef.current;
     if (!container) return;
     const currentY = container.scrollTop;
-    if (currentY > lastScrollY.current + 10) {
-      setHeaderVisible(false); // scrolling down
-    } else if (currentY < lastScrollY.current - 10) {
-      setHeaderVisible(true); // scrolling up
+    const now = performance.now();
+
+    // Velocity-based wheel-spin reset: if the user is scrolling UP fast
+    // (>1.4px/ms) AND we're already deep in the canvas, snap back home
+    // in a one-shot ~600ms morph instead of incremental fade.
+    const dy = currentY - lastScrollY.current;
+    const dt = now - lastScrollAt.current || 16;
+    const velocity = dy / dt;
+    if (
+      !wheelResetting.current &&
+      velocity < -1.4 && // fast upward
+      portalProgress > 0.35 // already past the threshold
+    ) {
+      wheelResetting.current = true;
+      setPortalProgress(0);
+      // Force the scroll container back to top with smooth-ish snap
+      container.scrollTo({ top: 0, behavior: 'smooth' });
+      setTimeout(() => { wheelResetting.current = false; }, 700);
+    } else if (!wheelResetting.current) {
+      // Standard scroll-driven progress.
+      // The fade range is the first ~480px of scroll — by then Layer B
+      // is gone and Layer C is fully present.
+      const FADE_RANGE = 480;
+      const next = Math.max(0, Math.min(1, currentY / FADE_RANGE));
+      setPortalProgress(next);
     }
+
     lastScrollY.current = currentY;
-  }, []);
+    lastScrollAt.current = now;
+  }, [portalProgress]);
 
   // CLEAN STATE: Two levels of reveal
   // TAP: Quick controls only (shuffle, repeat, share)
@@ -4219,21 +4256,25 @@ export const VoyoPortraitPlayer = ({
         )}
       
 
-      {/* --- TOP SECTION (History/Queue) --- Tivi+ pattern: full opacity at
-           top of page (nothing dimmed on first impression), then a fast fade
-           + slide-up when scroll begins so HOT/DISCOVERY breathe freely.
-           Shrunk from 18% to 14% so the hero gets more real estate. */}
+      {/* ╔═════════════════════════════════════════════════════════════╗
+          ║ ANCHOR LAYER (A) — top bubbles + center hero, always fixed  ║
+          ║ Position: sticky at top:0 of the scroll container.          ║
+          ║ Height = viewport minus the music shelf (Layer B) so Layer  ║
+          ║ B is visible AT REST in the bottom slice of the screen, and ║
+          ║ the anchor stays put as user scrolls deeper into Layer C.   ║
+          ╚═════════════════════════════════════════════════════════════╝ */}
+      <div
+        className="sticky top-0 z-20 flex flex-col flex-shrink-0"
+        style={{ height: 'calc(100% - 325px)' }}
+      >
+
+      {/* --- TOP SECTION (History/Queue) --- Part of the anchor.
+           Always visible — never fades on scroll. The bubbles are part of
+           the player's "hearth" alongside the BigCenterCard. */}
       <div
         className="px-6 flex justify-between items-start z-20 h-[14%]"
         style={{
           paddingTop: 'max(1.25rem, env(safe-area-inset-top))',
-          opacity: headerVisible ? 1 : 0,
-          transform: headerVisible ? 'translateY(0)' : 'translateY(-100%)',
-          transition: headerVisible
-            ? 'opacity 0.35s ease-out, transform 0.35s ease-out'
-            : 'opacity 0.45s cubic-bezier(0.16, 1, 0.3, 1), transform 0.45s cubic-bezier(0.16, 1, 0.3, 1)',
-          pointerEvents: headerVisible ? 'auto' : 'none',
-          willChange: 'transform, opacity',
         }}
       >
 
@@ -4484,6 +4525,17 @@ export const VoyoPortraitPlayer = ({
 
       </div>
 
+      {/* ╔═════════════════════════════════════════════════════════════╗
+          ║ END OF ANCHOR LAYER — top + center wrapped above            ║
+          ╚═════════════════════════════════════════════════════════════╝ */}
+      </div>
+
+      {/* ╔═════════════════════════════════════════════════════════════╗
+          ║ LAYER B — MUSIC SHELF (HOT/DISCOVERY + MIX BOARD)            ║
+          ║ Fades + slides up as portalProgress climbs. By progress=0.6  ║
+          ║ it's mostly gone, by 1.0 it's fully out of the way.          ║
+          ╚═════════════════════════════════════════════════════════════╝ */}
+
       {/* --- BOTTOM SECTION: DASHBOARD / MIX BOARD ---
           The "music control surface". Slightly concave Surface-Pro feel —
           elliptical top curve + inset shadow + a thin rim highlight giving
@@ -4496,6 +4548,13 @@ export const VoyoPortraitPlayer = ({
           cubeDockOpen ? 'min-h-[440px]' : oyeBarBehavior === 'fade' ? 'min-h-[325px]' : ''
         }`}
         style={{
+          // Layer B fade: opacity drops with portal progress, content
+          // also softens via blur so it dissolves rather than just dims.
+          opacity: Math.max(0, 1 - portalProgress * 1.2),
+          filter: portalProgress > 0.05 ? `blur(${portalProgress * 6}px)` : 'none',
+          pointerEvents: portalProgress > 0.6 ? 'none' : 'auto',
+          transform: `translateY(${portalProgress * -24}px)`,
+          transition: 'opacity 0.18s ease-out, filter 0.18s ease-out, transform 0.18s ease-out',
           background: 'linear-gradient(180deg, rgba(15,15,22,0.92) 0%, rgba(8,8,10,0.97) 28%, rgba(8,8,10,0.99) 100%)',
           // Elliptical top curve — wider in the middle than the corners
           // (the cube sits at the deepest part of the shallow dish).
@@ -5094,6 +5153,140 @@ export const VoyoPortraitPlayer = ({
 
         {/* TIVI+ Cross-Promo moved to HomeFeed.tsx (classic homepage) */}
 
+      </div>
+
+      {/* ╔═════════════════════════════════════════════════════════════╗
+          ║ LAYER C — AMBIENT CANVAS (the "while you jam" surface)      ║
+          ║ Fades IN as portalProgress climbs. Vibes cards reborn from  ║
+          ║ the existing mix modes, hold-to-add to the mix board. The   ║
+          ║ OYO chat dock lives at the top of this canvas — same room,  ║
+          ║ different focus. This is the teaser of VOYO Moments.        ║
+          ╚═════════════════════════════════════════════════════════════╝ */}
+      <div
+        className="relative w-full flex-shrink-0 px-4 pt-6"
+        style={{
+          minHeight: '100vh',
+          opacity: Math.min(1, portalProgress * 1.4),
+          pointerEvents: portalProgress > 0.4 ? 'auto' : 'none',
+          transform: `translateY(${(1 - portalProgress) * 24}px)`,
+          transition: 'opacity 0.18s ease-out, transform 0.18s ease-out',
+          background: 'linear-gradient(180deg, rgba(8,8,12,0) 0%, rgba(15,12,24,0.55) 18%, rgba(15,12,24,0.85) 100%)',
+        }}
+      >
+        {/* Canvas header — the "while you jam" tagline + OYO chat slot */}
+        <div className="text-center mb-5">
+          <div className="text-[10px] tracking-[0.25em] uppercase text-white/40 mb-1">while you jam</div>
+          <div className="text-[13px]" style={{ color: '#D4A053', textShadow: '0 0 12px rgba(212,160,83,0.4)' }}>
+            {currentTrack ? `vibes around "${currentTrack.title.slice(0, 28)}"` : 'pick your next move'}
+          </div>
+        </div>
+
+        {/* OYO DJ chat slot — surface entry, hold cube or scroll deeper */}
+        <button
+          onClick={() => setShowOyoIsland(true)}
+          className="w-full mb-5 rounded-2xl p-4 text-left active:scale-[0.98] transition-transform"
+          style={{
+            background: 'linear-gradient(135deg, rgba(139,92,246,0.18) 0%, rgba(212,160,83,0.10) 100%)',
+            border: '1px solid rgba(212,160,83,0.18)',
+            boxShadow: '0 0 24px rgba(139,92,246,0.12), inset 0 1px 0 rgba(255,255,255,0.04)',
+          }}
+        >
+          <div className="flex items-center gap-3">
+            <div
+              className="w-10 h-10 rounded-2xl flex items-center justify-center flex-shrink-0"
+              style={{
+                background: 'linear-gradient(135deg, #8b5cf6, #6d28d9)',
+                boxShadow: '0 0 16px rgba(139,92,246,0.4)',
+              }}
+            >
+              <span className="text-white font-black text-[10px] tracking-tight">OYO</span>
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-[12px] text-white/90 font-medium">Talk to OYO</div>
+              <div className="text-[10px] text-white/40 mt-0.5">tell me what you want next</div>
+            </div>
+            <div className="text-white/30 text-lg">→</div>
+          </div>
+        </button>
+
+        {/* VIBES CARDS — each existing mix mode as a canvas-resident card.
+            Tap to boost, hold to flood the mix board with this vibe. */}
+        <div className="flex flex-col gap-3">
+          {DEFAULT_MIX_MODES.map((mode) => {
+            const boostLevel = modeBoosts[mode.id] || 0;
+            const isActive = isModeActive(mode.id);
+            return (
+              <button
+                key={mode.id}
+                onClick={() => handleModeBoost(mode.id)}
+                onPointerDown={(e) => {
+                  // Hold ~500ms → flood the mix board with this vibe
+                  const tgt = e.currentTarget;
+                  const tid = setTimeout(() => {
+                    handleModeToQueueWithIntent(mode.id);
+                    haptics.medium();
+                    tgt.style.transform = 'scale(0.97)';
+                    setTimeout(() => { tgt.style.transform = ''; }, 180);
+                  }, 500);
+                  (tgt as HTMLButtonElement & { __holdTimer?: ReturnType<typeof setTimeout> }).__holdTimer = tid;
+                }}
+                onPointerUp={(e) => {
+                  const tgt = e.currentTarget as HTMLButtonElement & { __holdTimer?: ReturnType<typeof setTimeout> };
+                  if (tgt.__holdTimer) clearTimeout(tgt.__holdTimer);
+                }}
+                onPointerLeave={(e) => {
+                  const tgt = e.currentTarget as HTMLButtonElement & { __holdTimer?: ReturnType<typeof setTimeout> };
+                  if (tgt.__holdTimer) clearTimeout(tgt.__holdTimer);
+                }}
+                className="relative w-full rounded-2xl p-4 text-left overflow-hidden active:scale-[0.98] transition-transform"
+                style={{
+                  background: `linear-gradient(135deg, ${mode.glow.replace('0.5', '0.18').replace('0.4', '0.14').replace('0.45', '0.16').replace('0.55', '0.20')} 0%, rgba(15,12,24,0.85) 100%)`,
+                  border: `1px solid ${isActive ? mode.neon : 'rgba(255,255,255,0.06)'}`,
+                  boxShadow: isActive
+                    ? `0 0 24px ${mode.glow}, inset 0 0 12px ${mode.glow}`
+                    : `0 0 16px ${mode.glow.replace(/0\.[0-9]+/, '0.10')}`,
+                }}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex-1 min-w-0">
+                    <div
+                      className="text-[14px] font-bold mb-0.5"
+                      style={{ color: mode.neon, textShadow: `0 0 10px ${mode.glow}` }}
+                    >
+                      {mode.title}
+                    </div>
+                    <div className="text-[11px] text-white/50">
+                      {mode.taglines[0]}
+                    </div>
+                  </div>
+                  {/* Boost level dots */}
+                  <div className="flex gap-1 ml-3">
+                    {Array.from({ length: 6 }).map((_, i) => (
+                      <div
+                        key={i}
+                        className="w-1 rounded-full transition-all"
+                        style={{
+                          height: i < boostLevel ? '14px' : '6px',
+                          background: i < boostLevel ? mode.neon : 'rgba(255,255,255,0.15)',
+                          boxShadow: i < boostLevel ? `0 0 6px ${mode.glow}` : 'none',
+                        }}
+                      />
+                    ))}
+                  </div>
+                </div>
+                {/* Hold hint — only on first card to teach the gesture */}
+                {mode.id === 'afro-heat' && portalProgress > 0.7 && (
+                  <div className="absolute bottom-1 right-3 text-[8px] text-white/30 italic">
+                    hold to flood
+                  </div>
+                )}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Spacer at the bottom of the canvas so scroll has somewhere to land */}
+        <div style={{ height: '40vh' }} />
       </div>
 
       {/* BOOST SETTINGS PANEL */}
