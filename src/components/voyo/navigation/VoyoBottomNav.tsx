@@ -13,6 +13,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { House, ChatCircle } from '@phosphor-icons/react';
+import { Volume1, Volume2 } from 'lucide-react';
 import { usePlayerStore } from '../../../store/playerStore';
 import { useAuth } from '../../../hooks/useAuth';
 import { messagesAPI } from '../../../lib/voyo-api';
@@ -41,6 +42,20 @@ export const VoyoBottomNav = ({ onDahub, onHome, oyoSurface = 'home', playerMode
   const setVoyoTab = usePlayerStore(s => s.setVoyoTab);
   const isPlaying = usePlayerStore(s => s.isPlaying);
   const { dashId, isLoggedIn } = useAuth();
+
+  // VOLUME SLIDER GESTURE: hold a corner of the navbar pill and slide
+  // horizontally to scrub volume. Starts from the CURRENT volume so there's
+  // no harsh jump (the slide adds to current). Faded sound icons appear in
+  // the left/right corners while sliding. Tap fall-through to existing
+  // button click is preserved via the slidingRef guard.
+  const volume = usePlayerStore(s => s.volume);
+  const setVolume = usePlayerStore(s => s.setVolume);
+  const [isSliding, setIsSliding] = useState(false);
+  const slideStartXRef = useRef(0);
+  const slideStartVolRef = useRef(0);
+  const slidingRef = useRef(false);
+  const SLIDE_THRESHOLD = 8; // px before slide mode activates (preserves taps)
+  const SLIDER_TRACK_PX = 280; // map nav width to 100% volume range
 
   const [promptState, setPromptState] = useState<'clean' | 'love' | 'keep'>('clean');
   const [promptCount, setPromptCount] = useState(0);
@@ -184,14 +199,51 @@ export const VoyoBottomNav = ({ onDahub, onHome, oyoSurface = 'home', playerMode
   };
 
   const handleHome = () => {
+    // Suppress click if we just finished a slide gesture
+    if (slidingRef.current) { slidingRef.current = false; return; }
     wakeNav();
     onHome?.();
   };
 
   const handleDahub = () => {
+    if (slidingRef.current) { slidingRef.current = false; return; }
     wakeNav();
     onDahub?.();
   };
+
+  // ── VOLUME SLIDER GESTURE HANDLERS ───────────────────────────────
+  // Pointer events on the pill capture horizontal slides. If the user
+  // moves more than SLIDE_THRESHOLD pixels horizontally, we enter slide
+  // mode and own the gesture until pointerup. The button's onClick checks
+  // slidingRef and bails if a slide just happened.
+  const onPillPointerDown = useCallback((e: React.PointerEvent) => {
+    slideStartXRef.current = e.clientX;
+    slideStartVolRef.current = usePlayerStore.getState().volume;
+  }, []);
+
+  const onPillPointerMove = useCallback((e: React.PointerEvent) => {
+    const dx = e.clientX - slideStartXRef.current;
+    if (!isSliding && Math.abs(dx) < SLIDE_THRESHOLD) return;
+    if (!isSliding) {
+      setIsSliding(true);
+      slidingRef.current = true;
+      // Capture the pointer so subsequent events route here even if outside
+      try { (e.target as Element).setPointerCapture?.(e.pointerId); } catch {}
+    }
+    // Map slide distance to volume delta. Full nav width (~280px) = 100%.
+    const deltaPct = (dx / SLIDER_TRACK_PX) * 100;
+    const next = Math.max(0, Math.min(100, slideStartVolRef.current + deltaPct));
+    setVolume(Math.round(next));
+  }, [isSliding, setVolume]);
+
+  const onPillPointerUp = useCallback((e: React.PointerEvent) => {
+    if (isSliding) {
+      setIsSliding(false);
+      try { (e.target as Element).releasePointerCapture?.(e.pointerId); } catch {}
+      // Clear slidingRef on next tick so the about-to-fire onClick sees it
+      setTimeout(() => { slidingRef.current = false; }, 50);
+    }
+  }, [isSliding]);
 
   // 2-state ambient nav: full (100%) or fade (~6% — barely visible hint).
   // The fade-in is fast (responsive to touch), the fade-out is slow (graceful).
@@ -216,15 +268,18 @@ export const VoyoBottomNav = ({ onDahub, onHome, oyoSurface = 'home', playerMode
       }}
     >
       <div
-        className="pointer-events-auto max-w-[280px] mx-auto h-[54px] rounded-full flex items-center justify-around px-3"
+        className="pointer-events-auto max-w-[280px] mx-auto h-[54px] rounded-full flex items-center justify-around px-3 relative"
+        onPointerDown={onPillPointerDown}
+        onPointerMove={onPillPointerMove}
+        onPointerUp={onPillPointerUp}
+        onPointerCancel={onPillPointerUp}
         style={
           playerMode
             ? {
-                // Player mode: fully transparent — only the buttons themselves
-                // signal where the nav lives. No pill chrome at all.
                 background: 'transparent',
                 border: 'none',
                 boxShadow: 'none',
+                touchAction: 'pan-y', // allow vertical scrolling, capture horizontal
               }
             : {
                 background: 'rgba(10, 10, 15, 0.65)',
@@ -232,9 +287,54 @@ export const VoyoBottomNav = ({ onDahub, onHome, oyoSurface = 'home', playerMode
                 WebkitBackdropFilter: 'blur(16px) saturate(150%)',
                 border: '1px solid rgba(139, 92, 246, 0.08)',
                 boxShadow: '0 4px 24px rgba(0,0,0,0.5), 0 0 20px rgba(139,92,246,0.04)',
+                touchAction: 'pan-y',
               }
         }
       >
+        {/* VOLUME SLIDER VISUALS — faded sound icons in left/right corners
+            + horizontal track showing current volume level. Only visible
+            during slide gesture. */}
+        <div
+          aria-hidden
+          style={{
+            position: 'absolute', inset: 0, borderRadius: 9999, pointerEvents: 'none',
+            opacity: isSliding ? 1 : 0,
+            transition: 'opacity 0.2s ease-out',
+          }}
+        >
+          {/* Left sound icon (low volume) */}
+          <div style={{
+            position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)',
+            color: 'rgba(255,255,255,0.55)',
+            filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.6))',
+          }}>
+            <Volume1 size={16} />
+          </div>
+          {/* Right sound icon (high volume) */}
+          <div style={{
+            position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)',
+            color: 'rgba(167,139,250,0.85)',
+            filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.6))',
+          }}>
+            <Volume2 size={18} />
+          </div>
+          {/* Volume track — purple fill from left edge proportional to volume */}
+          <div style={{
+            position: 'absolute', left: 36, right: 36, top: '50%',
+            height: 2, transform: 'translateY(-50%)',
+            background: 'rgba(255,255,255,0.08)',
+            borderRadius: 1,
+            overflow: 'hidden',
+          }}>
+            <div style={{
+              position: 'absolute', left: 0, top: 0, bottom: 0,
+              width: `${volume}%`,
+              background: 'linear-gradient(to right, rgba(167,139,250,0.5), rgba(167,139,250,0.9))',
+              boxShadow: '0 0 6px rgba(167,139,250,0.6)',
+              transition: 'width 0.05s linear',
+            }} />
+          </div>
+        </div>
         {/* LEFT: HOME */}
         <button
           className="relative flex items-center justify-center flex-1 h-full"

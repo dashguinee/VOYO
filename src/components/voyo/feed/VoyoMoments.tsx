@@ -104,37 +104,62 @@ const S = {
   card: css({ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }),
   thumb: css({ position: 'absolute', inset: 0, objectFit: 'cover', width: '100%', height: '100%', display: 'block', margin: 0, padding: 0, borderRadius: 0 }),
   grad: css({ position: 'absolute', bottom: 0, left: 0, right: 0, height: '50%', background: 'linear-gradient(to top, rgba(0,0,0,0.78) 0%, rgba(0,0,0,0.35) 40%, transparent 100%)', zIndex: 2, pointerEvents: 'none' }),
-  // CREATOR ORB — positioned on the LEFT, vertically centered with the
-  // middle of the right-side action bar (action bar bottom: 160, height
-  // ~220px, middle ~270 from bottom). Subtle drift animation in sync with
-  // the rest of the moments visual rhythm.
-  creatorOrbWrap: css({ position: 'absolute', left: 18, bottom: 290, zIndex: 10, display: 'flex', alignItems: 'center', gap: 10, transition: 'opacity 0.55s cubic-bezier(0.16, 1, 0.3, 1), transform 0.55s cubic-bezier(0.16, 1, 0.3, 1)' }),
-  creatorOrb: css({ width: 44, height: 44, borderRadius: '50%', background: 'linear-gradient(135deg, rgba(139,92,246,0.5), rgba(139,92,246,0.18))', border: '1.5px solid rgba(167,139,250,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, fontWeight: 700, color: '#fff', boxShadow: '0 6px 20px rgba(0,0,0,0.55), 0 0 14px rgba(139,92,246,0.25)', animation: 'voyo-creator-drift 6s ease-in-out infinite' }),
-  creatorOrbName: css({ fontSize: 13, fontWeight: 600, color: '#fff', letterSpacing: 0.2, textShadow: '0 1px 4px rgba(0,0,0,0.7)' }),
-  // BIO GLASS CARD — sits below the creator orb on the left side. Reuses
-  // the .glass-card aesthetic from index.css with a tiny glossy top edge.
-  // Scrollable when content overflows.
-  bioCardWrap: css({ position: 'absolute', left: 18, bottom: 130, zIndex: 6, maxWidth: 'calc(60% - 30px)', transition: 'opacity 0.55s cubic-bezier(0.16, 1, 0.3, 1), transform 0.55s cubic-bezier(0.16, 1, 0.3, 1)' }),
+  // CREATOR BLOCK — single container positioned on the LEFT side, vertically
+  // aligned with the middle of the right-side action bar. Stacks the orb +
+  // name on top, with a compact glass bio card below. Bio is collapsed by
+  // default (~2 lines with fade at bottom), tap to expand and scroll the rest.
+  creatorBlock: css({ position: 'absolute', left: 18, bottom: 140, zIndex: 10, maxWidth: 'calc(62% - 30px)', display: 'flex', flexDirection: 'column', gap: 10, transition: 'opacity 0.55s cubic-bezier(0.16, 1, 0.3, 1), transform 0.55s cubic-bezier(0.16, 1, 0.3, 1)' }),
+  creatorOrbWrap: css({ display: 'flex', alignItems: 'center', gap: 10 }),
+  creatorOrb: css({ width: 44, height: 44, borderRadius: '50%', background: 'linear-gradient(135deg, rgba(139,92,246,0.5), rgba(139,92,246,0.18))', border: '1.5px solid rgba(167,139,250,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, fontWeight: 700, color: '#fff', boxShadow: '0 6px 20px rgba(0,0,0,0.55), 0 0 14px rgba(139,92,246,0.25)', animation: 'voyo-creator-drift 6s ease-in-out infinite', flexShrink: 0 }),
+  creatorOrbName: css({ fontSize: 14, fontWeight: 700, color: '#fff', letterSpacing: 0.2, textShadow: '0 1px 4px rgba(0,0,0,0.7)' }),
+  // BIO GLASS CARD — sits below the creator orb. Reuses the .glass-card
+  // aesthetic with a tiny glossy top edge. Compact by default (~2 lines
+  // visible with bottom fade), expanded on tap (full content scrollable).
   bioCard: css({
     background: 'rgba(20, 20, 30, 0.55)',
     backdropFilter: 'blur(20px) saturate(140%)',
     WebkitBackdropFilter: 'blur(20px) saturate(140%)',
     border: '1px solid rgba(255,255,255,0.08)',
-    borderRadius: 16,
-    padding: '12px 14px 10px',
+    borderRadius: 14,
+    padding: '10px 12px 8px',
     boxShadow: '0 8px 28px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.08)',
     position: 'relative',
     overflow: 'hidden',
+    cursor: 'pointer',
+    transition: 'max-height 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
   }),
   // Title — primary line in the glass card
-  bioTitle: css({ fontSize: 14, fontWeight: 600, color: '#fff', lineHeight: 1.35, marginBottom: 6, textShadow: '0 1px 3px rgba(0,0,0,0.5)' } as any),
-  // Bio body — scrollable text below the title
-  bioBody: css({ fontSize: 12, fontWeight: 400, color: 'rgba(255,255,255,0.72)', lineHeight: 1.5, maxHeight: 80, overflowY: 'auto', paddingRight: 4, marginBottom: 10 } as any),
-  // Bio react row — small react button at the bottom-right of the card
-  bioReactRow: css({ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, paddingTop: 6, borderTop: '1px solid rgba(255,255,255,0.06)' }),
-  bioReactBtn: css({ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 10px', borderRadius: 999, background: 'rgba(167,139,250,0.12)', border: '1px solid rgba(167,139,250,0.25)', fontSize: 11, fontWeight: 600, color: '#a78bfa', cursor: 'pointer', transition: 'all 0.2s ease' }),
-  // Track attribution — sits below the bio card
-  track: css({ fontSize: 11, color: 'rgba(255,255,255,0.5)', display: 'flex', alignItems: 'center', gap: 5, marginTop: 8, paddingLeft: 2 }),
+  bioTitle: css({ fontSize: 13, fontWeight: 600, color: '#fff', lineHeight: 1.35, marginBottom: 4, textShadow: '0 1px 3px rgba(0,0,0,0.5)' } as any),
+  // Bio body — collapsed by default (~2 lines), expanded scrollable on tap
+  bioBodyCollapsed: css({
+    fontSize: 12,
+    fontWeight: 400,
+    color: 'rgba(255,255,255,0.72)',
+    lineHeight: 1.5,
+    maxHeight: 36, // ~2 lines
+    overflow: 'hidden',
+    position: 'relative',
+  } as any),
+  bioBodyExpanded: css({
+    fontSize: 12,
+    fontWeight: 400,
+    color: 'rgba(255,255,255,0.78)',
+    lineHeight: 1.5,
+    maxHeight: 100,
+    overflowY: 'auto',
+    paddingRight: 4,
+    position: 'relative',
+  } as any),
+  // Bottom fade overlay on the collapsed bio so the cut-off feels intentional
+  bioFade: css({
+    position: 'absolute', bottom: 0, left: 0, right: 0, height: 18,
+    background: 'linear-gradient(to top, rgba(20,20,30,0.95) 0%, transparent 100%)',
+    pointerEvents: 'none',
+  }),
+  // Bio react row — small react button below the bio
+  bioReactRow: css({ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, paddingTop: 8, marginTop: 6, borderTop: '1px solid rgba(255,255,255,0.06)' }),
+  bioReactBtn: css({ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 10px', borderRadius: 999, background: 'rgba(167,139,250,0.12)', border: '1px solid rgba(167,139,250,0.25)', fontSize: 11, fontWeight: 600, color: '#a78bfa', cursor: 'pointer', transition: 'all 0.2s ease', flexShrink: 0 }),
+  track: css({ fontSize: 11, color: 'rgba(255,255,255,0.5)', display: 'flex', alignItems: 'center', gap: 5, paddingLeft: 2 }),
   actBar: css({ position: 'absolute', right: 12, bottom: 160, zIndex: 10, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 20 }),
   actBtn: css({ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, cursor: 'pointer' }),
   actLbl: css({ fontSize: 10, color: 'rgba(255,255,255,0.6)', fontWeight: 500 }),
@@ -379,6 +404,9 @@ interface MomentCardProps {
 }
 
 const MomentCard = memo(({ moment, isOyed, onOye, isActive, isMuted, onToggleMute, onPlayTrack, onArtistTap, widgetsVisible }: MomentCardProps) => {
+  // Bio expand state — collapsed by default (~2 lines visible with bottom fade),
+  // tap to expand and scroll the rest of the description.
+  const [bioExpanded, setBioExpanded] = useState(false);
   const initial = (moment.creator_name || moment.creator_username || '?')[0].toUpperCase();
   const creator = moment.creator_name || moment.creator_username || 'Unknown';
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -512,72 +540,72 @@ const MomentCard = memo(({ moment, isOyed, onOye, isActive, isMuted, onToggleMut
         </div>
       </div>
 
-      {/* CREATOR ORB — left side, vertically centered with action bar middle.
-          Subtle drift animation, in sync with the visual rhythm.
-          Fades when widgetsVisible is false (3s of inactivity in immersive mode). */}
+      {/* CREATOR BLOCK — single positioned container, stacked layout:
+          orb + name on top, glass bio card below. Bio is collapsed by
+          default (~2 lines with bottom fade), tap to expand and scroll. */}
       <div
         style={{
-          ...S.creatorOrbWrap,
-          opacity: widgetsVisible ? 1 : 0,
-          transform: widgetsVisible ? 'translateX(0)' : 'translateX(-8px)',
-          pointerEvents: widgetsVisible ? 'auto' : 'none',
-        }}
-      >
-        <div style={S.creatorOrb}>{initial}</div>
-        <span style={S.creatorOrbName}>@{creator}</span>
-      </div>
-
-      {/* BIO GLASS CARD — sits below the orb, scrollable, with react button.
-          Reuses .glass-card aesthetic + gloss top edge. Same fade behavior. */}
-      <div
-        style={{
-          ...S.bioCardWrap,
+          ...S.creatorBlock,
           opacity: widgetsVisible ? 1 : 0,
           transform: widgetsVisible ? 'translateY(0)' : 'translateY(8px)',
           pointerEvents: widgetsVisible ? 'auto' : 'none',
         }}
       >
-        <div style={S.bioCard}>
-          {/* Glossy top highlight (dash of light on the upper edge) */}
-          <div style={{
-            position: 'absolute', top: 0, left: 12, right: 12, height: 1,
-            background: 'linear-gradient(to right, transparent 0%, rgba(255,255,255,0.18) 50%, transparent 100%)',
-            pointerEvents: 'none',
-          }} />
-          <div style={S.bioTitle}>{moment.title}</div>
-          {moment.description && (
-            <div style={S.bioBody} className="scrollbar-hide">
-              {moment.description}
-            </div>
-          )}
-          <div style={S.bioReactRow}>
-            {moment.parent_track_title && (
+        <div style={S.creatorOrbWrap}>
+          <div style={S.creatorOrb}>{initial}</div>
+          <span style={S.creatorOrbName}>@{creator}</span>
+        </div>
+
+        {(moment.title || moment.description) && (
+          <div
+            style={S.bioCard}
+            onClick={(e) => { e.stopPropagation(); setBioExpanded(p => !p); }}
+          >
+            {/* Glossy top highlight */}
+            <div style={{
+              position: 'absolute', top: 0, left: 12, right: 12, height: 1,
+              background: 'linear-gradient(to right, transparent 0%, rgba(255,255,255,0.18) 50%, transparent 100%)',
+              pointerEvents: 'none',
+            }} />
+            <div style={S.bioTitle}>{moment.title}</div>
+            {moment.description && (
               <div
-                style={{ ...S.track, marginTop: 0, cursor: onPlayTrack ? 'pointer' : 'default', flex: 1, minWidth: 0 }}
-                onClick={(e) => { if (onPlayTrack) { e.stopPropagation(); onPlayTrack(); } }}
+                style={bioExpanded ? S.bioBodyExpanded : S.bioBodyCollapsed}
+                className="scrollbar-hide"
               >
-                <Play size={10} style={{ color: 'rgba(255,255,255,0.5)', flexShrink: 0 }} />
-                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  <span
-                    onClick={(e) => {
-                      if (onArtistTap && moment.parent_track_artist) {
-                        e.stopPropagation();
-                        onArtistTap(moment.parent_track_artist);
-                      }
-                    }}
-                  >{moment.parent_track_artist}</span> · {moment.parent_track_title}
-                </span>
+                {moment.description}
+                {!bioExpanded && <div style={S.bioFade} />}
               </div>
             )}
-            <button
-              style={S.bioReactBtn}
-              onClick={(e) => { e.stopPropagation(); onOye(); }}
-            >
-              <Heart size={11} style={{ color: '#a78bfa', fill: isOyed ? '#a78bfa' : 'none' }} />
-              <span>{isOyed ? 'OYÉD' : 'OYÉ'}</span>
-            </button>
+            <div style={S.bioReactRow}>
+              {moment.parent_track_title && (
+                <div
+                  style={{ ...S.track, cursor: onPlayTrack ? 'pointer' : 'default', flex: 1, minWidth: 0 }}
+                  onClick={(e) => { if (onPlayTrack) { e.stopPropagation(); onPlayTrack(); } }}
+                >
+                  <Play size={10} style={{ color: 'rgba(255,255,255,0.5)', flexShrink: 0 }} />
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    <span
+                      onClick={(e) => {
+                        if (onArtistTap && moment.parent_track_artist) {
+                          e.stopPropagation();
+                          onArtistTap(moment.parent_track_artist);
+                        }
+                      }}
+                    >{moment.parent_track_artist}</span> · {moment.parent_track_title}
+                  </span>
+                </div>
+              )}
+              <button
+                style={S.bioReactBtn}
+                onClick={(e) => { e.stopPropagation(); onOye(); }}
+              >
+                <Heart size={11} style={{ color: '#a78bfa', fill: isOyed ? '#a78bfa' : 'none' }} />
+                <span>{isOyed ? 'OYÉD' : 'OYÉ'}</span>
+              </button>
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );
