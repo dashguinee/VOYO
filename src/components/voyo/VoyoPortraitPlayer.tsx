@@ -4379,7 +4379,7 @@ export const VoyoPortraitPlayer = ({
            reveal), the bubbles fade out so only the central OYO player
            and the canvas remain. Carousel side-shift on each rail. */}
       <div
-        className="px-6 flex items-start gap-2 z-20 h-[14%]"
+        className="px-3 flex items-start gap-3 z-20 h-[14%]"
         style={{
           paddingTop: 'max(1.25rem, env(safe-area-inset-top))',
           // Step 2 (portalProgress > 0.55) fades the bubbles out.
@@ -4394,17 +4394,12 @@ export const VoyoPortraitPlayer = ({
         <div
           className="relative overflow-hidden"
           style={{
-            flexBasis: topRowActive === 'history' ? '65%' : topRowActive === 'queue' ? '32%' : '49%',
+            flexBasis: topRowActive === 'history' ? '68%' : topRowActive === 'queue' ? '30%' : '49%',
             transition: 'flex-basis 0.42s cubic-bezier(0.16, 1, 0.3, 1)',
           }}
           onPointerDown={() => activateTopRow('history')}
           onTouchStart={() => activateTopRow('history')}
         >
-          {/* Scroll fade indicator - right edge */}
-          {historyTracks.length > 2 && (
-            <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-[#0a0a0f] to-transparent pointer-events-none z-10" />
-          )}
-
           <div
             className="flex gap-3 overflow-x-auto scrollbar-hide"
             style={{
@@ -4437,17 +4432,12 @@ export const VoyoPortraitPlayer = ({
         <div
           className="relative overflow-hidden"
           style={{
-            flexBasis: topRowActive === 'queue' ? '65%' : topRowActive === 'history' ? '32%' : '49%',
+            flexBasis: topRowActive === 'queue' ? '68%' : topRowActive === 'history' ? '30%' : '49%',
             transition: 'flex-basis 0.42s cubic-bezier(0.16, 1, 0.3, 1)',
           }}
           onPointerDown={() => activateTopRow('queue')}
           onTouchStart={() => activateTopRow('queue')}
         >
-          {/* Scroll fade indicator - left edge */}
-          {queueTracks.length > 1 && (
-            <div className="absolute left-0 top-0 bottom-0 w-8 bg-gradient-to-r from-[#0a0a0f] to-transparent pointer-events-none z-10" />
-          )}
-
           <div
             className="flex gap-3 overflow-x-auto scrollbar-hide flex-row-reverse"
             style={{
