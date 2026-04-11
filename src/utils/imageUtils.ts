@@ -20,13 +20,26 @@ export const getThumbnailFallbackChain = (trackId: string): string[] => {
 // Additional utilities for SmartImage and cache hooks
 
 /**
- * Preload an image and return success status
+ * Preload an image and return success status.
+ *
+ * CRITICAL: includes a 5-second timeout. Without it, a slow/dead CDN
+ * (common with YouTube thumbnails — region blocks, expired URLs, hung
+ * connections) leaves the Promise pending forever, which strands SmartImage
+ * in its 'loading' state showing the skeleton shimmer permanently. With
+ * the timeout, a hung URL counts as failure and the fallback chain advances.
  */
-export const preloadImage = (src: string): Promise<boolean> => {
+export const preloadImage = (src: string, timeoutMs: number = 5000): Promise<boolean> => {
   return new Promise((resolve) => {
     const img = new Image();
-    img.onload = () => resolve(true);
-    img.onerror = () => resolve(false);
+    let settled = false;
+    const finish = (ok: boolean) => {
+      if (settled) return;
+      settled = true;
+      resolve(ok);
+    };
+    img.onload = () => finish(true);
+    img.onerror = () => finish(false);
+    setTimeout(() => finish(false), timeoutMs);
     img.src = src;
   });
 };

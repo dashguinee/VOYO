@@ -115,6 +115,9 @@ export const AudioPlayer = () => {
   // Multiband bypass — root cause fix for muffling on non-VOYEX presets
   const multibandBypassDirectRef = useRef<GainNode | null>(null);
   const multibandBypassMbRef = useRef<GainNode | null>(null);
+  // Spatial chain bypass — same root-cause fix for the spatial layer
+  const spatialBypassDirectRef = useRef<GainNode | null>(null);
+  const spatialBypassMainRef = useRef<GainNode | null>(null);
   const audioEnhancedRef = useRef<boolean>(false);
   const currentProfileRef = useRef<BoostPreset>('boosted');
 
@@ -489,7 +492,20 @@ export const AudioPlayer = () => {
       const hS = ctx.createChannelSplitter(2); const hM = ctx.createChannelMerger(2);
       const hD = ctx.createDelay(0.02); hD.delayTime.value = 0; haasDelayRef.current = hD;
       panner.connect(hS); hS.connect(hM, 0, 0); hS.connect(hD, 1); hD.connect(hM, 0, 1);
-      hM.connect(ctx.destination);
+
+      // ── SPATIAL CHAIN BYPASS — root-cause fix for non-VOYEX phase smear ──
+      // Same parallel-path technique as the multiband bypass. The 8-node
+      // spatial route (diveLP → cfSplitter → cfMerger → panner → hS → hD →
+      // hM) adds subtle phase distortion even at "transparent" settings.
+      // For non-VOYEX presets, route spInput directly to destination via
+      // spatialBypassDirect. For VOYEX, use spatialBypassMain (the full
+      // spatial chain). Cross-fade is click-free via linearRampToValueAtTime.
+      const spatialBypassDirect = ctx.createGain(); spatialBypassDirect.gain.value = 1; // default: bypass for non-VOYEX
+      const spatialBypassMain = ctx.createGain(); spatialBypassMain.gain.value = 0; // default: main path muted
+      spatialBypassDirectRef.current = spatialBypassDirect;
+      spatialBypassMainRef.current = spatialBypassMain;
+      spInput.connect(spatialBypassDirect); spatialBypassDirect.connect(ctx.destination);
+      hM.connect(spatialBypassMain); spatialBypassMain.connect(ctx.destination);
 
       // ── CONVOLVER REVERB — two real impulse responses (dark + bright) ──
       // Replaces metallic 3-delay-line feedback reverb with natural room sound
@@ -899,13 +915,18 @@ export const AudioPlayer = () => {
     // direct=1, multiband=0 → signal flows highPass → directGain → mix → subBass
     // multiband path still processes (CPU cost) but its output is muted, so
     // its phase smear can't reach the output.
+    // Spatial bypass works the same way for the post-master spatial chain.
     const useDirectPath = () => {
       ramp(multibandBypassDirectRef.current?.gain, 1);
       ramp(multibandBypassMbRef.current?.gain, 0);
+      ramp(spatialBypassDirectRef.current?.gain, 1);
+      ramp(spatialBypassMainRef.current?.gain, 0);
     };
     const useMultibandPath = () => {
       ramp(multibandBypassDirectRef.current?.gain, 0);
       ramp(multibandBypassMbRef.current?.gain, 1);
+      ramp(spatialBypassDirectRef.current?.gain, 0);
+      ramp(spatialBypassMainRef.current?.gain, 1);
     };
 
     const setStandardEqNeutral = () => {
