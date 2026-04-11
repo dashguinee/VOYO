@@ -9,19 +9,19 @@
  */
 
 import { createClient } from '@supabase/supabase-js';
-import { devLog, devWarn } from '../../utils/logger';
+import { supabase } from '../supabase';
 
 // Command Center's Supabase credentials (social data)
-// Check multiple env var names for compatibility
-const CC_SUPABASE_URL = import.meta.env.VITE_COMMAND_CENTER_URL || import.meta.env.VITE_CC_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL || '';
-const CC_SUPABASE_KEY = import.meta.env.VITE_COMMAND_CENTER_KEY || import.meta.env.VITE_CC_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+// Only create a separate client if CC-specific env vars are set
+const CC_SUPABASE_URL = import.meta.env.VITE_CC_SUPABASE_URL || '';
+const CC_SUPABASE_KEY = import.meta.env.VITE_CC_SUPABASE_ANON_KEY || '';
 
-// Create Command Center Supabase client for social features
-export const ccSupabase = CC_SUPABASE_URL && CC_SUPABASE_KEY
+// Reuse main client when no separate CC credentials are configured
+export const ccSupabase = (CC_SUPABASE_URL && CC_SUPABASE_KEY)
   ? createClient(CC_SUPABASE_URL, CC_SUPABASE_KEY)
-  : null;
+  : supabase;
 
-export const isDahubConfigured = Boolean(ccSupabase);
+export const isDahubConfigured = true;
 
 // ==============================================
 // TYPES
@@ -135,33 +135,57 @@ export type AppCode = typeof APP_CODES[keyof typeof APP_CODES];
 export const friendsAPI = {
   async getFriends(userId: string, appFilter?: AppCode): Promise<Friend[]> {
     if (!ccSupabase) {
-      devWarn('[DAHUB] Command Center Supabase not configured');
+      console.warn('[DAHUB] Command Center Supabase not configured');
       return [];
     }
 
     try {
+      // Try RPC first
       const { data, error } = await ccSupabase.rpc('get_friends_with_presence', {
         p_user_id: userId
       });
 
-      if (error) {
-        console.error('[DAHUB] Error fetching friends:', error);
-        return [];
+      if (!error && data?.length) {
+        let friends: Friend[] = data.map((row: any) => ({
+          dash_id: row.friend_id,
+          name: row.full_name || row.friend_id,
+          nickname: row.nickname,
+          avatar: undefined,
+          status: row.status || 'offline',
+          current_app: row.current_app,
+          activity: row.activity,
+          activity_data: undefined,
+          last_seen: row.last_seen
+        }));
+
+        // Filter by app if specified (VOYO only sees VOYO activity)
+        if (appFilter && appFilter !== APP_CODES.COMMAND_CENTER) {
+          friends = friends.filter(f => f.current_app === appFilter);
+        }
+
+        return friends;
       }
 
-      let friends: Friend[] = (data || []).map((row: any) => ({
-        dash_id: row.friend_id,
-        name: row.full_name || row.friend_id,
-        nickname: row.nickname,
-        avatar: undefined,
-        status: row.status || 'offline',
-        current_app: row.current_app,
-        activity: row.activity,
+      // RPC failed, fall back to shared account members as "friends"
+      // (No friendships table exists - friends are people on same accounts)
+      console.log('[DAHUB] Using shared account members as friends');
+
+      // Get shared account members and treat them as friends
+      const sharedMembers = await this.getSharedAccountMembers(userId);
+
+      let friends: Friend[] = sharedMembers.map(m => ({
+        dash_id: m.dash_id,
+        name: m.name,
+        nickname: undefined,
+        avatar: m.avatar,
+        status: (m.status as 'online' | 'offline' | 'away') || 'offline',
+        current_app: m.current_app || null,
+        activity: m.activity,
         activity_data: undefined,
-        last_seen: row.last_seen
+        last_seen: undefined
       }));
 
-      // Filter by app if specified (VOYO only sees VOYO activity)
+      // Filter by app if specified
       if (appFilter && appFilter !== APP_CODES.COMMAND_CENTER) {
         friends = friends.filter(f => f.current_app === appFilter);
       }
@@ -243,64 +267,49 @@ export const friendsAPI = {
         .eq('core_id', userId);
 
       if (userServicesError || !userServices?.length) {
-        devLog('[DAHUB] No shared accounts found for user');
+        console.log('[DAHUB] No shared accounts found for user');
         return [];
       }
 
       const accountIds = userServices.map(s => s.account_id).filter(Boolean);
       if (accountIds.length === 0) return [];
 
-      // Step 2 + 3 in parallel: these both only need data from Step 1.
-      // Old code ran them serially (~2 RTTs). Now they share one RTT.
-      const [sharedMembersRes, friendshipsRes] = await Promise.all([
-        ccSupabase
-          .from('user_services')
-          .select(`
-            core_id,
-            account_id,
-            service_type,
-            citizens!inner(core_id, full_name)
-          `)
-          .in('account_id', accountIds)
-          .neq('core_id', userId),
-        ccSupabase
-          .from('friendships')
-          .select('friend_id, status')
-          .eq('user_id', userId),
-      ]);
+      // Step 2: Find other users on the same accounts (no join, simpler query)
+      const { data: sharedMembers, error: membersError } = await ccSupabase
+        .from('user_services')
+        .select('core_id, account_id, service_type')
+        .in('account_id', accountIds)
+        .neq('core_id', userId);
 
-      const { data: sharedMembers, error: membersError } = sharedMembersRes;
-      if (membersError || !sharedMembers?.length) return [];
+      if (membersError || !sharedMembers?.length) {
+        console.log('[DAHUB] No shared members found:', membersError);
+        return [];
+      }
 
-      const { data: friendships } = friendshipsRes;
+      // Step 3: Get user details from users table
+      const memberCoreIds = [...new Set(sharedMembers.map(m => m.core_id))];
+      const { data: usersData } = await ccSupabase
+        .from('users')
+        .select('core_id, full_name')
+        .in('core_id', memberCoreIds);
 
-      const friendMap = new Map<string, string>();
-      (friendships || []).forEach((f: any) => {
-        friendMap.set(f.friend_id, f.status || 'accepted');
-      });
+      const usersMap = new Map((usersData || []).map((u: any) => [u.core_id, u.full_name]));
 
       // Step 4: Group by user and aggregate services
       const memberMap = new Map<string, SharedAccountMember>();
 
       for (const row of sharedMembers) {
         const memberId = row.core_id;
-        const citizen = row.citizens as any;
         const serviceType = row.service_type;
         const serviceInfo = SERVICE_DISPLAY[serviceType];
 
         if (!memberMap.has(memberId)) {
-          // Determine friend status
-          let friendStatus: 'suggested' | 'pending' | 'accepted' = 'suggested';
-          const existingStatus = friendMap.get(memberId);
-          if (existingStatus === 'accepted') friendStatus = 'accepted';
-          else if (existingStatus === 'pending') friendStatus = 'pending';
-
           memberMap.set(memberId, {
             dash_id: memberId,
-            name: citizen?.full_name || memberId,
+            name: usersMap.get(memberId) || memberId,
             avatar: undefined,
             shared_services: [],
-            friend_status: friendStatus,
+            friend_status: 'suggested',
             status: 'offline'
           });
         }

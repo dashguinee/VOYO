@@ -13,6 +13,8 @@ import { useState, useRef, useEffect, lazy, Suspense } from 'react';
 import { X, Send } from 'lucide-react';
 import { usePlayerStore } from '../../store/playerStore';
 import { DJMode, Track } from '../../types';
+import { useAuth } from '../../hooks/useAuth';
+import { APP_CODES } from '../../lib/dahub/dahub-api';
 
 // Lightweight — always loaded
 import { VoyoBottomNav } from './navigation/VoyoBottomNav';
@@ -21,8 +23,8 @@ import type { MomentTrackInfo } from './feed/VoyoMoments';
 // Heavy components — lazy loaded for code splitting
 const VoyoMoments = lazy(() => import('./feed/VoyoMoments').then(m => ({ default: m.VoyoMoments })));
 const VoyoPortraitPlayer = lazy(() => import('./VoyoPortraitPlayer').then(m => ({ default: m.VoyoPortraitPlayer })));
-// OFFICIAL DaHub from Hub.tsx (Classic Mode) — single source of truth, Command Center wired, has own nav
-const Hub = lazy(() => import('../classic/Hub').then(m => ({ default: m.Hub })));
+// DaHub — ported from Command Center, framer-motion stripped, voyo CSS animations
+const Dahub = lazy(() => import('../dahub/Dahub').then(m => ({ default: m.Dahub })));
 const ArtistPage = lazy(() => import('./ArtistPage').then(m => ({ default: m.ArtistPage })));
 
 // Quick DJ Prompts
@@ -148,6 +150,9 @@ export const PortraitVOYO = ({ onSearch, onDahub, onHome }: PortraitVOYOProps) =
   const voyoActiveTab = usePlayerStore(s => s.voyoActiveTab);
   const setVoyoTab = usePlayerStore(s => s.setVoyoTab);
   const playTrack = usePlayerStore(s => s.playTrack);
+
+  // DASH auth — for DaHub social layer
+  const { dashId, displayName } = useAuth();
 
   const [djMode, setDjMode] = useState<DJMode>('idle');
   const [djResponse, setDjResponse] = useState<string | null>(null);
@@ -305,11 +310,35 @@ export const PortraitVOYO = ({ onSearch, onDahub, onHome }: PortraitVOYOProps) =
           }}
         >
           <Suspense fallback={<div className="h-full bg-[#0a0a0c]" />}>
-            <Hub
-              onHome={onHome}
-              onSwitchToVOYO={() => setVoyoTab('music')}
-              onVoyoFeed={() => setVoyoTab('feed')}
-            />
+            {dashId ? (
+              <Dahub
+                userId={dashId}
+                userName={displayName || 'DASH Citizen'}
+                coreId={dashId}
+                appContext={APP_CODES.VOYO}
+                onClose={() => setVoyoTab('music')}
+              />
+            ) : (
+              <div className="h-full flex flex-col items-center justify-center px-8 text-center">
+                <div className="w-20 h-20 rounded-full bg-purple-500/10 flex items-center justify-center mb-5">
+                  <div className="w-12 h-12 rounded-full bg-gradient-to-br from-purple-500 to-violet-600 flex items-center justify-center text-2xl">👋</div>
+                </div>
+                <h2 className="text-white text-xl font-bold mb-2">Sign in to DaHub</h2>
+                <p className="text-white/50 text-sm mb-6 max-w-xs">Connect with friends, share notes, and chat across the DASH ecosystem.</p>
+                <button
+                  onClick={() => window.location.href = `https://hub.dasuperhub.com?returnUrl=${window.location.origin}&app=V`}
+                  className="px-6 py-3 rounded-full bg-gradient-to-r from-purple-500 to-violet-600 text-white font-semibold text-sm shadow-lg shadow-purple-500/30 active:scale-95 transition-transform"
+                >
+                  Sign in with DASH ID
+                </button>
+                <button
+                  onClick={() => setVoyoTab('music')}
+                  className="mt-4 text-white/40 text-sm active:scale-95 transition-transform"
+                >
+                  Back to music
+                </button>
+              </div>
+            )}
           </Suspense>
         </div>
 

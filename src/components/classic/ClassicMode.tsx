@@ -12,7 +12,8 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { Home, Radio, Library as LibraryIcon, Users, Zap, Plus, Shuffle, Repeat, Repeat1 } from 'lucide-react';
 import { HomeFeed } from './HomeFeed';
 import { Library } from './Library';
-import { Hub } from './Hub';
+import { Dahub } from '../dahub/Dahub';
+import { APP_CODES } from '../../lib/dahub/dahub-api';
 import { NowPlaying } from './NowPlaying';
 import { usePlayerStore } from '../../store/playerStore';
 import { getYouTubeThumbnail } from '../../data/tracks';
@@ -461,6 +462,7 @@ export const ClassicMode = ({ onSwitchToVOYO, onSearch }: ClassicModeProps) => {
   const [activeTab, setActiveTab] = useState<ClassicTab>('home');
   const [showNowPlaying, setShowNowPlaying] = useState(false);
   const [navVisible, setNavVisible] = useState(true);
+  const { dashId, displayName } = useAuth();
   const currentTrack = usePlayerStore(s => s.currentTrack);
   const shouldOpenNowPlaying = usePlayerStore(s => s.shouldOpenNowPlaying);
   const setShouldOpenNowPlaying = usePlayerStore(s => s.setShouldOpenNowPlaying);
@@ -509,12 +511,35 @@ export const ClassicMode = ({ onSwitchToVOYO, onSearch }: ClassicModeProps) => {
             />
           )}
           {activeTab === 'hub' && (
-            <Hub
-              onSwitchToVOYO={onSwitchToVOYO}
-              onHome={() => setActiveTab('home')}
-              onVoyoFeed={() => onSwitchToVOYO('feed')}
-              onLibrary={() => setActiveTab('library')}
-            />
+            dashId ? (
+              <Dahub
+                userId={dashId}
+                userName={displayName || 'DASH Citizen'}
+                coreId={dashId}
+                appContext={APP_CODES.COMMAND_CENTER}
+                onClose={() => setActiveTab('home')}
+              />
+            ) : (
+              <div className="h-full flex flex-col items-center justify-center px-8 text-center bg-[#0a0a0f]">
+                <div className="w-20 h-20 rounded-full bg-purple-500/10 flex items-center justify-center mb-5">
+                  <div className="w-12 h-12 rounded-full bg-gradient-to-br from-purple-500 to-violet-600 flex items-center justify-center text-2xl">👋</div>
+                </div>
+                <h2 className="text-white text-xl font-bold mb-2">Sign in to DaHub</h2>
+                <p className="text-white/50 text-sm mb-6 max-w-xs">Connect with friends, share notes, and chat across the DASH ecosystem.</p>
+                <button
+                  onClick={() => window.location.href = `https://hub.dasuperhub.com?returnUrl=${window.location.origin}&app=V`}
+                  className="px-6 py-3 rounded-full bg-gradient-to-r from-purple-500 to-violet-600 text-white font-semibold text-sm shadow-lg shadow-purple-500/30 active:scale-95 transition-transform"
+                >
+                  Sign in with DASH ID
+                </button>
+                <button
+                  onClick={() => setActiveTab('home')}
+                  className="mt-4 text-white/40 text-sm active:scale-95 transition-transform"
+                >
+                  Back to home
+                </button>
+              </div>
+            )
           )}
           {activeTab === 'library' && (
             <Library onTrackClick={handleTrackClick} />
