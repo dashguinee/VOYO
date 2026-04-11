@@ -103,15 +103,38 @@ const S = {
   compassArc: css({ position: 'relative', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', padding: '4px 0 10px', overflow: 'hidden', minHeight: 44 }),
   card: css({ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }),
   thumb: css({ position: 'absolute', inset: 0, objectFit: 'cover', width: '100%', height: '100%', display: 'block', margin: 0, padding: 0, borderRadius: 0 }),
-  grad: css({ position: 'absolute', bottom: 0, left: 0, right: 0, height: '45%', background: 'linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.45) 40%, transparent 100%)', zIndex: 2, pointerEvents: 'none' }),
-  bottom: css({ position: 'relative', zIndex: 5, padding: '0 18px 28px', paddingBottom: 'max(28px, env(safe-area-inset-bottom, 28px))', maxWidth: '75%' }),
-  // Identity row: avatar + creator name (the primary surface)
-  crRow: css({ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }),
-  avatar: css({ width: 36, height: 36, borderRadius: '50%', background: 'linear-gradient(135deg, rgba(139,92,246,0.4), rgba(139,92,246,0.15))', border: '1px solid rgba(139,92,246,0.35)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 700, color: '#fff', flexShrink: 0, boxShadow: '0 4px 14px rgba(0,0,0,0.45)' }),
-  crName: css({ fontSize: 14, color: '#fff', fontWeight: 600, letterSpacing: 0.1, textShadow: '0 1px 4px rgba(0,0,0,0.6)' }),
-  // Bio (the title text — used as caption/bio under the identity)
-  title: css({ fontSize: 13, fontWeight: 400, color: 'rgba(255,255,255,0.8)', lineHeight: 1.4, marginBottom: 8, textShadow: '0 1px 4px rgba(0,0,0,0.5)', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' } as any),
-  track: css({ fontSize: 11, color: 'rgba(255,255,255,0.5)', display: 'flex', alignItems: 'center', gap: 5, marginTop: 2 }),
+  grad: css({ position: 'absolute', bottom: 0, left: 0, right: 0, height: '50%', background: 'linear-gradient(to top, rgba(0,0,0,0.78) 0%, rgba(0,0,0,0.35) 40%, transparent 100%)', zIndex: 2, pointerEvents: 'none' }),
+  // CREATOR ORB — positioned on the LEFT, vertically centered with the
+  // middle of the right-side action bar (action bar bottom: 160, height
+  // ~220px, middle ~270 from bottom). Subtle drift animation in sync with
+  // the rest of the moments visual rhythm.
+  creatorOrbWrap: css({ position: 'absolute', left: 18, bottom: 290, zIndex: 10, display: 'flex', alignItems: 'center', gap: 10, transition: 'opacity 0.55s cubic-bezier(0.16, 1, 0.3, 1), transform 0.55s cubic-bezier(0.16, 1, 0.3, 1)' }),
+  creatorOrb: css({ width: 44, height: 44, borderRadius: '50%', background: 'linear-gradient(135deg, rgba(139,92,246,0.5), rgba(139,92,246,0.18))', border: '1.5px solid rgba(167,139,250,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, fontWeight: 700, color: '#fff', boxShadow: '0 6px 20px rgba(0,0,0,0.55), 0 0 14px rgba(139,92,246,0.25)', animation: 'voyo-creator-drift 6s ease-in-out infinite' }),
+  creatorOrbName: css({ fontSize: 13, fontWeight: 600, color: '#fff', letterSpacing: 0.2, textShadow: '0 1px 4px rgba(0,0,0,0.7)' }),
+  // BIO GLASS CARD — sits below the creator orb on the left side. Reuses
+  // the .glass-card aesthetic from index.css with a tiny glossy top edge.
+  // Scrollable when content overflows.
+  bioCardWrap: css({ position: 'absolute', left: 18, bottom: 130, zIndex: 6, maxWidth: 'calc(60% - 30px)', transition: 'opacity 0.55s cubic-bezier(0.16, 1, 0.3, 1), transform 0.55s cubic-bezier(0.16, 1, 0.3, 1)' }),
+  bioCard: css({
+    background: 'rgba(20, 20, 30, 0.55)',
+    backdropFilter: 'blur(20px) saturate(140%)',
+    WebkitBackdropFilter: 'blur(20px) saturate(140%)',
+    border: '1px solid rgba(255,255,255,0.08)',
+    borderRadius: 16,
+    padding: '12px 14px 10px',
+    boxShadow: '0 8px 28px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.08)',
+    position: 'relative',
+    overflow: 'hidden',
+  }),
+  // Title — primary line in the glass card
+  bioTitle: css({ fontSize: 14, fontWeight: 600, color: '#fff', lineHeight: 1.35, marginBottom: 6, textShadow: '0 1px 3px rgba(0,0,0,0.5)' } as any),
+  // Bio body — scrollable text below the title
+  bioBody: css({ fontSize: 12, fontWeight: 400, color: 'rgba(255,255,255,0.72)', lineHeight: 1.5, maxHeight: 80, overflowY: 'auto', paddingRight: 4, marginBottom: 10 } as any),
+  // Bio react row — small react button at the bottom-right of the card
+  bioReactRow: css({ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, paddingTop: 6, borderTop: '1px solid rgba(255,255,255,0.06)' }),
+  bioReactBtn: css({ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 10px', borderRadius: 999, background: 'rgba(167,139,250,0.12)', border: '1px solid rgba(167,139,250,0.25)', fontSize: 11, fontWeight: 600, color: '#a78bfa', cursor: 'pointer', transition: 'all 0.2s ease' }),
+  // Track attribution — sits below the bio card
+  track: css({ fontSize: 11, color: 'rgba(255,255,255,0.5)', display: 'flex', alignItems: 'center', gap: 5, marginTop: 8, paddingLeft: 2 }),
   actBar: css({ position: 'absolute', right: 12, bottom: 160, zIndex: 10, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 20 }),
   actBtn: css({ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, cursor: 'pointer' }),
   actLbl: css({ fontSize: 10, color: 'rgba(255,255,255,0.6)', fontWeight: 500 }),
@@ -352,9 +375,10 @@ interface MomentCardProps {
   onToggleMute: () => void;
   onPlayTrack?: () => void;
   onArtistTap?: (artistName: string) => void;
+  widgetsVisible: boolean;
 }
 
-const MomentCard = memo(({ moment, isOyed, onOye, isActive, isMuted, onToggleMute, onPlayTrack, onArtistTap }: MomentCardProps) => {
+const MomentCard = memo(({ moment, isOyed, onOye, isActive, isMuted, onToggleMute, onPlayTrack, onArtistTap, widgetsVisible }: MomentCardProps) => {
   const initial = (moment.creator_name || moment.creator_username || '?')[0].toUpperCase();
   const creator = moment.creator_name || moment.creator_username || 'Unknown';
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -488,32 +512,72 @@ const MomentCard = memo(({ moment, isOyed, onOye, isActive, isMuted, onToggleMut
         </div>
       </div>
 
-      <div style={S.bottom}>
-        {/* Identity row: avatar + handle (primary surface, biggest visual weight) */}
-        <div style={S.crRow}>
-          <div style={S.avatar}>{initial}</div>
-          <span style={S.crName}>@{creator}</span>
-        </div>
-        {/* Bio: the title acts as the caption/bio under the identity */}
-        <div style={S.title}>{moment.title}</div>
-        {/* Track attribution (smallest, most muted) */}
-        {moment.parent_track_title && (
-          <div
-            style={{ ...S.track, cursor: onPlayTrack ? 'pointer' : 'default' }}
-            onClick={(e) => { if (onPlayTrack) { e.stopPropagation(); onPlayTrack(); } }}
-          >
-            <Play size={10} style={{ color: 'rgba(255,255,255,0.5)' }} />
-            <span
-              onClick={(e) => {
-                if (onArtistTap && moment.parent_track_artist) {
-                  e.stopPropagation();
-                  onArtistTap(moment.parent_track_artist);
-                }
-              }}
-              style={{ textDecoration: onArtistTap && moment.parent_track_artist ? 'underline' : 'none', textDecorationColor: 'rgba(255,255,255,0.3)' }}
-            >{moment.parent_track_artist}</span> · <span>{moment.parent_track_title}</span>
+      {/* CREATOR ORB — left side, vertically centered with action bar middle.
+          Subtle drift animation, in sync with the visual rhythm.
+          Fades when widgetsVisible is false (3s of inactivity in immersive mode). */}
+      <div
+        style={{
+          ...S.creatorOrbWrap,
+          opacity: widgetsVisible ? 1 : 0,
+          transform: widgetsVisible ? 'translateX(0)' : 'translateX(-8px)',
+          pointerEvents: widgetsVisible ? 'auto' : 'none',
+        }}
+      >
+        <div style={S.creatorOrb}>{initial}</div>
+        <span style={S.creatorOrbName}>@{creator}</span>
+      </div>
+
+      {/* BIO GLASS CARD — sits below the orb, scrollable, with react button.
+          Reuses .glass-card aesthetic + gloss top edge. Same fade behavior. */}
+      <div
+        style={{
+          ...S.bioCardWrap,
+          opacity: widgetsVisible ? 1 : 0,
+          transform: widgetsVisible ? 'translateY(0)' : 'translateY(8px)',
+          pointerEvents: widgetsVisible ? 'auto' : 'none',
+        }}
+      >
+        <div style={S.bioCard}>
+          {/* Glossy top highlight (dash of light on the upper edge) */}
+          <div style={{
+            position: 'absolute', top: 0, left: 12, right: 12, height: 1,
+            background: 'linear-gradient(to right, transparent 0%, rgba(255,255,255,0.18) 50%, transparent 100%)',
+            pointerEvents: 'none',
+          }} />
+          <div style={S.bioTitle}>{moment.title}</div>
+          {moment.description && (
+            <div style={S.bioBody} className="scrollbar-hide">
+              {moment.description}
+            </div>
+          )}
+          <div style={S.bioReactRow}>
+            {moment.parent_track_title && (
+              <div
+                style={{ ...S.track, marginTop: 0, cursor: onPlayTrack ? 'pointer' : 'default', flex: 1, minWidth: 0 }}
+                onClick={(e) => { if (onPlayTrack) { e.stopPropagation(); onPlayTrack(); } }}
+              >
+                <Play size={10} style={{ color: 'rgba(255,255,255,0.5)', flexShrink: 0 }} />
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  <span
+                    onClick={(e) => {
+                      if (onArtistTap && moment.parent_track_artist) {
+                        e.stopPropagation();
+                        onArtistTap(moment.parent_track_artist);
+                      }
+                    }}
+                  >{moment.parent_track_artist}</span> · {moment.parent_track_title}
+                </span>
+              </div>
+            )}
+            <button
+              style={S.bioReactBtn}
+              onClick={(e) => { e.stopPropagation(); onOye(); }}
+            >
+              <Heart size={11} style={{ color: '#a78bfa', fill: isOyed ? '#a78bfa' : 'none' }} />
+              <span>{isOyed ? 'OYÉD' : 'OYÉ'}</span>
+            </button>
           </div>
-        )}
+        </div>
       </div>
     </div>
   );
@@ -686,11 +750,60 @@ export const VoyoMoments: React.FC<VoyoMomentsProps> = ({ onPlayFullTrack, onArt
   const [pendingStar, setPendingStar] = useState<{ momentId: string; creator: string; stars: number } | null>(null);
   const [selectedCategories, setSelectedCategories] = useState<Set<number>>(new Set());
   const [mixIndex, setMixIndex] = useState(0);
-  // Header glide-out: starts visible, fades smoothly after the user makes
-  // their first navigation gesture (swipe / tap-into-content). Returns
-  // visible if user double-taps or holds — those are gestures that suggest
-  // they want UI back. Standard TikTok/Reels pattern.
-  const [hasInteracted, setHasInteracted] = useState(false);
+  // Header / widget glide-out state. Three phases:
+  //   'idle'        — just landed, header + widgets visible
+  //   'transition'  — first scroll fired, gold word reveals (1.4s), header
+  //                   stays visible during this phase as the "moments mode"
+  //                   transition cue
+  //   'immersive'   — header faded, only video visible. Bio card and creator
+  //                   orb auto-fade after 3s of inactivity. Tap restores.
+  const [uiPhase, setUiPhase] = useState<'idle' | 'transition' | 'immersive'>('idle');
+  // 3-second widget visibility timer (only active in 'immersive' phase)
+  const [widgetsVisible, setWidgetsVisible] = useState(true);
+  const widgetFadeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const transitionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Trigger the transition reveal on first scroll, then enter immersive mode.
+  const startTransition = useCallback(() => {
+    if (uiPhase !== 'idle') return;
+    setUiPhase('transition');
+    if (transitionTimer.current) clearTimeout(transitionTimer.current);
+    transitionTimer.current = setTimeout(() => {
+      setUiPhase('immersive');
+    }, 1400);
+  }, [uiPhase]);
+
+  // Restart the 3-second widget visibility timer (called on tap)
+  const pingWidgets = useCallback(() => {
+    setWidgetsVisible(true);
+    if (widgetFadeTimer.current) clearTimeout(widgetFadeTimer.current);
+    widgetFadeTimer.current = setTimeout(() => setWidgetsVisible(false), 3000);
+  }, []);
+
+  // Auto-fade widgets on entering immersive phase, and on every new moment
+  useEffect(() => {
+    if (uiPhase === 'immersive') {
+      pingWidgets();
+    }
+    return () => {
+      if (widgetFadeTimer.current) clearTimeout(widgetFadeTimer.current);
+    };
+  }, [uiPhase, pingWidgets]);
+
+  // Restart the fade timer whenever the moment changes (user gets 3s to read
+  // the new bio, then it fades for immersion).
+  useEffect(() => {
+    if (uiPhase === 'immersive') pingWidgets();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mKey]);
+
+  // Cleanup transition timer on unmount
+  useEffect(() => () => {
+    if (transitionTimer.current) clearTimeout(transitionTimer.current);
+  }, []);
+
+  // Backward-compat: code below still references hasInteracted
+  const hasInteracted = uiPhase === 'immersive';
 
   // ============================================
   // MIX MODE — multi-category blended feed
@@ -820,7 +933,15 @@ export const VoyoMoments: React.FC<VoyoMomentsProps> = ({ onPlayFullTrack, onArt
   }, []);
 
   const handleOye = useCallback((momentId: string, x: number, y: number) => {
-    setOyedMoments(p => { const n = new Set(p); n.add(momentId); return n; });
+    // RULE: once OYÉd, you can't un-OYÉ. Idempotent — repeated calls just
+    // re-fire the float animation (like double-tapping a TikTok already-liked
+    // post: visual hearts fly, but the like state stays true).
+    setOyedMoments(p => {
+      if (p.has(momentId)) return p; // already OYÉd, no state change
+      const n = new Set(p);
+      n.add(momentId);
+      return n;
+    });
     const nf: OyeFloat[] = Array.from({ length: 5 }, (_, i) => ({ id: `${Date.now()}-${i}`, x: x - 14 + (Math.random() - 0.5) * 40, y: y - 14 }));
     setOyeFloats(p => [...p, ...nf]);
     setTimeout(() => setOyeFloats(p => p.filter(f => !nf.find(n => n.id === f.id))), 2200);
@@ -852,8 +973,8 @@ export const VoyoMoments: React.FC<VoyoMomentsProps> = ({ onPlayFullTrack, onArt
     if (Math.abs(dx) > SWIPE_THRESHOLD || Math.abs(dy) > SWIPE_THRESHOLD) {
       // Calculate velocity (px/ms)
       const velocity = distance / Math.max(duration, 1);
-      // First swipe — header glides out of the way
-      if (!hasInteracted) setHasInteracted(true);
+      // First swipe — fire the transition reveal (gold word + header fade chain)
+      startTransition();
 
       if (Math.abs(dx) > Math.abs(dy)) {
         if (dx < 0) {
@@ -871,18 +992,26 @@ export const VoyoMoments: React.FC<VoyoMomentsProps> = ({ onPlayFullTrack, onArt
       return;
     }
 
-    // Double-tap detection with star-hold
+    // Single tap = ping widgets back to visible (3s timer restart).
+    // Double-tap = OYÉ (star/super-react). Once a user has OYÉd a moment,
+    // it can't be un-OYÉd — like Dash's rule: you can't unlike a post.
     const now = Date.now();
     if (now - lastTap.current < DOUBLE_TAP_MS) {
       if (tapTimer.current) { clearTimeout(tapTimer.current); tapTimer.current = null; }
-      // Double-tap detected — fire OYE immediately
+      // Double-tap detected — fire OYÉ immediately
       if (currentMoment) handleOye(currentMoment.id, t.clientX, t.clientY);
       lastTap.current = 0;
     } else {
       lastTap.current = now;
-      tapTimer.current = setTimeout(() => { showVolBadge(); lastTap.current = 0; }, DOUBLE_TAP_MS);
+      tapTimer.current = setTimeout(() => {
+        // Single tap action: bring widgets back into view + restart fade timer
+        pingWidgets();
+        // Mute toggle is now a side-effect of single tap (preserved behavior)
+        showVolBadge();
+        lastTap.current = 0;
+      }, DOUBLE_TAP_MS);
     }
-  }, [showOverlay, showStarPanel, currentMoment, mixGoUp, mixGoDown, goLeft, goRight, nav, handleOye, showVolBadge]);
+  }, [showOverlay, showStarPanel, currentMoment, mixGoUp, mixGoDown, goLeft, goRight, nav, handleOye, showVolBadge, pingWidgets, startTransition]);
 
   // ---- KEYBOARD (desktop) ----
 
@@ -1014,8 +1143,7 @@ export const VoyoMoments: React.FC<VoyoMomentsProps> = ({ onPlayFullTrack, onArt
       </div>
 
       {/* Tap-to-show-header strip — invisible 28px hot zone at the very top
-          that re-reveals the header when tapped. Lets users get the UI back
-          without needing to swipe back to "start" of the feed. */}
+          that re-reveals the header when tapped. */}
       {hasInteracted && (
         <div
           style={{
@@ -1023,8 +1151,32 @@ export const VoyoMoments: React.FC<VoyoMomentsProps> = ({ onPlayFullTrack, onArt
             height: 'calc(env(safe-area-inset-top, 12px) + 28px)',
             zIndex: 31, pointerEvents: 'auto',
           }}
-          onClick={(e) => { e.stopPropagation(); setHasInteracted(false); }}
+          onClick={(e) => { e.stopPropagation(); setUiPhase('idle'); pingWidgets(); }}
         />
+      )}
+
+      {/* GOLD TRANSITION WORD — fires on first scroll, lives 1.4s, then fades.
+          Hand-feel script (Italianno) in DASH gold/bronze. Centered above
+          the compass. The cue that says "you're entering Moments". */}
+      {uiPhase === 'transition' && (
+        <div
+          style={{
+            position: 'absolute',
+            top: 'calc(env(safe-area-inset-top, 12px) + 88px)',
+            left: 0, right: 0, zIndex: 32,
+            textAlign: 'center',
+            pointerEvents: 'none',
+            fontFamily: "'Italianno', cursive",
+            fontSize: 56,
+            lineHeight: 1,
+            color: '#D4A053',
+            textShadow: '0 2px 24px rgba(212,160,83,0.45), 0 1px 4px rgba(0,0,0,0.6)',
+            letterSpacing: '0.04em',
+            animation: 'voyo-moment-word-in 1.4s cubic-bezier(0.16, 1, 0.3, 1) forwards',
+          }}
+        >
+          moments
+        </div>
       )}
 
       {/* MIX MODE BADGE -- visible when multi-category blending is active */}
@@ -1082,6 +1234,7 @@ export const VoyoMoments: React.FC<VoyoMomentsProps> = ({ onPlayFullTrack, onArt
               artist: currentMoment.parent_track_artist || 'Unknown Artist',
             }) : undefined}
             onArtistTap={onArtistTap}
+            widgetsVisible={widgetsVisible}
           />
         </div>
       ) : (

@@ -322,6 +322,22 @@ body {
   50% { transform: translateY(-20px); }
 }
 
+/* VOYO Moments — creator orb subtle drift, in sync with the visual rhythm */
+@keyframes voyo-creator-drift {
+  0%, 100% { transform: translateY(0) translateX(0); }
+  25% { transform: translateY(-3px) translateX(1px); }
+  50% { transform: translateY(0) translateX(0); }
+  75% { transform: translateY(3px) translateX(-1px); }
+}
+
+/* VOYO Moments — gold transition word reveal (DASH voice, not Swift) */
+@keyframes voyo-moment-word-in {
+  0% { opacity: 0; transform: translateY(8px) scale(0.96); letter-spacing: 0.06em; }
+  30% { opacity: 1; transform: translateY(0) scale(1); letter-spacing: 0.04em; }
+  70% { opacity: 1; transform: translateY(0) scale(1); letter-spacing: 0.04em; }
+  100% { opacity: 0; transform: translateY(-4px) scale(1); letter-spacing: 0.06em; }
+}
+
 @keyframes glow-pulse {
   0%, 100% { box-shadow: 0 0 20px rgba(139, 92, 246, 0.3), 0 0 40px rgba(139, 92, 246, 0.1); }
   50% { box-shadow: 0 0 40px rgba(139, 92, 246, 0.6), 0 0 80px rgba(139, 92, 246, 0.3); }
