@@ -12,6 +12,7 @@ import { useState } from 'react';
 import { Zap, Trash2, X, HardDrive, Settings, Sliders, Eye, EyeOff, Flame, Sparkles } from 'lucide-react';
 import { useDownloadStore } from '../../store/downloadStore';
 import { usePlayerStore } from '../../store/playerStore';
+import { haptics } from '../../utils/haptics';
 
 interface BoostSettingsProps {
   isOpen: boolean;
@@ -263,8 +264,12 @@ export const BoostSettings = ({ isOpen, onClose }: BoostSettingsProps) => {
                 </div>
               </div>
               <button
-                onClick={() => autoBoostEnabled ? disableAutoBoost() : enableAutoBoost()}
-                className="w-12 h-7 rounded-full transition-colors relative"
+                onClick={() => {
+                  haptics.light();
+                  autoBoostEnabled ? disableAutoBoost() : enableAutoBoost();
+                }}
+                className="w-12 h-7 rounded-full transition-colors relative active:scale-95"
+                aria-label={autoBoostEnabled ? 'Disable auto-boost' : 'Enable auto-boost'}
                 style={{
                   background: autoBoostEnabled
                     ? 'linear-gradient(135deg, #D4A053, #B17C2A)'
@@ -295,8 +300,11 @@ export const BoostSettings = ({ isOpen, onClose }: BoostSettingsProps) => {
               ].map(({ value, label, icon: Icon, desc }) => (
                 <button
                   key={value}
-                  onClick={() => setOyeBarBehavior(value as 'fade' | 'disappear')}
-                  className={`flex flex-col items-center gap-1.5 p-3 rounded-xl border transition-all ${
+                  onClick={() => {
+                    setOyeBarBehavior(value as 'fade' | 'disappear');
+                    haptics.light();
+                  }}
+                  className={`flex flex-col items-center gap-1.5 p-3 rounded-xl border transition-all active:scale-95 ${
                     oyeBarBehavior === value
                       ? 'bg-purple-500/20 border-purple-500/30 text-purple-300'
                       : 'bg-white/5 border-white/10 text-gray-400 hover:bg-white/10'

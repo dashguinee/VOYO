@@ -74,15 +74,22 @@ const ProgressSlider = memo(({ isScrubbing }: { isScrubbing: boolean }) => {
 
   return (
     <div className="flex-1 relative h-3 flex items-center">
-      <div className="absolute left-0 right-0 h-[1px] bg-white/15 rounded-full" />
+      {/* Track: slightly brighter hairline so the progress line is visible
+          against most backgrounds without stealing attention. */}
+      <div className="absolute left-0 right-0 h-[1px] bg-white/20 rounded-full" />
       {/* No seek input - VOYO is music, not video. You feel it, you don't scrub it. */}
       <div
-        className="absolute w-[5px] h-[5px] rounded-full"
+        className="absolute w-[6px] h-[6px] rounded-full"
         style={{
           left: `${duration > 0 ? (currentTime / duration) * 100 : 0}%`,
           transform: 'translateX(-50%)',
-          background: '#B54A2E',
-          boxShadow: isScrubbing ? '0 0 10px rgba(181,74,46,0.9)' : '0 0 4px rgba(181,74,46,0.4)',
+          background: '#D4613E',
+          // Stronger resting glow so the progress dot is always readable
+          // against dark posters. Still noticeably brighter when scrubbing.
+          boxShadow: isScrubbing
+            ? '0 0 12px rgba(212,97,62,1.0), 0 0 24px rgba(212,97,62,0.5)'
+            : '0 0 8px rgba(212,97,62,0.7), 0 0 16px rgba(212,97,62,0.3)',
+          transition: 'box-shadow 0.25s ease-out, width 0.2s ease-out',
           }}
       />
     </div>
@@ -884,6 +891,7 @@ const BackdropLibrary = ({
   return (
     <div
       className="fixed inset-0 z-[90] flex items-end justify-center"
+      data-no-canvas-swipe="true"
     >
       {/* Backdrop overlay */}
       <div
@@ -4115,6 +4123,16 @@ export const VoyoPortraitPlayer = ({
     hasCrossedThresholdRef.current = false;
     swipeStartRef.current = { x: e.clientX, y: e.clientY, t: Date.now() };
 
+    // Reset card wrapper for a clean take-over. If we're rapid-tapping
+    // after a skip, the wrapper may still be mid-transition. Force it
+    // to the at-rest state so pointermove has a consistent 0 baseline.
+    const el = cardWrapRef.current;
+    if (el) {
+      el.style.transition = 'none';
+      el.style.transform = 'translateX(0px) rotate(0deg)';
+      el.style.opacity = '1';
+    }
+
     // Start hold timer (400ms to trigger DJ mode)
     holdTimerRef.current = setTimeout(() => {
       didHoldRef.current = true;
@@ -4535,31 +4553,34 @@ export const VoyoPortraitPlayer = ({
       <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-[0.03] mix-blend-overlay pointer-events-none z-[1]" />
 
       {/* OYO ISLAND - DJ Voice Search & Chat (tap screen to show) */}
-      <OyoIsland
-        visible={showOyoIsland}
-        onHide={() => setShowOyoIsland(false)}
-        onActivity={() => {
-          // Reset controls auto-hide timer when interacting with OYO
-          if (controlsHideTimerRef.current) {
-            clearTimeout(controlsHideTimerRef.current);
-            controlsHideTimerRef.current = setTimeout(() => {
-              setIsControlsRevealed(false);
-              setShowOyoIsland(false);
-            }, 5000); // Extended timeout when interacting
-          }
-          }}
-      />
+      <div data-no-canvas-swipe="true">
+        <OyoIsland
+          visible={showOyoIsland}
+          onHide={() => setShowOyoIsland(false)}
+          onActivity={() => {
+            // Reset controls auto-hide timer when interacting with OYO
+            if (controlsHideTimerRef.current) {
+              clearTimeout(controlsHideTimerRef.current);
+              controlsHideTimerRef.current = setTimeout(() => {
+                setIsControlsRevealed(false);
+                setShowOyoIsland(false);
+              }, 5000); // Extended timeout when interacting
+            }
+            }}
+        />
+      </div>
 
       {/* FULLSCREEN VIDEO PLAYER - Shows when expand button clicked */}
-      
-        {isFullscreenVideo && currentTrack && (
+      {isFullscreenVideo && currentTrack && (
+        <div data-no-canvas-swipe="true">
           <FullscreenVideoPlayer
             track={currentTrack}
             isPlaying={isPlaying}
             onClose={() => setIsFullscreenVideo(false)}
             onTogglePlay={handlePlayPause}
           />
-        )}
+        </div>
+      )}
       
 
       {/* ╔═════════════════════════════════════════════════════════════╗
@@ -5737,17 +5758,19 @@ export const VoyoPortraitPlayer = ({
       <div className="flex-shrink-0 w-full" style={{ height: '1200px' }} />
 
       {/* BOOST SETTINGS PANEL */}
-      <BoostSettings
-        isOpen={isBoostSettingsOpen}
-        onClose={() => setIsBoostSettingsOpen(false)}
-      />
+      <div data-no-canvas-swipe="true">
+        <BoostSettings
+          isOpen={isBoostSettingsOpen}
+          onClose={() => setIsBoostSettingsOpen(false)}
+        />
+      </div>
 
       {/* SIGNAL INPUT MODAL - Double-tap billboard opens this */}
-      
-        {signalInputOpen && signalCategory && currentTrack && (
-          <div
-            className="fixed inset-0 z-[100] flex items-end justify-center"
-          >
+      {signalInputOpen && signalCategory && currentTrack && (
+        <div
+          className="fixed inset-0 z-[100] flex items-end justify-center"
+          data-no-canvas-swipe="true"
+        >
             {/* Backdrop */}
             <div
               className="absolute inset-0 bg-black/60 backdrop-blur-sm"
@@ -5839,15 +5862,19 @@ export const VoyoPortraitPlayer = ({
       
 
       {/* LYRICS OVERLAY - Tap album art to show */}
-      
-        {showLyricsOverlay && currentTrack && (
+      {showLyricsOverlay && currentTrack && (
+        // Wrap in data-no-canvas-swipe so the full-screen drag handler
+        // doesn't treat taps/drags inside the lyrics overlay as card
+        // gestures. The overlay has its own scroll + tap-to-close.
+        <div data-no-canvas-swipe="true">
           <LyricsOverlay
             track={currentTrack}
             isOpen={showLyricsOverlay}
             onClose={() => setShowLyricsOverlay(false)}
             currentTime={usePlayerStore.getState().currentTime}
           />
-        )}
+        </div>
+      )}
       
 
     </div>

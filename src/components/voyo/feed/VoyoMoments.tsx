@@ -12,7 +12,7 @@
  */
 
 import React, { useState, useRef, useCallback, useEffect, memo } from 'react';
-import { Heart, Flame, MessageCircle, ExternalLink, Play, Volume2, VolumeX } from 'lucide-react';
+import { Heart, Flame, MessageCircle, ExternalLink, Play, Volume2, VolumeX, X, Sparkles } from 'lucide-react';
 import { useMoments, CategoryAxis, NavAction, CATEGORY_PRESETS } from '../../../hooks/useMoments';
 import type { Moment } from '../../../services/momentsService';
 import { AnimatedArtCard } from './AnimatedArtCard';
@@ -110,7 +110,7 @@ const S = {
   // default (~2 lines with fade at bottom), tap to expand and scroll the rest.
   creatorBlock: css({ position: 'absolute', left: 18, bottom: 140, zIndex: 10, maxWidth: 'calc(62% - 30px)', display: 'flex', flexDirection: 'column', gap: 10, transition: 'opacity 0.55s cubic-bezier(0.16, 1, 0.3, 1), transform 0.55s cubic-bezier(0.16, 1, 0.3, 1)' }),
   creatorOrbWrap: css({ display: 'flex', alignItems: 'center', gap: 10 }),
-  creatorOrb: css({ width: 44, height: 44, borderRadius: '50%', background: 'linear-gradient(135deg, rgba(139,92,246,0.5), rgba(139,92,246,0.18))', border: '1.5px solid rgba(167,139,250,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, fontWeight: 700, color: '#fff', boxShadow: '0 6px 20px rgba(0,0,0,0.55), 0 0 14px rgba(139,92,246,0.25)', animation: 'voyo-creator-drift 6s ease-in-out infinite', flexShrink: 0 }),
+  creatorOrb: css({ width: 48, height: 48, borderRadius: '50%', background: 'linear-gradient(135deg, rgba(139,92,246,0.5), rgba(139,92,246,0.18))', border: '1.5px solid rgba(167,139,250,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17, fontWeight: 700, color: '#fff', boxShadow: '0 6px 20px rgba(0,0,0,0.55), 0 0 14px rgba(139,92,246,0.25)', animation: 'voyo-creator-drift 6s ease-in-out infinite', flexShrink: 0 }),
   creatorOrbName: css({ fontSize: 14, fontWeight: 700, color: '#fff', letterSpacing: 0.2, textShadow: '0 1px 4px rgba(0,0,0,0.7)' }),
   // BIO GLASS CARD — sits below the creator orb. Reuses the .glass-card
   // aesthetic with a tiny glossy top edge. Compact by default (~2 lines
@@ -245,11 +245,13 @@ const S = {
     color: '#fff', fontSize: 13, outline: 'none',
   }),
   commentSendBtn: css({
-    width: 36, height: 36, borderRadius: '50%',
+    width: 44, height: 44, borderRadius: '50%',
     background: 'linear-gradient(135deg, #8b5cf6, #7c3aed)',
     border: 'none', color: '#fff', cursor: 'pointer',
     display: 'flex', alignItems: 'center', justifyContent: 'center',
     flexShrink: 0,
+    transition: 'transform 0.15s ease-out, box-shadow 0.2s ease-out',
+    boxShadow: '0 4px 14px rgba(139,92,246,0.35)',
   }),
   actBar: css({ position: 'absolute', right: 12, bottom: 160, zIndex: 10, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 20 }),
   actBtn: css({ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, cursor: 'pointer' }),
@@ -450,10 +452,13 @@ const NextMomentPreview = memo(({ moment }: NextPreviewProps) => {
 NextMomentPreview.displayName = 'NextMomentPreview';
 
 const actIcon = (on: boolean): React.CSSProperties => ({
-  width: 40, height: 40, borderRadius: '50%',
+  // 48×48: above Apple (44) and Android (48) touch minimums. The visual
+  // icon inside stays 20px — the extra padding is an invisible hit zone.
+  width: 48, height: 48, borderRadius: '50%',
   background: on ? 'rgba(167,139,250,0.2)' : 'rgba(255,255,255,0.1)',
   backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)',
-  display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s ease',
+  display: 'flex', alignItems: 'center', justifyContent: 'center',
+  transition: 'all 0.2s ease, transform 0.15s ease-out',
 });
 
 // ============================================
@@ -800,7 +805,20 @@ const CommentsDrawer = memo(({ moment, onClose }: { moment: Moment; onClose: () 
         <div style={S.commentsHandle} />
         <div style={S.commentsHeader}>
           <span style={S.commentsTitle}>Comments</span>
-          <span style={S.commentsCount}>{comments.length} live</span>
+          <div className="flex items-center gap-3">
+            <span style={S.commentsCount}>{comments.length} live</span>
+            {/* Explicit close affordance — tapping the backdrop works too
+                but not all users know that. 44×44 hit zone with a small
+                visual icon keeps it discoverable without shouting. */}
+            <button
+              onClick={onClose}
+              aria-label="Close comments"
+              className="flex items-center justify-center rounded-full bg-white/8 hover:bg-white/15 active:scale-90 transition-all"
+              style={{ width: 36, height: 36, minWidth: 36, minHeight: 36 }}
+            >
+              <X size={16} style={{ color: 'rgba(255,255,255,0.75)' }} />
+            </button>
+          </div>
         </div>
         <div style={S.commentsList} className="scrollbar-hide">
           {comments.map((c) => (
@@ -834,9 +852,19 @@ const CommentsDrawer = memo(({ moment, onClose }: { moment: Moment; onClose: () 
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') handleSend(); }}
             style={S.commentInput}
+            // Tailwind focus ring is the cleanest way to add pseudo-state
+            // styling on top of the inline style. The inline `outline:none`
+            // in S.commentInput kills the browser default, these classes
+            // paint a subtle purple ring that matches the drawer accent.
+            className="focus:ring-2 focus:ring-purple-400/60 focus:border-purple-400/40"
           />
-          <button style={S.commentSendBtn} onClick={handleSend}>
-            <Heart size={14} style={{ color: '#fff', fill: '#fff' }} />
+          <button
+            style={S.commentSendBtn}
+            onClick={handleSend}
+            className="active:scale-90 hover:brightness-110"
+            aria-label="Send comment"
+          >
+            <Heart size={16} style={{ color: '#fff', fill: '#fff' }} />
           </button>
         </div>
       </div>
@@ -1563,14 +1591,27 @@ export const VoyoMoments: React.FC<VoyoMomentsProps> = ({ onPlayFullTrack, onArt
           />
         </div>
       ) : (
-        <div key="empty" style={S.empty} className="animate-[voyo-fade-in_0.2s_ease]">
+        <div key="empty" style={S.empty} className="animate-[voyo-fade-in_0.3s_ease]">
+          {/* Visual anchor — purple gradient halo with sparkle icon. Makes
+              the empty state feel intentional, not broken. */}
+          <div
+            className="flex items-center justify-center mb-4"
+            style={{
+              width: 72, height: 72, borderRadius: '50%',
+              background: 'linear-gradient(135deg, rgba(139,92,246,0.25), rgba(139,92,246,0.08))',
+              border: '1px solid rgba(167,139,250,0.3)',
+              boxShadow: '0 0 32px rgba(139,92,246,0.25), inset 0 1px 0 rgba(255,255,255,0.08)',
+            }}
+          >
+            <Sparkles size={28} style={{ color: '#c4b5fd' }} />
+          </div>
           <div style={S.emptyH}>
             {isMixMode ? 'No moments in MIX' : `No moments in ${displayName(currentCategory)}`}
           </div>
           <div style={S.emptyP}>
             {isMixMode
               ? 'Selected categories have no moments yet. Try adding more categories.'
-              : `Swipe left or right to explore other ${categoryAxis}.\nMoments will appear here as creators share them.`
+              : `Swipe sideways to explore other ${categoryAxis}.\nMoments will appear here as creators share them.`
             }
           </div>
         </div>
