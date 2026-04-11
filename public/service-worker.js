@@ -4,7 +4,7 @@
  * BACKGROUND PLAYBACK: Enhanced to cache audio streams
  */
 
-const CACHE_NAME = 'voyo-v17';
+const CACHE_NAME = 'voyo-v18';
 const AUDIO_CACHE_NAME = 'voyo-audio-v2';
 const STATIC_ASSETS = [
   '/',
@@ -98,6 +98,13 @@ self.addEventListener('fetch', (event) => {
 
   // Skip cross-origin requests (YouTube, other APIs)
   if (!event.request.url.startsWith(self.location.origin)) return;
+
+  // Skip version.json entirely — it MUST hit the network every time so the
+  // update-detection poll sees fresh data. If the SW caches it, the
+  // UpdateButton compares __APP_VERSION__ to a stale cached version and
+  // never fires the update prompt. `return` without respondWith → default
+  // browser fetch, which bypasses the SW cache layer.
+  if (event.request.url.includes('/version.json')) return;
 
   // Skip Vite dev server resources (HMR, react-refresh, etc.)
   if (event.request.url.includes('@vite') ||
