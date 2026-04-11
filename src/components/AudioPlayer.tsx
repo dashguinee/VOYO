@@ -157,6 +157,7 @@ export const AudioPlayer = () => {
   const backgroundBoostingRef = useRef<string | null>(null);
   const hotSwapAbortRef = useRef<AbortController | null>(null);
   const hasTriggered50PercentCacheRef = useRef<boolean>(false); // 50% auto-boost trigger
+  const hasTriggered85PercentCacheRef = useRef<boolean>(false); // 85% edge-stream cache trigger
   const hasTriggeredPreloadRef = useRef<boolean>(false); // 70% next-track preload trigger
   const shouldAutoResumeRef = useRef<boolean>(false); // Resume playback on refresh if position was saved
   const isEdgeStreamRef = useRef<boolean>(false); // True when playing from Edge Worker stream URL (not IndexedDB)
@@ -263,6 +264,38 @@ export const AudioPlayer = () => {
       });
     }, 5000);
   }, [progress, playbackSource, currentTrack, cacheTrack, downloadSetting]);
+
+  // 85% EDGE-STREAM CACHE: For non-R2 tracks (playing from YouTube CDN via
+  // the Edge Worker stream URL), trigger the background cache + R2 upload
+  // ONLY after the user has listened to 85% of the track. By that point:
+  //   1. The audio buffer is fully filled — no bandwidth competition
+  //   2. The user has clearly committed (not skipping early)
+  //   3. The cache is for the NEXT play, so 5-15s delay is invisible
+  //
+  // This was previously a 30s onplay defer that downloaded mid-song while
+  // the audio element was still streaming, causing bandwidth competition
+  // and audible buffer underruns. Now the cache fires only after the user
+  // is done listening to the song.
+  //
+  // handleEnded provides a fallback in case the user reaches 100% before
+  // this effect fires (rare but possible due to progress polling).
+  useEffect(() => {
+    if (hasTriggered85PercentCacheRef.current) return;
+    if (!isEdgeStreamRef.current) return; // only for edge-stream tracks
+    if (progress < 85) return;
+    if (!currentTrack?.trackId) return;
+    if (downloadSetting === 'never') return;
+
+    hasTriggered85PercentCacheRef.current = true;
+    devLog('🎵 [VOYO] 85% reached on edge stream — caching + uploading to R2 (post-buffer)');
+    cacheTrack(
+      currentTrack.trackId,
+      currentTrack.title,
+      currentTrack.artist,
+      currentTrack.duration || 0,
+      `https://voyo-edge.dash-webtv.workers.dev/cdn/art/${currentTrack.trackId}?quality=high`
+    );
+  }, [progress, currentTrack, cacheTrack, downloadSetting]);
 
   // 75% KEPT: Mark track as permanent cache when user shows strong interest
   useEffect(() => {
@@ -517,58 +550,86 @@ export const AudioPlayer = () => {
       spInput.connect(spatialBypassDirect); spatialBypassDirect.connect(ctx.destination);
       hM.connect(spatialBypassMain); spatialBypassMain.connect(ctx.destination);
 
-      // ── CONVOLVER REVERB — two real impulse responses (dark + bright) ──
-      // Replaces metallic 3-delay-line feedback reverb with natural room sound
-      const generateIR = (duration: number, decay: number, lpCutoff: number): AudioBuffer => {
-        const len = Math.ceil(ctx.sampleRate * duration);
-        const buf = ctx.createBuffer(2, len, ctx.sampleRate);
-        const L = buf.getChannelData(0), R = buf.getChannelData(1);
-        // Early reflections — discrete taps in first 80ms for room shape
-        const erEnd = Math.ceil(ctx.sampleRate * 0.08);
-        for (let er = 0; er < 12; er++) {
-          const pos = Math.floor(Math.random() * erEnd);
-          const amp = (1 - pos / erEnd) * 0.4;
-          L[pos] += (Math.random() * 2 - 1) * amp;
-          R[pos] += (Math.random() * 2 - 1) * amp;
-        }
-        // Late reverb — exponentially decaying noise (diffuse tail)
-        for (let n = erEnd; n < len; n++) {
-          const env = Math.exp(-decay * (n / ctx.sampleRate));
-          L[n] += (Math.random() * 2 - 1) * env;
-          R[n] += (Math.random() * 2 - 1) * env;
-        }
-        // Frequency shaping — one-pole lowpass for dark/bright character
-        const coeff = Math.exp(-2 * Math.PI * lpCutoff / ctx.sampleRate);
-        let pL = 0, pR = 0;
-        for (let n = 0; n < len; n++) {
-          L[n] = pL = pL * coeff + L[n] * (1 - coeff);
-          R[n] = pR = pR * coeff + R[n] * (1 - coeff);
-        }
-        return buf;
+      // ── HEAVY VOYEX SPATIAL NODES — DEFERRED to idle time ──
+      // The convolver IRs (~352K math operations across DIVE + IMMERSE) and
+      // the sub-harmonic waveshaper curve (44100 Math.tanh calls) used to
+      // run synchronously here on first chain build. ~50-200ms of main
+      // thread blocking right when the first track is trying to start,
+      // causing the "fresh start glitch". Now deferred to requestIdleCallback
+      // so they build during a free frame after first paint, NEVER blocking
+      // the audio thread startup.
+      //
+      // These nodes are only AUDIBLE when VOYEX is active with non-zero
+      // intensity. For boosted/calm/off users they're pure CPU waste, so
+      // deferring them is a free win.
+      //
+      // The wet gain refs (diveReverbWetRef, immerseReverbWetRef,
+      // subHarmonicGainRef) start as null. Any VOYEX code that touches them
+      // must check for null first (the existing ramp() helper already does).
+      const buildVoyexSpatialNodes = () => {
+        const generateIR = (duration: number, decay: number, lpCutoff: number): AudioBuffer => {
+          const len = Math.ceil(ctx.sampleRate * duration);
+          const buf = ctx.createBuffer(2, len, ctx.sampleRate);
+          const L = buf.getChannelData(0), R = buf.getChannelData(1);
+          const erEnd = Math.ceil(ctx.sampleRate * 0.08);
+          for (let er = 0; er < 12; er++) {
+            const pos = Math.floor(Math.random() * erEnd);
+            const amp = (1 - pos / erEnd) * 0.4;
+            L[pos] += (Math.random() * 2 - 1) * amp;
+            R[pos] += (Math.random() * 2 - 1) * amp;
+          }
+          for (let n = erEnd; n < len; n++) {
+            const env = Math.exp(-decay * (n / ctx.sampleRate));
+            L[n] += (Math.random() * 2 - 1) * env;
+            R[n] += (Math.random() * 2 - 1) * env;
+          }
+          const coeff = Math.exp(-2 * Math.PI * lpCutoff / ctx.sampleRate);
+          let pL = 0, pR = 0;
+          for (let n = 0; n < len; n++) {
+            L[n] = pL = pL * coeff + L[n] * (1 - coeff);
+            R[n] = pR = pR * coeff + R[n] * (1 - coeff);
+          }
+          return buf;
+        };
+
+        // DIVE reverb: dark room — long tail, heavy damping, warm
+        const diveConv = ctx.createConvolver();
+        diveConv.buffer = generateIR(2.5, 2.0, 1800);
+        const diveWet = ctx.createGain(); diveWet.gain.value = 0;
+        diveReverbWetRef.current = diveWet;
+        spInput.connect(diveConv); diveConv.connect(diveWet); diveWet.connect(ctx.destination);
+
+        // IMMERSE reverb: bright space
+        const immConv = ctx.createConvolver();
+        immConv.buffer = generateIR(1.5, 3.5, 9000);
+        const immWet = ctx.createGain(); immWet.gain.value = 0;
+        immerseReverbWetRef.current = immWet;
+        spInput.connect(immConv); immConv.connect(immWet); immWet.connect(ctx.destination);
+
+        // Sub-harmonic synthesizer
+        const sBP = ctx.createBiquadFilter(); sBP.type = 'bandpass'; sBP.frequency.value = 90; sBP.Q.value = 1;
+        const sSh = ctx.createWaveShaper();
+        const sC = new Float32Array(44100);
+        for (let si = 0; si < 44100; si++) { const sx = (si * 2) / 44100 - 1; sC[si] = Math.tanh(sx * 3) * 0.8; }
+        sSh.curve = sC; sSh.oversample = '2x';
+        const sLP = ctx.createBiquadFilter(); sLP.type = 'lowpass'; sLP.frequency.value = 80;
+        const sMx = ctx.createGain(); sMx.gain.value = 0; subHarmonicGainRef.current = sMx;
+        spInput.connect(sBP); sBP.connect(sSh); sSh.connect(sLP); sLP.connect(sMx); sMx.connect(ctx.destination);
+
+        devLog('🎛️ [VOYO] VOYEX spatial nodes built (deferred to idle)');
       };
 
-      // DIVE reverb: dark room — long tail, heavy damping, warm and enveloping
-      const diveConv = ctx.createConvolver();
-      diveConv.buffer = generateIR(2.5, 2.0, 1800);
-      const diveWet = ctx.createGain(); diveWet.gain.value = 0;
-      diveReverbWetRef.current = diveWet;
-      spInput.connect(diveConv); diveConv.connect(diveWet); diveWet.connect(ctx.destination);
-
-      // IMMERSE reverb: bright space — tight, airy, expansive
-      const immConv = ctx.createConvolver();
-      immConv.buffer = generateIR(1.5, 3.5, 9000);
-      const immWet = ctx.createGain(); immWet.gain.value = 0;
-      immerseReverbWetRef.current = immWet;
-      spInput.connect(immConv); immConv.connect(immWet); immWet.connect(ctx.destination);
-
-      const sBP = ctx.createBiquadFilter(); sBP.type = 'bandpass'; sBP.frequency.value = 90; sBP.Q.value = 1;
-      const sSh = ctx.createWaveShaper();
-      const sC = new Float32Array(44100);
-      for (let si = 0; si < 44100; si++) { const sx = (si * 2) / 44100 - 1; sC[si] = Math.tanh(sx * 3) * 0.8; }
-      sSh.curve = sC; sSh.oversample = '2x';
-      const sLP = ctx.createBiquadFilter(); sLP.type = 'lowpass'; sLP.frequency.value = 80;
-      const sMx = ctx.createGain(); sMx.gain.value = 0; subHarmonicGainRef.current = sMx;
-      spInput.connect(sBP); sBP.connect(sSh); sSh.connect(sLP); sLP.connect(sMx); sMx.connect(ctx.destination);
+      // Schedule the heavy build for idle time. requestIdleCallback runs
+      // when the main thread is free, so it never competes with the audio
+      // thread starting up the first track.
+      const w = window as unknown as {
+        requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => void;
+      };
+      if (typeof w.requestIdleCallback === 'function') {
+        w.requestIdleCallback(buildVoyexSpatialNodes, { timeout: 4000 });
+      } else {
+        setTimeout(buildVoyexSpatialNodes, 1500);
+      }
 
       spatialEnhancedRef.current = true;
       // All presets route final output → spInput → spatial chain → destination
@@ -1181,6 +1242,7 @@ export const AudioPlayer = () => {
       hasRecordedPlayRef.current = false;
       trackProgressRef.current = 0;
       hasTriggered50PercentCacheRef.current = false; // Reset 50% trigger for new track
+      hasTriggered85PercentCacheRef.current = false; // Reset 85% trigger for new track
       hasTriggeredPreloadRef.current = false; // Reset preload trigger for new track
       isEdgeStreamRef.current = false; // Reset edge stream flag for new track
       hasTriggered75PercentKeptRef.current = false; // Reset 75% kept trigger for new track
@@ -1445,31 +1507,22 @@ export const AudioPlayer = () => {
                 }
               };
 
-              // BACKGROUND: Download to cache after playback is STABLE.
-              // Was 3s — too aggressive. The download competes with streaming
-              // bandwidth on the same track and causes audio thread pressure
-              // (cracks/interruptions). 30s gives the buffer time to fill
-              // and lets the stream settle into a steady state. Stream URL
-              // is good for ~6h so we're not racing expiration.
-              // STALE GUARD: capture this load's attempt so a late-firing onplay
-              // from a stale track doesn't trigger a cache for a track the user
-              // already skipped past.
+              // BACKGROUND CACHE — moved out of onplay entirely. The previous
+              // version fired a parallel download 30s into playback, which
+              // re-fetched the entire track from the Edge Worker /extract
+              // endpoint while the audio element was still streaming the
+              // SAME audio from YouTube CDN. Bandwidth competition →
+              // streaming buffer underrun → mid-track glitches.
+              //
+              // The new approach: cache fires at 85% progress (handled by
+              // a separate effect below) OR at handleEnded (most natural —
+              // no competition with current playback). The cache exists for
+              // the NEXT play of this track, so a 5-30s delay is invisible
+              // to the user, and prevents the glitch.
               audioRef.current.onplay = () => {
                 if (isStale()) return;
-                setTimeout(() => {
-                  if (isStale()) return;
-                  const currentState = usePlayerStore.getState();
-                  if (currentState.currentTrack?.trackId === trackId && currentState.isPlaying) {
-                    devLog('🎵 [VOYO] Starting background cache (deferred 30s for stable playback)');
-                    cacheTrack(
-                      trackId,
-                      currentTrack.title,
-                      currentTrack.artist,
-                      currentTrack.duration || 0,
-                      `https://voyo-edge.dash-webtv.workers.dev/cdn/art/${trackId}?quality=high`
-                    );
-                  }
-                }, 30000);
+                // Intentionally empty — cache trigger moved to progress
+                // milestone + onEnded fallback. See cacheTriggerEffect below.
               };
             }
           } catch (streamError) {
@@ -1975,11 +2028,13 @@ export const AudioPlayer = () => {
     const track = currentTrack;
     const currentTime = audioRef.current?.currentTime || 0;
     const completionRate = trackProgressRef.current;
+    // Capture whether this was an edge-stream track (for cache fallback below)
+    const wasEdgeStream = isEdgeStreamRef.current;
+    const cacheNotYetTriggered = !hasTriggered85PercentCacheRef.current;
     // Advance to next track IMMEDIATELY — autoplay must be instant.
     nextTrack();
-    // Defer the telemetry/learning chain to next macrotask. Same pattern
-    // as recordPlayEvent: oyoOnTrackComplete → saveProfile → JSON.stringify
-    // + localStorage.setItem is sync and blocks the audio thread right
+    // Defer the telemetry/learning chain + cache fallback to next macrotask.
+    // Same pattern as recordPlayEvent: avoid blocking the audio thread right
     // when the next track is starting.
     if (track) {
       setTimeout(() => {
@@ -1988,12 +2043,26 @@ export const AudioPlayer = () => {
           recordPoolEngagement(track.trackId, 'complete', { completionRate });
           useTrackPoolStore.getState().recordCompletion(track.trackId, completionRate);
           oyoOnTrackComplete(track, currentTime);
+          // FALLBACK: if this was an edge-stream track AND the 85% cache
+          // effect didn't fire (rare — progress polling skipped over the
+          // threshold), cache it now. The audio is done playing, no
+          // competition, ideal moment to grab + upload to R2.
+          if (wasEdgeStream && cacheNotYetTriggered && track.trackId) {
+            devLog('🎵 [VOYO] handleEnded fallback cache (85% effect missed)');
+            cacheTrack(
+              track.trackId,
+              track.title,
+              track.artist,
+              track.duration || 0,
+              `https://voyo-edge.dash-webtv.workers.dev/cdn/art/${track.trackId}?quality=high`
+            );
+          }
         } catch (e) {
           devWarn('[VOYO] handleEnded telemetry failed:', e);
         }
       }, 0);
     }
-  }, [playbackSource, currentTrack, nextTrack, endListenSession]);
+  }, [playbackSource, currentTrack, nextTrack, endListenSession, cacheTrack]);
 
   const handleProgress = useCallback(() => {
     if ((playbackSource !== 'cached' && playbackSource !== 'r2') || !audioRef.current?.buffered.length) return;
