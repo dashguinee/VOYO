@@ -144,6 +144,12 @@ export const AudioPlayer = () => {
   // user has skipped to a new one and clobber `audioRef.current.src` with a
   // stale URL — symptom: wrong track plays after rapid skips.
   const loadAttemptRef = useRef<number>(0);
+  // Set true while loadTrack is mid-flight (during the audio.pause() that
+  // precedes the src swap). The onPause handler reads this and SKIPS the
+  // store sync — otherwise track-load pauses would clobber isPlaying to
+  // false, and the post-canplaythrough auto-play check would fail.
+  // Result: skipping no longer auto-plays the next track without this guard.
+  const isLoadingTrackRef = useRef<boolean>(false);
   const previousTrackRef = useRef<Track | null>(null);
   const hasRecordedPlayRef = useRef<boolean>(false);
   const trackProgressRef = useRef<number>(0);
@@ -232,19 +238,30 @@ export const AudioPlayer = () => {
     hasTriggered50PercentCacheRef.current = true;
 
     const API_BASE = 'https://voyo-edge.dash-webtv.workers.dev';
-    devLog('🎵 [VOYO] 50% reached! Upgrading R2 low quality to HIGH (genuine interest)');
-
-    // Start background cache
-    backgroundBoostingRef.current = currentTrack.trackId;
-    cacheTrack(
-      currentTrack.trackId,
-      currentTrack.title,
-      currentTrack.artist,
-      currentTrack.duration || 0,
-      `${API_BASE}/cdn/art/${currentTrack.trackId}?quality=high`
-    ).finally(() => {
-      backgroundBoostingRef.current = null;
-    });
+    // Defer the actual download by 5s and only fire if buffer is healthy.
+    // The download competes with the streaming audio for bandwidth — kicking
+    // it off the moment we hit 50% can pressure the buffer and cause cracks.
+    // Waiting 5s gives the user a chance to skip + spreads the network load.
+    const trackId = currentTrack.trackId;
+    const trackTitle = currentTrack.title;
+    const trackArtist = currentTrack.artist;
+    const trackDuration = currentTrack.duration || 0;
+    setTimeout(() => {
+      const state = usePlayerStore.getState();
+      if (state.currentTrack?.trackId !== trackId) return; // user moved on
+      if (state.bufferHealth < 60) return; // buffer's tight, don't compete
+      devLog('🎵 [VOYO] 50% deferred boost firing — buffer healthy, no skip');
+      backgroundBoostingRef.current = trackId;
+      cacheTrack(
+        trackId,
+        trackTitle,
+        trackArtist,
+        trackDuration,
+        `${API_BASE}/cdn/art/${trackId}?quality=high`
+      ).finally(() => {
+        backgroundBoostingRef.current = null;
+      });
+    }, 5000);
   }, [progress, playbackSource, currentTrack, cacheTrack, downloadSetting]);
 
   // 75% KEPT: Mark track as permanent cache when user shows strong interest
@@ -826,9 +843,10 @@ export const AudioPlayer = () => {
   // handlers right before audio.play() so the first audible samples of a
   // new track enter under a ramp, not a step. 80ms is long enough to bury
   // any transient click but short enough to feel instant.
-  // Disarms the watchdog — playback came up cleanly.
+  // Disarms the watchdog AND the load-in-flight guard — playback is up.
   const fadeInMasterGain = (durationMs: number = 80) => {
     disarmGainWatchdog();
+    isLoadingTrackRef.current = false; // Track load done, onPause may sync again
     if (!gainNodeRef.current || !audioContextRef.current) return;
     const ctx = audioContextRef.current;
     const now = ctx.currentTime;
@@ -1137,6 +1155,10 @@ export const AudioPlayer = () => {
       // wait for it to complete (~20ms) before calling .pause(). Otherwise
       // the pause cuts playback mid-ramp → audible click.
       if (audioRef.current) {
+        // Mark the load in flight so onPause doesn't sync isPlaying=false
+        // when we call pause() below. Without this guard, skipping causes
+        // the next track to load but never auto-play.
+        isLoadingTrackRef.current = true;
         muteMasterGainInstantly();
         audioRef.current.oncanplaythrough = null;
         audioRef.current.oncanplay = null;
@@ -1470,6 +1492,10 @@ export const AudioPlayer = () => {
       // Disarm any pending watchdog from the previous load so it doesn't
       // fire against the new track's in-flight load.
       disarmGainWatchdog();
+      // Clear loading guard so a stalled/failed load doesn't leave the
+      // onPause handler permanently muted. The next loadTrack will set it
+      // again at the start of its own pause cycle.
+      isLoadingTrackRef.current = false;
       if (cachedUrlRef.current) {
         URL.revokeObjectURL(cachedUrlRef.current);
         cachedUrlRef.current = null;
@@ -1481,14 +1507,29 @@ export const AudioPlayer = () => {
   const recordPlayEvent = useCallback(() => {
     if (hasRecordedPlayRef.current || !currentTrack) return;
     hasRecordedPlayRef.current = true;
-    recordPoolEngagement(currentTrack.trackId, 'play');
-    useTrackPoolStore.getState().recordPlay(currentTrack.trackId);
-    recordTrackInSession(currentTrack, 0, false, false);
-    djRecordPlay(currentTrack, false, false);
-    oyoOnTrackPlay(currentTrack, previousTrackRef.current || undefined);
-    viRegisterPlay(currentTrack.trackId, currentTrack.title, currentTrack.artist, 'user_play');
+    // Capture refs locally so the deferred call doesn't read a newer track
+    const track = currentTrack;
+    const prev = previousTrackRef.current;
     previousTrackRef.current = currentTrack;
-    devLog(`[VOYO] Recorded play: ${currentTrack.title}`);
+    // Defer the 6 services to the next macrotask. Each one does sync work
+    // (poolStore O(n) map, oyoDJ saveProfile = JSON.stringify + localStorage
+    // setItem, etc.) that totals 20-100ms of main thread blocking. Running
+    // synchronously inside the audio.play() promise resolution starves the
+    // audio thread = audible crack on every track start. setTimeout(0)
+    // yields to the next macrotask, letting the audio thread settle first.
+    setTimeout(() => {
+      try {
+        recordPoolEngagement(track.trackId, 'play');
+        useTrackPoolStore.getState().recordPlay(track.trackId);
+        recordTrackInSession(track, 0, false, false);
+        djRecordPlay(track, false, false);
+        oyoOnTrackPlay(track, prev || undefined);
+        viRegisterPlay(track.trackId, track.title, track.artist, 'user_play');
+        devLog(`[VOYO] Recorded play: ${track.title}`);
+      } catch (e) {
+        devWarn('[VOYO] recordPlayEvent failed:', e);
+      }
+    }, 0);
   }, [currentTrack]);
 
   // === HOT-SWAP: When boost completes mid-stream (R2 → cached upgrade) ===
@@ -1632,7 +1673,14 @@ export const AudioPlayer = () => {
         hotSwapAbortRef.current.abort();
       }
     };
-  }, [lastBoostCompletion, currentTrack?.trackId, playbackSource, isPlaying, checkCache, setPlaybackSource, setupAudioEnhancement]);
+    // CRITICAL: isPlaying and playbackSource removed from deps. Including
+    // them caused the hot-swap effect to re-fire on every play/pause toggle
+    // and every cdn↔r2↔cached transition — each re-fire abort+restarted any
+    // pending swap, occasionally leaving the audio element in a half-loaded
+    // state with masterGain muted. The actual decision logic reads these
+    // via closure capture / usePlayerStore.getState() which still works.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lastBoostCompletion, currentTrack?.trackId, checkCache, setPlaybackSource, setupAudioEnhancement]);
 
   // Handle play/pause (only when using audio element: cached or r2)
   // Also suspend AudioContext when paused to save battery
@@ -2135,13 +2183,19 @@ export const AudioPlayer = () => {
         (playbackSource === 'cached' || playbackSource === 'r2') && setBufferHealth(100, 'healthy');
       }}
       onWaiting={() => {
-        handleStalled(); // Arm recovery timer — stalled and waiting both signal frozen state
+        // 'waiting' fires on EVERY brief rebuffer (RTT spike, slow CDN,
+        // buffer dip). It's noisy. We only update buffer health here —
+        // recovery is reserved for the more definitive 'stalled' event.
         (playbackSource === 'cached' || playbackSource === 'r2') && setBufferHealth(50, 'warning');
       }}
       onStalled={handleStalled}
       onSuspend={() => clearStallTimer()}
       onPause={() => {
         // Sync the store to the actual audio state. No more force-resume.
+        // GUARD: skip the sync during a track-load pause (loadTrack pauses
+        // the element to swap src). Otherwise the post-canplaythrough auto-
+        // play check sees isPlaying=false and the next track stays silent.
+        if (isLoadingTrackRef.current) return;
         usePlayerStore.getState().setIsPlaying(false);
       }}
       style={{ display: 'none' }}

@@ -52,9 +52,38 @@ if (typeof document !== 'undefined') {
   window.addEventListener('focus', resumeCtx);
   // iOS/Android: After phone lock/unlock, AudioContext goes to 'interrupted' state.
   // A user gesture (touch/click) is required to resume it.
-  const resumeOnGesture = () => { resumeCtx(); };
-  document.addEventListener('touchstart', resumeOnGesture, { once: false, passive: true });
-  document.addEventListener('click', resumeOnGesture, { passive: true });
+  // CRITICAL: only attach the gesture listeners while context is actually
+  // suspended/interrupted. Previously these were always-on at document level
+  // and fired on EVERY tap/click in the app — even though resumeCtx() does
+  // a fast state check, the listener overhead added micro-jank to every
+  // interaction. Now we install on-demand and remove after the first
+  // successful resume.
+  let gestureListenerActive = false;
+  const installGestureListener = () => {
+    if (gestureListenerActive) return;
+    gestureListenerActive = true;
+    const resumeOnce = () => {
+      resumeCtx();
+      // Wait one tick — if context successfully ran, remove the listener.
+      setTimeout(() => {
+        if (_audioCtx && _audioCtx.state === 'running') {
+          document.removeEventListener('touchstart', resumeOnce);
+          document.removeEventListener('click', resumeOnce);
+          gestureListenerActive = false;
+        }
+      }, 50);
+    };
+    document.addEventListener('touchstart', resumeOnce, { once: false, passive: true });
+    document.addEventListener('click', resumeOnce, { passive: true });
+  };
+  // Watch for context state changes — install gesture listener when needed.
+  const watchContextState = setInterval(() => {
+    if (_audioCtx && (_audioCtx.state === 'suspended' || (_audioCtx as any).state === 'interrupted')) {
+      installGestureListener();
+    }
+  }, 2000);
+  // Cleanup interval on page unload (best effort)
+  window.addEventListener('beforeunload', () => clearInterval(watchContextState));
 }
 
 /**
