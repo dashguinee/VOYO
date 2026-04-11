@@ -1623,12 +1623,6 @@ const StreamCard = memo(({ track, onTap, isPlayed, modeColor, onQueueAdd }: {
               </div>
             </div>
           )}
-          {/* Mobile hint indicator */}
-          {isTouchDevice && (
-            <div className="absolute bottom-0.5 right-0.5 w-3 h-3 rounded-full bg-purple-500/80 flex items-center justify-center">
-              <Play size={6} fill="white" className="text-white" />
-            </div>
-          )}
         </div>
         <h4 className={`text-[9px] font-bold truncate w-full text-center ${isPlayed ? 'text-gray-400' : 'text-white'}`}>{track.title}</h4>
         <p className="text-[7px] text-gray-500 truncate w-full text-center uppercase">{track.artist}</p>
