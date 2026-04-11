@@ -3809,12 +3809,9 @@ export const VoyoPortraitPlayer = ({
       setTimeout(() => { wheelResetting.current = false; }, 700);
     } else if (!wheelResetting.current) {
       // Standard scroll-driven progress.
-      // Two-step model: 0 → 0.55 is "step 1" (mild Layer B fade,
-      // navbar approaches reveal), 0.55 → 1.0 is "step 2" (Layer B
-      // gone, Layer C reveals in the same slot, header bubbles fade).
-      // Fade range is the first ~360px of scroll — short on purpose
-      // so the canvas reveals quickly without dragging the layout.
-      const FADE_RANGE = 360;
+      // The fade range is the first ~480px of scroll — by then Layer B
+      // is gone and Layer C is fully present.
+      const FADE_RANGE = 480;
       const next = Math.max(0, Math.min(1, currentY / FADE_RANGE));
       setPortalProgress(next);
     }
@@ -4297,7 +4294,7 @@ export const VoyoPortraitPlayer = ({
     <div
       ref={scrollContainerRef}
       onScroll={handleHeaderScroll}
-      className={`relative w-full h-full bg-[#020203] text-white font-sans flex flex-col overflow-x-hidden ${
+      className={`relative w-full h-full bg-[#020203] text-white font-sans flex flex-col ${
         oyeBarBehavior === 'fade' ? 'overflow-y-auto' : 'overflow-hidden'
       }`}
     >
@@ -4375,18 +4372,16 @@ export const VoyoPortraitPlayer = ({
       >
 
       {/* --- TOP SECTION (History/Queue) --- Part of the anchor.
-           Visible in step 1 of the portal scroll. In step 2 (canvas
-           reveal), the bubbles fade out so only the central OYO player
-           and the canvas remain. Carousel side-shift on each rail. */}
+           Always visible — never fades on scroll. The bubbles are part of
+           the player's "hearth" alongside the BigCenterCard.
+           Carousel side-shift: when the user grabs one side it expands
+           to ~65% width and the other compresses to ~35%. Idle returns
+           to 50/50. The compress doubles as a soft scroll-lock — the
+           inactive side is too narrow to scroll. */}
       <div
         className="px-6 flex items-start gap-2 z-20 h-[14%]"
         style={{
           paddingTop: 'max(1.25rem, env(safe-area-inset-top))',
-          // Step 2 (portalProgress > 0.55) fades the bubbles out.
-          opacity: Math.max(0, 1 - Math.max(0, (portalProgress - 0.55) / 0.35)),
-          transform: `translateY(${Math.max(0, (portalProgress - 0.55) / 0.35) * -16}px)`,
-          pointerEvents: portalProgress > 0.7 ? 'none' : 'auto',
-          transition: 'opacity 0.2s ease-out, transform 0.2s ease-out',
         }}
       >
 
@@ -4685,18 +4680,12 @@ export const VoyoPortraitPlayer = ({
           cubeDockOpen ? 'min-h-[480px]' : oyeBarBehavior === 'fade' ? 'min-h-[360px]' : ''
         }`}
         style={{
-          // Two-step Layer B fade.
-          // Step 1 (portal 0 → 0.55): mild fade to ~60%, soft blur,
-          //   user is "approaching" but Layer B is still readable.
-          // Step 2 (portal 0.55 → 1.0): full fade out, Layer C takes
-          //   over the same physical slot. Faded Layer B stays as a
-          //   ghost behind Layer C for that immersive depth.
-          opacity: portalProgress < 0.55
-            ? 1 - portalProgress * 0.7  // step 1: 1.0 → 0.6
-            : Math.max(0, 0.6 - (portalProgress - 0.55) * 1.5), // step 2: 0.6 → 0
-          filter: `blur(${portalProgress * 8}px)`,
-          pointerEvents: portalProgress > 0.55 ? 'none' : 'auto',
-          transform: `translateY(${portalProgress * -10}px)`,
+          // Layer B fade: opacity drops with portal progress, content
+          // also softens via blur so it dissolves rather than just dims.
+          opacity: Math.max(0, 1 - portalProgress * 1.2),
+          filter: portalProgress > 0.05 ? `blur(${portalProgress * 6}px)` : 'none',
+          pointerEvents: portalProgress > 0.6 ? 'none' : 'auto',
+          transform: `translateY(${portalProgress * -24}px)`,
           transition: 'opacity 0.18s ease-out, filter 0.18s ease-out, transform 0.18s ease-out',
           background: 'linear-gradient(180deg, rgba(15,15,22,0.92) 0%, rgba(8,8,10,0.97) 28%, rgba(8,8,10,0.99) 100%)',
           // Elliptical top curve — wider in the middle than the corners
@@ -5328,30 +5317,20 @@ export const VoyoPortraitPlayer = ({
 
       {/* ╔═════════════════════════════════════════════════════════════╗
           ║ LAYER C — AMBIENT CANVAS (the "while you jam" surface)      ║
-          ║                                                              ║
-          ║ Lives in the SAME physical slot as Layer B — absolutely     ║
-          ║ positioned over the music shelf. Step 2 of the portal       ║
-          ║ scroll fades it in IN PLACE so the visual footprint never   ║
-          ║ shifts and the faded Layer B sits behind it as ambient      ║
-          ║ depth. Vibes cards reborn from the existing mix modes,      ║
-          ║ hold-to-flood the mix board. The OYO chat slot lives at the ║
-          ║ top — same room, different focus.                            ║
+          ║ Fades IN as portalProgress climbs. Vibes cards reborn from  ║
+          ║ the existing mix modes, hold-to-add to the mix board. The   ║
+          ║ OYO chat dock lives at the top of this canvas — same room,  ║
+          ║ different focus. This is the teaser of VOYO Moments.        ║
           ╚═════════════════════════════════════════════════════════════╝ */}
       <div
-        className="absolute left-0 right-0 px-4 pt-4 pb-6 overflow-y-auto scrollbar-hide z-50"
+        className="relative w-full flex-shrink-0 px-4 pt-6"
         style={{
-          // Anchor to the same slot Layer B occupies (bottom 360px).
-          bottom: 0,
-          height: cubeDockOpen ? '480px' : '360px',
-          // Step 2 fade: Layer C is invisible until portalProgress
-          // crosses 0.55, then fades in fast. Below that it's hidden.
-          opacity: portalProgress < 0.55 ? 0 : Math.min(1, (portalProgress - 0.55) / 0.35),
-          pointerEvents: portalProgress > 0.6 ? 'auto' : 'none',
-          transform: `translateY(${Math.max(0, (1 - portalProgress) * 24)}px)`,
-          transition: 'opacity 0.22s ease-out, transform 0.22s ease-out, height 0.5s cubic-bezier(0.16, 1, 0.3, 1)',
-          background: 'linear-gradient(180deg, rgba(8,8,12,0.20) 0%, rgba(15,12,24,0.65) 22%, rgba(15,12,24,0.92) 100%)',
-          backdropFilter: 'blur(12px) saturate(140%)',
-          WebkitBackdropFilter: 'blur(12px) saturate(140%)',
+          minHeight: '100vh',
+          opacity: Math.min(1, portalProgress * 1.4),
+          pointerEvents: portalProgress > 0.4 ? 'auto' : 'none',
+          transform: `translateY(${(1 - portalProgress) * 24}px)`,
+          transition: 'opacity 0.18s ease-out, transform 0.18s ease-out',
+          background: 'linear-gradient(180deg, rgba(8,8,12,0) 0%, rgba(15,12,24,0.55) 18%, rgba(15,12,24,0.85) 100%)',
         }}
       >
         {/* Canvas header — the "while you jam" tagline + OYO chat slot */}
@@ -5466,12 +5445,9 @@ export const VoyoPortraitPlayer = ({
           })}
         </div>
 
+        {/* Spacer at the bottom of the canvas so scroll has somewhere to land */}
+        <div style={{ height: '40vh' }} />
       </div>
-
-      {/* Scroll runway — gives the portal scroll handler enough vertical
-          travel to drive the two-step model. Layer C is absolutely
-          positioned so it doesn't create runway on its own. */}
-      <div className="flex-shrink-0 w-full" style={{ height: '500px' }} />
 
       {/* BOOST SETTINGS PANEL */}
       <BoostSettings
