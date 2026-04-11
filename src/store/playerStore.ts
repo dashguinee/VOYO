@@ -66,11 +66,23 @@ interface PersistedHistoryItem {
   oyeReactions: number;
 }
 
+// FIXED: Persisted queue items now also carry title/artist/coverUrl so
+// rehydration on page reload doesn't blank them to 'Loading...' for tracks
+// not in the static seed array (which is most user-played tracks).
+interface PersistedQueueItem {
+  trackId: string;
+  title?: string;
+  artist?: string;
+  coverUrl?: string;
+  addedAt: string;
+  source: 'manual' | 'auto' | 'roulette' | 'ai';
+}
+
 interface PersistedState {
   currentTrackId?: string;
   currentTime?: number;
   voyoActiveTab?: VoyoTab;
-  queue?: Array<{ trackId: string; addedAt: string; source: 'manual' | 'auto' | 'roulette' | 'ai' }>;
+  queue?: PersistedQueueItem[];
   history?: PersistedHistoryItem[];
 }
 
@@ -712,6 +724,9 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
             ...current,
             queue: state.queue.map(q => ({
               trackId: q.track.id,
+              title: q.track.title,
+              artist: q.track.artist,
+              coverUrl: q.track.coverUrl,
               addedAt: q.addedAt,
               source: q.source,
             })),
@@ -1017,6 +1032,9 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
         ...current,
         queue: state.queue.map(q => ({
           trackId: q.track.id,
+          title: q.track.title,
+          artist: q.track.artist,
+          coverUrl: q.track.coverUrl,
           addedAt: q.addedAt,
           source: q.source,
         })),
@@ -1050,6 +1068,9 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
         ...current,
         queue: state.queue.map(q => ({
           trackId: q.track.id,
+          title: q.track.title,
+          artist: q.track.artist,
+          coverUrl: q.track.coverUrl,
           addedAt: q.addedAt,
           source: q.source,
         })),
@@ -1083,6 +1104,9 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
         ...current,
         queue: state.queue.map(q => ({
           trackId: q.track.id,
+          title: q.track.title,
+          artist: q.track.artist,
+          coverUrl: q.track.coverUrl,
           addedAt: q.addedAt,
           source: q.source,
         })),
