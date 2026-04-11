@@ -728,6 +728,16 @@ input[type="range"]:focus::-moz-range-thumb {
   100% { opacity: 1; transform: scale(1) translateY(0); }
 }
 
+/* Iframe-audio pulse — runs on the Mini Player button when audio is
+   flowing through the YouTube iframe (during the iframe → hot-swap
+   window). Signals to the user: "tap me to see the video + keep app
+   foreground for background play until the audio element takes over". */
+@keyframes voyo-iframe-pulse {
+  0%   { box-shadow: 0 0 14px rgba(139,92,246,0.45), 0 0 24px rgba(139,92,246,0.20); }
+  50%  { box-shadow: 0 0 22px rgba(139,92,246,0.80), 0 0 40px rgba(139,92,246,0.40); }
+  100% { box-shadow: 0 0 14px rgba(139,92,246,0.45), 0 0 24px rgba(139,92,246,0.20); }
+}
+
 @keyframes voyo-fade-out {
   from { opacity: 1; }
   to { opacity: 0; }

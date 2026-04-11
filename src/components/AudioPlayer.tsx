@@ -85,6 +85,26 @@ const BOOST_PRESETS = {
 export const AudioPlayer = () => {
   const audioRef = useRef<HTMLAudioElement>(null);
   const cachedUrlRef = useRef<string | null>(null);
+  // SILENT AUDIO KEEPER for iframe background play.
+  //
+  // Problem: during the window between "iframe starts" and "hot-swap
+  // completes", audio comes from the YouTube iframe, not the main audio
+  // element. If the user backgrounds the app during this window, mobile
+  // OS suspends the iframe and audio cuts out.
+  //
+  // Trick: a SEPARATE hidden audio element playing a looping silent WAV
+  // keeps the page in "has audio focus" state, which encourages mobile
+  // OS to keep the page alive and the iframe playing. It's a known PWA
+  // pattern for bridging gaps in playback authority.
+  //
+  // The keeper is NOT connected to the Web Audio chain (it's a plain
+  // <audio> element, no createMediaElementSource). It only exists to
+  // keep the HTMLMediaElement.currentlyPlaying flag true on the page.
+  //
+  // volume 0.001 (nearly silent but NOT 0/muted) — some browsers treat
+  // muted=true or volume=0 as "not really playing" and drop audio focus.
+  const silentKeeperRef = useRef<HTMLAudioElement | null>(null);
+  const silentKeeperUrlRef = useRef<string | null>(null);
 
   // Web Audio API refs
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -497,6 +517,84 @@ export const AudioPlayer = () => {
     manageWakeLock();
     return () => { wakeLockRef.current?.release().catch(e => devWarn('🔒 [WakeLock] Cleanup release failed:', e.name)); };
   }, [isPlaying]);
+
+  // SILENT AUDIO KEEPER — create once on mount.
+  //
+  // Generates a 2-second silent WAV as an in-memory blob, creates a
+  // hidden audio element with loop=true, volume=0.001 (not muted —
+  // some browsers drop audio focus on volume=0). The keeper is only
+  // played during the iframe phase (see effect below). Blob URL is
+  // revoked on unmount to free memory.
+  useEffect(() => {
+    // Build a minimal silent WAV (8kHz, 8-bit, mono, 2 seconds ≈ 16KB).
+    const sampleRate = 8000;
+    const durationSec = 2;
+    const numSamples = sampleRate * durationSec;
+    const bufSize = 44 + numSamples;
+    const ab = new ArrayBuffer(bufSize);
+    const dv = new DataView(ab);
+    const writeStr = (off: number, s: string) => {
+      for (let i = 0; i < s.length; i++) dv.setUint8(off + i, s.charCodeAt(i));
+    };
+    writeStr(0, 'RIFF');
+    dv.setUint32(4, bufSize - 8, true);
+    writeStr(8, 'WAVE');
+    writeStr(12, 'fmt ');
+    dv.setUint32(16, 16, true);       // fmt chunk size
+    dv.setUint16(20, 1, true);        // PCM
+    dv.setUint16(22, 1, true);        // mono
+    dv.setUint32(24, sampleRate, true);
+    dv.setUint32(28, sampleRate, true); // byte rate (8-bit mono = sampleRate)
+    dv.setUint16(32, 1, true);        // block align
+    dv.setUint16(34, 8, true);        // bits per sample
+    writeStr(36, 'data');
+    dv.setUint32(40, numSamples, true);
+    // Data region is already zero-filled (silence).
+    // 8-bit unsigned PCM uses 128 as silent midpoint — fill with 128.
+    for (let i = 0; i < numSamples; i++) dv.setUint8(44 + i, 128);
+
+    const blob = new Blob([ab], { type: 'audio/wav' });
+    const url = URL.createObjectURL(blob);
+    silentKeeperUrlRef.current = url;
+
+    const el = new Audio();
+    el.src = url;
+    el.loop = true;
+    el.volume = 0.001;
+    el.preload = 'auto';
+    // Don't autoplay — we .play() it on demand when entering iframe phase.
+    silentKeeperRef.current = el;
+
+    return () => {
+      try { el.pause(); } catch {}
+      if (silentKeeperUrlRef.current) {
+        URL.revokeObjectURL(silentKeeperUrlRef.current);
+        silentKeeperUrlRef.current = null;
+      }
+      silentKeeperRef.current = null;
+    };
+  }, []);
+
+  // SILENT KEEPER CONTROL — play/pause based on playbackSource.
+  //
+  // During iframe phase, keep the page alive with the silent keeper so
+  // mobile OS preserves the iframe's audio focus. When hot-swap completes
+  // (source becomes cached/r2), pause the keeper — the main audio element
+  // has its own audio focus now.
+  useEffect(() => {
+    const el = silentKeeperRef.current;
+    if (!el) return;
+    if (playbackSource === 'iframe' && isPlaying) {
+      // Attempt to play — may fail without user gesture on first tap,
+      // but subsequent plays (after the user has interacted) succeed.
+      el.play().catch(() => {
+        // Silent failure — not fatal, hot-swap will still complete
+        // if user stays in foreground.
+      });
+    } else {
+      if (!el.paused) el.pause();
+    }
+  }, [playbackSource, isPlaying]);
 
   // Harmonic exciter curve — MEMOIZED.
   //

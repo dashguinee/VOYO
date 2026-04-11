@@ -1001,17 +1001,35 @@ const BackdropLibrary = ({
 };
 
 // ============================================
-// EXPAND BUTTON - Opens fullscreen video mode
+// EXPAND BUTTON / MINI PLAYER — Opens fullscreen video mode.
+// When playbackSource === 'iframe', the button pulses with a purple
+// glow + shows a small "live" dot so the user knows there's iframe
+// audio playing and they can open the mini player for foreground
+// mini-video playback during the hot-swap window.
 // ============================================
-const ExpandVideoButton = memo(({ onClick }: { onClick: () => void }) => (
+const ExpandVideoButton = memo(({ onClick, isIframeAudio }: { onClick: () => void; isIframeAudio: boolean }) => (
   <button
     onClick={onClick}
-    className="absolute top-3 right-3 z-30 px-3 py-1.5 rounded-full backdrop-blur-sm border border-[#28282f] text-white text-xs font-medium flex items-center gap-1.5 hover:border-purple-500/40 transition-all min-h-[44px] active:scale-95"
-    style={{ background: 'rgba(28, 28, 35, 0.65)' }}
-    aria-label="Expand video"
+    className={`absolute top-3 right-3 z-30 px-3 py-1.5 rounded-full backdrop-blur-sm border text-white text-xs font-medium flex items-center gap-1.5 transition-all min-h-[44px] active:scale-95 ${
+      isIframeAudio
+        ? 'border-purple-400/60 hover:border-purple-400/80'
+        : 'border-[#28282f] hover:border-purple-500/40'
+    }`}
+    style={{
+      background: isIframeAudio ? 'rgba(139,92,246,0.22)' : 'rgba(28, 28, 35, 0.65)',
+      boxShadow: isIframeAudio ? '0 0 16px rgba(139,92,246,0.5), 0 0 28px rgba(139,92,246,0.25)' : 'none',
+      animation: isIframeAudio ? 'voyo-iframe-pulse 1.6s ease-in-out infinite' : 'none',
+    }}
+    aria-label={isIframeAudio ? 'Open mini player (audio from video)' : 'Expand video'}
   >
+    {isIframeAudio && (
+      <span
+        className="w-1.5 h-1.5 rounded-full bg-purple-300"
+        style={{ boxShadow: '0 0 6px rgba(196,181,253,0.9)' }}
+      />
+    )}
     <Play size={12} fill="currentColor" />
-    <span>Video</span>
+    <span>{isIframeAudio ? 'Mini Player' : 'Video'}</span>
   </button>
 ));
 
@@ -1657,11 +1675,12 @@ StreamCard.displayName = 'StreamCard';
 // BIG CENTER CARD (NOW PLAYING - Canva-style purple fade with premium typography)
 // TAP ALBUM ART FOR LYRICS VIEW | VIDEO HANDLED BY GLOBAL IFRAME
 // ============================================
-const BigCenterCard = memo(({ track, onExpandVideo, onShowLyrics, hideThumb }: {
+const BigCenterCard = memo(({ track, onExpandVideo, onShowLyrics, hideThumb, isIframeAudio }: {
   track: Track;
   onExpandVideo?: () => void;
   onShowLyrics?: () => void;
   hideThumb?: boolean;
+  isIframeAudio?: boolean;
 }) => {
   return (
   <div
@@ -1740,9 +1759,11 @@ const BigCenterCard = memo(({ track, onExpandVideo, onShowLyrics, hideThumb }: {
         }}
     />
 
-    {/* Video mode button */}
+    {/* Video mode / Mini Player button. Pulses + shows a live dot when
+        playbackSource === 'iframe' (audio is flowing through the iframe,
+        tap to open the mini player and see the video). */}
     {onExpandVideo && (
-      <ExpandVideoButton onClick={onExpandVideo} />
+      <ExpandVideoButton onClick={onExpandVideo} isIframeAudio={!!isIframeAudio} />
     )}
 
     {/* Glowing border accent */}
@@ -3337,6 +3358,9 @@ export const VoyoPortraitPlayer = ({
   const isPlaying = usePlayerStore(s => s.isPlaying);
   const videoTarget = usePlayerStore(s => s.videoTarget);
   const setVideoTarget = usePlayerStore(s => s.setVideoTarget);
+  // Subscribe to playbackSource so the Mini Player button can pulse when
+  // audio is flowing through the iframe (between track-start and hot-swap).
+  const playbackSource = usePlayerStore(s => s.playbackSource);
   const videoBlocked = usePlayerStore(s => s.videoBlocked);
   const queue = usePlayerStore(s => s.queue);
   const history = usePlayerStore(s => s.history);
@@ -4758,6 +4782,10 @@ export const VoyoPortraitPlayer = ({
               onExpandVideo={() => setVideoTarget('portrait')}
               onShowLyrics={() => setShowLyricsOverlay(true)}
               hideThumb={videoTarget === 'portrait'}
+              // Signal "audio flowing through the iframe right now" so the
+              // Mini Player button pulses, telling the user: tap here to see
+              // the video for foreground playback until hot-swap completes.
+              isIframeAudio={playbackSource === 'iframe'}
             />
           ) : (
             <div className="w-48 h-48 rounded-[2rem] bg-white/5 border border-white/10 flex items-center justify-center">
