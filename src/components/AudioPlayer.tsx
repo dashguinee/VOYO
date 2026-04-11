@@ -596,8 +596,14 @@ export const AudioPlayer = () => {
       highComp.threshold.value = 0; highComp.knee.value = 8; highComp.ratio.value = 1; highComp.attack.value = 0.005; highComp.release.value = 0.1;
       multibandHighCompRef.current = highComp;
 
-      // Harmonic exciter (default: no curve = bypass) — low/mid only
-      const harmonic = ctx.createWaveShaper(); harmonic.oversample = '2x';
+      // Harmonic exciter (default: no curve = bypass) — low/mid only.
+      // CRITICAL: oversample must be 'none' when curve is null. 2x adds ~2-3
+      // samples of latency from the oversampling filter, which delays low+mid
+      // bands vs. the high band (high bypasses harmonic via exciterBypass).
+      // When they re-sum at bandMerger, the phase misalignment creates comb
+      // filtering at the 4500Hz crossover — audible as "muffling".
+      // Switch to '2x' dynamically when a curve is actually applied.
+      const harmonic = ctx.createWaveShaper(); harmonic.oversample = 'none';
       harmonicExciterRef.current = harmonic;
       const exciterBypass = ctx.createGain(); exciterBypass.gain.value = 1.0;
       const bandMerger = ctx.createGain(); bandMerger.gain.value = 1.0;
@@ -647,8 +653,12 @@ export const AudioPlayer = () => {
       masterGain.connect(comp);
 
       // ── BRICKWALL LIMITER (always active, safety net for all presets) ──
+      // RELAXED: was threshold=-1/ratio=20 which clamps down on almost every
+      // modern track (regularly peak at -0.1 to -0.5dBFS). That constant
+      // gain reduction sounds like "compression pumping" / muffling. New
+      // values catch true clips (>-0.3dBFS) without squashing normal peaks.
       const limiter = ctx.createDynamicsCompressor();
-      limiter.threshold.value = -1; limiter.knee.value = 0; limiter.ratio.value = 20;
+      limiter.threshold.value = -0.3; limiter.knee.value = 0; limiter.ratio.value = 8;
       limiter.attack.value = 0.001; limiter.release.value = 0.05;
       comp.connect(limiter); limiter.connect(spInput);
 
@@ -722,9 +732,47 @@ export const AudioPlayer = () => {
   // using scheduled linear ramps — pro DAW-grade click-free behaviour.
   // `audio.volume` stays pinned at 1.0 whenever the chain is wired.
 
+  // ── GAIN-STUCK WATCHDOG ──────────────────────────────────────────────
+  // CRITICAL: every track load mutes masterGain to 0.0001 and relies on
+  // `canplaythrough` firing to ramp back up. If that callback hangs (slow
+  // network, stalled decode, CDN stall), the element keeps playing but
+  // through a silenced Web Audio chain — the "crash stopping speakers
+  // muffling" symptom. The watchdog schedules a forced fade-in as a safety
+  // net. Cancel it when the real canplaythrough fires. Per-load timer so
+  // rapid track skips don't stack watchdogs.
+  const watchdogTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const armGainWatchdog = (label: string, timeoutMs: number = 6000) => {
+    if (watchdogTimerRef.current) clearTimeout(watchdogTimerRef.current);
+    watchdogTimerRef.current = setTimeout(() => {
+      watchdogTimerRef.current = null;
+      if (!audioRef.current || !gainNodeRef.current || !audioContextRef.current) return;
+      // If the element is still paused, nothing to rescue — let the play
+      // flow retry naturally when user interacts.
+      if (audioRef.current.paused) return;
+      // Element is playing but gain is stuck at silence → rescue.
+      const param = gainNodeRef.current.gain;
+      if (param.value > 0.01) return; // Already recovered on its own
+      devWarn(`🩹 [VOYO] Watchdog rescue (${label}) — canplaythrough never fired, forcing fade-in`);
+      const ctx = audioContextRef.current;
+      const now = ctx.currentTime;
+      const target = computeMasterTarget();
+      param.cancelScheduledValues(now);
+      param.setValueAtTime(0.0001, now);
+      param.linearRampToValueAtTime(target, now + 0.2);
+    }, timeoutMs);
+  };
+  const disarmGainWatchdog = () => {
+    if (watchdogTimerRef.current) {
+      clearTimeout(watchdogTimerRef.current);
+      watchdogTimerRef.current = null;
+    }
+  };
+
   // Instant mute — schedule gain to near-zero immediately. Used right
   // before audio.pause() on a track swap so the old track fades silent
   // cleanly and the new track doesn't hit a hot chain at full volume.
+  // Arms the watchdog: if canplaythrough never calls fadeInMasterGain, a
+  // forced fade-in will kick in after 6s.
   const muteMasterGainInstantly = () => {
     if (!gainNodeRef.current || !audioContextRef.current) return;
     const ctx = audioContextRef.current;
@@ -733,13 +781,16 @@ export const AudioPlayer = () => {
     param.cancelScheduledValues(now);
     param.setValueAtTime(param.value, now);
     param.linearRampToValueAtTime(0.0001, now + 0.015); // 15ms fade out
+    armGainWatchdog('mute-before-load');
   };
 
   // Short fade-in ramp from silence → target. Called from canplaythrough
   // handlers right before audio.play() so the first audible samples of a
   // new track enter under a ramp, not a step. 80ms is long enough to bury
   // any transient click but short enough to feel instant.
+  // Disarms the watchdog — playback came up cleanly.
   const fadeInMasterGain = (durationMs: number = 80) => {
+    disarmGainWatchdog();
     if (!gainNodeRef.current || !audioContextRef.current) return;
     const ctx = audioContextRef.current;
     const now = ctx.currentTime;
@@ -834,7 +885,7 @@ export const AudioPlayer = () => {
     if (preset === 'off') {
       setMultibandTransparent();
       setStandardEqNeutral();
-      harmonicExciterRef.current && (harmonicExciterRef.current.curve = null);
+      if (harmonicExciterRef.current) { harmonicExciterRef.current.curve = null; harmonicExciterRef.current.oversample = 'none'; }
       if (compressorRef.current) { ramp(compressorRef.current.threshold, 0); ramp(compressorRef.current.ratio, 1); }
       ramp(stereoDelayRef.current?.delayTime, 0);
       applyMasterGain();
@@ -852,14 +903,24 @@ export const AudioPlayer = () => {
       if (multibandLowCompRef.current) { ramp(multibandLowCompRef.current.threshold, s.low.threshold); ramp(multibandLowCompRef.current.ratio, s.low.ratio); }
       if (multibandMidCompRef.current) { ramp(multibandMidCompRef.current.threshold, s.mid.threshold); ramp(multibandMidCompRef.current.ratio, s.mid.ratio); }
       if (multibandHighCompRef.current) { ramp(multibandHighCompRef.current.threshold, s.high.threshold); ramp(multibandHighCompRef.current.ratio, s.high.ratio); }
-      if (harmonicExciterRef.current) { harmonicExciterRef.current.curve = s.harmonicAmount > 0 ? makeHarmonicCurve(s.harmonicAmount) : null; }
+      if (harmonicExciterRef.current) {
+        const applyCurve = s.harmonicAmount > 0;
+        harmonicExciterRef.current.curve = applyCurve ? makeHarmonicCurve(s.harmonicAmount) : null;
+        // Only enable 2x oversampling when a curve is actually applied — prevents the
+        // low/mid latency vs. high band phase drift that causes muffling on bypass.
+        harmonicExciterRef.current.oversample = applyCurve ? '2x' : 'none';
+      }
       setStandardEqNeutral();
       if (compressorRef.current) { ramp(compressorRef.current.threshold, 0); ramp(compressorRef.current.ratio, 1); } // Multiband handles compression
       ramp(stereoDelayRef.current?.delayTime, s.stereoWidth || 0);
     } else {
       // ── Standard presets: Multiband transparent, standard EQ active ──
       setMultibandTransparent();
-      harmonicExciterRef.current && (harmonicExciterRef.current.curve = s.harmonicAmount > 0 ? makeHarmonicCurve(s.harmonicAmount) : null);
+      if (harmonicExciterRef.current) {
+        const applyCurve = s.harmonicAmount > 0;
+        harmonicExciterRef.current.curve = applyCurve ? makeHarmonicCurve(s.harmonicAmount) : null;
+        harmonicExciterRef.current.oversample = applyCurve ? '2x' : 'none';
+      }
       // Frequency changes are NOT ramped — they're center-frequency tuning,
       // not amplitude. Direct assignment is fine and avoids the brief gain
       // dip that ramp would cause on filter retuning.
@@ -1023,7 +1084,7 @@ export const AudioPlayer = () => {
         audioRef.current.onplay = null;
         // Hold a reference so the timeout doesn't pause a future track
         const audioToFade = audioRef.current;
-        await new Promise<void>(resolve => setTimeout(resolve, 25));
+        await new Promise<void>(resolve => setTimeout(resolve, 18));
         // STALE GUARD: if another loadTrack started during the 25ms ramp wait,
         // don't touch the audio element — the newer load owns it now. Without
         // this guard, pausing or rewinding here can clobber a freshly-loading
@@ -1093,7 +1154,7 @@ export const AudioPlayer = () => {
                 // Schedule the fade-in BEFORE play() so the ramp is already
                 // queued when the first sample lands. 400ms premium settle-in
                 // so each fresh track eases in smoothly.
-                fadeInMasterGain(400);
+                fadeInMasterGain(120);
                 audioRef.current.play().then(() => {
                   recordPlayEvent();
                   devLog('🔮 [VOYO] Preloaded playback started!');
@@ -1165,7 +1226,7 @@ export const AudioPlayer = () => {
               if (shouldAutoResume) {
                 fadeInVolume(1200);
               } else {
-                fadeInMasterGain(400);
+                fadeInMasterGain(120);
               }
               audioRef.current.play().then(() => {
                 recordPlayEvent();
@@ -1231,7 +1292,7 @@ export const AudioPlayer = () => {
                   fadeInVolume(1200);
                 } else {
                   // 400ms premium settle-in for every fresh R2 track start.
-                  fadeInMasterGain(400);
+                  fadeInMasterGain(120);
                 }
                 audioRef.current.play().then(() => {
                   recordPlayEvent();
@@ -1298,7 +1359,7 @@ export const AudioPlayer = () => {
                     fadeInVolume(1200);
                   } else {
                     // 400ms premium settle-in for every fresh edge-stream start.
-                    fadeInMasterGain(400);
+                    fadeInMasterGain(120);
                   }
                   audioRef.current.play().then(() => {
                     recordPlayEvent();
@@ -1344,6 +1405,9 @@ export const AudioPlayer = () => {
     loadTrack();
 
     return () => {
+      // Disarm any pending watchdog from the previous load so it doesn't
+      // fire against the new track's in-flight load.
+      disarmGainWatchdog();
       if (cachedUrlRef.current) {
         URL.revokeObjectURL(cachedUrlRef.current);
         cachedUrlRef.current = null;
