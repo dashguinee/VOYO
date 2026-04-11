@@ -4381,7 +4381,7 @@ export const VoyoPortraitPlayer = ({
       <div
         className="px-3 flex items-start gap-3 z-20 h-[14%]"
         style={{
-          paddingTop: 'calc(max(1.25rem, env(safe-area-inset-top)) + 78px)',
+          paddingTop: 'calc(max(1.25rem, env(safe-area-inset-top)) + 36px)',
           // Step 2 (portalProgress > 0.55) fades the bubbles out.
           opacity: Math.max(0, 1 - Math.max(0, (portalProgress - 0.55) / 0.35)),
           transform: `translateY(${Math.max(0, (portalProgress - 0.55) / 0.35) * -16}px)`,
