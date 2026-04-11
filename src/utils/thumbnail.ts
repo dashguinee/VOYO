@@ -6,11 +6,24 @@
 // YouTube thumbnail quality options
 export type ThumbnailQuality = 'default' | 'medium' | 'high' | 'max';
 
+// CRITICAL: YouTube serves thumbnails at DIFFERENT aspect ratios depending on
+// the file. The 'default'/'mq'/'hq' family is 4:3 with BLACK LETTERBOX BARS
+// (the 16:9 video frame embedded in a 4:3 image). When you object-cover crop
+// these into a square card, the effective content is ~75% of the image — and
+// the cropped result looks blurry/small even at "high" quality.
+//
+// 'maxresdefault' is 16:9 without bars, but YouTube only generates it for
+// higher-quality uploads — for many tracks it returns 404 and we fall back
+// to the letterboxed lower quality.
+//
+// SOLUTION: 'hq720' (1280x720, 16:9, no bars) — the actual playback frame.
+// It's generated for EVERY video and is the same pixel res as maxresdefault
+// without the 404 risk.
 const QUALITY_MAP: Record<ThumbnailQuality, string> = {
-  default: 'default',      // 120x90
-  medium: 'mqdefault',     // 320x180
-  high: 'hqdefault',       // 480x360
-  max: 'maxresdefault',    // 1280x720
+  default: 'default',      // 120x90, 4:3 letterboxed
+  medium: 'mqdefault',     // 320x180, 4:3 letterboxed
+  high: 'hq720',           // 1280x720, 16:9, NO LETTERBOX, always exists
+  max: 'maxresdefault',    // 1280x720, 16:9, may 404 — fall back to hq720
 };
 
 /**
@@ -36,13 +49,37 @@ export const getThumb = (trackId: string, quality: ThumbnailQuality = 'high'): s
 };
 
 /**
- * Get thumbnail with fallback chain (for progressive loading)
+ * Get thumbnail with fallback chain (for progressive loading).
+ *
+ * Order:
+ * 1. maxresdefault (1280x720, 16:9) — best when available
+ * 2. hq720 (1280x720, 16:9, no letterbox) — always exists, same res
+ * 3. hqdefault (480x360, 4:3 letterboxed) — last resort, low res
+ *
+ * The maxresdefault → hq720 fallback is the key fix: previously when
+ * maxresdefault 404'd we'd drop straight to hqdefault (small + letterboxed)
+ * which looked blurry on cards. hq720 gives us same-pixel-res 16:9 fallback.
  */
-export const getThumbWithFallback = (trackId: string) => ({
-  primary: getThumb(trackId, 'max'),
-  fallback: getThumb(trackId, 'high'),
-  fallback2: getThumb(trackId, 'medium'),
-});
+export const getThumbWithFallback = (trackId: string) => {
+  const ytId = decodeYtId(trackId);
+  return {
+    primary: `https://i.ytimg.com/vi/${ytId}/maxresdefault.jpg`,
+    fallback: `https://i.ytimg.com/vi/${ytId}/hq720.jpg`,
+    fallback2: `https://i.ytimg.com/vi/${ytId}/hqdefault.jpg`,
+  };
+};
+
+// Helper for VOYO ID decoding (used by getThumbWithFallback)
+function decodeYtId(trackId: string): string {
+  if (!trackId) return '';
+  if (trackId.startsWith('vyo_')) {
+    const encoded = trackId.substring(4);
+    let base64 = encoded.replace(/-/g, '+').replace(/_/g, '/');
+    while (base64.length % 4 !== 0) base64 += '=';
+    try { return atob(base64); } catch { return trackId; }
+  }
+  return trackId;
+}
 
 /**
  * Generate DASH-branded placeholder SVG

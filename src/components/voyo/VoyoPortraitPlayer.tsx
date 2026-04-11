@@ -1131,7 +1131,7 @@ const SmallCard = memo(({ track, onTap, isPlayed, isNextUp }: {
       style={{ border: '1px solid rgba(255,255,255,0.05)' }}
     >
       <SmartImage
-        src={getTrackThumbnailUrl(track, 'medium')}
+        src={getTrackThumbnailUrl(track, 'high')}
         alt={`${track.title} by ${track.artist}`}
         className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
         trackId={track.trackId}
@@ -1589,7 +1589,7 @@ const StreamCard = memo(({ track, onTap, isPlayed, modeColor, onQueueAdd }: {
               }}
         >
           <SmartImage
-            src={getTrackThumbnailUrl(track, 'medium')}
+            src={getTrackThumbnailUrl(track, 'high')}
             alt={`${track.title} by ${track.artist}`}
             className={`w-full h-full object-cover transition-all duration-300 group-hover:scale-110 ${
               isPlayed ? 'opacity-60' : 'opacity-90 group-hover:opacity-100'
@@ -4615,7 +4615,7 @@ export const VoyoPortraitPlayer = ({
           isScrubbing={isScrubbing}
           onScrubStart={handleScrubStart}
           onScrubEnd={handleScrubEnd}
-          trackArt={currentTrack ? getTrackThumbnailUrl(currentTrack, 'medium') : undefined}
+          trackArt={currentTrack ? getTrackThumbnailUrl(currentTrack, 'high') : undefined}
           scrubDirection={scrubDirection}
           skeepLevel={skeepLevel}
         />
@@ -5589,7 +5589,7 @@ export const VoyoPortraitPlayer = ({
               {/* Track Info */}
               <div className="flex items-center gap-3 px-4 py-3 bg-white/5">
                 <img
-                  src={getTrackThumbnailUrl(currentTrack, 'medium')}
+                  src={getTrackThumbnailUrl(currentTrack, 'high')}
                   alt={currentTrack.title}
                   className="w-12 h-12 rounded-lg object-cover"
                 />

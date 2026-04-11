@@ -679,7 +679,7 @@ const AfricanVibesVideoCard = memo(({
       <div className="relative w-full h-full rounded-xl overflow-hidden bg-black">
         {/* Thumbnail - SmartImage with fallback chain */}
         <SmartImage
-          src={getThumb(track.trackId, 'medium')}
+          src={getThumb(track.trackId, 'high')}
           trackId={track.trackId}
           alt={track.title}
           artist={track.artist}
