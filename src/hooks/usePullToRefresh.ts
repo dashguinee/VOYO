@@ -41,28 +41,32 @@ export function usePullToRefresh() {
   const startY = useRef(0);
   const active = useRef(false);
   const scrollContainer = useRef<Element | null>(null);
+  // Refs for state read inside touch handlers — the previous version had
+  // pullY/refreshing in the useEffect deps, which made the entire effect
+  // re-run on every touchmove during a pull gesture. Document-level touch
+  // handlers were being removed and re-added 60+ times per second during
+  // the pull. Now the effect has [] deps and the handlers read from refs.
+  const pullYRef = useRef(0);
+  const refreshingRef = useRef(false);
+  pullYRef.current = pullY;
+  refreshingRef.current = refreshing;
 
   useEffect(() => {
     function onTouchStart(e: TouchEvent) {
-      // Find the actual scrollable container from the touched element
       const container = findScrollableAncestor(e.target as Element);
       scrollContainer.current = container;
-
-      // Only trigger when the container (or window) is scrolled to the very top
       const scrollTop = container ? container.scrollTop : window.scrollY;
       if (scrollTop > 2) {
         active.current = false;
         return;
       }
-
       startY.current = e.touches[0].clientY;
       active.current = true;
     }
 
     function onTouchMove(e: TouchEvent) {
-      if (!active.current || refreshing) return;
+      if (!active.current || refreshingRef.current) return;
 
-      // Re-verify top — scroll may have shifted during the same gesture
       const container = scrollContainer.current;
       const scrollTop = container ? container.scrollTop : window.scrollY;
       if (scrollTop > 2) {
@@ -75,10 +79,8 @@ export function usePullToRefresh() {
       const dy = e.touches[0].clientY - startY.current;
       if (dy < 0) { active.current = false; setPulling(false); setPullY(0); return; }
       if (dy > MIN_START_DIST) {
-        // 0.4x damping — harder pull, feels more intentional
         const newY = Math.min((dy - MIN_START_DIST) * 0.4, MAX_PULL);
-        // Tick when crossing the threshold
-        if (newY >= THRESHOLD && pullY < THRESHOLD) haptics.light();
+        if (newY >= THRESHOLD && pullYRef.current < THRESHOLD) haptics.light();
         setPulling(true);
         setPullY(newY);
       }
@@ -87,11 +89,10 @@ export function usePullToRefresh() {
     function onTouchEnd() {
       if (!active.current) return;
       active.current = false;
-      if (pullY >= THRESHOLD) {
+      if (pullYRef.current >= THRESHOLD) {
         haptics.success();
         setRefreshing(true);
         setPullY(THRESHOLD * 0.6);
-        // Reload the page (clears stale state, picks up new SW build)
         setTimeout(() => window.location.reload(), 300);
       } else {
         setPulling(false);
@@ -107,7 +108,7 @@ export function usePullToRefresh() {
       document.removeEventListener('touchmove', onTouchMove);
       document.removeEventListener('touchend', onTouchEnd);
     };
-  }, [pullY, refreshing]);
+  }, []);
 
   return { pulling, pullY, refreshing };
 }

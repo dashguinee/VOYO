@@ -1971,13 +1971,28 @@ export const AudioPlayer = () => {
 
   const handleEnded = useCallback(() => {
     if (playbackSource !== 'cached' && playbackSource !== 'r2') return;
-    if (currentTrack) {
-      endListenSession(audioRef.current?.currentTime || 0, 0);
-      recordPoolEngagement(currentTrack.trackId, 'complete', { completionRate: trackProgressRef.current });
-      useTrackPoolStore.getState().recordCompletion(currentTrack.trackId, trackProgressRef.current);
-      oyoOnTrackComplete(currentTrack, audioRef.current?.currentTime || 0);
-    }
+    // Capture current state for the deferred work
+    const track = currentTrack;
+    const currentTime = audioRef.current?.currentTime || 0;
+    const completionRate = trackProgressRef.current;
+    // Advance to next track IMMEDIATELY — autoplay must be instant.
     nextTrack();
+    // Defer the telemetry/learning chain to next macrotask. Same pattern
+    // as recordPlayEvent: oyoOnTrackComplete → saveProfile → JSON.stringify
+    // + localStorage.setItem is sync and blocks the audio thread right
+    // when the next track is starting.
+    if (track) {
+      setTimeout(() => {
+        try {
+          endListenSession(currentTime, 0);
+          recordPoolEngagement(track.trackId, 'complete', { completionRate });
+          useTrackPoolStore.getState().recordCompletion(track.trackId, completionRate);
+          oyoOnTrackComplete(track, currentTime);
+        } catch (e) {
+          devWarn('[VOYO] handleEnded telemetry failed:', e);
+        }
+      }, 0);
+    }
   }, [playbackSource, currentTrack, nextTrack, endListenSession]);
 
   const handleProgress = useCallback(() => {
@@ -2193,10 +2208,16 @@ export const AudioPlayer = () => {
       onSuspend={() => clearStallTimer()}
       onPause={() => {
         // Sync the store to the actual audio state. No more force-resume.
-        // GUARD: skip the sync during a track-load pause (loadTrack pauses
-        // the element to swap src). Otherwise the post-canplaythrough auto-
-        // play check sees isPlaying=false and the next track stays silent.
+        // GUARD 1: skip during a track-load pause (loadTrack pauses the
+        // element to swap src). Without this, skip didn't auto-play.
         if (isLoadingTrackRef.current) return;
+        // GUARD 2: skip during a natural-end pause. When a track ends,
+        // the browser fires `pause` BEFORE `ended`. Without this guard,
+        // the pause sets isPlaying=false → handleEnded runs nextTrack()
+        // which races to set it back to true → React commit may not
+        // resolve cleanly → autoplay doesn't fire. Check audio.ended
+        // (which is true by the time the pause event fires on natural end).
+        if (audioRef.current?.ended) return;
         usePlayerStore.getState().setIsPlaying(false);
       }}
       style={{ display: 'none' }}

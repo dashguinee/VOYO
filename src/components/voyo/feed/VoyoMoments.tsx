@@ -73,18 +73,20 @@ function slideVariants(dir: SlideDir, isSurrender: boolean = false) {
 
 const S = {
   container: css({ position: 'relative', width: '100%', height: '100%', backgroundColor: '#000', overflow: 'hidden', touchAction: 'none', userSelect: 'none', WebkitUserSelect: 'none' }),
-  topBar: css({ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 30, paddingTop: 'env(safe-area-inset-top, 12px)', background: 'linear-gradient(to bottom, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0.4) 60%, transparent 100%)', pointerEvents: 'auto' }),
+  topBar: css({ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 30, paddingTop: 'env(safe-area-inset-top, 12px)', background: 'transparent', pointerEvents: 'auto' }),
   axisTabs: css({ display: 'flex', justifyContent: 'center', gap: 4, padding: '8px 16px 2px' }),
   compassArc: css({ position: 'relative', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', padding: '4px 0 10px', overflow: 'hidden', minHeight: 44 }),
   card: css({ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }),
   thumb: css({ position: 'absolute', inset: 0, objectFit: 'cover', width: '100%', height: '100%', display: 'block', margin: 0, padding: 0, borderRadius: 0 }),
-  grad: css({ position: 'absolute', bottom: 0, left: 0, right: 0, height: '55%', background: 'linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.4) 50%, transparent 100%)', zIndex: 2, pointerEvents: 'none' }),
-  bottom: css({ position: 'relative', zIndex: 5, padding: '0 16px 24px', paddingBottom: 'max(24px, env(safe-area-inset-bottom, 24px))' }),
-  title: css({ fontSize: 16, fontWeight: 700, color: '#fff', lineHeight: 1.3, marginBottom: 4, textShadow: '0 1px 4px rgba(0,0,0,0.5)', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' } as any),
-  crRow: css({ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }),
-  avatar: css({ width: 28, height: 28, borderRadius: '50%', background: 'rgba(255,255,255,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, color: '#fff', flexShrink: 0 }),
-  crName: css({ fontSize: 13, color: 'rgba(255,255,255,0.7)', fontWeight: 500 }),
-  track: css({ fontSize: 12, color: 'rgba(255,255,255,0.5)', display: 'flex', alignItems: 'center', gap: 4 }),
+  grad: css({ position: 'absolute', bottom: 0, left: 0, right: 0, height: '45%', background: 'linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.45) 40%, transparent 100%)', zIndex: 2, pointerEvents: 'none' }),
+  bottom: css({ position: 'relative', zIndex: 5, padding: '0 18px 28px', paddingBottom: 'max(28px, env(safe-area-inset-bottom, 28px))', maxWidth: '75%' }),
+  // Identity row: avatar + creator name (the primary surface)
+  crRow: css({ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }),
+  avatar: css({ width: 36, height: 36, borderRadius: '50%', background: 'linear-gradient(135deg, rgba(139,92,246,0.4), rgba(139,92,246,0.15))', border: '1px solid rgba(139,92,246,0.35)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 700, color: '#fff', flexShrink: 0, boxShadow: '0 4px 14px rgba(0,0,0,0.45)' }),
+  crName: css({ fontSize: 14, color: '#fff', fontWeight: 600, letterSpacing: 0.1, textShadow: '0 1px 4px rgba(0,0,0,0.6)' }),
+  // Bio (the title text — used as caption/bio under the identity)
+  title: css({ fontSize: 13, fontWeight: 400, color: 'rgba(255,255,255,0.8)', lineHeight: 1.4, marginBottom: 8, textShadow: '0 1px 4px rgba(0,0,0,0.5)', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' } as any),
+  track: css({ fontSize: 11, color: 'rgba(255,255,255,0.5)', display: 'flex', alignItems: 'center', gap: 5, marginTop: 2 }),
   actBar: css({ position: 'absolute', right: 12, bottom: 160, zIndex: 10, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 20 }),
   actBtn: css({ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, cursor: 'pointer' }),
   actLbl: css({ fontSize: 10, color: 'rgba(255,255,255,0.6)', fontWeight: 500 }),
@@ -92,11 +94,11 @@ const S = {
   posCard: css({ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 20, padding: '28px 36px', textAlign: 'center', maxWidth: 300 }),
   posTitle: css({ fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.5)', letterSpacing: 3, textTransform: 'uppercase', marginBottom: 16 }),
   posCats: css({ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, marginBottom: 12, fontSize: 14, color: 'rgba(255,255,255,0.4)' }),
-  posCur: css({ fontSize: 18, fontWeight: 700, color: '#FBBF24', padding: '4px 12px', border: '1px solid rgba(251,191,36,0.3)', borderRadius: 8 }),
+  posCur: css({ fontSize: 18, fontWeight: 700, color: '#a78bfa', padding: '4px 12px', border: '1px solid rgba(167,139,250,0.3)', borderRadius: 8 }),
   posTime: css({ fontSize: 14, color: 'rgba(255,255,255,0.6)', marginTop: 8 }),
   posHint: css({ fontSize: 11, color: 'rgba(255,255,255,0.3)', marginTop: 16 }),
   loading: css({ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12, color: 'rgba(255,255,255,0.5)', fontSize: 14 }),
-  spinner: css({ width: 32, height: 32, borderRadius: '50%', border: '2px solid rgba(255,255,255,0.15)', borderTopColor: '#FBBF24' }),
+  spinner: css({ width: 32, height: 32, borderRadius: '50%', border: '2px solid rgba(255,255,255,0.15)', borderTopColor: '#a78bfa' }),
   empty: css({ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, padding: 32, textAlign: 'center' }),
   emptyH: css({ fontSize: 18, fontWeight: 700, color: 'rgba(255,255,255,0.7)' }),
   emptyP: css({ fontSize: 13, color: 'rgba(255,255,255,0.4)', lineHeight: 1.5 }),
@@ -285,7 +287,7 @@ NextMomentPreview.displayName = 'NextMomentPreview';
 
 const actIcon = (on: boolean): React.CSSProperties => ({
   width: 40, height: 40, borderRadius: '50%',
-  background: on ? 'rgba(251,191,36,0.2)' : 'rgba(255,255,255,0.1)',
+  background: on ? 'rgba(167,139,250,0.2)' : 'rgba(255,255,255,0.1)',
   backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)',
   display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s ease',
 });
@@ -303,7 +305,7 @@ const OyeAnimations = memo(({ floats }: { floats: OyeFloat[] }) => (
         key={f.id}
         style={{ ...S.oyeF, left: f.x, top: f.y, animation: 'voyo-float-up 2s cubic-bezier(0.16, 1, 0.3, 1) forwards' }}
       >
-        <Heart size={28} style={{ color: '#FBBF24', fill: '#FBBF24', filter: 'drop-shadow(0 0 8px rgba(251,191,36,0.6))' }} />
+        <Heart size={28} style={{ color: '#a78bfa', fill: '#a78bfa', filter: 'drop-shadow(0 0 8px rgba(167,139,250,0.6))' }} />
       </div>
     ))}
   </>
@@ -403,7 +405,6 @@ const MomentCard = memo(({ moment, isOyed, onOye, isActive, isMuted, onToggleMut
             ref={videoRef}
             src={videoUrl}
             className="absolute inset-0 w-full h-full object-cover"
-            style={{ aspectRatio: '9/16' }}
             muted={isMuted}
             loop
             playsInline
@@ -444,9 +445,9 @@ const MomentCard = memo(({ moment, isOyed, onOye, isActive, isMuted, onToggleMut
       <div style={S.actBar}>
         <div style={S.actBtn} onClick={onOye}>
           <div style={actIcon(isOyed)}>
-            <Heart size={20} style={{ color: isOyed ? '#FBBF24' : '#fff', fill: isOyed ? '#FBBF24' : 'none', transition: 'all 0.2s ease' }} />
+            <Heart size={20} style={{ color: isOyed ? '#a78bfa' : '#fff', fill: isOyed ? '#a78bfa' : 'none', transition: 'all 0.2s ease' }} />
           </div>
-          <span style={{ ...S.actLbl, color: isOyed ? '#FBBF24' : 'rgba(255,255,255,0.6)' }}>OYE</span>
+          <span style={{ ...S.actLbl, color: isOyed ? '#a78bfa' : 'rgba(255,255,255,0.6)' }}>OYE</span>
         </div>
         <div style={S.actBtn}>
           <div style={actIcon(false)}><Flame size={20} style={{ color: '#fff' }} /></div>
@@ -463,11 +464,14 @@ const MomentCard = memo(({ moment, isOyed, onOye, isActive, isMuted, onToggleMut
       </div>
 
       <div style={S.bottom}>
-        <div style={S.title}>{moment.title}</div>
+        {/* Identity row: avatar + handle (primary surface, biggest visual weight) */}
         <div style={S.crRow}>
           <div style={S.avatar}>{initial}</div>
           <span style={S.crName}>@{creator}</span>
         </div>
+        {/* Bio: the title acts as the caption/bio under the identity */}
+        <div style={S.title}>{moment.title}</div>
+        {/* Track attribution (smallest, most muted) */}
         {moment.parent_track_title && (
           <div
             style={{ ...S.track, cursor: onPlayTrack ? 'pointer' : 'default' }}
@@ -482,7 +486,7 @@ const MomentCard = memo(({ moment, isOyed, onOye, isActive, isMuted, onToggleMut
                 }
               }}
               style={{ textDecoration: onArtistTap && moment.parent_track_artist ? 'underline' : 'none', textDecorationColor: 'rgba(255,255,255,0.3)' }}
-            >{moment.parent_track_artist}</span> - <span>{moment.parent_track_title}</span>
+            >{moment.parent_track_artist}</span> · <span>{moment.parent_track_title}</span>
           </div>
         )}
       </div>
@@ -558,19 +562,19 @@ const StarPanel = memo(({ creator, onGiveStar, onClose }: StarPanelProps) => {
               key={n}
               style={{
                 width: 48, height: 48, borderRadius: '50%',
-                background: n === 1 ? 'rgba(251,191,36,0.2)' : 'rgba(255,255,255,0.08)',
-                border: n === 1 ? '2px solid rgba(251,191,36,0.4)' : '1px solid rgba(255,255,255,0.1)',
+                background: n === 1 ? 'rgba(167,139,250,0.2)' : 'rgba(255,255,255,0.08)',
+                border: n === 1 ? '2px solid rgba(167,139,250,0.4)' : '1px solid rgba(255,255,255,0.1)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 18, cursor: 'pointer', color: '#FBBF24',
+                fontSize: 18, cursor: 'pointer', color: '#a78bfa',
               }}
               onClick={() => onGiveStar(n)}
             >
-              {'★'.repeat(Math.min(n, 3))}{n > 3 ? <span style={{ fontSize: 10, color: 'rgba(251,191,36,0.7)' }}>+{n - 3}</span> : null}
+              {'★'.repeat(Math.min(n, 3))}{n > 3 ? <span style={{ fontSize: 10, color: 'rgba(167,139,250,0.7)' }}>+{n - 3}</span> : null}
             </button>
           ))}
         </div>
         {/* Hint: 1 star = follow */}
-        <div style={{ fontSize: 10, color: 'rgba(251,191,36,0.5)', marginTop: 12 }}>1 star = follow this creator</div>
+        <div style={{ fontSize: 10, color: 'rgba(167,139,250,0.5)', marginTop: 12 }}>1 star = follow this creator</div>
       </div>
     </div>
   );
@@ -592,7 +596,7 @@ const StarConfirmation = memo(({ creator, stars, onConfirm, onCancel }: StarConf
     onClick={onConfirm}
   >
     <div
-      style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(251,191,36,0.3)', borderRadius: 20, padding: '28px 36px', textAlign: 'center', maxWidth: 280 }}
+      style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(167,139,250,0.3)', borderRadius: 20, padding: '28px 36px', textAlign: 'center', maxWidth: 280 }}
       className="animate-[voyo-scale-in_0.2s_ease]"
       onClick={(e: React.MouseEvent) => e.stopPropagation()}
     >
@@ -605,7 +609,7 @@ const StarConfirmation = memo(({ creator, stars, onConfirm, onCancel }: StarConf
       </div>
       <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
         <button
-          style={{ padding: '10px 24px', borderRadius: 20, background: 'linear-gradient(135deg, #FBBF24, #F59E0B)', color: '#000', fontWeight: 700, fontSize: 14, border: 'none', cursor: 'pointer' }}
+          style={{ padding: '10px 24px', borderRadius: 20, background: 'linear-gradient(135deg, #a78bfa, #8b5cf6)', color: '#000', fontWeight: 700, fontSize: 14, border: 'none', cursor: 'pointer' }}
           onClick={onConfirm}
         >
           Send ★
