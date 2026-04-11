@@ -1673,11 +1673,32 @@ const BigCenterCard = memo(({ track, onExpandVideo, onShowLyrics, hideThumb }: {
         className="absolute inset-0 pointer-events-none"
         style={{ backgroundColor: 'rgba(139, 92, 246, 0.15)' }}
       />
-      {/* Title + Artist overlay */}
-      <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent pointer-events-none" />
+      {/* Title + Artist fade overlay — taller, stronger gradient so the
+          text is legible against any poster. Was hidden before because
+          the gradient was too soft (60% black at the very bottom only)
+          and the text sat at z-10 inside the same wrapper as everything
+          else, so the radial vignette at z-15 dimmed it further.
+          Now the gradient extends 50% up the card and the text gets a
+          subtle drop-shadow for the final reading bump. */}
+      <div
+        className="absolute left-0 right-0 bottom-0 h-1/2 pointer-events-none"
+        style={{
+          background: 'linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.55) 35%, transparent 100%)',
+        }}
+      />
       <div className="absolute bottom-3 left-3 right-3 pointer-events-none">
-        <p className="text-white font-bold text-[11px] truncate">{track.title}</p>
-        <p className="text-white/50 text-[9px] truncate">{track.artist}</p>
+        <p
+          className="text-white font-bold text-[13px] truncate"
+          style={{ textShadow: '0 1px 4px rgba(0,0,0,0.6)' }}
+        >
+          {track.title}
+        </p>
+        <p
+          className="text-white/70 text-[10px] truncate"
+          style={{ textShadow: '0 1px 3px rgba(0,0,0,0.6)' }}
+        >
+          {track.artist}
+        </p>
       </div>
       {/* Lyrics hint icon */}
       {onShowLyrics && (

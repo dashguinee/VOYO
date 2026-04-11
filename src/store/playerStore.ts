@@ -138,19 +138,24 @@ function getPersistedQueue(): QueueItem[] {
     // No default queue - will be populated from database
     return [];
   }
-  // Hydrate queue items with full track objects
+  // Hydrate queue items with full track objects.
+  // We persist title/artist/coverUrl per item, so use those when the track
+  // isn't in the static seed array. The previous fallback created tracks
+  // with title:'Loading...' which discarded the saved metadata — that's
+  // why Continue Listening / Queue / Previous showed wrong titles even
+  // though Heavy Rotation (different source) showed correct ones.
   return queue
     .map((item) => {
       // Try static tracks first
       let track = TRACKS.find(t => t.id === item.trackId || t.trackId === item.trackId);
-      // If not found, create minimal track to be hydrated from database
+      // If not found, USE the persisted metadata (don't blank it out)
       if (!track) {
         track = {
           id: item.trackId,
           trackId: item.trackId,
-          title: 'Loading...',
-          artist: '',
-          coverUrl: getThumb(item.trackId), // Decodes VOYO IDs automatically
+          title: item.title || 'Loading...',
+          artist: item.artist || '',
+          coverUrl: item.coverUrl || getThumb(item.trackId),
           duration: 0,
           tags: [],
           oyeScore: 0,
@@ -168,19 +173,22 @@ function getPersistedQueue(): QueueItem[] {
 function getPersistedHistory(): HistoryItem[] {
   const { history } = loadPersistedState();
   if (!history || history.length === 0) return [];
-  // Hydrate history items with full track objects
+  // Hydrate history items with full track objects.
+  // Same fix as getPersistedQueue — use persisted title/artist/coverUrl
+  // instead of blanking them to 'Loading...'. The localStorage already has
+  // the right data; the bug was the hydration discarding it.
   return history
     .map((item) => {
       // Try static tracks first
       let track = TRACKS.find(t => t.id === item.trackId || t.trackId === item.trackId);
-      // If not found, create minimal track to be hydrated from database
+      // If not found, USE the persisted metadata
       if (!track) {
         track = {
           id: item.trackId,
           trackId: item.trackId,
-          title: 'Loading...',
-          artist: '',
-          coverUrl: getThumb(item.trackId), // Decodes VOYO IDs automatically
+          title: item.title || 'Loading...',
+          artist: item.artist || '',
+          coverUrl: item.coverUrl || getThumb(item.trackId),
           duration: 0,
           tags: [],
           oyeScore: 0,
