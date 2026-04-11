@@ -385,33 +385,26 @@ export const AudioPlayer = () => {
     };
   }, [currentTrack?.trackId]);
 
-  // Background playback + AudioContext battery optimization
+  // Background playback + AudioContext battery optimization.
+  //
+  // SLIMMED DOWN: was calling audio.play() directly on visibility change,
+  // which competed with the audioEngine.ts visibility handler AND useMiniPiP
+  // visibility handler — three handlers firing simultaneously caused the
+  // "audio muffles when quitting/returning to app" symptom. Now this only
+  // does the ONE thing AudioPlayer is responsible for: suspend the context
+  // when hidden+paused (battery). Resume on show is handled by audioEngine.
+  // Background playback continues automatically because we never pause it.
   useEffect(() => {
     const handleVisibility = () => {
-      const { isPlaying: shouldPlay } = usePlayerStore.getState();
-
-      if (document.visibilityState === 'hidden') {
-        // Tab hidden - if playing, keep AudioContext running for background playback
-        if (shouldPlay && audioRef.current && (playbackSource === 'cached' || playbackSource === 'r2')) {
-          if (audioContextRef.current?.state === 'suspended') {
-            // .resume() / .suspend() return promises that can reject on iOS —
-            // catch to avoid unhandled rejection warnings flooding the console.
-            audioContextRef.current.resume().catch(() => {});
-          }
-          audioRef.current.play().catch(e => devWarn('🎵 [Playback] Background resume failed:', e.name));
-        }
-        // If NOT playing and tab hidden, suspend AudioContext to save battery
-        else if (!shouldPlay && audioContextRef.current?.state === 'running') {
+      // Defer the actual work to rAF so multiple visibility handlers in the
+      // app batch into one frame instead of cascading.
+      requestAnimationFrame(() => {
+        const { isPlaying: shouldPlay } = usePlayerStore.getState();
+        if (document.visibilityState === 'hidden' && !shouldPlay && audioContextRef.current?.state === 'running') {
           audioContextRef.current.suspend().catch(() => {});
-          devLog('🔋 [Battery] AudioContext suspended (tab hidden, not playing)');
+          devLog('🔋 [Battery] AudioContext suspended (paused + hidden)');
         }
-      } else {
-        // Tab visible - resume AudioContext if it was suspended
-        if (audioContextRef.current?.state === 'suspended' && shouldPlay) {
-          audioContextRef.current.resume().catch(() => {});
-          devLog('🔋 [Battery] AudioContext resumed (tab visible)');
-        }
-      }
+      });
     };
     document.addEventListener('visibilitychange', handleVisibility);
     return () => document.removeEventListener('visibilitychange', handleVisibility);
@@ -1940,7 +1933,15 @@ export const AudioPlayer = () => {
     navigator.mediaSession.setActionHandler('pause', () => usePlayerStore.getState().isPlaying && togglePlay());
     navigator.mediaSession.setActionHandler('nexttrack', () => nextTrack());
     navigator.mediaSession.setActionHandler('previoustrack', () => usePlayerStore.getState().prevTrack());
-    navigator.mediaSession.setActionHandler('seekto', (d) => d.seekTime !== undefined && audioRef.current && (audioRef.current.currentTime = d.seekTime));
+    navigator.mediaSession.setActionHandler('seekto', (d) => {
+      if (d.seekTime === undefined || !audioRef.current) return;
+      // Click-free seek: mute → seek → fade back in. Direct currentTime
+      // assignment causes a sample-level discontinuity = audible click.
+      muteMasterGainInstantly();
+      audioRef.current.currentTime = d.seekTime;
+      // Wait one tick for the seek to settle, then fade back in.
+      setTimeout(() => fadeInMasterGain(80), 30);
+    });
 
     navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
   }, [currentTrack, isPlaying, playbackSource, togglePlay, nextTrack]);

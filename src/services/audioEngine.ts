@@ -42,14 +42,25 @@ export interface AudioChainResult {
 
 // Resume AudioContext when tab regains focus (iOS/Android suspend it)
 // Also resume on user interaction — iOS requires a gesture after lock/unlock
+//
+// CANONICAL visibility handler. Used to be 3 different handlers (here,
+// AudioPlayer.tsx, useMiniPiP) all firing on visibilitychange and competing
+// for the audio thread. Now AudioPlayer's handler is slimmed down to just
+// suspend-on-hidden, useMiniPiP handles PiP only, and THIS handler is the
+// single source of truth for context resume. Wrapped in rAF so it batches
+// with React updates from other components reacting to visibility.
 if (typeof document !== 'undefined') {
   const resumeCtx = () => {
     if (_audioCtx && (_audioCtx.state === 'suspended' || (_audioCtx as any).state === 'interrupted')) {
       _audioCtx.resume().catch(() => {});
     }
   };
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) resumeCtx(); });
-  window.addEventListener('focus', resumeCtx);
+  const onVisibilityChange = () => {
+    if (document.hidden) return;
+    requestAnimationFrame(resumeCtx);
+  };
+  document.addEventListener('visibilitychange', onVisibilityChange);
+  window.addEventListener('focus', () => requestAnimationFrame(resumeCtx));
   // iOS/Android: After phone lock/unlock, AudioContext goes to 'interrupted' state.
   // A user gesture (touch/click) is required to resume it.
   // CRITICAL: only attach the gesture listeners while context is actually

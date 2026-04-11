@@ -1195,55 +1195,71 @@ function App() {
   // }, []);
 
   // FIRST-TIME EXPERIENCE: Prime the player with a curated track on cold boot.
-  // Without this, new users open the app, see an empty player, and bounce. We
-  // load a known-good seed track (Calm Down by Rema — verified video ID) into
-  // currentTrack so the player shows SOMETHING. We do NOT autoplay — browsers
-  // require a user gesture anyway, and we want the user to tap play
-  // deliberately. Only runs if no existing track and no queue.
+  // DEFERRED to after first paint so it doesn't block the splash + cold boot
+  // doesn't fight the audio loading flow. The player just shows empty for
+  // ~500ms longer if it was going to be empty anyway — invisible to users
+  // who already have a saved track.
   useEffect(() => {
-    const { currentTrack, queue, playTrack, setIsPlaying } = usePlayerStore.getState();
-    if (!currentTrack && queue.length === 0) {
-      const primer = TRACKS.find(t => t.trackId === 'WcIcVapfqXw') || TRACKS[0];
-      if (primer) {
-        playTrack(primer);
-        // Immediately pause — playTrack sets isPlaying=true, but we want the
-        // player primed and ready, not playing. Audio element won't make noise
-        // until the user taps play (browser gesture requirement).
-        setIsPlaying(false);
-        devLog('[VOYO] First-time primer: loaded', primer.title, 'as empty-state track');
+    const tid = setTimeout(() => {
+      const { currentTrack, queue, playTrack, setIsPlaying } = usePlayerStore.getState();
+      if (!currentTrack && queue.length === 0) {
+        const primer = TRACKS.find(t => t.trackId === 'WcIcVapfqXw') || TRACKS[0];
+        if (primer) {
+          playTrack(primer);
+          // Immediately pause — playTrack sets isPlaying=true, but we want the
+          // player primed and ready, not playing.
+          setIsPlaying(false);
+          devLog('[VOYO] First-time primer: loaded', primer.title, '(deferred)');
+        }
       }
-    }
+    }, 800);
+    return () => clearTimeout(tid);
   }, []);
 
-  // TRACK POOL MAINTENANCE: Start automatic pool management (rescoring every 5 mins)
+  // TRACK POOL MAINTENANCE + sync work — DEFERRED to idle so it doesn't
+  // race the first track load. Was causing startup audio muffling because
+  // ~5 things were running synchronously on mount: pool maintenance start,
+  // 2x Supabase batch syncs, refreshRecommendations (324K DB query), all
+  // competing with the first track's audio loading + decoding.
   useEffect(() => {
-    startPoolMaintenance();
-    devLog('[VOYO] Track pool maintenance started');
-
-    // SEED SYNC: Upload local tracks to Supabase (one-time per device)
-    // This ensures the collective brain has our seed tracks
-    syncSeedTracks(TRACKS).then(count => {
-      if (count > 0) {
-        devLog(`[VOYO] 🌱 Synced ${count} seed tracks to Supabase`);
+    const w = window as unknown as {
+      requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number;
+      cancelIdleCallback?: (id: number) => void;
+    };
+    const scheduleIdle = (cb: () => void): number => {
+      if (typeof w.requestIdleCallback === 'function') {
+        return w.requestIdleCallback(cb, { timeout: 5000 });
       }
-    });
-
-    // VIDEO INTELLIGENCE: Also sync seed tracks to collective brain
-    syncManyToDatabase(TRACKS).then(count => {
-      if (count > 0) {
-        devLog(`[VOYO] 🧠 Synced ${count} seed tracks to video_intelligence`);
+      return window.setTimeout(cb, 2000) as unknown as number;
+    };
+    const cancelIdle = (id: number) => {
+      if (typeof w.cancelIdleCallback === 'function') {
+        w.cancelIdleCallback(id);
+      } else {
+        window.clearTimeout(id);
       }
-    });
+    };
 
-    // DISABLED: bootstrapPool, runStartupHeal, curateAllSections
-    // These made 60+ API calls to Fly.io on every load
-    // With 324K tracks in Supabase, refreshRecommendations() is sufficient
-    // Re-enable as server-side jobs, not client-side startup
-    devLog('[VOYO] Skipping bootstrap/heal/curate - database is source of truth');
-
-    // VIBES FIRST: Load from 324K database IMMEDIATELY
+    // FIRST: refresh recommendations immediately so the UI has data fast.
+    // This is the only thing the user actually sees on startup.
     usePlayerStore.getState().refreshRecommendations();
     devLog('[VOYO] VIBES FIRST: Loading from 324K database...');
+
+    // SECOND: defer pool maintenance + seed syncs to idle.
+    const idleId = scheduleIdle(() => {
+      startPoolMaintenance();
+      devLog('[VOYO] Track pool maintenance started (deferred)');
+
+      syncSeedTracks(TRACKS).then(count => {
+        if (count > 0) devLog(`[VOYO] 🌱 Synced ${count} seed tracks to Supabase`);
+      });
+
+      syncManyToDatabase(TRACKS).then(count => {
+        if (count > 0) devLog(`[VOYO] 🧠 Synced ${count} seed tracks to video_intelligence`);
+      });
+    });
+
+    return () => cancelIdle(idleId);
   }, []);
 
   // REALTIME NOTIFICATIONS: Subscribe to Supabase events for DynamicIsland

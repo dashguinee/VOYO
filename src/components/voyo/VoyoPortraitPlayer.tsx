@@ -3805,44 +3805,51 @@ export const VoyoPortraitPlayer = ({
   const lastScrollAt = useRef(0);
   const wheelResetting = useRef(false);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  // rAF throttle: scroll events fire much faster than 60Hz on touch devices.
+  // Coalescing setPortalProgress() to once per animation frame eliminates
+  // 60+ React re-render cascades per second of scrolling — which was the
+  // root cause of "audio muffles when scrolling" (audio thread starvation
+  // from main thread render storms).
+  const scrollRafRef = useRef<number | null>(null);
+  // Latest portalProgress accessible inside the rAF callback without
+  // re-creating the handler on every change.
+  const portalProgressRef = useRef(portalProgress);
+  portalProgressRef.current = portalProgress;
 
   const handleHeaderScroll = useCallback(() => {
-    const container = scrollContainerRef.current;
-    if (!container) return;
-    const currentY = container.scrollTop;
-    const now = performance.now();
+    if (scrollRafRef.current !== null) return; // coalesce to one update per frame
+    scrollRafRef.current = requestAnimationFrame(() => {
+      scrollRafRef.current = null;
+      const container = scrollContainerRef.current;
+      if (!container) return;
+      const currentY = container.scrollTop;
+      const now = performance.now();
 
-    // Velocity-based wheel-spin reset: if the user is scrolling UP fast
-    // (>1.4px/ms) AND we're already deep in the canvas, snap back home
-    // in a one-shot ~600ms morph instead of incremental fade.
-    const dy = currentY - lastScrollY.current;
-    const dt = now - lastScrollAt.current || 16;
-    const velocity = dy / dt;
-    if (
-      !wheelResetting.current &&
-      velocity < -1.4 && // fast upward
-      portalProgress > 0.35 // already past the threshold
-    ) {
-      wheelResetting.current = true;
-      setPortalProgress(0);
-      // Force the scroll container back to top with smooth-ish snap
-      container.scrollTo({ top: 0, behavior: 'smooth' });
-      setTimeout(() => { wheelResetting.current = false; }, 700);
-    } else if (!wheelResetting.current) {
-      // Standard scroll-driven progress.
-      // Two-step model: 0 → 0.55 is "step 1" (mild Layer B fade,
-      // navbar approaches reveal), 0.55 → 1.0 is "step 2" (Layer B
-      // gone, Layer C reveals in the same slot, header bubbles fade).
-      // Fade range is the first ~360px of scroll — short on purpose
-      // so the canvas reveals quickly without dragging the layout.
-      const FADE_RANGE = 360;
-      const next = Math.max(0, Math.min(1, currentY / FADE_RANGE));
-      setPortalProgress(next);
-    }
+      // Velocity-based wheel-spin reset: if the user is scrolling UP fast
+      // (>1.4px/ms) AND we're already deep in the canvas, snap back home
+      // in a one-shot ~600ms morph instead of incremental fade.
+      const dy = currentY - lastScrollY.current;
+      const dt = now - lastScrollAt.current || 16;
+      const velocity = dy / dt;
+      if (
+        !wheelResetting.current &&
+        velocity < -1.4 && // fast upward
+        portalProgressRef.current > 0.35 // already past the threshold
+      ) {
+        wheelResetting.current = true;
+        setPortalProgress(0);
+        container.scrollTo({ top: 0, behavior: 'smooth' });
+        setTimeout(() => { wheelResetting.current = false; }, 700);
+      } else if (!wheelResetting.current) {
+        const FADE_RANGE = 360;
+        const next = Math.max(0, Math.min(1, currentY / FADE_RANGE));
+        setPortalProgress(next);
+      }
 
-    lastScrollY.current = currentY;
-    lastScrollAt.current = now;
-  }, [portalProgress]);
+      lastScrollY.current = currentY;
+      lastScrollAt.current = now;
+    });
+  }, [setPortalProgress]);
 
   // CLEAN STATE: Two levels of reveal
   // TAP: Quick controls only (shuffle, repeat, share)
