@@ -5466,12 +5466,76 @@ export const VoyoPortraitPlayer = ({
           })}
         </div>
 
+        {/* ===== OYÉ OPTIONS — react to what's playing without leaving =====
+            The four reactions live here in Layer C as a horizontal row.
+            Tap = quick reaction, hold = stronger (matches the existing
+            reaction store flow). Lets the user OYÉ a track from the
+            ambient canvas without going back to the player chrome. */}
+        <div className="mt-6 mb-2">
+          <div className="text-[10px] tracking-[0.25em] uppercase text-white/40 mb-2 px-1">react</div>
+          <div className="flex gap-2">
+            {[
+              { type: 'oyo', label: 'OYO', emoji: '👋', neon: '#a78bfa', glow: 'rgba(167,139,250,0.4)' },
+              { type: 'oye', label: 'OYÉ', emoji: '🎉', neon: '#D4A053', glow: 'rgba(212,160,83,0.5)' },
+              { type: 'wazzguan', label: 'Wazzguán', emoji: '🤙', neon: '#a8a29e', glow: 'rgba(168,162,158,0.35)' },
+              { type: 'fire', label: 'Fireee', emoji: '🔥', neon: '#D4A053', glow: 'rgba(212,160,83,0.5)' },
+            ].map((r) => (
+              <button
+                key={r.type}
+                onClick={() => {
+                  if (currentTrack) {
+                    handleReaction(r.type as ReactionType, r.emoji, r.label, 1);
+                    haptics.light();
+                  }
+                }}
+                className="flex-1 rounded-2xl p-3 flex flex-col items-center gap-1 active:scale-95 transition-transform"
+                style={{
+                  background: `linear-gradient(135deg, ${r.glow.replace(/0\.[0-9]+/, '0.12')} 0%, rgba(15,12,24,0.7) 100%)`,
+                  border: `1px solid ${r.glow.replace(/0\.[0-9]+/, '0.18')}`,
+                  boxShadow: `0 0 10px ${r.glow.replace(/0\.[0-9]+/, '0.10')}`,
+                }}
+              >
+                <span className="text-lg leading-none">{r.emoji}</span>
+                <span
+                  className="text-[9px] font-bold tracking-wide"
+                  style={{ color: r.neon, textShadow: `0 0 6px ${r.glow}` }}
+                >
+                  {r.label}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* ===== MORE COMING — soft footer placeholder =====
+            Tells the user there's more they'll discover in VOYO Moments,
+            and gives the canvas a graceful tail before it scrolls away. */}
+        <div className="mt-6 mb-3 text-center">
+          <div
+            className="text-[10px] tracking-[0.2em] uppercase"
+            style={{ color: 'rgba(212,160,83,0.5)' }}
+          >
+            more in voyo moments
+          </div>
+          <div className="text-[9px] text-white/30 mt-1">
+            keep scrolling to clear • swipe up fast to snap home
+          </div>
+        </div>
+
+        {/* Inner spacer so the canvas content has bottom breathing room
+            before it itself scrolls past (the user reads the "react" row,
+            scrolls a bit more, and the canvas clears entirely). */}
+        <div style={{ height: '24px' }} />
+
       </div>
 
-      {/* Scroll runway — gives the portal scroll handler enough vertical
-          travel to drive the two-step model. Layer C is absolutely
-          positioned so it doesn't create runway on its own. */}
-      <div className="flex-shrink-0 w-full" style={{ height: '500px' }} />
+      {/* Scroll runway — Apple-Watch-list scroll feel.
+          Long enough that the user can scroll past everything in Layer C
+          and reach a fully cleared state where only the central player
+          controls (play/pause + next/prev, both inside the sticky anchor)
+          remain. Layer C scrolls internally too but the outer runway is
+          what drives the two-step + clearing transition. */}
+      <div className="flex-shrink-0 w-full" style={{ height: '1200px' }} />
 
       {/* BOOST SETTINGS PANEL */}
       <BoostSettings
