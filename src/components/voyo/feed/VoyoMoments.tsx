@@ -160,6 +160,97 @@ const S = {
   bioReactRow: css({ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, paddingTop: 8, marginTop: 6, borderTop: '1px solid rgba(255,255,255,0.06)' }),
   bioReactBtn: css({ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 10px', borderRadius: 999, background: 'rgba(167,139,250,0.12)', border: '1px solid rgba(167,139,250,0.25)', fontSize: 11, fontWeight: 600, color: '#a78bfa', cursor: 'pointer', transition: 'all 0.2s ease', flexShrink: 0 }),
   track: css({ fontSize: 11, color: 'rgba(255,255,255,0.5)', display: 'flex', alignItems: 'center', gap: 5, paddingLeft: 2 }),
+
+  // ─── COMMENTS DRAWER ─────────────────────────────────────────
+  // YouTube-Live-meets-bio-bar — slide-up drawer with glass + scrolling
+  // live-style comments + react buttons + input. Same glassmorphism
+  // aesthetic as the bio card so it feels like one design family.
+  commentsBackdrop: css({
+    position: 'absolute', inset: 0, zIndex: 60,
+    background: 'rgba(0,0,0,0.55)',
+    backdropFilter: 'blur(4px)',
+    WebkitBackdropFilter: 'blur(4px)',
+  }),
+  commentsDrawer: css({
+    position: 'absolute', bottom: 0, left: 0, right: 0, zIndex: 61,
+    maxHeight: '70%',
+    minHeight: '50%',
+    background: 'rgba(15, 15, 22, 0.78)',
+    backdropFilter: 'blur(28px) saturate(150%)',
+    WebkitBackdropFilter: 'blur(28px) saturate(150%)',
+    borderTop: '1px solid rgba(167,139,250,0.2)',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    boxShadow: '0 -12px 40px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.08)',
+    display: 'flex',
+    flexDirection: 'column',
+    overflow: 'hidden',
+  }),
+  commentsHandle: css({
+    width: 40, height: 4, background: 'rgba(255,255,255,0.18)',
+    borderRadius: 2, margin: '10px auto 6px',
+  }),
+  commentsHeader: css({
+    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+    padding: '6px 18px 12px',
+    borderBottom: '1px solid rgba(255,255,255,0.06)',
+  }),
+  commentsTitle: css({
+    fontSize: 14, fontWeight: 700, color: '#fff', letterSpacing: 0.2,
+  }),
+  commentsCount: css({
+    fontSize: 11, color: 'rgba(255,255,255,0.45)', fontWeight: 500,
+  }),
+  commentsList: css({
+    flex: 1, overflowY: 'auto', padding: '12px 18px 6px',
+    display: 'flex', flexDirection: 'column-reverse', gap: 14,
+  } as any),
+  commentRow: css({
+    display: 'flex', alignItems: 'flex-start', gap: 10,
+  }),
+  commentAvatar: css({
+    width: 28, height: 28, borderRadius: '50%',
+    background: 'linear-gradient(135deg, rgba(139,92,246,0.4), rgba(139,92,246,0.12))',
+    border: '1px solid rgba(167,139,250,0.3)',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    fontSize: 11, fontWeight: 700, color: '#fff', flexShrink: 0,
+  }),
+  commentBody: css({ flex: 1, minWidth: 0 }),
+  commentMeta: css({
+    display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 2,
+  }),
+  commentName: css({ fontSize: 12, fontWeight: 600, color: 'rgba(255,255,255,0.85)' }),
+  commentTime: css({ fontSize: 10, color: 'rgba(255,255,255,0.35)' }),
+  commentText: css({ fontSize: 12.5, color: 'rgba(255,255,255,0.78)', lineHeight: 1.45, wordBreak: 'break-word' } as any),
+  commentReactBtn: css({
+    display: 'flex', alignItems: 'center', gap: 4, padding: '2px 8px',
+    borderRadius: 999, background: 'rgba(167,139,250,0.1)',
+    border: '1px solid rgba(167,139,250,0.18)',
+    fontSize: 10, fontWeight: 600, color: '#a78bfa',
+    cursor: 'pointer', flexShrink: 0,
+    transition: 'all 0.2s ease',
+  }),
+  commentInputWrap: css({
+    display: 'flex', alignItems: 'center', gap: 8,
+    padding: '12px 18px',
+    paddingBottom: 'max(12px, env(safe-area-inset-bottom, 12px))',
+    borderTop: '1px solid rgba(255,255,255,0.06)',
+    background: 'rgba(10,10,15,0.4)',
+  }),
+  commentInput: css({
+    flex: 1, height: 36, padding: '0 14px',
+    borderRadius: 18,
+    background: 'rgba(255,255,255,0.06)',
+    border: '1px solid rgba(255,255,255,0.08)',
+    color: '#fff', fontSize: 13, outline: 'none',
+  }),
+  commentSendBtn: css({
+    width: 36, height: 36, borderRadius: '50%',
+    background: 'linear-gradient(135deg, #8b5cf6, #7c3aed)',
+    border: 'none', color: '#fff', cursor: 'pointer',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    flexShrink: 0,
+  }),
   actBar: css({ position: 'absolute', right: 12, bottom: 160, zIndex: 10, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 20 }),
   actBtn: css({ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, cursor: 'pointer' }),
   actLbl: css({ fontSize: 10, color: 'rgba(255,255,255,0.6)', fontWeight: 500 }),
@@ -400,13 +491,14 @@ interface MomentCardProps {
   onToggleMute: () => void;
   onPlayTrack?: () => void;
   onArtistTap?: (artistName: string) => void;
+  onOpenComments?: () => void;
   showOrb: boolean;
   showName: boolean;
   showTitle: boolean;
   showBioBody: boolean;
 }
 
-const MomentCard = memo(({ moment, isOyed, onOye, isActive, isMuted, onToggleMute, onPlayTrack, onArtistTap, showOrb, showName, showTitle, showBioBody }: MomentCardProps) => {
+const MomentCard = memo(({ moment, isOyed, onOye, isActive, isMuted, onToggleMute, onPlayTrack, onArtistTap, onOpenComments, showOrb, showName, showTitle, showBioBody }: MomentCardProps) => {
   // Bio expand state — collapsed by default (~2 lines visible with bottom fade),
   // tap to expand and scroll the rest of the description.
   const [bioExpanded, setBioExpanded] = useState(false);
@@ -522,7 +614,7 @@ const MomentCard = memo(({ moment, isOyed, onOye, isActive, isMuted, onToggleMut
 
       <div style={S.grad} />
 
-      <div style={S.actBar}>
+      <div style={S.actBar} data-no-tap-wake="true">
         <div style={S.actBtn} onClick={onOye}>
           <div style={actIcon(isOyed)}>
             <Heart size={20} style={{ color: isOyed ? '#a78bfa' : '#fff', fill: isOyed ? '#a78bfa' : 'none', transition: 'all 0.2s ease' }} />
@@ -533,7 +625,7 @@ const MomentCard = memo(({ moment, isOyed, onOye, isActive, isMuted, onToggleMut
           <div style={actIcon(false)}><Flame size={20} style={{ color: '#fff' }} /></div>
           <span style={S.actLbl}>{formatCount(moment.voyo_reactions || 0)}</span>
         </div>
-        <div style={S.actBtn}>
+        <div style={S.actBtn} onClick={(e) => { e.stopPropagation(); onOpenComments?.(); }}>
           <div style={actIcon(false)}><MessageCircle size={20} style={{ color: '#fff' }} /></div>
           <span style={S.actLbl}>{formatCount(moment.comment_count || 0)}</span>
         </div>
@@ -546,25 +638,36 @@ const MomentCard = memo(({ moment, isOyed, onOye, isActive, isMuted, onToggleMut
       {/* CREATOR BLOCK — single positioned container, stacked layout:
           orb + name on top, glass bio card below. Staged fade choreography:
           bio body fades first (2s), then title (4s), then orb paint-out (6s).
-          Each stage has its own transition. Tap restarts everything. */}
+          Name STAYS through all stages — lightweight creator credit. */}
       <div style={S.creatorBlock}>
-        <div
-          style={{
-            ...S.creatorOrbWrap,
-            opacity: showOrb ? 1 : 0,
-            transform: showOrb ? 'translateY(0)' : 'translateY(-4px)',
-            transition: 'opacity 0.9s cubic-bezier(0.16, 1, 0.3, 1), transform 0.9s cubic-bezier(0.16, 1, 0.3, 1)',
-            // Paint-sweep dissolve when orb fades out (stage 3)
-            animation: !showOrb ? 'voyo-paint-out 0.9s ease-out forwards' : undefined,
-            pointerEvents: showOrb ? 'auto' : 'none',
-          }}
-        >
-          <div style={S.creatorOrb}>{initial}</div>
-          {showName && <span style={S.creatorOrbName}>@{creator}</span>}
+        <div style={S.creatorOrbWrap}>
+          {/* Orb — fades with paint sweep at stage 3 */}
+          <div
+            style={{
+              opacity: showOrb ? 1 : 0,
+              transform: showOrb ? 'scale(1)' : 'scale(0.92)',
+              transition: 'opacity 0.9s cubic-bezier(0.16, 1, 0.3, 1), transform 0.9s cubic-bezier(0.16, 1, 0.3, 1)',
+              animation: !showOrb ? 'voyo-paint-out 0.9s ease-out forwards' : undefined,
+            }}
+          >
+            <div style={S.creatorOrb}>{initial}</div>
+          </div>
+          {/* Name — always visible. Slightly dimmer when orb is gone so it
+              reads as a watermark/credit, not a label. */}
+          <span
+            style={{
+              ...S.creatorOrbName,
+              opacity: showOrb ? 1 : 0.7,
+              transition: 'opacity 0.9s cubic-bezier(0.16, 1, 0.3, 1)',
+            }}
+          >
+            @{creator}
+          </span>
         </div>
 
         {(moment.title || moment.description) && showTitle && (
           <div
+            data-no-tap-wake="true"
             style={{
               ...S.bioCard,
               opacity: showTitle ? 1 : 0,
@@ -628,6 +731,119 @@ const MomentCard = memo(({ moment, isOyed, onOye, isActive, isMuted, onToggleMut
   );
 });
 MomentCard.displayName = 'MomentCard';
+
+// ============================================
+// COMMENTS DRAWER — YouTube-Live-meets-bio-bar in VOYO DNA.
+// Slide-up glass drawer with scrolling live comments + react buttons + input.
+// Same glassmorphism family as the bio card so it feels coherent.
+// Mock data for now (no backend wired) — just the surface.
+// ============================================
+
+interface CommentItem {
+  id: string;
+  author: string;
+  text: string;
+  reactions: number;
+  hasReacted: boolean;
+  timeAgo: string;
+}
+
+const MOCK_COMMENTS: CommentItem[] = [
+  { id: '1', author: 'kenza', text: 'this hits different at 2am 🔥', reactions: 12, hasReacted: false, timeAgo: '3m' },
+  { id: '2', author: 'omar', text: 'who shot this? cinematography crazy', reactions: 8, hasReacted: false, timeAgo: '7m' },
+  { id: '3', author: 'sarah', text: 'OYÉ!!! I needed this today', reactions: 24, hasReacted: true, timeAgo: '12m' },
+  { id: '4', author: 'aziz', text: 'add to playlist immediately', reactions: 5, hasReacted: false, timeAgo: '18m' },
+  { id: '5', author: 'fatou', text: 'the vocals on this 😮‍💨', reactions: 17, hasReacted: false, timeAgo: '24m' },
+];
+
+const CommentsDrawer = memo(({ moment, onClose }: { moment: Moment; onClose: () => void }) => {
+  const [comments, setComments] = useState<CommentItem[]>(MOCK_COMMENTS);
+  const [draft, setDraft] = useState('');
+
+  const handleReact = useCallback((id: string) => {
+    setComments(prev => prev.map(c =>
+      c.id === id && !c.hasReacted
+        ? { ...c, hasReacted: true, reactions: c.reactions + 1 }
+        : c
+    ));
+  }, []);
+
+  const handleSend = useCallback(() => {
+    if (!draft.trim()) return;
+    const newComment: CommentItem = {
+      id: `local-${Date.now()}`,
+      author: 'you',
+      text: draft.trim(),
+      reactions: 0,
+      hasReacted: false,
+      timeAgo: 'now',
+    };
+    setComments(prev => [newComment, ...prev]);
+    setDraft('');
+  }, [draft]);
+
+  return (
+    <>
+      {/* Backdrop — tap to close */}
+      <div
+        style={S.commentsBackdrop}
+        className="animate-[voyo-fade-in_0.25s_ease-out]"
+        onClick={onClose}
+      />
+      {/* Drawer */}
+      <div
+        style={S.commentsDrawer}
+        className="animate-voyo-spring-in-bottom"
+        data-no-tap-wake="true"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div style={S.commentsHandle} />
+        <div style={S.commentsHeader}>
+          <span style={S.commentsTitle}>Comments</span>
+          <span style={S.commentsCount}>{comments.length} live</span>
+        </div>
+        <div style={S.commentsList} className="scrollbar-hide">
+          {comments.map((c) => (
+            <div key={c.id} style={S.commentRow}>
+              <div style={S.commentAvatar}>{c.author[0].toUpperCase()}</div>
+              <div style={S.commentBody}>
+                <div style={S.commentMeta}>
+                  <span style={S.commentName}>@{c.author}</span>
+                  <span style={S.commentTime}>· {c.timeAgo}</span>
+                </div>
+                <div style={S.commentText}>{c.text}</div>
+              </div>
+              <button
+                style={{
+                  ...S.commentReactBtn,
+                  background: c.hasReacted ? 'rgba(167,139,250,0.22)' : 'rgba(167,139,250,0.1)',
+                }}
+                onClick={() => handleReact(c.id)}
+              >
+                <Heart size={9} style={{ color: '#a78bfa', fill: c.hasReacted ? '#a78bfa' : 'none' }} />
+                <span>{c.reactions}</span>
+              </button>
+            </div>
+          ))}
+        </div>
+        <div style={S.commentInputWrap}>
+          <input
+            type="text"
+            placeholder="add to the moment…"
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') handleSend(); }}
+            style={S.commentInput}
+          />
+          <button style={S.commentSendBtn} onClick={handleSend}>
+            <Heart size={14} style={{ color: '#fff', fill: '#fff' }} />
+          </button>
+        </div>
+      </div>
+    </>
+  );
+});
+CommentsDrawer.displayName = 'CommentsDrawer';
 
 // ============================================
 // POSITION OVERLAY
@@ -810,6 +1026,16 @@ export const VoyoMoments: React.FC<VoyoMomentsProps> = ({ onPlayFullTrack, onArt
   const [headerVisible, setHeaderVisible] = useState(true);
   const headerHideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Comments overlay — YouTube-Live-meets-bio-bar drawer that slides up
+  // from the bottom. Shows scrolling live comments + react buttons + input.
+  const [showComments, setShowComments] = useState(false);
+  const handleOpenComments = useCallback(() => {
+    setShowComments(true);
+  }, []);
+  const handleCloseComments = useCallback(() => {
+    setShowComments(false);
+  }, []);
+
   // STAGED WIDGET VISIBILITY — choreographed fade for immersion.
   //
   //   stage 0  full       = orb + name + title + bio body all visible
@@ -834,21 +1060,29 @@ export const VoyoMoments: React.FC<VoyoMomentsProps> = ({ onPlayFullTrack, onArt
   }, [uiPhase]);
 
   // Restart the staged fade — stage 0 → 1 → 2 → 3 over 6 seconds.
-  // Bio body fades first, then title, then the orb paint-dissolves last.
-  // Also restores the HEADER (axis tabs + compass arc) and starts a 5s
-  // timer to hide it again — so the modes widget is reachable on every tap.
+  // Does NOT touch the header — that's reserved for explicit taps via
+  // wakeHeaderOnTap below. Scrolls + new-moment events restart the
+  // staged fade but the header stays gone until the user explicitly taps.
   const pingWidgets = useCallback(() => {
     setWidgetStage(0);
-    setHeaderVisible(true);
     stageTimers.current.forEach(t => clearTimeout(t));
     stageTimers.current = [
       setTimeout(() => setWidgetStage(1), 2000),  // bio body fades at 2s
       setTimeout(() => setWidgetStage(2), 4000),  // title fades at 4s
       setTimeout(() => setWidgetStage(3), 6000),  // orb paint-dissolves at 6s
     ];
+  }, []);
+
+  // Tap-only header restore. Never called from scroll/swipe handlers.
+  // Restores the modes widget (axis tabs + compass arc) and auto-hides
+  // again after 5s. ALSO calls pingWidgets so the orb/title/bio come back
+  // along with the header for a coherent reveal.
+  const wakeHeaderOnTap = useCallback(() => {
+    setHeaderVisible(true);
+    pingWidgets();
     if (headerHideTimer.current) clearTimeout(headerHideTimer.current);
     headerHideTimer.current = setTimeout(() => setHeaderVisible(false), 5000);
-  }, []);
+  }, [pingWidgets]);
 
   // Auto-fade on entering immersive phase, and on every new moment
   useEffect(() => {
@@ -874,9 +1108,12 @@ export const VoyoMoments: React.FC<VoyoMomentsProps> = ({ onPlayFullTrack, onArt
 
   // Backward-compat: code below still references hasInteracted
   const hasInteracted = uiPhase === 'immersive';
-  // Visibility flags derived from the staged fade
+  // Visibility flags derived from the staged fade.
+  // Name STAYS — it's the lightweight creator credit/watermark that
+  // persists after everything else fades. Per Dash: keep the name after
+  // the animation.
   const showOrb = widgetStage < 3;
-  const showName = widgetStage < 3;
+  const showName = true;
   const showTitle = widgetStage < 2;
   const showBioBody = widgetStage < 1;
 
@@ -976,6 +1213,15 @@ export const VoyoMoments: React.FC<VoyoMomentsProps> = ({ onPlayFullTrack, onArt
   // ---- TOUCH HANDLERS ----
 
   const onTS = useCallback((e: React.TouchEvent) => {
+    // EXCLUDE action buttons + bio card from being treated as taps for the
+    // wake-header / single-tap-mute logic. The user's intent on those
+    // surfaces is the button itself, not "wake the modes widget".
+    const target = e.target as HTMLElement;
+    if (target.closest('[data-no-tap-wake="true"]')) {
+      touchStart.current = null;
+      return;
+    }
+
     const t = e.touches[0];
     touchStart.current = { x: t.clientX, y: t.clientY, time: Date.now() };
     swiping.current = false;
@@ -1079,14 +1325,14 @@ export const VoyoMoments: React.FC<VoyoMomentsProps> = ({ onPlayFullTrack, onArt
     } else {
       lastTap.current = now;
       tapTimer.current = setTimeout(() => {
-        // Single tap action: bring widgets back into view + restart fade timer
-        pingWidgets();
-        // Mute toggle is now a side-effect of single tap (preserved behavior)
-        showVolBadge();
+        // Single tap action: ONLY bring header + widgets back. Mute is now
+        // controlled by the navbar volume slider (slide to 0 = muted) so
+        // we don't conflict the screen tap with mute toggle anymore.
+        wakeHeaderOnTap();
         lastTap.current = 0;
       }, DOUBLE_TAP_MS);
     }
-  }, [showOverlay, showStarPanel, currentMoment, mixGoUp, mixGoDown, goLeft, goRight, nav, handleOye, showVolBadge, pingWidgets, startTransition]);
+  }, [showOverlay, showStarPanel, currentMoment, mixGoUp, mixGoDown, goLeft, goRight, nav, handleOye, wakeHeaderOnTap, startTransition]);
 
   // ---- KEYBOARD (desktop) ----
 
@@ -1309,6 +1555,7 @@ export const VoyoMoments: React.FC<VoyoMomentsProps> = ({ onPlayFullTrack, onArt
               artist: currentMoment.parent_track_artist || 'Unknown Artist',
             }) : undefined}
             onArtistTap={onArtistTap}
+            onOpenComments={handleOpenComments}
             showOrb={showOrb}
             showName={showName}
             showTitle={showTitle}
@@ -1363,6 +1610,11 @@ export const VoyoMoments: React.FC<VoyoMomentsProps> = ({ onPlayFullTrack, onArt
           onConfirm={handleConfirmStar}
           onCancel={handleCancelStar}
         />
+      )}
+
+      {/* COMMENTS DRAWER — slides up from bottom on comment button tap */}
+      {showComments && currentMoment && (
+        <CommentsDrawer moment={currentMoment} onClose={handleCloseComments} />
       )}
     </div>
   );

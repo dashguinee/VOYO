@@ -347,9 +347,29 @@ export const BoostSettings = ({ isOpen, onClose }: BoostSettingsProps) => {
           {cachedTracks.length > 0 && (
             <div className="bg-white/5 rounded-2xl p-4">
               <div className="text-sm font-medium text-white mb-3">Recently Boosted</div>
-              <div className="space-y-2 max-h-32 overflow-y-auto">
+              <div className="space-y-1 max-h-32 overflow-y-auto">
                 {cachedTracks.slice(0, 5).map((track) => (
-                  <div key={track.id} className="flex items-center gap-3 py-1">
+                  <button
+                    key={track.id}
+                    onClick={() => {
+                      // Play the boosted track. Construct a minimal Track shape
+                      // — playerStore handles the rest via the load pipeline
+                      // and the local IndexedDB cache for instant playback.
+                      usePlayerStore.getState().playTrack({
+                        id: track.id,
+                        trackId: track.id,
+                        title: track.title,
+                        artist: track.artist,
+                        coverUrl: `https://i.ytimg.com/vi/${track.id}/hq720.jpg`,
+                        duration: 0,
+                        tags: [],
+                        oyeScore: 0,
+                        createdAt: new Date().toISOString(),
+                      } as any);
+                      onClose();
+                    }}
+                    className="flex items-center gap-3 py-2 px-2 -mx-2 rounded-lg w-full text-left hover:bg-white/5 active:bg-white/10 transition-colors"
+                  >
                     <div className="w-6 h-6 rounded bg-purple-500/20 flex items-center justify-center flex-shrink-0">
                       <Zap size={10} className="text-purple-400" />
                     </div>
@@ -357,8 +377,8 @@ export const BoostSettings = ({ isOpen, onClose }: BoostSettingsProps) => {
                       <div className="text-xs font-medium text-white truncate">{track.title}</div>
                       <div className="text-[10px] text-gray-500 truncate">{track.artist}</div>
                     </div>
-                    <div className="text-[10px] text-gray-500">{formatSize(track.size)}</div>
-                  </div>
+                    <div className="text-[10px] text-gray-500 flex-shrink-0">{formatSize(track.size)}</div>
+                  </button>
                 ))}
               </div>
             </div>
