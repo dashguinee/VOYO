@@ -1490,6 +1490,10 @@ const PortalBelt = memo(({ tracks, onTap, onQueueAdd, playedTrackIds, type, mixM
       ref={containerRef}
       className="flex-1 relative h-20 overflow-hidden cursor-grab active:cursor-grabbing select-none"
       style={{ touchAction: 'pan-x' }} // Allow horizontal drag, prevent vertical scroll
+      // PortalBelt has its own horizontal drag. Mark it so the global
+      // canvas swipe (center-section swipe-to-skip) bails on pointerdown
+      // and doesn't double-handle the same gesture.
+      data-no-canvas-swipe="true"
       onMouseEnter={() => !isDragging.current && setIsPaused(true)}
       onMouseLeave={() => {
         if (!isDragging.current) setIsPaused(false);
@@ -3872,6 +3876,12 @@ export const VoyoPortraitPlayer = ({
   const lastTapRef = useRef<number>(0);
   const didHoldRef = useRef(false);
   const djWakeCountRef = useRef(0); // Track how many times DJ mode was activated
+  // GLOBAL SWIPE: drag-anywhere on the center section to skip tracks.
+  // Start pos captured on pointerdown, checked on pointermove. If horizontal
+  // delta exceeds threshold and dominates vertical delta, fire prev/next.
+  // swipeFiredRef keeps the subsequent click from triggering tap/lyrics.
+  const swipeStartRef = useRef<{ x: number; y: number; t: number } | null>(null);
+  const swipeFiredRef = useRef(false);
 
   // ===== CUBE DOCK — inline OYO DJ chat that expands from the carousel cube =====
   // Hold the cube (~500ms) → footer expands → subtle chat dock slides in.
@@ -4032,10 +4042,28 @@ export const VoyoPortraitPlayer = ({
     return !!t.closest('button, [role="button"], input, textarea, a, label, select');
   };
 
-  // Handle tap/hold/double-tap
+  // Handle tap/hold/double-tap + GLOBAL SWIPE-TO-SKIP.
+  //
+  // The center section is one big gesture zone:
+  //   • Tap  → toggle controls / OYO island
+  //   • Double-tap → Wazzguan direct input
+  //   • Hold (400ms) → DJ mode
+  //   • Horizontal swipe → next/prev track (GLOBAL — anywhere on the view)
+  //
+  // Interactive children (buttons, inputs, scrollable rails) are excluded
+  // via didOriginateOnInteractive so they keep their own event handling.
   const handleCanvasPointerDown = useCallback((e: React.PointerEvent) => {
     if (didOriginateOnInteractive(e)) return;
+    // Also skip if the pointer started on a scrollable rail (history/queue
+    // card belts have their own horizontal drag — we don't want to double-
+    // handle). They're marked with data-no-canvas-swipe.
+    const target = e.target as HTMLElement | null;
+    if (target?.closest?.('[data-no-canvas-swipe]')) return;
+
     didHoldRef.current = false;
+    swipeFiredRef.current = false;
+    swipeStartRef.current = { x: e.clientX, y: e.clientY, t: Date.now() };
+
     // Start hold timer (400ms to trigger DJ mode)
     holdTimerRef.current = setTimeout(() => {
       didHoldRef.current = true;
@@ -4046,18 +4074,64 @@ export const VoyoPortraitPlayer = ({
     }, 400);
   }, [showDJWakeToast]);
 
+  // POINTER MOVE: detect swipe. Fires continuously during drag — we only
+  // trigger prev/next ONCE per gesture (swipeFiredRef guard).
+  const handleCanvasPointerMove = useCallback((e: React.PointerEvent) => {
+    const start = swipeStartRef.current;
+    if (!start) return;
+    if (swipeFiredRef.current) return; // already fired this gesture
+
+    const dx = e.clientX - start.x;
+    const dy = e.clientY - start.y;
+    const SWIPE_THRESHOLD = 70; // px — ignore tiny wiggles
+    const HORIZONTAL_BIAS = 1.4; // horizontal delta must dominate vertical
+
+    // Horizontal swipe fires the skip. Vertical drags are left alone so
+    // the page can still scroll (BigCenterCard → lyrics overlay etc).
+    if (Math.abs(dx) > SWIPE_THRESHOLD && Math.abs(dx) > Math.abs(dy) * HORIZONTAL_BIAS) {
+      swipeFiredRef.current = true;
+
+      // Cancel the hold timer — this is a swipe, not a DJ-mode hold.
+      if (holdTimerRef.current) {
+        clearTimeout(holdTimerRef.current);
+        holdTimerRef.current = null;
+      }
+
+      // Left swipe → next track, right swipe → prev.
+      // Matches swipe-to-dismiss convention (swipe left to move forward).
+      if (dx < 0) {
+        nextTrack();
+      } else {
+        prevTrack();
+      }
+      haptics.medium();
+    }
+  }, [nextTrack, prevTrack]);
+
   const handleCanvasPointerUp = useCallback(() => {
     // Cancel hold timer
     if (holdTimerRef.current) {
       clearTimeout(holdTimerRef.current);
       holdTimerRef.current = null;
     }
+    // Clear swipe start — pointerup ends the gesture. swipeFiredRef is
+    // NOT cleared here; it stays set until the click handler reads it.
+    swipeStartRef.current = null;
   }, []);
 
   const handleCanvasTap = useCallback((e: React.MouseEvent) => {
     // Skip clicks that came from real interactive elements (player
     // buttons, inputs, etc.) — those have their own onClick already.
     if (didOriginateOnInteractive(e)) return;
+    // If a swipe just fired, eat the click. The click event fires after
+    // pointerup, so a swipe-to-skip would otherwise also toggle controls
+    // or open lyrics (if started on BigCenterCard). Clear the flag so the
+    // NEXT genuine tap still works.
+    if (swipeFiredRef.current) {
+      swipeFiredRef.current = false;
+      e.stopPropagation();
+      return;
+    }
     // Skip if this was a hold
     if (didHoldRef.current) {
       didHoldRef.current = false;
@@ -4516,10 +4590,12 @@ export const VoyoPortraitPlayer = ({
         className={`flex flex-col items-center justify-end relative z-10 flex-1 ${
           oyeBarBehavior === 'fade' ? 'pt-12' : 'pt-10'
         }`}
-        style={{ transform: 'translateY(28px)' }}
+        style={{ transform: 'translateY(28px)', touchAction: 'pan-y' }}
         onPointerDown={handleCanvasPointerDown}
+        onPointerMove={handleCanvasPointerMove}
         onPointerUp={handleCanvasPointerUp}
         onPointerLeave={handleCanvasPointerUp}
+        onPointerCancel={handleCanvasPointerUp}
         onClick={handleCanvasTap}
       >
 
