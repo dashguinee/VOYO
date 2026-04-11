@@ -3876,12 +3876,62 @@ export const VoyoPortraitPlayer = ({
   const lastTapRef = useRef<number>(0);
   const didHoldRef = useRef(false);
   const djWakeCountRef = useRef(0); // Track how many times DJ mode was activated
-  // GLOBAL SWIPE: drag-anywhere on the center section to skip tracks.
-  // Start pos captured on pointerdown, checked on pointermove. If horizontal
-  // delta exceeds threshold and dominates vertical delta, fire prev/next.
+  // GLOBAL DRAG: touch ANYWHERE on the app surface and the central card
+  // follows your finger. Release past the commit threshold (120px) OR
+  // with enough velocity launches the card off-screen + fires prev/next.
+  // Below threshold, card springs back to center.
+  //
+  // Implementation: the card wrapper ref is mutated directly on pointer
+  // move (no React re-render per frame — would be catastrophic). React
+  // state is only involved for the final animation back / out.
+  //
   // swipeFiredRef keeps the subsequent click from triggering tap/lyrics.
   const swipeStartRef = useRef<{ x: number; y: number; t: number } | null>(null);
   const swipeFiredRef = useRef(false);
+  const hasCrossedThresholdRef = useRef(false); // haptic on threshold cross
+  const cardWrapRef = useRef<HTMLDivElement>(null);
+
+  // Apply a transform + opacity to the card wrapper directly. Called from
+  // pointermove. Zero re-renders.
+  const applyCardTransform = (dx: number, dragging: boolean) => {
+    const el = cardWrapRef.current;
+    if (!el) return;
+    const tilt = Math.max(-14, Math.min(14, dx / 18)); // ±14deg max
+    const opacity = Math.max(0.55, 1 - Math.min(0.45, Math.abs(dx) / 600));
+    el.style.transition = dragging ? 'none' : 'transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.3s ease-out';
+    el.style.transform = `translateX(${dx}px) rotate(${tilt}deg)`;
+    el.style.opacity = String(opacity);
+    el.style.willChange = dragging ? 'transform, opacity' : 'auto';
+  };
+
+  // Launch the card off-screen in the direction of the swipe, then fire
+  // the skip. After the skip, the new track mounts and we reset the
+  // wrapper's transform instantly (no animation) so it's ready for the
+  // next gesture.
+  const launchCardAndSkip = (dx: number) => {
+    const el = cardWrapRef.current;
+    const dir = dx > 0 ? 1 : -1;
+    if (el) {
+      el.style.transition = 'transform 0.28s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.24s ease-out';
+      el.style.transform = `translateX(${dir * window.innerWidth}px) rotate(${dir * 28}deg)`;
+      el.style.opacity = '0';
+    }
+    setTimeout(() => {
+      if (dir > 0) prevTrack(); else nextTrack();
+      // Reset wrapper to center instantly — next track's artwork will
+      // fade in via BigCenterCard's own mount animation.
+      setTimeout(() => {
+        const el2 = cardWrapRef.current;
+        if (!el2) return;
+        el2.style.transition = 'none';
+        el2.style.transform = 'translateX(0) rotate(0deg)';
+        el2.style.opacity = '1';
+        // Force reflow then re-enable transitions so subsequent drags animate.
+        el2.offsetHeight;
+        el2.style.transition = 'transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.3s ease-out';
+      }, 40);
+    }, 200);
+  };
 
   // ===== CUBE DOCK — inline OYO DJ chat that expands from the carousel cube =====
   // Hold the cube (~500ms) → footer expands → subtle chat dock slides in.
@@ -4062,6 +4112,7 @@ export const VoyoPortraitPlayer = ({
 
     didHoldRef.current = false;
     swipeFiredRef.current = false;
+    hasCrossedThresholdRef.current = false;
     swipeStartRef.current = { x: e.clientX, y: e.clientY, t: Date.now() };
 
     // Start hold timer (400ms to trigger DJ mode)
@@ -4074,49 +4125,74 @@ export const VoyoPortraitPlayer = ({
     }, 400);
   }, [showDJWakeToast]);
 
-  // POINTER MOVE: detect swipe. Fires continuously during drag — we only
-  // trigger prev/next ONCE per gesture (swipeFiredRef guard).
+  // POINTER MOVE: drag the central card with the finger. The card wrapper
+  // transforms 1:1 with horizontal delta (plus a subtle tilt and opacity
+  // fade). A haptic "click" fires the moment the user crosses the commit
+  // threshold so they know they've armed the skip — release there and
+  // the card launches off-screen. Release short of it and it springs back.
+  const COMMIT_THRESHOLD = 120; // px — the "will skip on release" line
+  const HORIZONTAL_BIAS = 1.4;  // horizontal must dominate vertical
   const handleCanvasPointerMove = useCallback((e: React.PointerEvent) => {
     const start = swipeStartRef.current;
     if (!start) return;
-    if (swipeFiredRef.current) return; // already fired this gesture
 
     const dx = e.clientX - start.x;
     const dy = e.clientY - start.y;
-    const SWIPE_THRESHOLD = 70; // px — ignore tiny wiggles
-    const HORIZONTAL_BIAS = 1.4; // horizontal delta must dominate vertical
 
-    // Horizontal swipe fires the skip. Vertical drags are left alone so
-    // the page can still scroll (BigCenterCard → lyrics overlay etc).
-    if (Math.abs(dx) > SWIPE_THRESHOLD && Math.abs(dx) > Math.abs(dy) * HORIZONTAL_BIAS) {
-      swipeFiredRef.current = true;
+    // If the gesture looks vertical (scrolling the portal layer), leave
+    // the card alone — don't fight the native scroll.
+    if (Math.abs(dy) > Math.abs(dx) * HORIZONTAL_BIAS && Math.abs(dy) > 20) {
+      return;
+    }
 
-      // Cancel the hold timer — this is a swipe, not a DJ-mode hold.
+    // Once we've moved meaningfully horizontally, cancel the hold timer
+    // (this is a drag, not a DJ-mode hold) and mark so tap is suppressed.
+    if (Math.abs(dx) > 8) {
       if (holdTimerRef.current) {
         clearTimeout(holdTimerRef.current);
         holdTimerRef.current = null;
       }
-
-      // Left swipe → next track, right swipe → prev.
-      // Matches swipe-to-dismiss convention (swipe left to move forward).
-      if (dx < 0) {
-        nextTrack();
-      } else {
-        prevTrack();
-      }
-      haptics.medium();
+      swipeFiredRef.current = true; // eat the trailing click
     }
-  }, [nextTrack, prevTrack]);
 
-  const handleCanvasPointerUp = useCallback(() => {
+    // Drive the card wrapper transform directly — no React re-render.
+    applyCardTransform(dx, true);
+
+    // Fire haptic on threshold cross — tactile "armed" feedback.
+    const crossed = Math.abs(dx) >= COMMIT_THRESHOLD;
+    if (crossed && !hasCrossedThresholdRef.current) {
+      hasCrossedThresholdRef.current = true;
+      haptics.light();
+    }
+  }, []);
+
+  const handleCanvasPointerUp = useCallback((e: React.PointerEvent) => {
     // Cancel hold timer
     if (holdTimerRef.current) {
       clearTimeout(holdTimerRef.current);
       holdTimerRef.current = null;
     }
-    // Clear swipe start — pointerup ends the gesture. swipeFiredRef is
-    // NOT cleared here; it stays set until the click handler reads it.
+
+    const start = swipeStartRef.current;
     swipeStartRef.current = null;
+    if (!start) return;
+
+    const dx = e.clientX - start.x;
+    const elapsed = Date.now() - start.t;
+    const velocity = Math.abs(dx) / Math.max(1, elapsed); // px/ms
+
+    // COMMIT if crossed threshold OR fast flick (velocity > 0.6 px/ms
+    // ≈ 600px/sec). Fast flicks count even if they didn't travel the
+    // full 120px — matches the feel of flicking away a card.
+    const shouldCommit = Math.abs(dx) > COMMIT_THRESHOLD || (velocity > 0.6 && Math.abs(dx) > 40);
+
+    if (shouldCommit) {
+      haptics.medium();
+      launchCardAndSkip(dx);
+    } else {
+      // Spring back to center.
+      applyCardTransform(0, false);
+    }
   }, []);
 
   const handleCanvasTap = useCallback((e: React.MouseEvent) => {
@@ -4410,6 +4486,20 @@ export const VoyoPortraitPlayer = ({
       className={`relative w-full h-full bg-[#020203] text-white font-sans flex flex-col overflow-x-hidden ${
         oyeBarBehavior === 'fade' ? 'overflow-y-auto' : 'overflow-hidden'
       }`}
+      // FULL-SCREEN SWIPE SURFACE. The canvas-swipe handlers now live on
+      // the outermost container so horizontal swipe-to-skip works from
+      // ANYWHERE in the portrait player, not just the thin center section.
+      // Interactive children (buttons, inputs, scrollable rails) are
+      // filtered via didOriginateOnInteractive + data-no-canvas-swipe.
+      // touchAction: pan-y keeps vertical page scroll (portal reveal)
+      // working; horizontal gestures get captured by the handler.
+      style={{ touchAction: 'pan-y' }}
+      onPointerDown={handleCanvasPointerDown}
+      onPointerMove={handleCanvasPointerMove}
+      onPointerUp={handleCanvasPointerUp}
+      onPointerLeave={handleCanvasPointerUp}
+      onPointerCancel={handleCanvasPointerUp}
+      onClick={handleCanvasTap}
     >
 
       {/* FULLSCREEN BACKGROUND - Album art with dark overlay for floating effect.
@@ -4507,6 +4597,7 @@ export const VoyoPortraitPlayer = ({
             flexBasis: topRowActive === 'history' ? '68%' : topRowActive === 'queue' ? '30%' : '49%',
             transition: 'flex-basis 0.42s cubic-bezier(0.16, 1, 0.3, 1)',
           }}
+          data-no-canvas-swipe="true"
           onPointerDown={() => activateTopRow('history')}
           onTouchStart={() => activateTopRow('history')}
         >
@@ -4590,20 +4681,25 @@ export const VoyoPortraitPlayer = ({
         className={`flex flex-col items-center justify-end relative z-10 flex-1 ${
           oyeBarBehavior === 'fade' ? 'pt-12' : 'pt-10'
         }`}
-        style={{ transform: 'translateY(28px)', touchAction: 'pan-y' }}
-        onPointerDown={handleCanvasPointerDown}
-        onPointerMove={handleCanvasPointerMove}
-        onPointerUp={handleCanvasPointerUp}
-        onPointerLeave={handleCanvasPointerUp}
-        onPointerCancel={handleCanvasPointerUp}
-        onClick={handleCanvasTap}
+        style={{ transform: 'translateY(28px)' }}
       >
 
         {/* RIGHT-SIDE TOOLBAR - Always visible */}
         <RightToolbar onSettingsClick={handleOpenBoostSettings} />
 
-        {/* 1. Main Artwork with Expand Video Button */}
-        <div className="relative">
+        {/* 1. Main Artwork with Expand Video Button + GLOBAL DRAG WRAPPER.
+            cardWrapRef receives direct style mutations on pointermove (no
+            re-render). Dragging from anywhere on the app surface drives
+            this transform via handleCanvasPointerMove → applyCardTransform. */}
+        <div
+          ref={cardWrapRef}
+          className="relative"
+          style={{
+            // Initial state — handlers overwrite when dragging.
+            transform: 'translateX(0) rotate(0deg)',
+            transition: 'transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.3s ease-out',
+          }}
+        >
           {currentTrack ? (
             <BigCenterCard
               track={currentTrack}
