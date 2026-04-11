@@ -163,6 +163,17 @@ export const AudioPlayer = () => {
   const isEdgeStreamRef = useRef<boolean>(false); // True when playing from Edge Worker stream URL (not IndexedDB)
   const hasTriggered75PercentKeptRef = useRef<boolean>(false); // 75% permanent cache trigger
   const hasTriggered30sListenRef = useRef<boolean>(false); // 30s artist discovery listen tracking
+  // Throttle guards for handleTimeUpdate → setCurrentTime/setProgress writes.
+  // Browser fires ontimeupdate at 4Hz (Chrome) up to 66Hz (Safari). Each
+  // store write re-renders 9 subscribing components (OyoIsland, NowPlaying,
+  // LandscapeVOYO, VideoMode, VoyoPortraitPlayer x2, ClassicMode, AudioPlayer,
+  // ...). At 10Hz that's 90 component re-renders/sec during playback, all on
+  // the main thread competing with the audio thread. Throttle the store
+  // writes to 4Hz (250ms buckets) — smooth enough for progress bars, but
+  // 16× lighter on Safari. trackProgressRef.current still updates every
+  // fire so milestone checks (50/75/85%) stay accurate.
+  const lastProgressWriteBucketRef = useRef<number>(-1);
+  const lastMediaSessionWriteRef = useRef<number>(0);
 
   // Store state — fine-grained selectors so AudioPlayer only re-renders when
   // fields it actually uses change. A broad destructure would cause a
@@ -176,9 +187,24 @@ export const AudioPlayer = () => {
   const playbackRate = usePlayerStore(s => s.playbackRate);
   const boostProfile = usePlayerStore(s => s.boostProfile);
   const voyexSpatial = usePlayerStore(s => s.voyexSpatial);
-  const savedCurrentTime = usePlayerStore(s => s.currentTime);
+  // SESSION-RESUME ONLY: read the persisted currentTime ONCE at mount.
+  // Previously subscribed as usePlayerStore(s => s.currentTime) — but that
+  // field is updated 4× per second by handleTimeUpdate during playback, so
+  // AudioPlayer was re-rendering 4Hz JUST to read a value that's only used
+  // on initial load. Capture in a ref at mount and never re-read.
+  const savedCurrentTimeRef = useRef<number>(
+    typeof window !== 'undefined' ? usePlayerStore.getState().currentTime : 0
+  );
+  const savedCurrentTime = savedCurrentTimeRef.current;
   const playbackSource = usePlayerStore(s => s.playbackSource);
-  const progress = usePlayerStore(s => s.progress);
+  // NOTE: AudioPlayer deliberately does NOT subscribe to `progress`. The
+  // milestone checks (50/75/85% and 30s listen) are triggered from inside
+  // handleTimeUpdate using trackProgressRef.current — firing at the 4Hz
+  // bucket rate without re-rendering the component. Re-rendering AudioPlayer
+  // at 4Hz during playback was causing it to rebuild ~40 effect closures
+  // and re-attach JSX event handlers 4× per second, consuming main-thread
+  // CPU that the audio thread needed. Now AudioPlayer re-renders ONLY on
+  // real state changes (track switch, play/pause, preset change).
   const queue = usePlayerStore(s => s.queue);
   const setCurrentTime = usePlayerStore(s => s.setCurrentTime);
   const setDuration = usePlayerStore(s => s.setDuration);
@@ -208,129 +234,105 @@ export const AudioPlayer = () => {
     initDownloads();
   }, [initDownloads]);
 
-  // 50% AUTO-BOOST: Trigger quality upgrade when user shows genuine interest
-  // Works for: r2 low quality (upgrade to high)
-  useEffect(() => {
-    // Only trigger at 50% for r2 (for quality upgrade from low to high)
-    if (playbackSource !== 'r2') return;
-    if (hasTriggered50PercentCacheRef.current) return;
-    if (progress < 50) return;
-    if (!currentTrack?.trackId) return;
+  // MILESTONE CHECKS — called from handleTimeUpdate at 4Hz bucket rate.
+  //
+  // Previously 4 separate useEffects subscribed to `progress` and fired
+  // every render. Moving the checks here means AudioPlayer no longer needs
+  // to subscribe to `progress` → zero re-renders during steady playback.
+  // Each check is O(1) refs + early returns, so calling all 4 from every
+  // 250ms bucket is cheap.
+  //
+  // All four triggers already use refs (hasTriggeredNNPercent*) for
+  // idempotency, so we can't double-fire. State reads go through
+  // usePlayerStore.getState() / useDownloadStore.getState() to avoid
+  // stale closure on long-lived callback.
+  const checkProgressMilestones = useCallback((progress: number) => {
+    const track = currentTrack;
+    if (!track?.trackId) return;
 
-    // Check network preference (always | wifi-only | ask | never)
-    if (downloadSetting === 'never') {
-      devLog('🎵 [VOYO] 50% reached but download setting is "never"');
-      return;
-    }
-
-    if (downloadSetting === 'wifi-only') {
-      // Use Network Information API to detect wifi vs cellular
-      const connection = (navigator as any).connection || (navigator as any).mozConnection || (navigator as any).webkitConnection;
-      const isWifi = !connection || connection.type === 'wifi' || connection.type === 'ethernet' || !connection.effectiveType?.includes('2g');
-      if (!isWifi) {
-        devLog('🎵 [VOYO] 50% reached but wifi-only setting blocks caching on mobile data');
-        return;
+    // 50% R2 QUALITY UPGRADE — low-quality R2 track, upgrade to high when
+    // user shows genuine interest. Deferred 5s + buffer-health check so
+    // the upgrade download doesn't compete with the streaming audio.
+    if (
+      playbackSource === 'r2' &&
+      !hasTriggered50PercentCacheRef.current &&
+      progress >= 50 &&
+      downloadSetting !== 'never'
+    ) {
+      // Check wifi-only gate
+      let allowed = true;
+      if (downloadSetting === 'wifi-only') {
+        const connection = (navigator as any).connection || (navigator as any).mozConnection || (navigator as any).webkitConnection;
+        allowed = !connection || connection.type === 'wifi' || connection.type === 'ethernet' || !connection.effectiveType?.includes('2g');
+      }
+      if (allowed) {
+        hasTriggered50PercentCacheRef.current = true;
+        const API_BASE = 'https://voyo-edge.dash-webtv.workers.dev';
+        const trackId = track.trackId;
+        const trackTitle = track.title;
+        const trackArtist = track.artist;
+        const trackDuration = track.duration || 0;
+        setTimeout(() => {
+          const state = usePlayerStore.getState();
+          if (state.currentTrack?.trackId !== trackId) return;
+          if (state.bufferHealth < 60) return;
+          devLog('🎵 [VOYO] 50% deferred boost firing — buffer healthy, no skip');
+          backgroundBoostingRef.current = trackId;
+          cacheTrack(trackId, trackTitle, trackArtist, trackDuration, `${API_BASE}/cdn/art/${trackId}?quality=high`)
+            .finally(() => { backgroundBoostingRef.current = null; });
+        }, 5000);
       }
     }
 
-    // 'always' and 'ask' both allow caching (ask prompts for manual boost, auto-cache is silent)
-
-    // Mark as triggered to prevent duplicate calls
-    hasTriggered50PercentCacheRef.current = true;
-
-    const API_BASE = 'https://voyo-edge.dash-webtv.workers.dev';
-    // Defer the actual download by 5s and only fire if buffer is healthy.
-    // The download competes with the streaming audio for bandwidth — kicking
-    // it off the moment we hit 50% can pressure the buffer and cause cracks.
-    // Waiting 5s gives the user a chance to skip + spreads the network load.
-    const trackId = currentTrack.trackId;
-    const trackTitle = currentTrack.title;
-    const trackArtist = currentTrack.artist;
-    const trackDuration = currentTrack.duration || 0;
-    setTimeout(() => {
-      const state = usePlayerStore.getState();
-      if (state.currentTrack?.trackId !== trackId) return; // user moved on
-      if (state.bufferHealth < 60) return; // buffer's tight, don't compete
-      devLog('🎵 [VOYO] 50% deferred boost firing — buffer healthy, no skip');
-      backgroundBoostingRef.current = trackId;
+    // 85% EDGE-STREAM CACHE — non-R2 track (playing from YouTube CDN via
+    // Edge Worker). Cache + upload to R2 for the NEXT play. By 85% the
+    // audio element buffer is full, so the download runs uncontested.
+    if (
+      !hasTriggered85PercentCacheRef.current &&
+      isEdgeStreamRef.current &&
+      progress >= 85 &&
+      downloadSetting !== 'never'
+    ) {
+      hasTriggered85PercentCacheRef.current = true;
+      devLog('🎵 [VOYO] 85% reached on edge stream — caching + uploading to R2 (post-buffer)');
       cacheTrack(
-        trackId,
-        trackTitle,
-        trackArtist,
-        trackDuration,
-        `${API_BASE}/cdn/art/${trackId}?quality=high`
-      ).finally(() => {
-        backgroundBoostingRef.current = null;
+        track.trackId,
+        track.title,
+        track.artist,
+        track.duration || 0,
+        `https://voyo-edge.dash-webtv.workers.dev/cdn/art/${track.trackId}?quality=high`
+      );
+    }
+
+    // 75% KEPT — mark as permanent cache when user shows strong interest.
+    if (
+      !hasTriggered75PercentKeptRef.current &&
+      progress >= 75 &&
+      (playbackSource === 'cached' || playbackSource === 'r2')
+    ) {
+      hasTriggered75PercentKeptRef.current = true;
+      import('../services/downloadManager').then(({ markTrackAsKept }) => {
+        const normalizedId = track.trackId.replace('VOYO_', '');
+        markTrackAsKept(normalizedId);
+        devLog('🎵 [VOYO] 75% reached - track marked as KEPT (permanent)');
       });
-    }, 5000);
-  }, [progress, playbackSource, currentTrack, cacheTrack, downloadSetting]);
+    }
 
-  // 85% EDGE-STREAM CACHE: For non-R2 tracks (playing from YouTube CDN via
-  // the Edge Worker stream URL), trigger the background cache + R2 upload
-  // ONLY after the user has listened to 85% of the track. By that point:
-  //   1. The audio buffer is fully filled — no bandwidth competition
-  //   2. The user has clearly committed (not skipping early)
-  //   3. The cache is for the NEXT play, so 5-15s delay is invisible
-  //
-  // This was previously a 30s onplay defer that downloaded mid-song while
-  // the audio element was still streaming, causing bandwidth competition
-  // and audible buffer underruns. Now the cache fires only after the user
-  // is done listening to the song.
-  //
-  // handleEnded provides a fallback in case the user reaches 100% before
-  // this effect fires (rare but possible due to progress polling).
-  useEffect(() => {
-    if (hasTriggered85PercentCacheRef.current) return;
-    if (!isEdgeStreamRef.current) return; // only for edge-stream tracks
-    if (progress < 85) return;
-    if (!currentTrack?.trackId) return;
-    if (downloadSetting === 'never') return;
-
-    hasTriggered85PercentCacheRef.current = true;
-    devLog('🎵 [VOYO] 85% reached on edge stream — caching + uploading to R2 (post-buffer)');
-    cacheTrack(
-      currentTrack.trackId,
-      currentTrack.title,
-      currentTrack.artist,
-      currentTrack.duration || 0,
-      `https://voyo-edge.dash-webtv.workers.dev/cdn/art/${currentTrack.trackId}?quality=high`
-    );
-  }, [progress, currentTrack, cacheTrack, downloadSetting]);
-
-  // 75% KEPT: Mark track as permanent cache when user shows strong interest
-  useEffect(() => {
-    if (hasTriggered75PercentKeptRef.current) return;
-    if (progress < 75) return;
-    if (!currentTrack?.trackId) return;
-    if (playbackSource !== 'cached' && playbackSource !== 'r2') return;
-
-    hasTriggered75PercentKeptRef.current = true;
-
-    import('../services/downloadManager').then(({ markTrackAsKept }) => {
-      const normalizedId = currentTrack.trackId.replace('VOYO_', '');
-      markTrackAsKept(normalizedId);
-      devLog('🎵 [VOYO] 75% reached - track marked as KEPT (permanent)');
-    });
-  }, [progress, currentTrack?.trackId, playbackSource]);
-
-  // 30s LISTEN: Flag track for R2 download when user listens > 30 seconds
-  // This powers the demand-driven acquisition pipeline:
-  // User discovers via YouTube → listens 30s → flagged → batch script downloads to R2
-  useEffect(() => {
-    if (hasTriggered30sListenRef.current) return;
-    if (!currentTrack?.trackId) return;
-    const elapsed = (currentTrack.duration || 300) * (progress / 100);
-    if (elapsed < 30) return;
-    if (playbackSource !== 'iframe') return; // Only flag iframe-sourced tracks (not yet in R2)
-
-    hasTriggered30sListenRef.current = true;
-    devLog('🎵 [VOYO] 30s listen reached — flagging for R2 download');
-
-    // Flag in video_intelligence for batch download
-    import('../lib/supabase').then(({ videoIntelligenceAPI }) => {
-      videoIntelligenceAPI.flagForDownload(currentTrack.trackId);
-    });
-  }, [progress, currentTrack?.trackId, currentTrack?.duration, playbackSource]);
+    // 30s LISTEN — flag iframe-sourced tracks for R2 batch download.
+    if (
+      !hasTriggered30sListenRef.current &&
+      playbackSource === 'iframe'
+    ) {
+      const elapsed = (track.duration || 300) * (progress / 100);
+      if (elapsed >= 30) {
+        hasTriggered30sListenRef.current = true;
+        devLog('🎵 [VOYO] 30s listen reached — flagging for R2 download');
+        import('../lib/supabase').then(({ videoIntelligenceAPI }) => {
+          videoIntelligenceAPI.flagForDownload(track.trackId);
+        });
+      }
+    }
+  }, [currentTrack, playbackSource, downloadSetting, cacheTrack]);
 
   // PRELOAD: Start preloading next 2-3 tracks IMMEDIATELY when track starts (like Spotify)
   // Major platforms don't wait - they start buffering upcoming tracks right away
@@ -1243,6 +1245,7 @@ export const AudioPlayer = () => {
       trackProgressRef.current = 0;
       hasTriggered50PercentCacheRef.current = false; // Reset 50% trigger for new track
       hasTriggered85PercentCacheRef.current = false; // Reset 85% trigger for new track
+      lastProgressWriteBucketRef.current = -1; // Reset throttle bucket → first frame of new track writes
       hasTriggeredPreloadRef.current = false; // Reset preload trigger for new track
       isEdgeStreamRef.current = false; // Reset edge stream flag for new track
       hasTriggered75PercentKeptRef.current = false; // Reset 75% kept trigger for new track
@@ -2000,22 +2003,54 @@ export const AudioPlayer = () => {
   }, [currentTrack, isPlaying, playbackSource, togglePlay, nextTrack]);
 
   // Audio element handlers (only active when using audio element: cached or r2)
+  //
+  // THROTTLED STORE WRITES: ontimeupdate fires 4-66Hz (Safari is worst).
+  // 9 components subscribe to currentTime/progress — every write re-renders
+  // all of them. At Safari's 66Hz that's ~600 component re-renders/second
+  // during playback, consuming main thread CPU that the audio thread needs.
+  //
+  // Throttle:
+  //   - Store writes → 4Hz (every 250ms). Quarter-second buckets are smooth
+  //     enough for progress bars but 16× lighter on Safari.
+  //   - trackProgressRef.current → EVERY fire. Milestone checks (50/75/85%,
+  //     preload, auto-cache) read from the ref so they're still precise.
+  //   - mediaSession.setPositionState → 1Hz. Native bridge calls are slow,
+  //     1s resolution is plenty for the OS/lockscreen display.
   const handleTimeUpdate = useCallback(() => {
     if ((playbackSource !== 'cached' && playbackSource !== 'r2') || !audioRef.current?.duration) return;
     const el = audioRef.current;
     const progress = (el.currentTime / el.duration) * 100;
-    setCurrentTime(el.currentTime);
-    setProgress(progress);
+    // Always update the ref — zero cost, no re-render, keeps milestone
+    // checks accurate even if store is throttled.
     trackProgressRef.current = progress;
 
-    if ('mediaSession' in navigator) {
-      try {
-        navigator.mediaSession.setPositionState({
-          duration: el.duration, playbackRate: el.playbackRate, position: el.currentTime
-        });
-      } catch (e) {}
+    // 4Hz bucket throttle for store writes. floor(currentTime * 4) changes
+    // every 250ms, so we write at most 4× per second regardless of how
+    // often the event fires.
+    const bucket = Math.floor(el.currentTime * 4);
+    if (bucket !== lastProgressWriteBucketRef.current) {
+      lastProgressWriteBucketRef.current = bucket;
+      setCurrentTime(el.currentTime);
+      setProgress(progress);
+      // Milestone checks also run at 4Hz — same bucket rate. AudioPlayer
+      // no longer re-renders on progress change, so these have to fire
+      // from inside the callback, not a useEffect.
+      checkProgressMilestones(progress);
     }
-  }, [playbackSource, setCurrentTime, setProgress]);
+
+    // 1Hz throttle for mediaSession — native bridge is expensive on iOS.
+    if ('mediaSession' in navigator) {
+      const now = performance.now();
+      if (now - lastMediaSessionWriteRef.current >= 1000) {
+        lastMediaSessionWriteRef.current = now;
+        try {
+          navigator.mediaSession.setPositionState({
+            duration: el.duration, playbackRate: el.playbackRate, position: el.currentTime
+          });
+        } catch (e) {}
+      }
+    }
+  }, [playbackSource, setCurrentTime, setProgress, checkProgressMilestones]);
 
   const handleDurationChange = useCallback(() => {
     if ((playbackSource !== 'cached' && playbackSource !== 'r2') || !audioRef.current?.duration) return;

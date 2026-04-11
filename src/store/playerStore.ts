@@ -730,8 +730,15 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
           isSkeeping: false,
         });
 
-        // FIX 3: Persist queue after consuming track
-        setTimeout(() => {
+        // Persist queue after consuming track. Was setTimeout(100) which
+        // fired JSON.stringify + localStorage.setItem right in the window
+        // where AudioPlayer is loading the new track src (pause → src swap
+        // → load() → decode) — exactly when the main thread must be free
+        // for the audio thread to spin up. Now deferred to requestIdleCallback
+        // so the persist runs when the browser has idle time, never
+        // competing with track-load work. Fallback: setTimeout 500ms if
+        // requestIdleCallback isn't available (older Safari).
+        const persistQueue = () => {
           const state = get();
           const current = loadPersistedState();
           savePersistedState({
@@ -745,7 +752,15 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
               source: q.source,
             })),
           });
-        }, 100);
+        };
+        const w = window as unknown as {
+          requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => void;
+        };
+        if (typeof w.requestIdleCallback === 'function') {
+          w.requestIdleCallback(persistQueue, { timeout: 2000 });
+        } else {
+          setTimeout(persistQueue, 500);
+        }
 
         return;
       }
