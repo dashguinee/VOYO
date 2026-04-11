@@ -1645,7 +1645,7 @@ const BigCenterCard = memo(({ track, onExpandVideo, onShowLyrics, hideThumb }: {
 }) => {
   return (
   <div
-    className="relative w-52 h-52 md:w-60 md:h-60 rounded-[2rem] overflow-hidden z-20 group"
+    className="relative w-56 h-56 md:w-64 md:h-64 rounded-[2rem] overflow-hidden z-20 group"
     style={{
       boxShadow: '0 25px 60px -12px rgba(0,0,0,0.9), 0 0 50px rgba(139,92,246,0.2), 0 0 100px rgba(139,92,246,0.1)',
       transform: hideThumb ? 'scale(0.94)' : 'scale(1)',
@@ -4371,7 +4371,7 @@ export const VoyoPortraitPlayer = ({
           ╚═════════════════════════════════════════════════════════════╝ */}
       <div
         className="sticky top-0 z-20 flex flex-col flex-shrink-0"
-        style={{ height: 'calc(100% - 360px)' }}
+        style={{ height: 'calc(100% - 282px)' }}
       >
 
       {/* --- TOP SECTION (History/Queue) --- Part of the anchor.
@@ -4381,7 +4381,7 @@ export const VoyoPortraitPlayer = ({
       <div
         className="px-3 flex items-start gap-3 z-20 h-[14%]"
         style={{
-          paddingTop: 'max(1.25rem, env(safe-area-inset-top))',
+          paddingTop: 'calc(max(1.25rem, env(safe-area-inset-top)) + 78px)',
           // Step 2 (portalProgress > 0.55) fades the bubbles out.
           opacity: Math.max(0, 1 - Math.max(0, (portalProgress - 0.55) / 0.35)),
           transform: `translateY(${Math.max(0, (portalProgress - 0.55) / 0.35) * -16}px)`,
@@ -4478,7 +4478,7 @@ export const VoyoPortraitPlayer = ({
       {/* TAP: Quick controls | HOLD/DOUBLE TAP: Full DJ Mode */}
       <div
         className={`flex flex-col items-center justify-end relative z-10 flex-1 ${
-          oyeBarBehavior === 'fade' ? 'pt-7' : 'pt-5'
+          oyeBarBehavior === 'fade' ? 'pt-12' : 'pt-10'
         }`}
         onPointerDown={handleCanvasPointerDown}
         onPointerUp={handleCanvasPointerUp}
