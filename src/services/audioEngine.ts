@@ -86,7 +86,12 @@ export function connectAudioChain(audio: HTMLAudioElement): AudioChainResult | n
     const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
     if (!AudioContextClass) return null;
 
-    if (!_audioCtx) _audioCtx = new AudioContextClass();
+    // latencyHint: 'playback' uses larger audio buffers (~256-512 samples
+    // vs ~128 for 'interactive') which dramatically reduces audio thread
+    // pressure on weak devices. For music playback this is invisible — the
+    // user doesn't care about ~10ms more latency. The trade-off prevents
+    // the audio thread from underrunning when CPU spikes (= audible cracks).
+    if (!_audioCtx) _audioCtx = new AudioContextClass({ latencyHint: 'playback' });
     if (_audioCtx.state === 'suspended' || (_audioCtx as any).state === 'interrupted') {
       _audioCtx.resume().catch(() => {});
     }
@@ -295,7 +300,7 @@ class AudioEngine {
       } else if (health.status === 'warning' && this.onBufferWarning) {
         this.onBufferWarning(health);
       }
-    }, 2000); // Check every 2 seconds
+    }, 5000); // Check every 5 seconds — was 2s, reduced to lower wasted CPU during steady playback
 
     return () => this.stopBufferMonitoring();
   }

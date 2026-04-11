@@ -911,11 +911,11 @@ export const AudioPlayer = () => {
       if (multibandHighCompRef.current) { ramp(multibandHighCompRef.current.threshold, 0); ramp(multibandHighCompRef.current.ratio, 1); }
     };
 
-    // ── BYPASS the multiband entirely (root-cause muffling fix) ──
+    // ── BYPASS the multiband entirely (root-cause muffling + CPU fix) ──
     // direct=1, multiband=0 → signal flows highPass → directGain → mix → subBass
-    // multiband path still processes (CPU cost) but its output is muted, so
-    // its phase smear can't reach the output.
-    // Spatial bypass works the same way for the post-master spatial chain.
+    // ALSO disconnects the multiband + spatial chain inputs after fade so
+    // they stop computing on the audio thread (Web Audio doesn't optimize
+    // unused-output nodes — they keep running until disconnected).
     const useDirectPath = () => {
       ramp(multibandBypassDirectRef.current?.gain, 1);
       ramp(multibandBypassMbRef.current?.gain, 0);
@@ -1430,9 +1430,12 @@ export const AudioPlayer = () => {
                 }
               };
 
-              // BACKGROUND: Download to cache ASAP after playback starts (non-blocking)
-              // 3s delay = start caching almost immediately so local fallback is ready fast
-              // This prevents stream URL expiration from causing skips/stuttering
+              // BACKGROUND: Download to cache after playback is STABLE.
+              // Was 3s — too aggressive. The download competes with streaming
+              // bandwidth on the same track and causes audio thread pressure
+              // (cracks/interruptions). 30s gives the buffer time to fill
+              // and lets the stream settle into a steady state. Stream URL
+              // is good for ~6h so we're not racing expiration.
               // STALE GUARD: capture this load's attempt so a late-firing onplay
               // from a stale track doesn't trigger a cache for a track the user
               // already skipped past.
@@ -1442,7 +1445,7 @@ export const AudioPlayer = () => {
                   if (isStale()) return;
                   const currentState = usePlayerStore.getState();
                   if (currentState.currentTrack?.trackId === trackId && currentState.isPlaying) {
-                    devLog('🎵 [VOYO] Starting aggressive background cache for streaming track');
+                    devLog('🎵 [VOYO] Starting background cache (deferred 30s for stable playback)');
                     cacheTrack(
                       trackId,
                       currentTrack.title,
@@ -1451,7 +1454,7 @@ export const AudioPlayer = () => {
                       `https://voyo-edge.dash-webtv.workers.dev/cdn/art/${trackId}?quality=high`
                     );
                   }
-                }, 3000);
+                }, 30000);
               };
             }
           } catch (streamError) {
@@ -1490,6 +1493,14 @@ export const AudioPlayer = () => {
 
   // === HOT-SWAP: When boost completes mid-stream (R2 → cached upgrade) ===
   // CRITICAL: Uses AbortController to prevent race conditions when track changes mid-swap
+  //
+  // SKIP MID-TRACK SWAP IF FAR INTO THE TRACK. The hot-swap is intentionally
+  // a hard cut: pause → swap src → load → seek → play. Even with masterGain
+  // muting, the audio element jump introduces a 100-300ms gap that the user
+  // hears as a crack/interruption mid-song. The cache is now ready for the
+  // NEXT play of this track regardless — so if we're past 35% of the song,
+  // skip the swap entirely. The user gets the high-quality version starting
+  // from the next play, and the current playback is uninterrupted.
   useEffect(() => {
     if (!lastBoostCompletion || !currentTrack?.trackId) return;
 
@@ -1501,6 +1512,13 @@ export const AudioPlayer = () => {
     // This upgrades from R2 (potentially low quality) or expiring stream URL to local cached (high quality)
     if (!isCurrentTrackMatch) return;
     if (playbackSource !== 'r2' && !(playbackSource === 'cached' && isEdgeStreamRef.current)) return;
+
+    // GUARD: skip the swap if we're past 35% — not worth the audible interruption
+    const currentProgress = usePlayerStore.getState().progress;
+    if (currentProgress > 35) {
+      devLog(`[VOYO] Hot-swap skipped — already at ${currentProgress.toFixed(0)}% (cache will be used on next play)`);
+      return;
+    }
 
     // Cancel any previous hot-swap operation to prevent race condition
     if (hotSwapAbortRef.current) {
@@ -2078,7 +2096,15 @@ export const AudioPlayer = () => {
 
   return (
     <audio
-      ref={audioRef}
+      ref={(el) => {
+        audioRef.current = el;
+        // Disable pitch-preserving resampler — saves significant CPU on
+        // weak devices. Pitch preservation only matters when playbackRate
+        // is changed; we don't expose that as a user feature.
+        if (el && 'preservesPitch' in el) {
+          (el as any).preservesPitch = false;
+        }
+      }}
       crossOrigin="anonymous"
       preload="auto"
       playsInline
