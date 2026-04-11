@@ -851,6 +851,18 @@ const CommentsDrawer = memo(({ moment, onClose }: { moment: Moment; onClose: () 
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') handleSend(); }}
+            onFocus={(e) => {
+              // Mobile keyboard-open ensure-visible: the drawer is fixed
+              // bottom, so when the keyboard slides up it covers the input
+              // unless we scroll it into view. scrollIntoView({block:'nearest'})
+              // is a no-op if already visible — safe to call unconditionally.
+              // Small delay lets the virtual keyboard finish animating in
+              // before we measure layout.
+              const el = e.currentTarget;
+              setTimeout(() => {
+                try { el.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch {}
+              }, 320);
+            }}
             style={S.commentInput}
             // Tailwind focus ring is the cleanest way to add pseudo-state
             // styling on top of the inline style. The inline `outline:none`

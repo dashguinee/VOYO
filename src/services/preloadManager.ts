@@ -302,7 +302,31 @@ function evictOldPreloads(): void {
       entry.audioElement.src = '';
     }
     state.preloadedTracks.delete(key);
+    // ABORT CONTROLLER EVICTION: if a preload got evicted while its
+    // fetch was still in flight, the abort controller stayed in the
+    // Map forever. Across a long listening session (50+ skips), this
+    // leaks a small object per evicted track. Aborting + deleting here
+    // releases the memory and cancels the stale fetch.
+    const ctrl = trackAbortControllers.get(key);
+    if (ctrl) {
+      try { ctrl.abort(); } catch {}
+      trackAbortControllers.delete(key);
+    }
     devLog(`🔮 [Preload] Evicted oldest preload: ${key}`);
+  }
+
+  // Safety net: if trackAbortControllers has grown to an absurd size
+  // (shouldn't, but defensive), drop any controller whose track is no
+  // longer in preloadedTracks. This catches any path that forgot to
+  // delete after completion.
+  if (trackAbortControllers.size > 20) {
+    const liveKeys = new Set(state.preloadedTracks.keys());
+    for (const [key, ctrl] of trackAbortControllers) {
+      if (!liveKeys.has(key)) {
+        try { ctrl.abort(); } catch {}
+        trackAbortControllers.delete(key);
+      }
+    }
   }
 }
 

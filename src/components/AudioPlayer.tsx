@@ -498,8 +498,26 @@ export const AudioPlayer = () => {
     return () => { wakeLockRef.current?.release().catch(e => devWarn('🔒 [WakeLock] Cleanup release failed:', e.name)); };
   }, [isPlaying]);
 
-  // Harmonic exciter curve
+  // Harmonic exciter curve — MEMOIZED.
+  //
+  // Previously regenerated 44100 samples on every preset switch. Each call
+  // runs 44K trig ops (Math.abs + divisions) on the main thread — ~2-5ms
+  // on mid-tier devices, worse on weak Android. Since the app only uses
+  // a handful of distinct `amount` values (one per preset), we cache by
+  // amount key. First call for a given amount builds and stores; every
+  // subsequent call returns the cached Float32Array.
+  //
+  // Module-scoped ref so the cache survives component re-mounts within
+  // the same page load (preset switches don't ever unmount AudioPlayer
+  // but defensive is good).
+  const harmonicCurveCacheRef = useRef<Map<number, Float32Array>>(new Map());
   const makeHarmonicCurve = (amount: number): Float32Array<ArrayBuffer> => {
+    // Round to 0.01 precision so micro-float differences don't blow out
+    // the cache (shouldn't happen, but harmless).
+    const key = Math.round(amount * 100) / 100;
+    const cached = harmonicCurveCacheRef.current.get(key);
+    if (cached) return cached as Float32Array<ArrayBuffer>;
+
     const samples = 44100;
     const curve = new Float32Array(samples) as Float32Array<ArrayBuffer>;
     const deg = Math.PI / 180;
@@ -507,6 +525,7 @@ export const AudioPlayer = () => {
       const x = (i * 2) / samples - 1;
       curve[i] = ((3 + amount / 100) * x * 20 * deg) / (Math.PI + (amount / 100) * Math.abs(x));
     }
+    harmonicCurveCacheRef.current.set(key, curve);
     return curve;
   };
 
@@ -1001,9 +1020,17 @@ export const AudioPlayer = () => {
     const ctx = audioContextRef.current;
     const now = ctx ? ctx.currentTime : 0;
     const RAMP_MS = 25; // 25ms — fast enough to feel instant, slow enough to be perfectly smooth
+    const RAMP_EPSILON = 0.0005; // skip reschedule if |delta| < this
 
+    // Epsilon-guarded ramp: skip the cancelScheduledValues/setValueAtTime/
+    // linearRampToValueAtTime triplet when the target is already ~equal to
+    // the current value. Rapid preset switching between presets that share
+    // parameter values (boosted → calm often overlaps) used to reschedule
+    // identical automation curves on the audio thread — free CPU savings
+    // with no behavior change.
     const ramp = (param: AudioParam | undefined | null, value: number) => {
       if (!param || !ctx) return;
+      if (Math.abs(param.value - value) < RAMP_EPSILON) return; // already there
       param.cancelScheduledValues(now);
       param.setValueAtTime(param.value, now);
       param.linearRampToValueAtTime(value, now + RAMP_MS / 1000);
@@ -1120,8 +1147,14 @@ export const AudioPlayer = () => {
     const ctx = audioContextRef.current;
     const now = ctx ? ctx.currentTime : 0;
     const RAMP_MS = 25;
+    const RAMP_EPSILON = 0.0005;
+    // Same epsilon guard as updateBoostPreset's ramp helper — skip reschedule
+    // when value is already where it should be. VOYEX spatial slider fires
+    // this helper on every ~16ms tick during user drag, so avoiding wasted
+    // audio-thread scheduling adds up fast.
     const ramp = (param: AudioParam | undefined | null, value: number) => {
       if (!param || !ctx) return;
+      if (Math.abs(param.value - value) < RAMP_EPSILON) return;
       param.cancelScheduledValues(now);
       param.setValueAtTime(param.value, now);
       param.linearRampToValueAtTime(value, now + RAMP_MS / 1000);

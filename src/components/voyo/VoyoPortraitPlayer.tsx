@@ -1670,6 +1670,10 @@ const BigCenterCard = memo(({ track, onExpandVideo, onShowLyrics, hideThumb }: {
       boxShadow: '0 25px 60px -12px rgba(0,0,0,0.9), 0 0 50px rgba(139,92,246,0.2), 0 0 100px rgba(139,92,246,0.1)',
       transform: hideThumb ? 'scale(0.94)' : 'scale(1)',
       opacity: hideThumb ? 0 : 1,
+      // Smooth fade-through when video takes over the card slot. Was
+      // popping instantly because no transition was declared. 300ms
+      // feels like a gentle handoff, not a jump.
+      transition: 'transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.3s ease-out',
     }}
   >
     {/* THUMBNAIL */}
@@ -4090,14 +4094,21 @@ export const VoyoPortraitPlayer = ({
   }, []);
 
   // Did the pointer/tap originate on an actual interactive element
-  // (button, input, link)? If so, the canvas tap/hold gesture must
-  // ignore it — otherwise tapping play/pause/skip etc. would also
-  // toggle controls reveal and open OyoIsland.
+  // (button, input, link, custom ARIA role)? If so, the canvas tap/hold
+  // gesture must ignore it — otherwise tapping play/pause/skip etc.
+  // would also toggle controls reveal and open OyoIsland. Expanded
+  // selector to catch ARIA-styled interactive divs (switch/tab/menuitem
+  // etc.) that aren't <button> but function as buttons.
   const didOriginateOnInteractive = (e: { target: EventTarget | null }) => {
     const t = e.target as HTMLElement | null;
     if (!t) return false;
     if (typeof t.closest !== 'function') return false;
-    return !!t.closest('button, [role="button"], input, textarea, a, label, select');
+    return !!t.closest(
+      'button, [role="button"], input, textarea, a, label, select, ' +
+      '[role="link"], [role="menuitem"], [role="menuitemradio"], ' +
+      '[role="switch"], [role="tab"], [role="checkbox"], [role="radio"], ' +
+      '[role="slider"]'
+    );
   };
 
   // Handle tap/hold/double-tap + GLOBAL SWIPE-TO-SKIP.
@@ -4211,6 +4222,26 @@ export const VoyoPortraitPlayer = ({
       // Spring back to center.
       applyCardTransform(0, false);
     }
+  }, []);
+
+  // Dedicated pointer-CANCEL handler. Distinct from pointer-UP because
+  // cancel means "the gesture was interrupted" — finger left viewport,
+  // app backgrounded, OS cancelled the touch. We should NEVER commit a
+  // skip on cancel; always spring back to center cleanly. Using the
+  // pointer-up logic here would read the last known position and could
+  // fire an accidental skip if the user's finger happened to be past
+  // threshold at the moment of cancellation.
+  const handleCanvasPointerCancel = useCallback(() => {
+    if (holdTimerRef.current) {
+      clearTimeout(holdTimerRef.current);
+      holdTimerRef.current = null;
+    }
+    swipeStartRef.current = null;
+    swipeFiredRef.current = false;
+    hasCrossedThresholdRef.current = false;
+    // Spring back regardless of where the finger was — cancel means
+    // "forget this gesture happened".
+    applyCardTransform(0, false);
   }, []);
 
   const handleCanvasTap = useCallback((e: React.MouseEvent) => {
@@ -4516,7 +4547,7 @@ export const VoyoPortraitPlayer = ({
       onPointerMove={handleCanvasPointerMove}
       onPointerUp={handleCanvasPointerUp}
       onPointerLeave={handleCanvasPointerUp}
-      onPointerCancel={handleCanvasPointerUp}
+      onPointerCancel={handleCanvasPointerCancel}
       onClick={handleCanvasTap}
     >
 
@@ -4734,12 +4765,25 @@ export const VoyoPortraitPlayer = ({
             </div>
           )}
 
-          {/* LEFT QUICK CONTROLS - ")" arc: center reaches IN toward card */}
-          
+          {/* LEFT QUICK CONTROLS - ")" arc: center reaches IN toward card.
+              Always mounted (conditional isControlsRevealed now controls
+              opacity/transform via CSS) so the reveal/hide animates instead
+              of popping. pointer-events flips off when hidden so dead
+              buttons don't steal taps. */}
+          <div
+            className="absolute top-1/2 -left-14 flex flex-col gap-4"
+            style={{
+              transform: isControlsRevealed
+                ? 'translateY(-50%) scale(1)'
+                : 'translateY(-50%) scale(0.85) translateX(-6px)',
+              opacity: isControlsRevealed ? 1 : 0,
+              pointerEvents: isControlsRevealed ? 'auto' : 'none',
+              transition: 'opacity 0.28s ease-out, transform 0.32s cubic-bezier(0.34, 1.56, 0.64, 1)',
+            }}
+            aria-hidden={!isControlsRevealed}
+          >
             {isControlsRevealed && (
-              <div
-                className="absolute top-1/2 -translate-y-1/2 -left-14 flex flex-col gap-4"
-              >
+              <>
                 {/* Shuffle - Top of ")", slightly OUT */}
                 <button
                   className={`w-9 h-9 rounded-full flex items-center justify-center transition-colors -translate-x-[2px] ${
@@ -4794,9 +4838,9 @@ export const VoyoPortraitPlayer = ({
                 >
                   <Share2 size={16} />
                 </button>
-              </div>
+              </>
             )}
-          
+          </div>
 
         </div>
 
