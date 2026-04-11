@@ -67,10 +67,36 @@ const ALL_PHRASES: SoussouPhrase[] = [
 // Locale detection + weaving
 // ---------------------------------------------------------------------------
 
-export function isGuineaLocale(locale: string | undefined): boolean {
+/**
+ * Is this a locale where Soussou weaving is appropriate?
+ *
+ * Soussou is Guinean, so the safe default is Guinea locales only. But this
+ * check is also the gate for a per-user override — a Guinean user living
+ * abroad (e.g. Dash in Kuala Lumpur) can flip `localStorage.voyo_soussou_on`
+ * to `1` and get the weaving regardless of geo. We explicitly do NOT enable
+ * Soussou for all Malaysian users because most don't speak it; it's only on
+ * for users who opt in.
+ */
+export function isSoussouEnabled(locale: string | undefined): boolean {
+  // Manual override (per-user preference, persists across sessions)
+  if (typeof window !== 'undefined') {
+    try {
+      if (localStorage.getItem('voyo_soussou_on') === '1') return true;
+      if (localStorage.getItem('voyo_soussou_on') === '0') return false;
+    } catch {
+      // localStorage unavailable (SSR, private mode) — fall through to locale check
+    }
+  }
+
+  // Locale-based auto-detect (Guinea users get it by default)
   if (!locale) return false;
   const lower = locale.toLowerCase();
   return lower === 'gn' || lower === 'fr-gn' || lower.startsWith('gn-') || lower.endsWith('-gn');
+}
+
+/** @deprecated Use isSoussouEnabled — kept for backwards compatibility */
+export function isGuineaLocale(locale: string | undefined): boolean {
+  return isSoussouEnabled(locale);
 }
 
 /**
@@ -81,7 +107,7 @@ export function weaveSoussou(
   userLocale: string | undefined,
   category?: SoussouPhrase['category'],
 ): SoussouPhrase | null {
-  if (!isGuineaLocale(userLocale)) return null;
+  if (!isSoussouEnabled(userLocale)) return null;
 
   const pool = category
     ? ALL_PHRASES.filter((p) => p.category === category)
@@ -96,13 +122,13 @@ export function weaveSoussou(
  * when the user is detected to be in Guinea.
  */
 export function buildSoussouBlock(userLocale: string | undefined): string {
-  if (!isGuineaLocale(userLocale)) return '';
+  if (!isSoussouEnabled(userLocale)) return '';
 
   const examples = ALL_PHRASES.slice(0, 12)
     .map((p) => `- "${p.soussou}" = ${p.english}`)
     .join('\n');
 
-  return `=== SOUSSOU (Guinea listener detected) ===
+  return `=== SOUSSOU (Guinean listener detected) ===
 The listener is in Guinea. Occasionally sprinkle Soussou expressions into your responses to connect culturally. Do NOT force it — use it like a Guinean friend would, naturally and warmly.
 Safe, verified phrases to use:
 ${examples}
