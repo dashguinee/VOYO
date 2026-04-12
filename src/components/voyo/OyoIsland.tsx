@@ -442,93 +442,89 @@ function CollapsedIsland({
   hasLyrics: boolean;
   onLyricsPress: () => void;
 }) {
+  // Decontracted = circle/pill (resting). Clean glass bar.
+  // VOYO DNA: same material language as the nav bar glass.
   return (
-    <div
-      className="fixed top-4 left-1/2 -translate-x-1/2 z-50"
-    >
+    <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 animate-[voyo-fade-in_0.3s_ease-out]">
       <div
         style={{
-          background: 'linear-gradient(135deg, rgba(0,0,0,0.9) 0%, rgba(30,30,30,0.95) 100%)',
-          borderRadius: '28px',
-          padding: '8px 16px',
+          background: 'rgba(10,10,14,0.85)',
+          borderRadius: '999px',
+          padding: '6px 6px 6px 14px',
           display: 'flex',
           alignItems: 'center',
-          gap: '12px',
-          backdropFilter: 'blur(20px)',
-          border: '1px solid rgba(255,255,255,0.1)',
-          boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
-          }}
+          gap: '10px',
+          backdropFilter: 'blur(24px)',
+          WebkitBackdropFilter: 'blur(24px)',
+          border: '1px solid rgba(255,255,255,0.08)',
+          boxShadow: '0 8px 32px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.04)',
+        }}
       >
-        {/* DJ Avatar */}
-        <div
-          style={{
-            width: '32px',
-            height: '32px',
-            borderRadius: '50%',
-            background: 'linear-gradient(135deg, #8B5CF6 0%, #EC4899 100%)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: '14px',
-            }}
-        >
-          🎧
-        </div>
-
-        {/* DJ Name */}
+        {/* DJ Name — tap to expand chat */}
         <button
           onClick={onExpand}
+          className="active:scale-95 transition-transform"
           style={{
             background: 'none',
             border: 'none',
-            color: 'white',
-            fontSize: '14px',
+            color: 'rgba(255,255,255,0.85)',
+            fontSize: '13px',
             fontWeight: '600',
             cursor: 'pointer',
-            }}
+            letterSpacing: '0.02em',
+          }}
         >
           {djName}
         </button>
 
-        {/* Voice Search Button */}
-        <button
-          onClick={onVoicePress}
-          style={{
-            width: '32px',
-            height: '32px',
-            borderRadius: '50%',
-            background: 'rgba(139, 92, 246, 0.3)',
-            border: 'none',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            cursor: 'pointer',
-            fontSize: '14px',
-            }}
-        >
-          🎤
-        </button>
-
-        {/* Lyrics Button (if available) */}
-        {hasLyrics && (
+        {/* Action buttons — pill-shaped, minimal */}
+        <div style={{ display: 'flex', gap: '4px' }}>
+          {/* Voice */}
           <button
-            onClick={onLyricsPress}
+            onClick={onVoicePress}
+            className="active:scale-90 transition-transform"
             style={{
-              width: '32px',
-              height: '32px',
+              width: '34px',
+              height: '34px',
               borderRadius: '50%',
-              background: 'rgba(236, 72, 153, 0.3)',
-              border: 'none',
+              background: 'rgba(255,255,255,0.06)',
+              border: '1px solid rgba(255,255,255,0.08)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               cursor: 'pointer',
-              fontSize: '14px',
-              }}
+              color: 'rgba(255,255,255,0.6)',
+              fontSize: '15px',
+            }}
+            aria-label="Voice search"
           >
-            📝
+            🎤
           </button>
-        )}
+
+          {/* Lyrics (if available) */}
+          {hasLyrics && (
+            <button
+              onClick={onLyricsPress}
+              className="active:scale-90 transition-transform"
+              style={{
+                width: '34px',
+                height: '34px',
+                borderRadius: '50%',
+                background: 'rgba(255,255,255,0.06)',
+                border: '1px solid rgba(255,255,255,0.08)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                color: 'rgba(255,255,255,0.6)',
+                fontSize: '15px',
+              }}
+              aria-label="Show lyrics"
+            >
+              📝
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -544,65 +540,90 @@ function VoiceIsland({
   djName: string;
   onCancel: () => void;
 }) {
+  // VOYO DNA: circle (decontracted) → square (contracted/active).
+  // When recording, the panel morphs from rounded-24px to 16px (square
+  // VOYO orb press-to-square morph). Color shifts from purple to warm
+  // golden-brown (Araba palette) to signal "I'm actively listening."
+  const isActive = state.isRecording;
+
   return (
-    <div
-      className="fixed top-4 left-4 right-4 z-50"
-    >
+    <div className="fixed top-4 left-4 right-4 z-50">
       <div
         style={{
-          background: 'linear-gradient(135deg, rgba(0,0,0,0.95) 0%, rgba(30,30,30,0.98) 100%)',
-          borderRadius: '24px',
+          background: 'linear-gradient(145deg, rgba(10,10,14,0.96), rgba(22,22,28,0.98))',
+          // MORPH: circle (24px) when idle → square (16px) when recording
+          borderRadius: isActive ? '16px' : '24px',
           padding: '24px',
-          backdropFilter: 'blur(20px)',
-          border: '1px solid rgba(139,92,246,0.3)',
-          boxShadow: '0 12px 40px rgba(0,0,0,0.5)',
-          textAlign: 'center',
-          }}
+          backdropFilter: 'blur(24px)',
+          WebkitBackdropFilter: 'blur(24px)',
+          // Border shifts from subtle white to warm golden when active
+          border: isActive
+            ? '1px solid rgba(180,135,70,0.35)'
+            : '1px solid rgba(255,255,255,0.08)',
+          // Shadow shifts to golden glow when active
+          boxShadow: isActive
+            ? '0 12px 40px rgba(0,0,0,0.5), 0 0 30px rgba(180,135,70,0.12)'
+            : '0 12px 40px rgba(0,0,0,0.5)',
+          textAlign: 'center' as const,
+          // Smooth morph between states
+          transition: 'border-radius 0.4s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.3s ease-out, box-shadow 0.3s ease-out',
+        }}
       >
-        {/* Animated Mic */}
+        {/* Mic indicator — morphs circle↔square in sync with panel */}
         <div
           style={{
-            width: '80px',
-            height: '80px',
-            borderRadius: '50%',
-            background: state.isRecording
-              ? 'linear-gradient(135deg, #8B5CF6 0%, #EC4899 100%)'
-              : 'rgba(139,92,246,0.2)',
+            width: '72px',
+            height: '72px',
+            // Same morph: circle → square
+            borderRadius: isActive ? '18px' : '50%',
+            background: isActive
+              ? 'linear-gradient(135deg, rgba(180,135,70,0.25), rgba(140,100,50,0.15))'
+              : 'rgba(255,255,255,0.06)',
+            border: isActive
+              ? '1.5px solid rgba(196,148,90,0.4)'
+              : '1px solid rgba(255,255,255,0.08)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            fontSize: '32px',
+            fontSize: '28px',
             margin: '0 auto 16px',
-            }}
+            transition: 'border-radius 0.4s cubic-bezier(0.16, 1, 0.3, 1), background 0.3s ease-out, border-color 0.3s ease-out',
+            // Pulse animation when recording
+            animation: isActive ? 'voyo-orb-pulse 1.5s ease-in-out infinite' : 'none',
+          }}
         >
-          {state.isProcessing ? '🔄' : '🎤'}
+          {state.isProcessing ? '⏳' : '🎤'}
         </div>
 
-        {/* Status Text */}
-        <p style={{ color: 'white', fontSize: '16px', fontWeight: '600', marginBottom: '4px' }}>
-          {state.isRecording && 'Listening... Sing or hum!'}
+        <p style={{
+          color: isActive ? 'rgba(196,148,90,0.95)' : 'white',
+          fontSize: '15px',
+          fontWeight: '600',
+          marginBottom: '4px',
+          transition: 'color 0.3s ease-out',
+        }}>
+          {state.isRecording && 'Listening...'}
           {state.isProcessing && 'Processing...'}
           {state.error && 'Error'}
         </p>
 
-        <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: '13px', marginBottom: '16px' }}>
-          {state.isRecording && `${djName} is listening to find your song`}
-          {state.isProcessing && 'Analyzing phonetics with Whisper AI...'}
+        <p style={{ color: 'rgba(255,255,255,0.45)', fontSize: '12px', marginBottom: '16px' }}>
+          {state.isRecording && `${djName} is finding your song`}
+          {state.isProcessing && 'Analyzing with Whisper AI...'}
           {state.error && state.error}
         </p>
 
-        {/* Cancel Button */}
         <button
           onClick={onCancel}
           style={{
-            background: 'rgba(255,255,255,0.1)',
-            border: 'none',
+            background: 'rgba(255,255,255,0.06)',
+            border: '1px solid rgba(255,255,255,0.10)',
             borderRadius: '12px',
             padding: '10px 24px',
-            color: 'white',
-            fontSize: '14px',
+            color: 'rgba(255,255,255,0.7)',
+            fontSize: '13px',
             cursor: 'pointer',
-            }}
+          }}
         >
           Cancel
         </button>
