@@ -536,7 +536,7 @@ export const BoostSettings = ({ isOpen, onClose }: BoostSettingsProps) => {
                   }}
                 />
                 <span className="text-[11px] font-semibold relative z-10">Fade</span>
-                <span className="text-[8px] opacity-50 relative z-10">Scroll for Mix</span>
+                <span className="text-[8px] opacity-50 relative z-10">to DJ OYO's Space</span>
               </button>
               {/* Disappear option — card has a "vanishing" feel */}
               <button
@@ -556,7 +556,7 @@ export const BoostSettings = ({ isOpen, onClose }: BoostSettingsProps) => {
                   }}
                 />
                 <span className="text-[11px] font-semibold relative z-10">Disappear</span>
-                <span className="text-[8px] opacity-50 relative z-10">Full Mix Board</span>
+                <span className="text-[8px] opacity-50 relative z-10">OYO's Space Direct</span>
               </button>
             </div>
           </div>
@@ -585,7 +585,12 @@ export const BoostSettings = ({ isOpen, onClose }: BoostSettingsProps) => {
             {cachedTracks.length > 0 && (
               <button
                 onClick={() => setShowClearConfirm(true)}
-                className="w-full py-2.5 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm font-medium flex items-center justify-center gap-2 hover:bg-red-500/20 transition-colors voyo-tap-scale"
+                className="w-full py-2.5 rounded-xl text-sm font-medium flex items-center justify-center gap-2 transition-colors voyo-tap-scale active:scale-[0.97]"
+                style={{
+                  background: 'linear-gradient(135deg, rgba(160,165,175,0.08), rgba(130,135,145,0.04))',
+                  border: '1px solid rgba(160,165,175,0.15)',
+                  color: 'rgba(180,185,195,0.75)',
+                }}
               >
                 <Trash2 size={14} />
                 Clear All Boosted Tracks
@@ -620,8 +625,10 @@ export const BoostSettings = ({ isOpen, onClose }: BoostSettingsProps) => {
                     }}
                     className="flex items-center gap-3 py-2 px-2 -mx-2 rounded-lg w-full text-left hover:bg-white/5 active:bg-white/10 transition-colors"
                   >
-                    <div className="w-6 h-6 rounded bg-purple-500/20 flex items-center justify-center flex-shrink-0">
-                      <Zap size={10} className="text-purple-400" />
+                    <div className="w-6 h-6 rounded flex items-center justify-center flex-shrink-0"
+                      style={{ background: 'rgba(160,120,60,0.15)' }}
+                    >
+                      <Zap size={10} style={{ color: '#C4945A' }} />
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="text-xs font-medium text-white truncate">{track.title}</div>
@@ -636,29 +643,54 @@ export const BoostSettings = ({ isOpen, onClose }: BoostSettingsProps) => {
         </div>
 
         {/* Clear Confirm Dialog */}
+        {/* Clear Confirm — Apple-style metallic dialog. No red anywhere.
+            Destructive action indicated by weight (bold) not color. */}
         {showClearConfirm && (
-          <div className="absolute inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-6 animate-voyo-fade-in">
-            <div className="bg-[#1c1c22] rounded-2xl p-6 w-full max-w-xs animate-voyo-scale-in">
+          <div className="absolute inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-6 animate-voyo-fade-in">
+            <div
+              className="rounded-2xl p-6 w-full max-w-xs animate-voyo-scale-in"
+              style={{
+                background: 'linear-gradient(145deg, rgba(38,38,44,0.98), rgba(28,28,34,0.98))',
+                border: '1px solid rgba(160,165,175,0.12)',
+                boxShadow: '0 24px 60px rgba(0,0,0,0.7), inset 0 1px 0 rgba(255,255,255,0.06)',
+              }}
+            >
               <div className="text-center mb-6">
-                <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-red-500/20 flex items-center justify-center">
-                  <Trash2 size={20} className="text-red-400" />
+                <div
+                  className="w-12 h-12 mx-auto mb-3 rounded-full flex items-center justify-center"
+                  style={{
+                    background: 'linear-gradient(135deg, rgba(160,165,175,0.12), rgba(130,135,145,0.06))',
+                    border: '1px solid rgba(160,165,175,0.15)',
+                  }}
+                >
+                  <Trash2 size={20} style={{ color: 'rgba(180,185,195,0.7)' }} />
                 </div>
                 <h4 className="text-white font-bold mb-1">Clear All Boosted Tracks?</h4>
-                <p className="text-xs text-gray-400">
-                  This will delete {cachedTracks.length} tracks ({formatSize(cacheSize)}) from your device.
+                <p className="text-xs" style={{ color: 'rgba(160,165,175,0.6)' }}>
+                  This will remove {cachedTracks.length} tracks ({formatSize(cacheSize)}) from your device.
                 </p>
               </div>
               <div className="flex gap-3">
                 <button
                   onClick={() => setShowClearConfirm(false)}
-                  className="flex-1 py-2.5 rounded-xl bg-white/10 text-gray-300 text-sm font-medium"
+                  className="flex-1 py-2.5 rounded-xl text-sm font-medium active:scale-[0.97] transition-transform"
+                  style={{
+                    background: 'rgba(160,165,175,0.08)',
+                    border: '1px solid rgba(160,165,175,0.12)',
+                    color: 'rgba(200,205,215,0.8)',
+                  }}
                   disabled={isClearing}
                 >
                   Cancel
                 </button>
                 <button
                   onClick={handleClearCache}
-                  className="flex-1 py-2.5 rounded-xl bg-red-500 text-white text-sm font-bold"
+                  className="flex-1 py-2.5 rounded-xl text-sm font-bold active:scale-[0.97] transition-transform"
+                  style={{
+                    background: 'linear-gradient(135deg, rgba(180,185,195,0.18), rgba(150,155,165,0.10))',
+                    border: '1px solid rgba(180,185,195,0.22)',
+                    color: 'rgba(230,233,240,0.95)',
+                  }}
                   disabled={isClearing}
                 >
                   {isClearing ? 'Clearing...' : 'Clear All'}
