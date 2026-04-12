@@ -314,18 +314,27 @@ export const usePreferenceStore = create<PreferenceStore>()(
           };
         });
 
-        // Auto-sync to cloud when logged in (debounced)
-        setTimeout(async () => {
+        // Auto-sync to cloud when logged in — deferred to idle so the
+        // dynamic import() doesn't block the audio thread mid-playback.
+        // Was setTimeout(500) which fired import() in a microtask that
+        // competed with audio buffer refills = audible glitch on like.
+        const w = window as unknown as {
+          requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => void;
+        };
+        const syncLike = async () => {
           try {
             const { useUniverseStore } = await import('./universeStore');
             const universeStore = useUniverseStore.getState();
             if (universeStore.isLoggedIn) {
               universeStore.syncToCloud();
             }
-          } catch {
-            // Ignore sync errors
-          }
-        }, 500);
+          } catch {}
+        };
+        if (typeof w.requestIdleCallback === 'function') {
+          w.requestIdleCallback(() => syncLike(), { timeout: 5000 });
+        } else {
+          setTimeout(() => syncLike(), 1000);
+        }
       },
 
       // Get track preference
