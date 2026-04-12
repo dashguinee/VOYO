@@ -1510,30 +1510,37 @@ export const AudioPlayer = () => {
       // wait for it to complete (~20ms) before calling .pause(). Otherwise
       // the pause cuts playback mid-ramp → audible click.
       if (audioRef.current) {
-        // Mark the load in flight so onPause doesn't sync isPlaying=false
-        // when we call pause() below. Without this guard, skipping causes
-        // the next track to load but never auto-play.
         isLoadingTrackRef.current = true;
-        muteMasterGainInstantly();
         audioRef.current.oncanplaythrough = null;
         audioRef.current.oncanplay = null;
         audioRef.current.onplay = null;
-        // CLEAR STALE LOOP FLAG: the iframe-miss branch sets loop=true to
-        // keep the silent WAV looping. If that load never reached hot-swap
-        // (stream failed), the flag persists. Without this reset, the next
-        // R2/cached track would loop forever on its first play.
         audioRef.current.loop = false;
-        // Hold a reference so the timeout doesn't pause a future track
-        const audioToFade = audioRef.current;
-        await new Promise<void>(resolve => setTimeout(resolve, 18));
-        // STALE GUARD: if another loadTrack started during the 25ms ramp wait,
-        // don't touch the audio element — the newer load owns it now. Without
-        // this guard, pausing or rewinding here can clobber a freshly-loading
-        // track during rapid skips.
-        if (isStale()) { devLog(`[AudioPlayer] cancelled stale load for ${trackId} after fade timeout`); return; }
-        if (audioRef.current === audioToFade) {
-          audioRef.current.pause();
-          audioRef.current.currentTime = 0;
+
+        // If the DJ crossfade is active, DON'T mute + pause immediately.
+        // The crossfade ramp is already fading the old track. Let it play
+        // out while we load the new track's src. We'll only pause+swap
+        // when canplaythrough fires for the new track (the old is silent
+        // by then because the crossfade ramp has completed).
+        //
+        // For user skips (no crossfade): mute instantly + pause after
+        // 18ms ramp as before. Hard cut is expected on skip.
+        if (!isCrossfadingRef.current) {
+          muteMasterGainInstantly();
+          const audioToFade = audioRef.current;
+          await new Promise<void>(resolve => setTimeout(resolve, 18));
+          if (isStale()) { devLog(`[AudioPlayer] cancelled stale load for ${trackId} after fade timeout`); return; }
+          if (audioRef.current === audioToFade) {
+            audioRef.current.pause();
+            audioRef.current.currentTime = 0;
+          }
+        } else {
+          // Crossfading: the gain ramp is running. Don't touch the audio
+          // element — it's still playing the old track at decreasing volume.
+          // We'll set new src below, which implicitly stops the old playback
+          // (browser aborts the old stream when src changes). The crossfade
+          // ramp on masterGain will be at near-zero by the time the new
+          // track's canplaythrough fires, so fadeInMasterGain picks up clean.
+          devLog('[VOYO] Crossfade active — skipping mute+pause, old track fading naturally');
         }
       }
 
