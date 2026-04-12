@@ -127,22 +127,25 @@ export const VoyoBottomNav = ({ onDahub, onHome, oyoSurface = 'home', playerMode
     }
 
     const fetchUnread = async () => {
-      const count = await messagesAPI.getUnreadCount(dashId);
-      setUnreadDMs(count);
+      try {
+        const count = await messagesAPI.getUnreadCount(dashId);
+        setUnreadDMs(count);
+      } catch { /* Supabase not configured or network error */ }
     };
 
     fetchUnread();
     const interval = setInterval(fetchUnread, 30000);
 
-    const subscription = messagesAPI.subscribe(dashId, () => {
-      setUnreadDMs(prev => prev + 1);
-    });
+    let subscription: ReturnType<typeof messagesAPI.subscribe> | null = null;
+    try {
+      subscription = messagesAPI.subscribe(dashId, () => {
+        setUnreadDMs(prev => prev + 1);
+      });
+    } catch { /* Supabase not configured */ }
 
     return () => {
       clearInterval(interval);
-      if (subscription) {
-        messagesAPI.unsubscribe(subscription);
-      }
+      try { if (subscription) messagesAPI.unsubscribe(subscription); } catch {}
     };
   }, [dashId, isLoggedIn]);
 

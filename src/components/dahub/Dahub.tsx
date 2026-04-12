@@ -978,18 +978,24 @@ export function Dahub({ userId, userName, userAvatar, coreId, appContext, onClos
 
   useEffect(() => {
     loadData();
-    presenceAPI.updatePresence(userId, 'online', appContext || APP_CODES.COMMAND_CENTER);
-    const unsubscribe = messagesAPI.subscribeToMessages(userId, (msg) => {
-      setConversations(prev => {
-        const existing = prev.find(c => c.friend_id === msg.from_id);
-        if (existing) {
-          return prev.map(c => c.friend_id === msg.from_id ? { ...c, last_message: msg.message, last_message_time: msg.created_at, unread_count: c.unread_count + 1 } : c);
-        }
-        return prev;
+    let unsubscribe: (() => void) | null = null;
+    try {
+      presenceAPI.updatePresence(userId, 'online', appContext || APP_CODES.COMMAND_CENTER);
+      unsubscribe = messagesAPI.subscribeToMessages(userId, (msg) => {
+        setConversations(prev => {
+          const existing = prev.find(c => c.friend_id === msg.from_id);
+          if (existing) {
+            return prev.map(c => c.friend_id === msg.from_id ? { ...c, last_message: msg.message, last_message_time: msg.created_at, unread_count: c.unread_count + 1 } : c);
+          }
+          return prev;
+        });
+        setUnreadCount(c => c + 1);
       });
-      setUnreadCount(c => c + 1);
-    });
-    return () => { unsubscribe(); presenceAPI.updatePresence(userId, 'offline', appContext || APP_CODES.COMMAND_CENTER); };
+    } catch { /* Supabase not configured or network error */ }
+    return () => {
+      try { unsubscribe?.(); } catch {}
+      try { presenceAPI.updatePresence(userId, 'offline', appContext || APP_CODES.COMMAND_CENTER); } catch {}
+    };
   }, [userId, appContext, loadData]);
 
   const handleConnect = async (member: SharedAccountMember) => {

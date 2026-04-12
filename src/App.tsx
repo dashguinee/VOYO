@@ -1401,7 +1401,7 @@ function App() {
 
   // PERSIST APP MODE: Save to localStorage when it changes
   useEffect(() => {
-    localStorage.setItem('voyo-app-mode', appMode);
+    try { localStorage.setItem('voyo-app-mode', appMode); } catch {}
   }, [appMode]);
 
   // Get background image URL with fallback
