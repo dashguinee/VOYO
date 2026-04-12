@@ -1596,10 +1596,6 @@ export const AudioPlayer = () => {
                 // Schedule the fade-in BEFORE play() so the ramp is already
                 // queued when the first sample lands. 400ms premium settle-in
                 // so each fresh track eases in smoothly.
-                // Adaptive fade-in: if we're mid-crossfade (the previous
-                // track's fade-out started at T-6s), use a 3s ramp so
-                // both fades overlap smoothly. If not crossfading
-                // (user skip, first play), use a short 200ms ramp.
                 fadeInMasterGain(80);
                 audioRef.current.play().then(() => {
                   clearLoadWatchdog();
@@ -1673,10 +1669,6 @@ export const AudioPlayer = () => {
               if (shouldAutoResume) {
                 fadeInVolume(1200);
               } else {
-                // Adaptive fade-in: if we're mid-crossfade (the previous
-                // track's fade-out started at T-6s), use a 3s ramp so
-                // both fades overlap smoothly. If not crossfading
-                // (user skip, first play), use a short 200ms ramp.
                 fadeInMasterGain(80);
               }
               audioRef.current.play().then(() => {
@@ -1744,11 +1736,7 @@ export const AudioPlayer = () => {
                   fadeInVolume(1200);
                 } else {
                   // 400ms premium settle-in for every fresh R2 track start.
-                  // Adaptive fade-in: if we're mid-crossfade (the previous
-                // track's fade-out started at T-6s), use a 3s ramp so
-                // both fades overlap smoothly. If not crossfading
-                // (user skip, first play), use a short 200ms ramp.
-                fadeInMasterGain(80);
+                  fadeInMasterGain(80);
                 }
                 audioRef.current.play().then(() => {
                   clearLoadWatchdog();
@@ -1829,11 +1817,7 @@ export const AudioPlayer = () => {
                     if (shouldAutoResume) {
                       fadeInVolume(1200);
                     } else {
-                      // Adaptive fade-in: if we're mid-crossfade (the previous
-                // track's fade-out started at T-6s), use a 3s ramp so
-                // both fades overlap smoothly. If not crossfading
-                // (user skip, first play), use a short 200ms ramp.
-                fadeInMasterGain(80);
+                      fadeInMasterGain(80);
                     }
                     audioRef.current.play().then(() => {
                       clearLoadWatchdog();

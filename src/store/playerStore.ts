@@ -402,9 +402,17 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   bufferStatus: 'healthy',
   prefetchStatus: new Map(),
   playbackSource: null,
-  boostProfile: 'boosted', // Default to BOOSTED (warm standard with protection)
-  voyexSpatial: 0,
-  oyeBarBehavior: 'fade', // Default to FADE (signature always visible)
+  // Persist audio settings across reload. Was hardcoded defaults — user
+  // lost their preset selection on every refresh.
+  boostProfile: ((): 'off' | 'boosted' | 'calm' | 'voyex' => {
+    try { return (localStorage.getItem('voyo-boost-profile') as 'off' | 'boosted' | 'calm' | 'voyex') || 'boosted'; } catch { return 'boosted'; }
+  })(),
+  voyexSpatial: ((): number => {
+    try { return parseInt(localStorage.getItem('voyo-voyex-spatial') || '0', 10); } catch { return 0; }
+  })(),
+  oyeBarBehavior: ((): 'fade' | 'disappear' => {
+    try { return (localStorage.getItem('voyo-oye-behavior') as 'fade' | 'disappear') || 'fade'; } catch { return 'fade'; }
+  })(),
 
   // FIX 2: Persist queue and history across refreshes
   queue: getPersistedQueue(),
@@ -1588,9 +1596,25 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
 
   setPlaybackSource: (source) => set({ playbackSource: source }),
 
-  setBoostProfile: (profile) => set({ boostProfile: profile }),
-  setVoyexSpatial: (value) => set({ voyexSpatial: Math.max(-100, Math.min(100, value)) }),
-  setOyeBarBehavior: (behavior) => set({ oyeBarBehavior: behavior }),
+  setBoostProfile: (profile) => {
+    set({ boostProfile: profile });
+    try { localStorage.setItem('voyo-boost-profile', profile); } catch {}
+  },
+  setVoyexSpatial: (value) => {
+    const clamped = Math.max(-100, Math.min(100, value));
+    set({ voyexSpatial: clamped });
+    // Debounce spatial persist — slider fires rapidly during drag
+    if (!(window as any).__voyexPersistTimer) {
+      (window as any).__voyexPersistTimer = setTimeout(() => {
+        try { localStorage.setItem('voyo-voyex-spatial', String(clamped)); } catch {}
+        (window as any).__voyexPersistTimer = null;
+      }, 500);
+    }
+  },
+  setOyeBarBehavior: (behavior) => {
+    set({ oyeBarBehavior: behavior });
+    try { localStorage.setItem('voyo-oye-behavior', behavior); } catch {}
+  },
 
   setPrefetchStatus: (trackId, status) => {
     set((state) => {
