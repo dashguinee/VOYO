@@ -526,22 +526,19 @@ export const AudioPlayer = () => {
         return;
       }
 
-      // RETURNING FROM BACKGROUND — stagger the resume work to prevent
-      // a main-thread freeze. On return, audioEngine.ts already calls
-      // ctx.resume() synchronously. The frequency pump restarts via rAF.
-      // Any deferred setTimeout callbacks from background fire. If we ALSO
-      // call audio.play() + do state reads synchronously, everything lands
-      // in the same frame = 50-200ms freeze.
+      // RETURNING FROM BACKGROUND — re-kick the audio element if needed.
+      // The crossfade system (which caused the freeze on return) has been
+      // removed, so we can fire this immediately now. No setTimeout delay.
       //
-      // Defer the audio re-kick by 100ms so it lands in the NEXT frame
-      // after the initial burst settles.
-      setTimeout(() => {
-        const { isPlaying: sp, playbackSource: pbs } = usePlayerStore.getState();
-        if (sp && audioRef.current?.paused && (pbs === 'cached' || pbs === 'r2')) {
-          audioRef.current.play().catch(() => {});
-          devLog('🔄 [VOYO] Re-kicked audio element on foreground return');
-        }
-      }, 100);
+      // Covers ALL sources — cached, r2, AND iframe (the silent keeper
+      // needs to stay playing to hold audio focus). Previously only
+      // checked cached/r2, leaving iframe audio dead on return.
+      const { isPlaying: sp } = usePlayerStore.getState();
+      if (sp && audioRef.current?.paused && audioRef.current.src) {
+        audioContextRef.current?.resume().catch(() => {});
+        audioRef.current.play().catch(() => {});
+        devLog('🔄 [VOYO] Re-kicked audio element on foreground return');
+      }
     };
     document.addEventListener('visibilitychange', handleVisibility);
     return () => document.removeEventListener('visibilitychange', handleVisibility);
