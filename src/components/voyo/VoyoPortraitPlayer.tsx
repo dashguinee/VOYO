@@ -1771,7 +1771,7 @@ const BigCenterCard = memo(({ track, onExpandVideo, onShowLyrics, hideThumb, isI
           provides enough visual interest). */}
       <div
         className="absolute inset-0 pointer-events-none"
-        style={{ backgroundColor: 'rgba(139, 92, 246, 0.08)' }}
+        style={{ backgroundColor: 'rgba(139, 92, 246, 0.09)' }}
       />
       {/* Title + Artist fade overlay — taller, stronger gradient so the
           text is legible against any poster. Was hidden before because
