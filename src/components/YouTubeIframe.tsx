@@ -474,19 +474,21 @@ export const YouTubeIframe = memo(() => {
     }
 
     if (videoTarget === 'portrait' && isPlaying) {
-      // Center over BigCenterCard area
+      // Floating mini player — draggable. portraitPos offsets from center.
       return {
         position: 'fixed',
         overflow: 'hidden',
         background: '#000',
         top: '50%',
         left: '50%',
-        transform: 'translate(-50%, -50%)',
+        transform: `translate(calc(-50% + ${portraitPos.x}px), calc(-50% + ${portraitPos.y}px))`,
         width: '208px',
         height: '208px',
         borderRadius: '2rem',
         zIndex: 60,
         opacity: 1,
+        transition: dragStartRef.current ? 'none' : 'transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)',
+        boxShadow: '0 12px 40px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.08)',
       };
     }
 
@@ -518,8 +520,11 @@ export const YouTubeIframe = memo(() => {
 
   const showOverlays = videoTarget !== 'hidden' && isPlaying;
 
-  // Portrait mode: draggable
+  // Portrait mode: draggable floating mini player
   const isPortraitMode = videoTarget === 'portrait' && isPlaying;
+  const dragStartRef = useRef<{ x: number; y: number; ox: number; oy: number } | null>(null);
+  const [portraitPos, setPortraitPos] = useState({ x: 0, y: 0 });
+  const portraitDraggedRef = useRef(false);
 
   return (
     <div
@@ -542,15 +547,51 @@ export const YouTubeIframe = memo(() => {
         <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
       </div>
 
-      {/* Tap to close - portrait only (uses onTap to not fire on drag) */}
+      {/* Portrait drag + tap layer. Drag to move the floating player.
+          Tap (no drag) to close. */}
       {isPortraitMode && (
         <div
-          onClick={() => setVideoTarget('hidden')}
           style={{
             position: 'absolute',
             inset: 0,
-            cursor: 'grab',
+            cursor: dragStartRef.current ? 'grabbing' : 'grab',
             zIndex: 5,
+            touchAction: 'none', // we handle ALL touch on this layer
+          }}
+          onPointerDown={(e) => {
+            portraitDraggedRef.current = false;
+            dragStartRef.current = {
+              x: e.clientX,
+              y: e.clientY,
+              ox: portraitPos.x,
+              oy: portraitPos.y,
+            };
+            setIsDragging(true);
+          }}
+          onPointerMove={(e) => {
+            if (!dragStartRef.current) return;
+            const dx = e.clientX - dragStartRef.current.x;
+            const dy = e.clientY - dragStartRef.current.y;
+            if (Math.abs(dx) > 4 || Math.abs(dy) > 4) {
+              portraitDraggedRef.current = true;
+            }
+            setPortraitPos({
+              x: dragStartRef.current.ox + dx,
+              y: dragStartRef.current.oy + dy,
+            });
+          }}
+          onPointerUp={() => {
+            dragStartRef.current = null;
+            setIsDragging(false);
+            // If no meaningful drag happened, it's a tap → close
+            if (!portraitDraggedRef.current) {
+              setVideoTarget('hidden');
+              setPortraitPos({ x: 0, y: 0 }); // reset for next open
+            }
+          }}
+          onPointerCancel={() => {
+            dragStartRef.current = null;
+            setIsDragging(false);
           }}
         />
       )}
