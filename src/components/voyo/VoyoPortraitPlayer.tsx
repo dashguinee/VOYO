@@ -1684,23 +1684,49 @@ const BigCenterCard = memo(({ track, onExpandVideo, onShowLyrics, hideThumb, isI
   isIframeAudio?: boolean;
 }) => {
   return (
+  // ── PERSPECTIVE CONTAINER ─────────────────────────────────────────
+  // Wraps the card in a 3D space. perspective: 1200px is deep enough
+  // that the rotations look natural, not fish-eye. The card inside
+  // transforms in this 3D space.
+  <div style={{ perspective: '1200px' }}>
   <div
     className="relative w-56 h-56 md:w-64 md:h-64 rounded-[2rem] overflow-hidden z-20 group"
     style={{
-      boxShadow: '0 25px 60px -12px rgba(0,0,0,0.9), 0 0 50px rgba(139,92,246,0.2), 0 0 100px rgba(139,92,246,0.1)',
-      // BASS PULSE: album art inhales with kick drums. --voyo-bass is
-      // written by AudioPlayer's frequency pump at ~20fps. scale(1 + bass*0.03)
-      // = max ~3% scale increase — subtle but perceptible on every beat.
-      // When hideThumb (video mode), use the static scale-down.
-      // NOTE: calc() with CSS custom properties works in Chrome 87+ / Safari 15.4+.
+      // ── 3D DEPTH SYSTEM (Silicon Valley 2050, not 2015 flip card) ──
+      //
+      // Three audio-reactive layers, all within Dash's 7% max visual
+      // change threshold:
+      //
+      // 1. BASS SCALE: +2.5% max (subtle inhale on kicks)
+      // 2. ENERGY TILT: rotateY(-1.8deg) max (left edge 2px closer)
+      // 3. BASS DEPTH: translateZ(+3px) max (card pushes toward you)
+      //
+      // At rest (paused, bass=0, energy=0): card is perfectly flat +
+      // untilted. During playback: it gains presence, tilts subtly,
+      // breathes with the bass. The viewer feels it without seeing it.
+      //
+      // Total visual "incline" at full bass + energy: ~5-6%, under 7%.
+      transformStyle: 'preserve-3d',
       transform: hideThumb
-        ? 'scale(0.94)'
-        : 'scale(calc(1 + var(--voyo-bass, 0) * 0.03))',
+        ? 'scale(0.94) rotateY(0deg) translateZ(0px)'
+        : [
+            'scale(calc(1 + var(--voyo-bass, 0) * 0.025))',
+            'rotateY(calc(var(--voyo-energy, 0) * -1.8deg))',
+            'translateZ(calc(var(--voyo-bass, 0) * 3px))',
+          ].join(' '),
+      // Shadow deepens with bass — farther from surface = bigger spread.
+      // The base shadow anchors it; the reactive layer adds presence.
+      boxShadow: [
+        '0 25px 60px -12px rgba(0,0,0,0.9)',
+        '0 0 calc(40px + var(--voyo-bass, 0) * 20px) rgba(139,92,246, calc(0.12 + var(--voyo-bass, 0) * 0.12))',
+        '0 0 100px rgba(139,92,246,0.08)',
+      ].join(', '),
       opacity: hideThumb ? 0 : 1,
       transition: hideThumb
         ? 'transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.3s ease-out'
         : 'opacity 0.3s ease-out',
       willChange: 'transform',
+      backfaceVisibility: 'hidden',
     }}
   >
     {/* THUMBNAIL */}
@@ -1719,10 +1745,22 @@ const BigCenterCard = memo(({ track, onExpandVideo, onShowLyrics, hideThumb, isI
         title={track.title}
         lazy={false}
       />
-      {/* Light purple overlay */}
+      {/* ── GLOSSY LIGHT SOURCE ──────────────────────────────────────
+          Thin gradient from top-left (light hits the tilted surface)
+          to bottom-right (shadow side). Combined with the rotateY tilt,
+          this creates the depth perception. Barely visible (5-8% white)
+          — you feel it more than you see it. Premium, not toy. */}
       <div
         className="absolute inset-0 pointer-events-none"
-        style={{ backgroundColor: 'rgba(139, 92, 246, 0.15)' }}
+        style={{
+          background: 'linear-gradient(135deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.02) 30%, transparent 60%, rgba(0,0,0,0.06) 100%)',
+        }}
+      />
+      {/* Subtle warm-purple tint (lighter than before — the glossy layer
+          provides enough visual interest). */}
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{ backgroundColor: 'rgba(139, 92, 246, 0.08)' }}
       />
       {/* Title + Artist fade overlay — taller, stronger gradient so the
           text is legible against any poster. Was hidden before because
@@ -1781,14 +1819,24 @@ const BigCenterCard = memo(({ track, onExpandVideo, onShowLyrics, hideThumb, isI
       <ExpandVideoButton onClick={onExpandVideo} isIframeAudio={!!isIframeAudio} />
     )}
 
-    {/* Glowing border accent */}
+    {/* ── EDGE HIGHLIGHT ─────────────────────────────────────────────
+        The left border is slightly brighter than the right (the light
+        source is top-left, matching the glossy gradient above). This
+        sells the 3D tilt — the "forward" edge catches more light.
+        The inset glow softened from 30px to 20px so it doesn't fight
+        the glossy overlay. */}
     <div
       className="absolute inset-0 rounded-[2rem] pointer-events-none transition-all duration-500 z-25"
       style={{
-        border: '1px solid rgba(139, 92, 246, 0.3)',
-        boxShadow: 'inset 0 0 30px rgba(139, 92, 246, 0.1)',
+        borderTop: '1px solid rgba(255, 255, 255, 0.12)',
+        borderLeft: '1px solid rgba(255, 255, 255, 0.10)',
+        borderRight: '1px solid rgba(139, 92, 246, 0.15)',
+        borderBottom: '1px solid rgba(0, 0, 0, 0.15)',
+        boxShadow: 'inset 0 0 20px rgba(139, 92, 246, 0.06)',
         }}
     />
+  </div>
+  {/* Close perspective container */}
   </div>
   );
 });
