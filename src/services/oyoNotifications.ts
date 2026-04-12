@@ -35,7 +35,7 @@ export interface OyoNotification {
 // ============================================================================
 
 export function showInAppNotification(notif: OyoNotification): void {
-  if (Notification.permission !== 'granted') return;
+  if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
 
   try {
     const reg = navigator.serviceWorker?.controller;
