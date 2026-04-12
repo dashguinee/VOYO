@@ -669,20 +669,26 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     }
 
     // PORTAL SYNC: Update now_playing every 10 seconds for live position.
-    // Same dedup pattern.
+    // Deferred to idle — same pattern as the position persist above.
     if (time > 0 && flooredSec % 10 === 0 && flooredSec !== _lastPortalSyncSec) {
       _lastPortalSyncSec = flooredSec;
-      (async () => {
+      const syncPosition = async () => {
         try {
           const { useUniverseStore } = await import('./universeStore');
           const universeStore = useUniverseStore.getState();
           if (universeStore.isPortalOpen) {
             universeStore.updateNowPlaying();
           }
-        } catch {
-          // Ignore sync errors
-        }
-      })();
+        } catch {}
+      };
+      const w2 = window as unknown as {
+        requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => void;
+      };
+      if (typeof w2.requestIdleCallback === 'function') {
+        w2.requestIdleCallback(() => syncPosition(), { timeout: 5000 });
+      } else {
+        setTimeout(() => syncPosition(), 200);
+      }
     }
   },
 
