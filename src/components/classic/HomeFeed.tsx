@@ -15,7 +15,7 @@ import { getThumb } from '../../utils/thumbnail';
 import { SmartImage } from '../ui/SmartImage';
 import { VIBES, Vibe } from '../../data/tracks';
 import { LottieIcon } from '../ui/LottieIcon';
-import { getUserTopTracks, getPoolAwareHotTracks, getPoolAwareDiscoveryTracks, calculateBehaviorScore } from '../../services/personalization';
+import { getUserTopTracks, getPoolAwareHotTracks, getPoolAwareDiscoveryTracks, calculateBehaviorScore, recordPoolEngagement } from '../../services/personalization';
 import { getInsights as getOyoInsights } from '../../services/oyoDJ';
 import { usePreferenceStore } from '../../store/preferenceStore';
 import { usePlayerStore } from '../../store/playerStore';
@@ -404,6 +404,68 @@ const TrackCard = memo(({ track, onPlay, showBoostBadge = false }: TrackCardProp
   const [oyeActive, setOyeActive] = useState(false);
   const createReaction = useReactionStore(s => s.createReaction);
   const boostTrack = useDownloadStore(s => s.boostTrack);
+  const addToQueue = usePlayerStore(s => s.addToQueue);
+
+  // ── HOLD-TO-PREFERENCE GESTURE ──────────────────────────────────
+  // Hold 400ms → card enters preference mode. Two shimmers appear:
+  // left (grey = "not interested") and right (golden = "interested").
+  // Slide the card on its own axis to commit. Release right → auto-
+  // queue. Release left → skip signal. Release center → cancel.
+  const [prefMode, setPrefMode] = useState(false);
+  const [prefDx, setPrefDx] = useState(0);
+  const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const prefStartRef = useRef<{ x: number } | null>(null);
+  const cardRef = useRef<HTMLDivElement>(null);
+  const didPrefRef = useRef(false);
+
+  const PREF_THRESHOLD = 35; // px to commit
+
+  const handlePrefDown = (e: React.PointerEvent) => {
+    didPrefRef.current = false;
+    prefStartRef.current = { x: e.clientX };
+    holdTimerRef.current = setTimeout(() => {
+      setPrefMode(true);
+      didPrefRef.current = true;
+      try { navigator.vibrate?.(15); } catch {}
+    }, 400);
+  };
+
+  const handlePrefMove = (e: React.PointerEvent) => {
+    if (!prefMode || !prefStartRef.current) return;
+    const dx = e.clientX - prefStartRef.current.x;
+    setPrefDx(Math.max(-60, Math.min(60, dx))); // clamp
+  };
+
+  const handlePrefUp = () => {
+    if (holdTimerRef.current) { clearTimeout(holdTimerRef.current); holdTimerRef.current = null; }
+    if (!prefMode) { prefStartRef.current = null; return; }
+
+    if (prefDx > PREF_THRESHOLD) {
+      // ── INTERESTED: golden flash → auto-queue ──
+      // 60% chance insert at position 0 (plays next if vibe fits),
+      // 40% insert at random position (OYO DJ decides when).
+      const position = Math.random() < 0.6 ? 0 : undefined;
+      addToQueue(track, position);
+      try { navigator.vibrate?.([20, 10, 20]); } catch {}
+
+      // Quick golden flash
+      if (cardRef.current) {
+        cardRef.current.style.transition = 'box-shadow 0.3s ease-out';
+        cardRef.current.style.boxShadow = '0 0 20px rgba(212,160,83,0.6), inset 0 0 30px rgba(212,160,83,0.15)';
+        setTimeout(() => {
+          if (cardRef.current) { cardRef.current.style.boxShadow = ''; cardRef.current.style.transition = ''; }
+        }, 500);
+      }
+    } else if (prefDx < -PREF_THRESHOLD) {
+      // ── NOT INTERESTED: grey fade → skip signal ──
+      recordPoolEngagement(track.id || track.trackId, 'skip');
+      try { navigator.vibrate?.(10); } catch {}
+    }
+    // Reset
+    setPrefMode(false);
+    setPrefDx(0);
+    prefStartRef.current = null;
+  };
 
   const handleOye = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -424,10 +486,22 @@ const TrackCard = memo(({ track, onPlay, showBoostBadge = false }: TrackCardProp
   return (
     <button
       className="flex-shrink-0 w-32 relative group"
-      onClick={onPlay}
+      onClick={(e) => { if (didPrefRef.current) { didPrefRef.current = false; return; } onPlay(); }}
       style={{ scrollSnapAlign: 'start' }}
+      onPointerDown={handlePrefDown}
+      onPointerMove={handlePrefMove}
+      onPointerUp={handlePrefUp}
+      onPointerCancel={() => { setPrefMode(false); setPrefDx(0); if (holdTimerRef.current) clearTimeout(holdTimerRef.current); }}
     >
-      <div className="relative w-32 h-32 rounded-xl overflow-hidden mb-2 bg-[#1c1c22] border border-[#28282f]/50 group-active:border-[#8b5cf6]/30 transition-colors">
+      <div
+        ref={cardRef}
+        className="relative w-32 h-32 rounded-xl overflow-hidden mb-2 bg-[#1c1c22] border border-[#28282f]/50 group-active:border-white/15 transition-colors"
+        style={{
+          // Card slides on its own axis during preference mode
+          transform: prefMode ? `translateX(${prefDx}px) rotate(${prefDx / 8}deg)` : 'none',
+          transition: prefMode ? 'none' : 'transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)',
+        }}
+      >
         <SmartImage
           src={getThumb(track.trackId)}
           alt={track.title}
@@ -436,23 +510,57 @@ const TrackCard = memo(({ track, onPlay, showBoostBadge = false }: TrackCardProp
           artist={track.artist}
           title={track.title}
         />
-        <div
-          className="absolute inset-0 pointer-events-none"
-          style={{
-            background: 'linear-gradient(135deg, rgba(139,92,246,0.10) 0%, rgba(139,92,246,0.04) 100%)',
-          }}
-        />
-        {isHovered && (
+        {/* Normal state: subtle tint */}
+        {!prefMode && (
           <div
-            className="absolute inset-0 bg-black/40 flex items-center justify-center"
-          >
-            <div className="w-12 h-12 rounded-full bg-purple-500 flex items-center justify-center">
+            className="absolute inset-0 pointer-events-none"
+            style={{
+              background: 'linear-gradient(135deg, rgba(139,92,246,0.08) 0%, rgba(139,92,246,0.02) 100%)',
+            }}
+          />
+        )}
+        {/* PREFERENCE MODE: dual shimmer gradients.
+            Left shimmer = grey (not interested), fades in as user slides left.
+            Right shimmer = golden bronze (interested), fades in as user slides right.
+            Both overlays are always present; opacity is driven by prefDx. */}
+        {prefMode && (
+          <>
+            {/* Grey "skip" shimmer — left side */}
+            <div
+              className="absolute inset-0 pointer-events-none"
+              style={{
+                background: 'linear-gradient(to right, rgba(120,125,135,0.35), transparent 60%)',
+                opacity: Math.max(0, -prefDx / 60),
+                transition: 'opacity 0.1s ease-out',
+              }}
+            />
+            {/* Golden "interested" shimmer — right side */}
+            <div
+              className="absolute inset-0 pointer-events-none"
+              style={{
+                background: 'linear-gradient(to left, rgba(212,160,83,0.40), transparent 60%)',
+                opacity: Math.max(0, prefDx / 60),
+                transition: 'opacity 0.1s ease-out',
+              }}
+            />
+            {/* Center divider glow when neutral */}
+            <div
+              className="absolute inset-0 pointer-events-none"
+              style={{
+                boxShadow: 'inset 0 0 20px rgba(255,255,255,0.08)',
+                opacity: 1 - Math.abs(prefDx) / 60,
+              }}
+            />
+          </>
+        )}
+        {isHovered && !prefMode && (
+          <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+            <div className="w-12 h-12 rounded-full bg-white/15 backdrop-blur-sm flex items-center justify-center">
               <Play className="w-6 h-6 text-white ml-1" fill="white" />
             </div>
           </div>
         )}
-        {/* OYÉ Boost Badge — only shown on auto-boosted shelves (Continue, Discover More) */}
-        {showBoostBadge && (
+        {showBoostBadge && !prefMode && (
           <button
             className="absolute top-2 right-2 z-10"
             onClick={handleOye}

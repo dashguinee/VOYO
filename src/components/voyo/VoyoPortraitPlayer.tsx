@@ -4633,9 +4633,13 @@ export const VoyoPortraitPlayer = ({
       // ANYWHERE in the portrait player, not just the thin center section.
       // Interactive children (buttons, inputs, scrollable rails) are
       // filtered via didOriginateOnInteractive + data-no-canvas-swipe.
-      // touchAction: pan-y keeps vertical page scroll (portal reveal)
-      // working; horizontal gestures get captured by the handler.
-      style={{ touchAction: 'pan-y' }}
+      // touchAction: manipulation allows ALL standard scrolling (horizontal
+      // shelves, vertical portal scroll) while disabling double-tap-to-zoom
+      // (which adds 300ms delay to tap detection). Was 'pan-y' which blocked
+      // horizontal scroll on ALL children — PortalBelt, history/queue rails.
+      // Our pointer handlers distinguish horizontal card-drags from scrolls
+      // via the HORIZONTAL_BIAS check + data-no-canvas-swipe guards.
+      style={{ touchAction: 'manipulation' }}
       onPointerDown={handleCanvasPointerDown}
       onPointerMove={handleCanvasPointerMove}
       onPointerUp={handleCanvasPointerUp}
