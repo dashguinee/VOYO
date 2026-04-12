@@ -1219,10 +1219,16 @@ export const AudioPlayer = () => {
     const now = ctx.currentTime;
     const param = gainNodeRef.current.gain;
     const target = computeMasterTarget();
+    // NEAR-INSTANT PRESENCE: 3ms micro-ramp from near-silence to target.
+    // Previously 10ms which ate the first beat (ramp started before decoded
+    // audio arrived → first samples entered at partial volume). 3ms is
+    // 132 samples at 44.1kHz — long enough for a smooth zero-crossing
+    // (no click), short enough that the first beat arrives at >95% volume.
+    // The latencyHint: 'playback' audio buffer (256+ samples ≈ 6ms) means
+    // the ramp completes before the buffer drains to the speakers.
     param.cancelScheduledValues(now);
     param.setValueAtTime(0.0001, now);
-    // 10ms micro-ramp — inaudible but prevents click
-    param.linearRampToValueAtTime(target, now + 0.01);
+    param.linearRampToValueAtTime(target, now + 0.003);
   };
 
   // Smooth volume fade-in for auto-resume (1.2s from silence to target)
