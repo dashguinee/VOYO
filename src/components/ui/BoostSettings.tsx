@@ -9,7 +9,7 @@
  */
 
 import { useState, useEffect, useRef } from 'react';
-import { Zap, Trash2, X, HardDrive, Settings, Sliders, Eye, EyeOff, Flame, Sparkles, Moon, Timer } from 'lucide-react';
+import { Zap, Trash2, X, HardDrive, Settings, Sliders, Flame, Wind, Moon, Timer } from 'lucide-react';
 import { useDownloadStore } from '../../store/downloadStore';
 import { usePlayerStore } from '../../store/playerStore';
 import { haptics } from '../../utils/haptics';
@@ -330,21 +330,21 @@ export const BoostSettings = ({ isOpen, onClose }: BoostSettingsProps) => {
                 onClick={() => setBoostProfile('calm')}
                 className={`flex flex-col items-center gap-1 p-3 rounded-xl border transition-all voyo-tap-scale ${
                   boostProfile === 'calm'
-                    ? 'bg-gradient-to-br from-purple-400/15 to-violet-500/10 border-purple-400/35'
+                    ? 'bg-gradient-to-br from-white/8 to-white/[0.03] border-white/25'
                     : 'bg-white/5 border-white/10 hover:bg-white/10'
                 }`}
               >
-                <Sparkles
+                <Wind
                   size={22}
                   strokeWidth={1.6}
                   style={{
-                    color: boostProfile === 'calm' ? '#c4b5fd' : 'rgba(196,181,253,0.55)',
-                    filter: boostProfile === 'calm' ? 'drop-shadow(0 0 6px rgba(196,181,253,0.7))' : 'none',
+                    color: boostProfile === 'calm' ? 'rgba(220,225,235,0.9)' : 'rgba(180,185,195,0.45)',
+                    filter: boostProfile === 'calm' ? 'drop-shadow(0 0 5px rgba(220,225,235,0.4))' : 'none',
                   }}
                 />
                 <span
                   className="text-[11px] font-bold"
-                  style={{ color: boostProfile === 'calm' ? '#c4b5fd' : 'rgba(255,255,255,0.55)' }}
+                  style={{ color: boostProfile === 'calm' ? 'rgba(220,225,235,0.9)' : 'rgba(255,255,255,0.55)' }}
                 >
                   Cool
                 </span>
