@@ -324,9 +324,9 @@ export const BoostSettings = ({ isOpen, onClose }: BoostSettingsProps) => {
                   className="text-[11px] font-bold"
                   style={{ color: boostProfile === 'boosted' ? '#E6B865' : 'rgba(255,255,255,0.55)' }}
                 >
-                  Warm
+                  True Feel
                 </span>
-                <span className="text-[9px] opacity-60 text-white">Bass Boost</span>
+                <span className="text-[9px] opacity-60 text-white">Roots Audio</span>
               </button>
 
               <button
@@ -394,7 +394,7 @@ export const BoostSettings = ({ isOpen, onClose }: BoostSettingsProps) => {
               </button>
             </div>
             <div className="text-[10px] text-gray-500 mt-3 text-center">
-              {boostProfile === 'boosted' && 'Warm bass with speaker protection'}
+              {boostProfile === 'boosted' && 'Roots™ Audio — True Feel'}
               {boostProfile === 'calm' && 'Perfectly Balanced · Daily enjoyment'}
               {boostProfile === 'voyex' && 'Studio energy — full immersion'}
             </div>
