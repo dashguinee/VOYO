@@ -1585,7 +1585,7 @@ export const AudioPlayer = () => {
                 // track's fade-out started at T-6s), use a 3s ramp so
                 // both fades overlap smoothly. If not crossfading
                 // (user skip, first play), use a short 200ms ramp.
-                fadeInMasterGain(200);
+                fadeInMasterGain(80);
                 audioRef.current.play().then(() => {
                   clearLoadWatchdog();
                   recordPlayEvent();
@@ -1662,7 +1662,7 @@ export const AudioPlayer = () => {
                 // track's fade-out started at T-6s), use a 3s ramp so
                 // both fades overlap smoothly. If not crossfading
                 // (user skip, first play), use a short 200ms ramp.
-                fadeInMasterGain(200);
+                fadeInMasterGain(80);
               }
               audioRef.current.play().then(() => {
                 clearLoadWatchdog();
@@ -1733,7 +1733,7 @@ export const AudioPlayer = () => {
                 // track's fade-out started at T-6s), use a 3s ramp so
                 // both fades overlap smoothly. If not crossfading
                 // (user skip, first play), use a short 200ms ramp.
-                fadeInMasterGain(200);
+                fadeInMasterGain(80);
                 }
                 audioRef.current.play().then(() => {
                   clearLoadWatchdog();
@@ -1818,7 +1818,7 @@ export const AudioPlayer = () => {
                 // track's fade-out started at T-6s), use a 3s ramp so
                 // both fades overlap smoothly. If not crossfading
                 // (user skip, first play), use a short 200ms ramp.
-                fadeInMasterGain(200);
+                fadeInMasterGain(80);
                     }
                     audioRef.current.play().then(() => {
                       clearLoadWatchdog();
