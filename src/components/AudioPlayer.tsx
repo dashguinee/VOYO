@@ -2724,7 +2724,7 @@ export const AudioPlayer = () => {
 
     const errorName = error ? (errorCodes[error.code] || `Unknown(${error.code})`) : 'Unknown';
     const recoveryStart = performance.now();
-    console.error(`🚨 [VOYO] Audio error: ${errorName}`, error?.message);
+    devWarn(`🚨 [VOYO] Audio error: ${errorName}`, error?.message);
 
     // Clear the load watchdog — we're now in recovery mode. If recovery
     // succeeds, we don't want the original 8s timer to fire and skip the
