@@ -30,7 +30,8 @@ import { useReactionStore, ReactionCategory, initReactionSubscription } from '..
 import { devLog } from '../../utils/logger';
 // TiviPlusCrossPromo moved to HomeFeed.tsx (classic homepage)
 import { useAuth } from '../../hooks/useAuth';
-import { generateLyrics, getCurrentSegment, type EnrichedLyrics, type LyricsGenerationProgress } from '../../services/lyricsEngine';
+import { getCurrentSegment, type EnrichedLyrics, type LyricsGenerationProgress } from '../../services/lyricsEngine';
+import { findLyrics } from '../../services/lyricsAgent';
 import { getVideoStreamUrl } from '../../services/piped';
 import { translateWord, type TranslationMatch } from '../../services/lexiconService';
 import { voiceSearch, recordFromMicrophone, isConfigured as isWhisperConfigured } from '../../services/whisperService';
@@ -3203,17 +3204,26 @@ const LyricsOverlay = memo(({ track, isOpen, onClose, currentTime }: LyricsOverl
     const loadLyrics = async () => {
       try {
         setError(null);
-        setProgress({ stage: 'fetching', progress: 0, message: 'Fetching audio...' });
+        setProgress({ stage: 'fetching', progress: 20, message: 'Finding lyrics...' });
 
-        // Get audio URL for Whisper
-        const audioUrl = await getVideoStreamUrl(track.trackId);
-        if (!audioUrl) {
-          throw new Error('Could not get audio stream');
+        // NEW: LyricsAgent — checks Supabase cache, then asks Gemini.
+        // No audio URL needed. No Whisper transcription. One API call
+        // covers African music that LRCLIB/Musixmatch can't find.
+        const result = await findLyrics(
+          track.trackId,
+          track.title,
+          track.artist,
+          track.duration,
+        );
+
+        if (result.lyrics) {
+          setLyrics(result.lyrics);
+          setProgress({ stage: 'complete', progress: 100, message: `Found! (${result.source})` });
+          setTimeout(() => setProgress(null), 1000);
+        } else {
+          setError('No lyrics found for this track');
+          setProgress(null);
         }
-
-        const result = await generateLyrics(track, audioUrl, setProgress);
-        setLyrics(result);
-        setProgress(null);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load lyrics');
         setProgress(null);
