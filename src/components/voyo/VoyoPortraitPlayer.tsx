@@ -4658,19 +4658,12 @@ export const VoyoPortraitPlayer = ({
       // ANYWHERE in the portrait player, not just the thin center section.
       // Interactive children (buttons, inputs, scrollable rails) are
       // filtered via didOriginateOnInteractive + data-no-canvas-swipe.
-      // touchAction: manipulation allows ALL standard scrolling (horizontal
-      // shelves, vertical portal scroll) while disabling double-tap-to-zoom
-      // (which adds 300ms delay to tap detection). Was 'pan-y' which blocked
-      // horizontal scroll on ALL children — PortalBelt, history/queue rails.
-      // Our pointer handlers distinguish horizontal card-drags from scrolls
-      // via the HORIZONTAL_BIAS check + data-no-canvas-swipe guards.
+      // manipulation on the outer container = shelves scroll horizontally.
+      // The pointer handlers for the card drag live on the CENTER SECTION
+      // (which has pan-y), NOT here. If they were here, the browser's
+      // 'manipulation' touch-action consumes horizontal swipes before
+      // our pointermove ever fires.
       style={{ touchAction: 'manipulation' }}
-      onPointerDown={handleCanvasPointerDown}
-      onPointerMove={handleCanvasPointerMove}
-      onPointerUp={handleCanvasPointerUp}
-      onPointerLeave={handleCanvasPointerUp}
-      onPointerCancel={handleCanvasPointerCancel}
-      onClick={handleCanvasTap}
     >
 
       {/* FULLSCREEN BACKGROUND - Album art with dark overlay for floating effect.
@@ -4857,12 +4850,17 @@ export const VoyoPortraitPlayer = ({
         }`}
         style={{
           transform: 'translateY(28px)',
-          // pan-y on the CENTER section: vertical scroll still works (portal
-          // reveal) but horizontal swipes are captured by our pointer handlers
-          // for the card drag gesture. The OUTER container keeps 'manipulation'
-          // so horizontal shelves (PortalBelt, history/queue rails) scroll fine.
+          // pan-y: browser handles vertical scroll (portal reveal), JS handles
+          // horizontal (card drag). The pointer handlers LIVE HERE on the center
+          // section, not on the outer container (which has 'manipulation').
           touchAction: 'pan-y',
         }}
+        onPointerDown={handleCanvasPointerDown}
+        onPointerMove={handleCanvasPointerMove}
+        onPointerUp={handleCanvasPointerUp}
+        onPointerLeave={handleCanvasPointerUp}
+        onPointerCancel={handleCanvasPointerCancel}
+        onClick={handleCanvasTap}
       >
 
         {/* RIGHT-SIDE TOOLBAR - Always visible */}
