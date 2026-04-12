@@ -292,9 +292,20 @@ export const VoyoBottomNav = ({ onDahub, onHome, oyoSurface = 'home', playerMode
               // — OYO is forming. The full long-press fire still launches
               // the actual OYO summon overlay; this is the entrance gesture.
               borderRadius: pressedBtn === 'voyo' ? '14px' : '999px',
-              transform: pressedBtn === 'voyo' ? 'scale(1.08)' : 'scale(1)',
+              // Bass pulse on the orb: scale(1 + bass*0.04). When pressed,
+              // the scale override takes priority. When at rest, the orb
+              // breathes with the kick drums.
+              transform: pressedBtn === 'voyo'
+                ? 'scale(1.08)'
+                : 'scale(calc(1 + var(--voyo-bass, 0) * 0.04))',
               transition: 'border-radius 0.45s cubic-bezier(0.16, 1, 0.3, 1), transform 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
-              // Slow ambient halo throb so the orb feels alive even at rest.
+              // AUDIO-REACTIVE ORB: bass energy from the frequency pump
+              // adds a subtle scale boost on top of the ambient pulse.
+              // --voyo-bass drives the scale, --voyo-energy drives the glow
+              // intensity. Both fall to 0 when paused so the orb returns
+              // to its resting CSS animation state naturally.
+              // NOTE: The CSS animation + transform coexist because the
+              // animation targets box-shadow (glow), not transform.
               animation: 'voyo-orb-pulse 4.5s ease-in-out infinite',
             }}
           >

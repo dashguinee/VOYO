@@ -8,8 +8,8 @@
  * - Storage usage
  */
 
-import { useState } from 'react';
-import { Zap, Trash2, X, HardDrive, Settings, Sliders, Eye, EyeOff, Flame, Sparkles } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Zap, Trash2, X, HardDrive, Settings, Sliders, Eye, EyeOff, Flame, Sparkles, Moon, Timer } from 'lucide-react';
 import { useDownloadStore } from '../../store/downloadStore';
 import { usePlayerStore } from '../../store/playerStore';
 import { haptics } from '../../utils/haptics';
@@ -17,6 +17,148 @@ import { haptics } from '../../utils/haptics';
 interface BoostSettingsProps {
   isOpen: boolean;
   onClose: () => void;
+}
+
+// ============================================
+// SLEEP TIMER — fade out + pause after N minutes.
+// Essential quality-of-life for evening listening.
+// ============================================
+const SLEEP_OPTIONS = [
+  { mins: 5,  label: '5m' },
+  { mins: 15, label: '15m' },
+  { mins: 30, label: '30m' },
+  { mins: 60, label: '1h' },
+];
+
+function SleepTimerSection() {
+  const [activeMinutes, setActiveMinutes] = useState<number | null>(() => {
+    // Restore from sessionStorage so the timer survives settings close/open
+    try {
+      const saved = sessionStorage.getItem('voyo-sleep-timer-end');
+      if (saved) {
+        const end = parseInt(saved, 10);
+        const remaining = end - Date.now();
+        if (remaining > 0) return Math.ceil(remaining / 60000);
+      }
+    } catch {}
+    return null;
+  });
+  const [remaining, setRemaining] = useState('');
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const endTimeRef = useRef<number>(0);
+
+  const startTimer = (mins: number) => {
+    // Clear any existing timer
+    if (timerRef.current) clearInterval(timerRef.current);
+
+    const endMs = Date.now() + mins * 60000;
+    endTimeRef.current = endMs;
+    setActiveMinutes(mins);
+    try { sessionStorage.setItem('voyo-sleep-timer-end', String(endMs)); } catch {}
+
+    haptics.light();
+
+    timerRef.current = setInterval(() => {
+      const left = endTimeRef.current - Date.now();
+      if (left <= 0) {
+        // TIME'S UP — fade out audio then pause
+        if (timerRef.current) clearInterval(timerRef.current);
+        timerRef.current = null;
+        setActiveMinutes(null);
+        setRemaining('');
+        try { sessionStorage.removeItem('voyo-sleep-timer-end'); } catch {}
+
+        // Gentle 10-second fade-out via the audio element's volume
+        // (not masterGain — don't mess with the Web Audio chain)
+        const el = document.querySelector('audio') as HTMLAudioElement | null;
+        if (el && !el.paused) {
+          const startVol = el.volume;
+          let step = 0;
+          const fade = setInterval(() => {
+            step++;
+            el.volume = Math.max(0, startVol * (1 - step / 40)); // 40 steps × 250ms = 10s
+            if (step >= 40) {
+              clearInterval(fade);
+              usePlayerStore.getState().togglePlay(); // pause
+              el.volume = startVol; // restore for next play
+            }
+          }, 250);
+        } else {
+          usePlayerStore.getState().setIsPlaying(false);
+        }
+        return;
+      }
+      // Update countdown display
+      const m = Math.floor(left / 60000);
+      const s = Math.floor((left % 60000) / 1000);
+      setRemaining(`${m}:${s.toString().padStart(2, '0')}`);
+    }, 1000);
+  };
+
+  const cancelTimer = () => {
+    if (timerRef.current) clearInterval(timerRef.current);
+    timerRef.current = null;
+    setActiveMinutes(null);
+    setRemaining('');
+    try { sessionStorage.removeItem('voyo-sleep-timer-end'); } catch {}
+    haptics.light();
+  };
+
+  // Restore timer on mount if sessionStorage has a future end time
+  useEffect(() => {
+    try {
+      const saved = sessionStorage.getItem('voyo-sleep-timer-end');
+      if (saved) {
+        const end = parseInt(saved, 10);
+        const left = end - Date.now();
+        if (left > 0) {
+          endTimeRef.current = end;
+          startTimer(Math.ceil(left / 60000));
+        }
+      }
+    } catch {}
+    return () => { if (timerRef.current) clearInterval(timerRef.current); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return (
+    <div className="bg-white/5 rounded-2xl p-4">
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-3">
+          <Moon size={18} className="text-purple-400" />
+          <div>
+            <div className="text-sm font-medium text-white">Sleep Timer</div>
+            <div className="text-[10px] text-gray-500">
+              {activeMinutes ? `${remaining} remaining` : 'Music fades out gently'}
+            </div>
+          </div>
+        </div>
+        {activeMinutes && (
+          <button
+            onClick={cancelTimer}
+            className="text-[10px] text-red-400/70 hover:text-red-400 px-2 py-1 rounded-lg bg-red-500/10 active:scale-95 transition-all"
+          >
+            Cancel
+          </button>
+        )}
+      </div>
+      <div className="grid grid-cols-4 gap-2">
+        {SLEEP_OPTIONS.map(({ mins, label }) => (
+          <button
+            key={mins}
+            onClick={() => activeMinutes === mins ? cancelTimer() : startTimer(mins)}
+            className={`py-2 rounded-xl text-xs font-medium transition-all active:scale-95 ${
+              activeMinutes === mins
+                ? 'bg-purple-500/25 border border-purple-500/40 text-purple-300'
+                : 'bg-white/5 border border-white/10 text-gray-400 hover:bg-white/10'
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 export const BoostSettings = ({ isOpen, onClose }: BoostSettingsProps) => {
@@ -321,6 +463,9 @@ export const BoostSettings = ({ isOpen, onClose }: BoostSettingsProps) => {
               {oyeBarBehavior === 'disappear' && 'Full Mix Board, double-tap for reactions'}
             </div>
           </div>
+
+          {/* Sleep Timer */}
+          <SleepTimerSection />
 
           {/* Storage Info */}
           <div className="bg-white/5 rounded-2xl p-4">

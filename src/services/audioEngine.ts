@@ -31,6 +31,7 @@ export type BufferStatus = 'healthy' | 'warning' | 'emergency';
 
 let _audioCtx: AudioContext | null = null;
 let _sourceNode: MediaElementAudioSourceNode | null = null;
+let _analyserNode: AnalyserNode | null = null;
 let _connectedElement: HTMLAudioElement | null = null;
 let _chainWired = false;
 
@@ -148,6 +149,17 @@ export function connectAudioChain(audio: HTMLAudioElement): AudioChainResult | n
       _sourceNode = _audioCtx.createMediaElementSource(audio);
     }
 
+    // ANALYSER NODE — passive tap on the audio signal for visualization.
+    // Doesn't modify the audio chain in any way (no gain, no latency,
+    // no CPU cost beyond the FFT when someone reads the data). Only
+    // created ONCE — the AudioPlayer's frequency pump reads it via
+    // getAnalyser() and writes CSS custom properties for visual response.
+    if (!_analyserNode && _audioCtx) {
+      _analyserNode = _audioCtx.createAnalyser();
+      _analyserNode.fftSize = 256; // 128 frequency bins — lightweight
+      _analyserNode.smoothingTimeConstant = 0.8; // smooth visual movement
+    }
+
     _connectedElement = audio;
     _chainWired = true;
 
@@ -169,6 +181,14 @@ export function connectAudioChain(audio: HTMLAudioElement): AudioChainResult | n
  */
 export function getAudioContext(): AudioContext | null {
   return _audioCtx;
+}
+
+/**
+ * Get the AnalyserNode for audio visualization. Returns null if the chain
+ * hasn't been wired yet. The caller should check for null and bail.
+ */
+export function getAnalyser(): AnalyserNode | null {
+  return _analyserNode;
 }
 
 /**

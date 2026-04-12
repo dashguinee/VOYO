@@ -84,11 +84,12 @@ const ProgressSlider = memo(({ isScrubbing }: { isScrubbing: boolean }) => {
           left: `${duration > 0 ? (currentTime / duration) * 100 : 0}%`,
           transform: 'translateX(-50%)',
           background: '#D4613E',
-          // Stronger resting glow so the progress dot is always readable
-          // against dark posters. Still noticeably brighter when scrubbing.
+          // AUDIO-REACTIVE GLOW: the progress dot brightens with overall
+          // audio energy. --voyo-energy is 0-1 from the frequency pump.
+          // calc() scales the glow radius: 8px base + up to 10px from energy.
           boxShadow: isScrubbing
             ? '0 0 12px rgba(212,97,62,1.0), 0 0 24px rgba(212,97,62,0.5)'
-            : '0 0 8px rgba(212,97,62,0.7), 0 0 16px rgba(212,97,62,0.3)',
+            : '0 0 calc(8px + var(--voyo-energy, 0) * 10px) rgba(212,97,62, calc(0.6 + var(--voyo-energy, 0) * 0.35)), 0 0 16px rgba(212,97,62,0.3)',
           transition: 'box-shadow 0.25s ease-out, width 0.2s ease-out',
           }}
       />
@@ -1687,12 +1688,19 @@ const BigCenterCard = memo(({ track, onExpandVideo, onShowLyrics, hideThumb, isI
     className="relative w-56 h-56 md:w-64 md:h-64 rounded-[2rem] overflow-hidden z-20 group"
     style={{
       boxShadow: '0 25px 60px -12px rgba(0,0,0,0.9), 0 0 50px rgba(139,92,246,0.2), 0 0 100px rgba(139,92,246,0.1)',
-      transform: hideThumb ? 'scale(0.94)' : 'scale(1)',
+      // BASS PULSE: album art inhales with kick drums. --voyo-bass is
+      // written by AudioPlayer's frequency pump at ~20fps. scale(1 + bass*0.03)
+      // = max ~3% scale increase — subtle but perceptible on every beat.
+      // When hideThumb (video mode), use the static scale-down.
+      // NOTE: calc() with CSS custom properties works in Chrome 87+ / Safari 15.4+.
+      transform: hideThumb
+        ? 'scale(0.94)'
+        : 'scale(calc(1 + var(--voyo-bass, 0) * 0.03))',
       opacity: hideThumb ? 0 : 1,
-      // Smooth fade-through when video takes over the card slot. Was
-      // popping instantly because no transition was declared. 300ms
-      // feels like a gentle handoff, not a jump.
-      transition: 'transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.3s ease-out',
+      transition: hideThumb
+        ? 'transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.3s ease-out'
+        : 'opacity 0.3s ease-out',
+      willChange: 'transform',
     }}
   >
     {/* THUMBNAIL */}
@@ -1705,7 +1713,7 @@ const BigCenterCard = memo(({ track, onExpandVideo, onShowLyrics, hideThumb, isI
       <SmartImage
         src={getTrackThumbnailUrl(track, 'high')}
         alt={`${track.title} by ${track.artist}`}
-        className="w-full h-full object-cover transition-transform duration-700 scale-[1.3] group-hover:scale-[1.4]"
+        className="w-full h-full object-cover transition-all duration-700 scale-[1.3] group-hover:scale-[1.4]"
         trackId={track.trackId}
         artist={track.artist}
         title={track.title}
@@ -1729,7 +1737,14 @@ const BigCenterCard = memo(({ track, onExpandVideo, onShowLyrics, hideThumb, isI
           background: 'linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.55) 35%, transparent 100%)',
         }}
       />
-      <div className="absolute bottom-3 left-3 right-3 pointer-events-none">
+      {/* Title + artist fade in on each new track via key-based re-mount.
+          React unmounts the old div and mounts a new one, triggering the
+          voyo-fade-in animation. Result: text crossfades on every track
+          change instead of popping. */}
+      <div
+        key={track.trackId}
+        className="absolute bottom-3 left-3 right-3 pointer-events-none animate-[voyo-fade-in_0.4s_ease-out]"
+      >
         <p
           className="text-white font-bold text-[13px] truncate"
           style={{ textShadow: '0 1px 4px rgba(0,0,0,0.6)' }}

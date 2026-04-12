@@ -27,7 +27,8 @@ import { devLog, devWarn } from '../utils/logger';
 import { usePreferenceStore } from '../store/preferenceStore';
 import { useDownloadStore } from '../store/downloadStore';
 import { useTrackPoolStore } from '../store/trackPoolStore';
-import { audioEngine, connectAudioChain } from '../services/audioEngine';
+import { audioEngine, connectAudioChain, getAnalyser } from '../services/audioEngine';
+import { haptics } from '../utils/haptics';
 import { checkR2Cache } from '../services/api';
 import { downloadTrack, getCachedTrackUrl } from '../services/downloadManager';
 
@@ -562,6 +563,86 @@ export const AudioPlayer = () => {
     };
   }, []);
 
+  // ── FREQUENCY PUMP ─────────────────────────────────────────────────
+  // Reads the AnalyserNode at ~20fps and writes CSS custom properties
+  // to document.documentElement. All visual components read these via
+  // var(--voyo-bass), var(--voyo-energy), var(--voyo-treble) in their
+  // CSS — ZERO React re-renders, pure GPU-composited visual response.
+  //
+  // Architecture choices for PWA smoothness:
+  //   • 20fps (every 3rd rAF) — not 60fps. Saves main thread budget
+  //     for touch events + scroll compositing. Audio visualization
+  //     looks smooth at 20fps; 60 is overkill and competes with the
+  //     audio thread on weak devices.
+  //   • Pre-allocated Uint8Array buffer — no GC per frame.
+  //   • Visibility-gated — stops pumping when document is hidden.
+  //   • Only runs when isPlaying — no work when paused.
+  //
+  // Values written:
+  //   --voyo-bass    : 0-1 (avg of bins 0-15, ~60-250Hz)
+  //   --voyo-mid     : 0-1 (avg of bins 16-80, ~250-5kHz)
+  //   --voyo-treble  : 0-1 (avg of bins 81-127, ~5-20kHz)
+  //   --voyo-energy  : 0-1 (RMS of all bins — overall loudness)
+  const freqBufferRef = useRef<Uint8Array<ArrayBuffer> | null>(null);
+  useEffect(() => {
+    if (!isPlaying) {
+      // Reset to 0 when paused so visuals settle to rest state.
+      const root = document.documentElement;
+      root.style.setProperty('--voyo-bass', '0');
+      root.style.setProperty('--voyo-mid', '0');
+      root.style.setProperty('--voyo-treble', '0');
+      root.style.setProperty('--voyo-energy', '0');
+      return;
+    }
+
+    let frameCount = 0;
+    let rafId = 0;
+
+    const pump = () => {
+      rafId = requestAnimationFrame(pump);
+      // Skip 2 out of 3 frames → ~20fps on a 60fps display.
+      if (++frameCount % 3 !== 0) return;
+      // Don't pump when tab is hidden — saves 100% of this work.
+      if (document.hidden) return;
+
+      const analyser = getAnalyser();
+      if (!analyser) return;
+
+      // Lazy-init the buffer on first pump (128 bins from fftSize=256).
+      if (!freqBufferRef.current) {
+        freqBufferRef.current = new Uint8Array(analyser.frequencyBinCount) as Uint8Array<ArrayBuffer>;
+      }
+      const buf = freqBufferRef.current;
+      analyser.getByteFrequencyData(buf);
+
+      // Compute band averages (0-255 scale → 0-1 normalized).
+      let bass = 0, mid = 0, treble = 0, total = 0;
+      const len = buf.length; // 128
+      for (let i = 0; i < len; i++) {
+        const v = buf[i];
+        total += v;
+        if (i < 16) bass += v;
+        else if (i < 80) mid += v;
+        else treble += v;
+      }
+      bass = (bass / 16) / 255;
+      mid = (mid / 64) / 255;
+      treble = (treble / 48) / 255;
+      const energy = (total / len) / 255;
+
+      // Write CSS custom properties — the ONLY DOM touch per frame.
+      // Components read via var(), composited by GPU, no layout thrash.
+      const root = document.documentElement;
+      root.style.setProperty('--voyo-bass', bass.toFixed(3));
+      root.style.setProperty('--voyo-mid', mid.toFixed(3));
+      root.style.setProperty('--voyo-treble', treble.toFixed(3));
+      root.style.setProperty('--voyo-energy', energy.toFixed(3));
+    };
+
+    rafId = requestAnimationFrame(pump);
+    return () => cancelAnimationFrame(rafId);
+  }, [isPlaying]);
+
   // Harmonic exciter curve — MEMOIZED.
   //
   // Previously regenerated 44100 samples on every preset switch. Each call
@@ -888,6 +969,18 @@ export const AudioPlayer = () => {
       limiter.threshold.value = -0.3; limiter.knee.value = 0; limiter.ratio.value = 8;
       limiter.attack.value = 0.001; limiter.release.value = 0.05;
       comp.connect(limiter); limiter.connect(spInput);
+
+      // ANALYSER TAP: connect the AnalyserNode (from audioEngine) in
+      // parallel to the spatial input. It's a passive read-only tap —
+      // doesn't modify gain, latency, or frequency response. The
+      // frequency pump in useEffect below reads it at ~30fps and writes
+      // CSS custom properties (--voyo-bass, --voyo-energy, --voyo-treble)
+      // that drive visual responses: album art pulse, background brightness,
+      // progress dot glow intensity.
+      const analyser = getAnalyser();
+      if (analyser) {
+        try { spInput.connect(analyser); } catch {}
+      }
 
       audioEnhancedRef.current = true;
 
@@ -2379,6 +2472,10 @@ export const AudioPlayer = () => {
     const wasEdgeStream = isEdgeStreamRef.current;
     const cacheNotYetTriggered = !hasTriggered85PercentCacheRef.current;
     // Advance to next track IMMEDIATELY — autoplay must be instant.
+    // Haptic pulse: subtle "beat" on auto-transition so the user feels
+    // the track boundary physically (multimodal: hear silence gap +
+    // feel the tap + see the art crossfade).
+    haptics.light();
     nextTrack();
     // Defer the telemetry/learning chain + cache fallback to next macrotask.
     // Same pattern as recordPlayEvent: avoid blocking the audio thread right
