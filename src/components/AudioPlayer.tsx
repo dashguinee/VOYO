@@ -184,6 +184,7 @@ export const AudioPlayer = () => {
   const hasTriggered85PercentCacheRef = useRef<boolean>(false); // 85% edge-stream cache trigger
   const hasTriggeredPreloadRef = useRef<boolean>(false); // 70% next-track preload trigger
   const shouldAutoResumeRef = useRef<boolean>(false); // Resume playback on refresh if position was saved
+  const pendingAutoResumeRef = useRef<boolean>(false); // True when autoplay was blocked by browser — first user tap resumes
   const isEdgeStreamRef = useRef<boolean>(false); // True when playing from Edge Worker stream URL (not IndexedDB)
   const hasTriggered75PercentKeptRef = useRef<boolean>(false); // 75% permanent cache trigger
   const hasTriggered30sListenRef = useRef<boolean>(false); // 30s artist discovery listen tracking
@@ -222,10 +223,33 @@ export const AudioPlayer = () => {
     devWarn(`[Playback] ${label} play failed:`, e.name);
     clearLoadWatchdog();
     if (e.name === 'NotAllowedError') {
-      // Autoplay blocked. Reflect paused state so the UI shows "tap to
-      // play" — don't auto-skip, the user wants THIS track.
+      // Autoplay blocked by browser (no user gesture). Set pending flag
+      // so the FIRST user tap anywhere on the app resumes playback.
+      // The track is already loaded + seeked to position — one tap = instant resume.
       usePlayerStore.getState().setIsPlaying(false);
       isLoadingTrackRef.current = false;
+      pendingAutoResumeRef.current = true;
+
+      // Install a one-time gesture listener on document to resume.
+      // Fires on the first touch/click, then removes itself.
+      const resumeOnGesture = () => {
+        if (!pendingAutoResumeRef.current) return;
+        pendingAutoResumeRef.current = false;
+        document.removeEventListener('touchstart', resumeOnGesture);
+        document.removeEventListener('click', resumeOnGesture);
+        // The user just tapped — we have gesture authority. Resume.
+        if (audioRef.current && audioRef.current.paused && audioRef.current.src) {
+          audioContextRef.current?.resume().catch(() => {});
+          fadeInMasterGain(80);
+          audioRef.current.play().then(() => {
+            usePlayerStore.getState().setIsPlaying(true);
+            devLog('🎵 [VOYO] Auto-resume on first gesture after reload');
+          }).catch(() => {});
+        }
+      };
+      document.addEventListener('touchstart', resumeOnGesture, { once: true, passive: true });
+      document.addEventListener('click', resumeOnGesture, { once: true });
+      devLog('[VOYO] Autoplay blocked — waiting for first user gesture to resume');
       return;
     }
     // Real failure — advance immediately rather than waiting 8s for the
