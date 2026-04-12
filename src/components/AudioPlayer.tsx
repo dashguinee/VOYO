@@ -1152,9 +1152,23 @@ export const AudioPlayer = () => {
   // new track enter under a ramp, not a step. 80ms is long enough to bury
   // any transient click but short enough to feel instant.
   // Disarms the watchdog AND the load-in-flight guard — playback is up.
-  const fadeInMasterGain = (durationMs: number = 80) => {
+  // INSTANT PRESENCE: set gain to target BEFORE play(), not after.
+  //
+  // Old approach: silence → play → ramp up over 80-200ms. The first
+  // samples play at low volume = soft start, track doesn't "arrive."
+  //
+  // New approach: the chain is already silent (muteMasterGainInstantly
+  // ran during the src swap). Set gain to TARGET instantly. Then play().
+  // First sample enters at full volume. Zero ramp. Zero soft start.
+  // The track IS there, fully present, from the first beat.
+  //
+  // A tiny 10ms micro-ramp (inaudible) prevents the theoretical sample-
+  // level discontinuity. At 44.1kHz, 10ms = 441 samples — enough for
+  // a smooth zero-crossing. Human temporal resolution for loudness is
+  // ~100ms, so 10ms is physically imperceptible.
+  const fadeInMasterGain = (_durationMs: number = 80) => {
     disarmGainWatchdog();
-    isLoadingTrackRef.current = false; // Track load done, onPause may sync again
+    isLoadingTrackRef.current = false;
     if (!gainNodeRef.current || !audioContextRef.current) return;
     const ctx = audioContextRef.current;
     const now = ctx.currentTime;
@@ -1162,7 +1176,8 @@ export const AudioPlayer = () => {
     const target = computeMasterTarget();
     param.cancelScheduledValues(now);
     param.setValueAtTime(0.0001, now);
-    param.linearRampToValueAtTime(target, now + durationMs / 1000);
+    // 10ms micro-ramp — inaudible but prevents click
+    param.linearRampToValueAtTime(target, now + 0.01);
   };
 
   // Smooth volume fade-in for auto-resume (1.2s from silence to target)
