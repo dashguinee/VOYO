@@ -247,7 +247,7 @@ export const BoostSettings = ({ isOpen, onClose }: BoostSettingsProps) => {
                 style={{
                   background: 'linear-gradient(110deg, transparent 20%, rgba(200,165,100,0.18) 40%, rgba(170,130,70,0.10) 50%, transparent 70%)',
                   backgroundSize: '300% 100%',
-                  animation: 'voyo-araba-shimmer 4s ease-in-out infinite',
+                  animation: 'voyo-araba-shimmer 14s ease-in-out infinite',
                 }}
               />
               <div className="relative flex flex-col items-end">
@@ -344,7 +344,7 @@ export const BoostSettings = ({ isOpen, onClose }: BoostSettingsProps) => {
                     style={{
                       background: 'linear-gradient(110deg, transparent 30%, rgba(91,164,207,0.12) 45%, rgba(130,200,240,0.06) 55%, transparent 70%)',
                       backgroundSize: '300% 100%',
-                      animation: 'voyo-araba-shimmer 5s ease-in-out infinite',
+                      animation: 'voyo-araba-shimmer 12s ease-in-out infinite',
                     }}
                   />
                 )}
