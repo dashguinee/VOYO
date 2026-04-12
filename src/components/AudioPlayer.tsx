@@ -485,15 +485,27 @@ export const AudioPlayer = () => {
   // Background playback continues automatically because we never pause it.
   useEffect(() => {
     const handleVisibility = () => {
-      // Defer the actual work to rAF so multiple visibility handlers in the
-      // app batch into one frame instead of cascading.
-      requestAnimationFrame(() => {
-        const { isPlaying: shouldPlay } = usePlayerStore.getState();
-        if (document.visibilityState === 'hidden' && !shouldPlay && audioContextRef.current?.state === 'running') {
+      const { isPlaying: shouldPlay, playbackSource: ps } = usePlayerStore.getState();
+
+      if (document.visibilityState === 'hidden') {
+        // BATTERY: suspend context ONLY when paused + hidden.
+        // Never suspend when playing — audio must continue in background.
+        if (!shouldPlay && audioContextRef.current?.state === 'running') {
           audioContextRef.current.suspend().catch(() => {});
           devLog('🔋 [Battery] AudioContext suspended (paused + hidden)');
         }
-      });
+        return;
+      }
+
+      // RETURNING FROM BACKGROUND — ensure audio is actually playing.
+      // Some mobile browsers pause the audio element's internal scheduler
+      // during background even if the AudioContext stays running. A safety
+      // play() call re-kicks the scheduler. Only fires if the store says
+      // we should be playing AND the audio element is paused (desync).
+      if (shouldPlay && audioRef.current?.paused && (ps === 'cached' || ps === 'r2')) {
+        audioRef.current.play().catch(() => {});
+        devLog('🔄 [VOYO] Re-kicked audio element on foreground return');
+      }
     };
     document.addEventListener('visibilitychange', handleVisibility);
     return () => document.removeEventListener('visibilitychange', handleVisibility);
@@ -597,17 +609,20 @@ export const AudioPlayer = () => {
 
     let frameCount = 0;
     let rafId = 0;
+    let wasHidden = false;
 
     const pump = () => {
       rafId = requestAnimationFrame(pump);
+
+      // Reset frame counter on visibility return so the 6-frame cadence
+      // starts fresh. Without this, the counter was out of sync after
+      // background → foreground transitions, causing stale/delayed
+      // frequency reads on the first few frames back.
+      if (document.hidden) { wasHidden = true; return; }
+      if (wasHidden) { frameCount = 0; wasHidden = false; }
+
       // Skip 5 out of 6 frames → ~10fps on a 60fps display.
-      // Was 20fps (every 3rd frame) which added too much style-recalc
-      // pressure — BigCenterCard transform + progress dot shadow + orb
-      // scale all trigger GPU recomposition. 10fps is visually smooth
-      // enough for bass-pulse and saves 50% of the main-thread budget.
       if (++frameCount % 6 !== 0) return;
-      // Don't pump when tab is hidden — saves 100% of this work.
-      if (document.hidden) return;
 
       const analyser = getAnalyser();
       if (!analyser) return;

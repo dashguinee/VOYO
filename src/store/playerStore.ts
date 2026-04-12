@@ -84,6 +84,9 @@ interface PersistedQueueItem {
 
 interface PersistedState {
   currentTrackId?: string;
+  currentTrackTitle?: string;   // Full metadata so reload doesn't show "Loading..."
+  currentTrackArtist?: string;
+  currentTrackCoverUrl?: string;
   currentTime?: number;
   voyoActiveTab?: VoyoTab;
   queue?: PersistedQueueItem[];
@@ -127,25 +130,29 @@ if (typeof window !== 'undefined') {
 }
 
 function getPersistedTrack(): Track | null {
-  const { currentTrackId } = loadPersistedState();
+  const persisted = loadPersistedState();
+  const { currentTrackId } = persisted;
   if (currentTrackId) {
-    // Try to find in static tracks (for hydration)
+    // Try to find in static tracks (for hydration) — these have full metadata
     const track = TRACKS.find(t => t.id === currentTrackId || t.trackId === currentTrackId);
     if (track) return track;
-    // If not in static, create a minimal track object to be hydrated from database later
+    // Not in static array: use PERSISTED metadata (title/artist/coverUrl)
+    // that we save in setCurrentTrack. This eliminates the "Loading..."
+    // stub that appeared for every user-discovered track on reload —
+    // the now-playing card displays correctly from the first frame.
     return {
       id: currentTrackId,
       trackId: currentTrackId,
-      title: 'Loading...',
-      artist: '',
-      coverUrl: getThumb(currentTrackId), // Decodes VOYO IDs automatically
+      title: persisted.currentTrackTitle || 'Loading...',
+      artist: persisted.currentTrackArtist || '',
+      coverUrl: persisted.currentTrackCoverUrl || getThumb(currentTrackId),
       duration: 0,
       tags: [],
       oyeScore: 0,
       createdAt: new Date().toISOString(),
     };
   }
-  return null; // No default - will be populated from database
+  return null;
 }
 
 function getPersistedQueue(): QueueItem[] {
@@ -507,9 +514,20 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       signal.addEventListener('abort', () => clearTimeout(refreshTimeoutId));
     }
 
-    // PERSIST: Save track ID so it survives refresh
+    // PERSIST: Save full track metadata so it survives refresh.
+    // Was saving ONLY trackId — on reload, getPersistedTrack() couldn't
+    // find user-discovered tracks in the static TRACKS array and showed
+    // "Loading..." stub. Now persisting title + artist + coverUrl so the
+    // now-playing card displays correctly from the first frame after reload.
     const current = loadPersistedState();
-    savePersistedState({ ...current, currentTrackId: track.id || track.trackId, currentTime: 0 });
+    savePersistedState({
+      ...current,
+      currentTrackId: track.id || track.trackId,
+      currentTrackTitle: track.title,
+      currentTrackArtist: track.artist,
+      currentTrackCoverUrl: track.coverUrl || getThumb(track.trackId || track.id),
+      currentTime: 0,
+    });
 
     // PORTAL SYNC: Update now_playing if portal is open (cancellable)
     const portalSyncTimeoutId = setTimeout(async () => {

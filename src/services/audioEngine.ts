@@ -56,12 +56,19 @@ if (typeof document !== 'undefined') {
       _audioCtx.resume().catch(() => {});
     }
   };
+  // IMMEDIATE resume on visibility change — no rAF delay.
+  // Was wrapped in requestAnimationFrame which added ~16ms before the
+  // AudioContext actually resumed. On background→foreground transitions,
+  // the user heard a brief silence gap while the context spun back up.
+  // Now fires synchronously on visibilitychange AND redundantly on focus
+  // for maximum speed. The context.resume() call is idempotent, so
+  // double-calling is harmless.
   const onVisibilityChange = () => {
     if (document.hidden) return;
-    requestAnimationFrame(resumeCtx);
+    resumeCtx(); // Immediate — no rAF delay
   };
   document.addEventListener('visibilitychange', onVisibilityChange);
-  window.addEventListener('focus', () => requestAnimationFrame(resumeCtx));
+  window.addEventListener('focus', resumeCtx); // Also immediate
   // iOS/Android: After phone lock/unlock, AudioContext goes to 'interrupted' state.
   // A user gesture (touch/click) is required to resume it.
   // CRITICAL: only attach the gesture listeners while context is actually
