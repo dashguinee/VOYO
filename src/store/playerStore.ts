@@ -529,8 +529,13 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       currentTime: 0,
     });
 
-    // PORTAL SYNC: Update now_playing if portal is open (cancellable)
-    const portalSyncTimeoutId = setTimeout(async () => {
+    // PORTAL SYNC: Update now_playing if portal is open (cancellable).
+    // Deferred to requestIdleCallback — the dynamic import() resolves in
+    // a microtask that runs before the next audio buffer callback. During
+    // rapid skip/seek, multiple import() promises queue up and block the
+    // audio thread for 2-5ms per fire. requestIdleCallback pushes it to
+    // when the browser has free time.
+    const runPortalSync = async () => {
       if (signal.aborted) return;
       try {
         const { useUniverseStore } = await import('./universeStore');
@@ -539,12 +544,16 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
         if (universeStore.isPortalOpen) {
           universeStore.updateNowPlaying();
         }
-      } catch {
-        // Ignore sync errors
-      }
-    }, 100);
-    // Cleanup on abort
-    signal.addEventListener('abort', () => clearTimeout(portalSyncTimeoutId));
+      } catch {}
+    };
+    const w = window as unknown as {
+      requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => void;
+    };
+    if (typeof w.requestIdleCallback === 'function') {
+      w.requestIdleCallback(() => runPortalSync(), { timeout: 3000 });
+    } else {
+      setTimeout(() => runPortalSync(), 200);
+    }
   },
 
   // CONSOLIDATED: Play a track - sets track AND isPlaying in one atomic update
@@ -606,18 +615,22 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       return { isPlaying: newIsPlaying };
     });
 
-    // PORTAL SYNC: Update now_playing on play/pause
-    setTimeout(async () => {
+    // PORTAL SYNC: deferred to idle (same pattern as setCurrentTrack)
+    const syncPlay = async () => {
       try {
         const { useUniverseStore } = await import('./universeStore');
         const universeStore = useUniverseStore.getState();
-        if (universeStore.isPortalOpen) {
-          universeStore.updateNowPlaying();
-        }
-      } catch {
-        // Ignore sync errors
-      }
-    }, 100);
+        if (universeStore.isPortalOpen) universeStore.updateNowPlaying();
+      } catch {}
+    };
+    const w = window as unknown as {
+      requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => void;
+    };
+    if (typeof w.requestIdleCallback === 'function') {
+      w.requestIdleCallback(() => syncPlay(), { timeout: 3000 });
+    } else {
+      setTimeout(() => syncPlay(), 200);
+    }
   },
 
   setProgress: (progress) => set({ progress }),
