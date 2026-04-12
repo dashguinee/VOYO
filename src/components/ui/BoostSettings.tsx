@@ -239,11 +239,14 @@ export const BoostSettings = ({ isOpen, onClose }: BoostSettingsProps) => {
                 border: '1px solid rgba(160,120,60,0.25)',
               }}
             >
-              {/* Shimmer sweep — moves across, shifts the brown tint as it goes */}
+              {/* Shimmer sweep — moves across, shifts the brown tint as it goes.
+                  background-size: 300% ensures the gradient is wider than the
+                  container so background-position animation creates visible movement. */}
               <div
                 className="absolute inset-0 pointer-events-none"
                 style={{
-                  background: 'linear-gradient(110deg, transparent 20%, rgba(200,165,100,0.15) 40%, rgba(170,130,70,0.08) 50%, transparent 70%)',
+                  background: 'linear-gradient(110deg, transparent 20%, rgba(200,165,100,0.18) 40%, rgba(170,130,70,0.10) 50%, transparent 70%)',
+                  backgroundSize: '300% 100%',
                   animation: 'voyo-araba-shimmer 4s ease-in-out infinite',
                 }}
               />
