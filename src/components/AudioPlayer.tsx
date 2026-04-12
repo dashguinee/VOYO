@@ -34,6 +34,9 @@ import { downloadTrack, getCachedTrackUrl } from '../services/downloadManager';
 
 // Edge Worker for extraction (FREE - replaces Fly.io)
 const EDGE_WORKER_URL = 'https://voyo-edge.dash-webtv.workers.dev';
+// VPS audio server — pre-processed audio with loudness normalization.
+// Falls back to edge worker + iframe if VPS is down or overloaded.
+const VPS_AUDIO_URL = 'https://stream.zionsynapse.online:8443';
 import { recordPoolEngagement } from '../services/personalization';
 import { recordTrackInSession } from '../services/poolCurator';
 import { recordPlay as djRecordPlay } from '../services/intelligentDJ';
@@ -1731,11 +1734,99 @@ export const AudioPlayer = () => {
             };
           }
         } else {
-          // 📡 R2 MISS — IFRAME FIRST, HOT-SWAP TO AUDIO ELEMENT
+          // 📡 R2 MISS — TRY VPS SERVER FIRST, FALL BACK TO IFRAME
           //
-          // Old flow: await /stream, then play audio element. If /stream
-          // failed, we'd call nextTrack() and the user would watch their
-          // track disappear. No fallback, no background play.
+          // The VPS (stream.zionsynapse.online) runs yt-dlp + FFmpeg to
+          // extract, normalize (EBU R128), and encode audio on the server.
+          // The client gets a finished stream — zero client-side extraction,
+          // better battery, instant background play. If the VPS is down or
+          // overloaded, we fall back to the iframe + hot-swap pipeline
+          // (the battle-tested client-side path).
+          //
+          // VPS audio endpoint: /voyo/audio/:trackId?quality=high|medium|low
+          // Returns: audio/ogg (Opus) stream, chunked transfer encoding
+          // On cache hit: 302 redirect to R2 CDN (zero VPS bandwidth)
+          // On miss: stream while processing (3-8s FFmpeg startup)
+          devLog('🎵 [VOYO] R2 miss — trying VPS server first...');
+
+          let vpsHandled = false;
+          try {
+            const vpsResponse = await fetch(
+              `${VPS_AUDIO_URL}/voyo/audio/${trackId}?quality=high`,
+              { signal: AbortSignal.timeout(8000) },
+            );
+            if (isStale()) return;
+
+            if (vpsResponse.ok || vpsResponse.status === 302) {
+              // VPS served the audio (either stream or R2 redirect).
+              // The fetch API follows redirects automatically, so
+              // vpsResponse.url is the final URL (R2 CDN or VPS stream).
+              devLog('🎵 [VOYO] VPS server responded — playing server-processed audio');
+              vpsHandled = true;
+
+              // Create a blob URL from the response for the audio element
+              const audioBlob = await vpsResponse.blob();
+              if (isStale()) return;
+              const blobUrl = URL.createObjectURL(audioBlob);
+
+              isEdgeStreamRef.current = false;
+              setPlaybackSource('cached'); // Treat server audio as cached
+
+              const { boostProfile: profile } = usePlayerStore.getState();
+              setupAudioEnhancement(profile);
+
+              if (audioRef.current) {
+                if (cachedUrlRef.current) URL.revokeObjectURL(cachedUrlRef.current);
+                cachedUrlRef.current = blobUrl;
+                audioRef.current.loop = false;
+                audioRef.current.volume = 1.0;
+                audioRef.current.src = blobUrl;
+                audioRef.current.load();
+
+                audioRef.current.oncanplaythrough = () => {
+                  if (!audioRef.current) return;
+                  if (isStale()) return;
+
+                  if (isInitialLoadRef.current && savedCurrentTime > 5) {
+                    audioRef.current.currentTime = savedCurrentTime;
+                    isInitialLoadRef.current = false;
+                  }
+
+                  const { isPlaying: shouldPlay } = usePlayerStore.getState();
+                  const shouldAutoResume = shouldAutoResumeRef.current;
+                  if (shouldAutoResume) shouldAutoResumeRef.current = false;
+
+                  if ((shouldPlay || shouldAutoResume) && audioRef.current.paused) {
+                    audioContextRef.current?.state === 'suspended' && audioContextRef.current.resume().catch(() => {});
+                    if (shouldAutoResume) {
+                      fadeInVolume(1200);
+                    } else {
+                      fadeInMasterGain(120);
+                    }
+                    audioRef.current.play().then(() => {
+                      clearLoadWatchdog();
+                      recordPlayEvent();
+                      if (shouldAutoResume && !shouldPlay) {
+                        usePlayerStore.getState().togglePlay();
+                      }
+                      devLog('🎵 [VOYO] Playback started (VPS server-processed)');
+                    }).catch(e => handlePlayFailure(e, 'VPS'));
+                  }
+                };
+              }
+            }
+          } catch (e) {
+            devLog(`[VOYO] VPS server unavailable (${(e as Error)?.message}) — falling back to iframe pipeline`);
+          }
+
+          // If VPS handled it, we're done. Otherwise fall through to iframe.
+          if (vpsHandled) return;
+
+          // 📡 FALLBACK — IFRAME FIRST, HOT-SWAP TO AUDIO ELEMENT
+          //
+          // The VPS is down or overloaded. Fall back to the battle-tested
+          // client-side pipeline: iframe plays instantly, /stream fetch
+          // runs in parallel, hot-swap when ready.
           //
           // New flow:
           //   1. IMMEDIATELY set playbackSource='iframe'. The YouTubeIframe
