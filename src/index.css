@@ -728,6 +728,16 @@ input[type="range"]:focus::-moz-range-thumb {
   100% { opacity: 1; transform: scale(1) translateY(0); }
 }
 
+/* VOYEX Araba luxury shimmer — sweeps across the badge, shifting the
+   brown tint as it goes. Each shimmer cycle subtly changes the warmth
+   from deep cocoa → golden brown → amber → back. 4s cycle so it's
+   ambient, not attention-grabbing. */
+@keyframes voyo-araba-shimmer {
+  0%   { background-position: -200% 0; filter: hue-rotate(0deg); }
+  50%  { background-position: 200% 0; filter: hue-rotate(8deg); }
+  100% { background-position: -200% 0; filter: hue-rotate(0deg); }
+}
+
 /* Iframe-audio pulse — runs on the Mini Player button when audio is
    flowing through the YouTube iframe (during the iframe → hot-swap
    window). Signals to the user: "tap me to see the video + keep app

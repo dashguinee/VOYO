@@ -125,18 +125,18 @@ function SleepTimerSection() {
     <div className="bg-white/5 rounded-2xl p-4">
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-3">
-          <Moon size={18} className="text-purple-400" />
+          <Moon size={18} style={{ color: 'rgba(160,120,60,0.7)' }} />
           <div>
-            <div className="text-sm font-medium text-white">Sleep Timer</div>
+            <div className="text-sm font-medium text-white">Sleep</div>
             <div className="text-[10px] text-gray-500">
-              {activeMinutes ? `${remaining} remaining` : 'Music fades out gently'}
+              {activeMinutes ? `${remaining} remaining` : 'Fades out gently'}
             </div>
           </div>
         </div>
         {activeMinutes && (
           <button
             onClick={cancelTimer}
-            className="text-[10px] text-red-400/70 hover:text-red-400 px-2 py-1 rounded-lg bg-red-500/10 active:scale-95 transition-all"
+            className="text-[10px] text-gray-400 hover:text-white px-2 py-1 rounded-lg bg-white/5 active:scale-95 transition-all"
           >
             Cancel
           </button>
@@ -149,8 +149,8 @@ function SleepTimerSection() {
             onClick={() => activeMinutes === mins ? cancelTimer() : startTimer(mins)}
             className={`py-2 rounded-xl text-xs font-medium transition-all active:scale-95 ${
               activeMinutes === mins
-                ? 'bg-purple-500/25 border border-purple-500/40 text-purple-300'
-                : 'bg-white/5 border border-white/10 text-gray-400 hover:bg-white/10'
+                ? 'bg-white/10 border border-white/25 text-white'
+                : 'bg-white/[0.03] border border-white/8 text-gray-500 hover:bg-white/5'
             }`}
           >
             {label}
@@ -213,23 +213,84 @@ export const BoostSettings = ({ isOpen, onClose }: BoostSettingsProps) => {
         {/* Handle */}
         <div className="absolute top-3 left-1/2 -translate-x-1/2 w-12 h-1 bg-white/20 rounded-full z-10" />
 
-        {/* Header */}
+        {/* Header — VOYEX Araba TM branding */}
         <div className="flex items-center justify-between p-6 pb-4 flex-shrink-0">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500/20 to-violet-600/20 border border-purple-500/30 flex items-center justify-center">
-              <Zap size={18} className="text-purple-400" />
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center"
+              style={{
+                background: 'linear-gradient(135deg, rgba(139,100,50,0.22), rgba(90,65,35,0.12))',
+                border: '1px solid rgba(160,120,60,0.30)',
+                boxShadow: '0 0 14px rgba(139,100,50,0.18)',
+              }}
+            >
+              <Settings size={18} style={{ color: '#C4945A' }} />
             </div>
             <div>
-              <h3 className="text-lg font-bold text-white">Boost Settings</h3>
-              <p className="text-xs text-gray-500">{cachedTracks.length} tracks boosted</p>
+              <h3 className="text-lg font-bold text-white">Studio</h3>
+              <p className="text-xs" style={{ color: 'rgba(160,120,60,0.7)' }}>{cachedTracks.length} tracks boosted</p>
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="p-2 rounded-full bg-white/5 hover:bg-white/10 transition-colors"
-          >
-            <X size={18} className="text-gray-400" />
-          </button>
+          {/* VOYEX Araba TM badge — right corner, luxury shimmer */}
+          <div className="flex items-center gap-3">
+            <div
+              className="relative overflow-hidden rounded-xl px-3 py-2"
+              style={{
+                background: 'linear-gradient(135deg, rgba(80,55,30,0.35), rgba(50,35,20,0.25))',
+                border: '1px solid rgba(160,120,60,0.25)',
+              }}
+            >
+              {/* Shimmer sweep — moves across, shifts the brown tint as it goes */}
+              <div
+                className="absolute inset-0 pointer-events-none"
+                style={{
+                  background: 'linear-gradient(110deg, transparent 20%, rgba(200,165,100,0.15) 40%, rgba(170,130,70,0.08) 50%, transparent 70%)',
+                  animation: 'voyo-araba-shimmer 4s ease-in-out infinite',
+                }}
+              />
+              <div className="relative flex flex-col items-end">
+                <div className="flex items-baseline gap-1">
+                  <span
+                    className="text-[10px] font-black tracking-[0.15em]"
+                    style={{
+                      background: 'linear-gradient(135deg, #C4945A 0%, #A07840 40%, #7A5A30 70%, #5C4020 100%)',
+                      WebkitBackgroundClip: 'text',
+                      WebkitTextFillColor: 'transparent',
+                      backgroundClip: 'text',
+                    }}
+                  >
+                    VOYEX
+                  </span>
+                  <span
+                    className="text-[10px] font-bold tracking-wide"
+                    style={{
+                      background: 'linear-gradient(135deg, #D4A868 0%, #B08548 50%, #8A6535 100%)',
+                      WebkitBackgroundClip: 'text',
+                      WebkitTextFillColor: 'transparent',
+                      backgroundClip: 'text',
+                    }}
+                  >
+                    Araba
+                  </span>
+                  <span className="text-[6px] align-super" style={{ color: 'rgba(160,120,60,0.6)' }}>TM</span>
+                </div>
+                <span
+                  className="text-[7px] tracking-[0.25em] font-medium"
+                  style={{
+                    // "Excellence" in soft golden — the lightest, warmest tone
+                    color: 'rgba(212,175,105,0.55)',
+                  }}
+                >
+                  AFRICAN SOUND EXCELLENCE
+                </span>
+              </div>
+            </div>
+            <button
+              onClick={onClose}
+              className="p-2 rounded-full bg-white/5 hover:bg-white/10 transition-colors"
+            >
+              <X size={18} className="text-gray-400" />
+            </button>
+          </div>
         </div>
 
         {/* Content - Scrollable */}
@@ -294,7 +355,7 @@ export const BoostSettings = ({ isOpen, onClose }: BoostSettingsProps) => {
                 onClick={() => setBoostProfile('voyex')}
                 className={`flex flex-col items-center gap-1 p-3 rounded-xl border transition-all relative voyo-tap-scale ${
                   boostProfile === 'voyex'
-                    ? 'bg-gradient-to-br from-purple-500/15 to-violet-700/10 border-purple-500/35'
+                    ? 'bg-gradient-to-br from-[#8A6535]/18 to-[#5C4020]/10 border-[#C4945A]/35'
                     : 'bg-white/5 border-white/10 hover:bg-white/10'
                 }`}
               >
@@ -302,17 +363,25 @@ export const BoostSettings = ({ isOpen, onClose }: BoostSettingsProps) => {
                   size={22}
                   strokeWidth={1.6}
                   style={{
-                    color: boostProfile === 'voyex' ? '#a78bfa' : 'rgba(167,139,250,0.55)',
-                    filter: boostProfile === 'voyex' ? 'drop-shadow(0 0 6px rgba(139,92,246,0.7))' : 'none',
+                    color: boostProfile === 'voyex' ? '#C4945A' : 'rgba(160,120,60,0.55)',
+                    filter: boostProfile === 'voyex' ? 'drop-shadow(0 0 6px rgba(160,120,60,0.7))' : 'none',
                   }}
                 />
                 <span
                   className="text-[11px] font-bold"
-                  style={{ color: boostProfile === 'voyex' ? '#a78bfa' : 'rgba(255,255,255,0.55)' }}
+                  style={{
+                    background: boostProfile === 'voyex'
+                      ? 'linear-gradient(135deg, #C4945A, #A07840)'
+                      : 'none',
+                    WebkitBackgroundClip: boostProfile === 'voyex' ? 'text' : undefined,
+                    WebkitTextFillColor: boostProfile === 'voyex' ? 'transparent' : undefined,
+                    backgroundClip: boostProfile === 'voyex' ? 'text' : undefined,
+                    color: boostProfile === 'voyex' ? undefined : 'rgba(255,255,255,0.55)',
+                  }}
                 >
-                  VOYEX
+                  Studio
                 </span>
-                <span className="text-[9px] opacity-60 text-white">Studio</span>
+                <span className="text-[9px] opacity-60 text-white">Araba</span>
               </button>
             </div>
             <div className="text-[10px] text-gray-500 mt-3 text-center">
@@ -403,6 +472,16 @@ export const BoostSettings = ({ isOpen, onClose }: BoostSettingsProps) => {
                     </span>
                   </div>
                   <div className="text-[10px] text-gray-500 mt-0.5">Download tracks you love as you go</div>
+                  {autoBoostEnabled && (
+                    <div className="flex items-center gap-1 mt-0.5">
+                      <span
+                        className="text-[8px] font-bold tracking-wider"
+                        style={{ color: 'rgba(180,135,70,0.65)' }}
+                      >
+                        VOYEX<sup className="text-[5px]">TM</sup> enabled
+                      </span>
+                    </div>
+                  )}
                 </div>
               </div>
               <button
@@ -432,35 +511,53 @@ export const BoostSettings = ({ isOpen, onClose }: BoostSettingsProps) => {
             </div>
           </div>
 
-          {/* OYE Bar Behavior */}
+          {/* OYE Bar Behavior — the cards ARE the effect.
+              No eye icons. The selected card has a subtle glow/animation
+              that demonstrates the behavior. Neutral tones (no purple). */}
           <div className="bg-white/5 rounded-2xl p-4">
-            <div className="text-sm font-medium text-white mb-3">OYE Bar Behavior</div>
+            <div className="text-sm font-medium text-white mb-3">OYE Bar</div>
             <div className="grid grid-cols-2 gap-2">
-              {[
-                { value: 'fade', label: 'Fade', icon: Eye, desc: 'Scroll for Mix Board' },
-                { value: 'disappear', label: 'Disappear', icon: EyeOff, desc: 'Full Mix Board' },
-              ].map(({ value, label, icon: Icon, desc }) => (
-                <button
-                  key={value}
-                  onClick={() => {
-                    setOyeBarBehavior(value as 'fade' | 'disappear');
-                    haptics.light();
+              {/* Fade option — card has a subtle opacity gradient to show "fading" */}
+              <button
+                onClick={() => { setOyeBarBehavior('fade'); haptics.light(); }}
+                className={`relative flex flex-col items-center justify-center gap-1 p-3 rounded-xl border transition-all active:scale-95 overflow-hidden ${
+                  oyeBarBehavior === 'fade'
+                    ? 'bg-white/8 border-white/25 text-white'
+                    : 'bg-white/[0.03] border-white/8 text-gray-500 hover:bg-white/5'
+                }`}
+              >
+                {/* The "fade" effect visualized ON the card */}
+                <div
+                  className="absolute inset-0 pointer-events-none"
+                  style={{
+                    background: oyeBarBehavior === 'fade'
+                      ? 'linear-gradient(to bottom, rgba(255,255,255,0.06) 0%, transparent 60%)'
+                      : 'none',
                   }}
-                  className={`flex flex-col items-center gap-1.5 p-3 rounded-xl border transition-all active:scale-95 ${
-                    oyeBarBehavior === value
-                      ? 'bg-purple-500/20 border-purple-500/30 text-purple-300'
-                      : 'bg-white/5 border-white/10 text-gray-400 hover:bg-white/10'
-                  }`}
-                >
-                  <Icon size={18} />
-                  <span className="text-[10px] font-medium">{label}</span>
-                  <span className="text-[8px] opacity-70">{desc}</span>
-                </button>
-              ))}
-            </div>
-            <div className="text-[10px] text-gray-500 mt-3 text-center">
-              {oyeBarBehavior === 'fade' && 'Reactions visible, scroll for Mix Board'}
-              {oyeBarBehavior === 'disappear' && 'Full Mix Board, double-tap for reactions'}
+                />
+                <span className="text-[11px] font-semibold relative z-10">Fade</span>
+                <span className="text-[8px] opacity-50 relative z-10">Scroll for Mix</span>
+              </button>
+              {/* Disappear option — card has a "vanishing" feel */}
+              <button
+                onClick={() => { setOyeBarBehavior('disappear'); haptics.light(); }}
+                className={`relative flex flex-col items-center justify-center gap-1 p-3 rounded-xl border transition-all active:scale-95 overflow-hidden ${
+                  oyeBarBehavior === 'disappear'
+                    ? 'bg-white/8 border-white/25 text-white'
+                    : 'bg-white/[0.03] border-white/8 text-gray-500 hover:bg-white/5'
+                }`}
+              >
+                <div
+                  className="absolute inset-0 pointer-events-none"
+                  style={{
+                    background: oyeBarBehavior === 'disappear'
+                      ? 'linear-gradient(to bottom, transparent 40%, rgba(255,255,255,0.04) 100%)'
+                      : 'none',
+                  }}
+                />
+                <span className="text-[11px] font-semibold relative z-10">Disappear</span>
+                <span className="text-[8px] opacity-50 relative z-10">Full Mix Board</span>
+              </button>
             </div>
           </div>
 
