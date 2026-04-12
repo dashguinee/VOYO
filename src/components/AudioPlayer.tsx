@@ -2079,9 +2079,14 @@ export const AudioPlayer = () => {
     // (poolStore O(n) map, oyoDJ saveProfile = JSON.stringify + localStorage
     // setItem, etc.) that totals 20-100ms of main thread blocking. Running
     // synchronously inside the audio.play() promise resolution starves the
-    // audio thread = audible crack on every track start. setTimeout(0)
-    // yields to the next macrotask, letting the audio thread settle first.
-    setTimeout(() => {
+    // Defer ALL telemetry to idle. Was setTimeout(0) which fires as a
+    // macrotask that competes with audio buffer refills. The 6 service
+    // calls total 5-20ms of synchronous work (Zustand set, O(n) pool
+    // iteration, oyoDJ profile stringify, Supabase async). At 256-sample
+    // buffers (~5.8ms), this is guaranteed to underrun.
+    // requestIdleCallback runs when the browser has free time — NEVER
+    // during audio buffer processing.
+    const doRecord = () => {
       try {
         recordPoolEngagement(track.trackId, 'play');
         useTrackPoolStore.getState().recordPlay(track.trackId);
@@ -2093,7 +2098,13 @@ export const AudioPlayer = () => {
       } catch (e) {
         devWarn('[VOYO] recordPlayEvent failed:', e);
       }
-    }, 0);
+    };
+    const wr = window as unknown as { requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => void };
+    if (typeof wr.requestIdleCallback === 'function') {
+      wr.requestIdleCallback(doRecord, { timeout: 3000 });
+    } else {
+      setTimeout(doRecord, 100);
+    }
   }, [currentTrack]);
 
   // === HOT-SWAP: When boost completes mid-stream (R2 → cached upgrade) ===

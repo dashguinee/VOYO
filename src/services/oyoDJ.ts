@@ -208,11 +208,31 @@ const STORAGE_KEY = 'voyo-oyo-profile';
 /**
  * Save DJ profile to localStorage
  */
+// Debounced + idle-deferred save. saveProfile is called 15+ times
+// during a single track lifecycle (play, complete, skip, reactions).
+// Each call was: JSON.stringify(djProfile) + localStorage.setItem
+// = 1-3ms synchronous main-thread I/O. During playback, this competed
+// with audio buffer refills. Now batches into a single idle-deferred
+// write, no matter how many calls happen in a burst.
+let _saveScheduled = false;
 function saveProfile(): void {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(djProfile));
-  } catch (e) {
-    devWarn('[OYO] Failed to save profile:', e);
+  if (_saveScheduled) return; // already queued
+  _saveScheduled = true;
+  const w = window as unknown as {
+    requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => void;
+  };
+  const doSave = () => {
+    _saveScheduled = false;
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(djProfile));
+    } catch (e) {
+      devWarn('[OYO] Failed to save profile:', e);
+    }
+  };
+  if (typeof w.requestIdleCallback === 'function') {
+    w.requestIdleCallback(doSave, { timeout: 5000 });
+  } else {
+    setTimeout(doSave, 500);
   }
 }
 
