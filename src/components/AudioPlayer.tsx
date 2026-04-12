@@ -199,6 +199,7 @@ export const AudioPlayer = () => {
   const lastProgressWriteBucketRef = useRef<number>(-1);
   const lastMediaSessionWriteRef = useRef<number>(0);
   const crossfadeArmedRef = useRef(false); // prevents double-fire of DJ crossfade
+  const isCrossfadingRef = useRef(false); // true during active crossfade → tells fadeInMasterGain to use long ramp
   // FLOW WATCHDOG: armed when loadTrack starts, cleared when play() succeeds.
   // If it fires, it means loadTrack never reached a playing state — either
   // the stream URL was null, fetch failed silently, canplaythrough never
@@ -1146,18 +1147,29 @@ export const AudioPlayer = () => {
   //
   // Falls through to muteMasterGainInstantly for the final silent-swap
   // (the loadTrack effect still needs the chain at 0 before src change).
-  // DJ crossfade: 600ms exponential fade-out. Short enough to not be
-  // obvious during the last notes, long enough to feel mixed (not cut).
-  // Was 1500ms which made the volume drop noticeable during the final
-  // chorus. 600ms is the sweet spot — same timing DJs use for a quick mix.
-  const crossfadeMute = () => {
+  // ── ADAPTIVE DJ CROSSFADE ───────────────────────────────────────
+  //
+  // The fade IS the loading time. Instead of: hard stop → silence →
+  // wait for server → play next, the old track fades out WHILE the
+  // server prepares the next track. User never hears silence.
+  //
+  // Duration adapts to context:
+  //   • durationSec = 3.0 → snappy (high BPM / server ready fast)
+  //   • durationSec = 6.0 → slow, smooth (chill track / server needs time)
+  //
+  // The handleEnded → nextTrack fires DURING the fade, not after.
+  // loadTrack starts its work while the old track is still audible.
+  // When the new track's canplaythrough fires, fadeInMasterGain takes
+  // over from wherever the crossfade ramp currently is.
+  const crossfadeMute = (durationSec: number = 3.0) => {
     if (!gainNodeRef.current || !audioContextRef.current) return;
     const ctx = audioContextRef.current;
     const now = ctx.currentTime;
     const param = gainNodeRef.current.gain;
     param.cancelScheduledValues(now);
     param.setValueAtTime(param.value, now);
-    param.exponentialRampToValueAtTime(0.001, now + 0.6);
+    // Exponential ramp = natural perceived loudness curve
+    param.exponentialRampToValueAtTime(0.001, now + durationSec);
   };
 
   // Short fade-in ramp from silence → target. Called from canplaythrough
@@ -1168,6 +1180,7 @@ export const AudioPlayer = () => {
   const fadeInMasterGain = (durationMs: number = 80) => {
     disarmGainWatchdog();
     isLoadingTrackRef.current = false; // Track load done, onPause may sync again
+    isCrossfadingRef.current = false; // Crossfade handoff complete
     if (!gainNodeRef.current || !audioContextRef.current) return;
     const ctx = audioContextRef.current;
     const now = ctx.currentTime;
@@ -1605,7 +1618,11 @@ export const AudioPlayer = () => {
                 // Schedule the fade-in BEFORE play() so the ramp is already
                 // queued when the first sample lands. 400ms premium settle-in
                 // so each fresh track eases in smoothly.
-                fadeInMasterGain(200);
+                // Adaptive fade-in: if we're mid-crossfade (the previous
+                // track's fade-out started at T-6s), use a 3s ramp so
+                // both fades overlap smoothly. If not crossfading
+                // (user skip, first play), use a short 200ms ramp.
+                fadeInMasterGain(isCrossfadingRef.current ? 3000 : 200);
                 audioRef.current.play().then(() => {
                   clearLoadWatchdog();
                   recordPlayEvent();
@@ -1678,7 +1695,11 @@ export const AudioPlayer = () => {
               if (shouldAutoResume) {
                 fadeInVolume(1200);
               } else {
-                fadeInMasterGain(200);
+                // Adaptive fade-in: if we're mid-crossfade (the previous
+                // track's fade-out started at T-6s), use a 3s ramp so
+                // both fades overlap smoothly. If not crossfading
+                // (user skip, first play), use a short 200ms ramp.
+                fadeInMasterGain(isCrossfadingRef.current ? 3000 : 200);
               }
               audioRef.current.play().then(() => {
                 clearLoadWatchdog();
@@ -1745,7 +1766,11 @@ export const AudioPlayer = () => {
                   fadeInVolume(1200);
                 } else {
                   // 400ms premium settle-in for every fresh R2 track start.
-                  fadeInMasterGain(200);
+                  // Adaptive fade-in: if we're mid-crossfade (the previous
+                // track's fade-out started at T-6s), use a 3s ramp so
+                // both fades overlap smoothly. If not crossfading
+                // (user skip, first play), use a short 200ms ramp.
+                fadeInMasterGain(isCrossfadingRef.current ? 3000 : 200);
                 }
                 audioRef.current.play().then(() => {
                   clearLoadWatchdog();
@@ -1826,7 +1851,11 @@ export const AudioPlayer = () => {
                     if (shouldAutoResume) {
                       fadeInVolume(1200);
                     } else {
-                      fadeInMasterGain(200);
+                      // Adaptive fade-in: if we're mid-crossfade (the previous
+                // track's fade-out started at T-6s), use a 3s ramp so
+                // both fades overlap smoothly. If not crossfading
+                // (user skip, first play), use a short 200ms ramp.
+                fadeInMasterGain(isCrossfadingRef.current ? 3000 : 200);
                     }
                     audioRef.current.play().then(() => {
                       clearLoadWatchdog();
@@ -2600,21 +2629,42 @@ export const AudioPlayer = () => {
       checkProgressMilestones(progress);
     }
 
-    // ── DJ CROSSFADE TRIGGER ──────────────────────────────────────
-    // When the track is within 3 seconds of ending, start the smooth
-    // crossfade. The current track fades out over 1.5s (exponential
-    // ramp), nextTrack fires so the new track starts loading while
-    // the old one is still audible. The new track's fade-in (800ms)
-    // overlaps with the tail of the old fade-out. Result: DJ-mixed
-    // transition instead of hard silence cut.
+    // ── ADAPTIVE DJ CROSSFADE TRIGGER ──────────────────────────────
     //
-    // crossfadeArmedRef prevents double-firing (the trigger condition
-    // is true for ~12 handleTimeUpdate ticks).
+    // Start at T-6s. The fade IS the loading time — the old track
+    // fades out WHILE the server prepares the next one. User never
+    // hears silence because nextTrack fires immediately and loadTrack
+    // starts its work while the old track is still audible.
+    //
+    // Duration adapts to audio energy (proxy for BPM/tempo):
+    //   • High energy (>0.4) → 3s fade (snappy, high BPM, keeps momentum)
+    //   • Low energy (<0.4) → 6s fade (smooth, chill, gentle handoff)
+    //
+    // The new track's canplaythrough fires fadeInMasterGain(200ms or 3s)
+    // which takes over from wherever the crossfade ramp is. If the
+    // server is fast (R2 cache hit), the new track fades in during the
+    // old track's fade-out → TRUE overlap. If the server is slow,
+    // the old track finishes its fade, brief silence, then new track
+    // fades in. Either way: smoother than a hard cut.
     const remaining = el.duration - el.currentTime;
-    if (remaining > 0 && remaining < 1.5 && !crossfadeArmedRef.current && el.duration > 10 && !el.ended) {
+    if (remaining > 0 && remaining < 6 && !crossfadeArmedRef.current && el.duration > 15 && !el.ended) {
       crossfadeArmedRef.current = true;
-      devLog(`[VOYO] DJ crossfade: ${remaining.toFixed(1)}s remaining — fading out`);
-      crossfadeMute();
+
+      // Read current energy from the frequency pump (0-1 scale)
+      const energyStr = document.documentElement.style.getPropertyValue('--voyo-energy');
+      const energy = parseFloat(energyStr) || 0;
+      const isHighEnergy = energy > 0.4;
+
+      // Adaptive fade: high energy = 3s snappy, low energy = 6s smooth
+      const fadeDuration = isHighEnergy ? 3.0 : Math.min(6.0, remaining);
+      devLog(`[VOYO] DJ crossfade: ${remaining.toFixed(1)}s left, energy=${energy.toFixed(2)}, fade=${fadeDuration}s`);
+      isCrossfadingRef.current = true;
+      crossfadeMute(fadeDuration);
+
+      // Fire nextTrack NOW — loadTrack starts while old track is still
+      // fading. The loading time IS the crossfade time.
+      haptics.light();
+      nextTrack();
     }
 
     // 1Hz throttle for mediaSession — native bridge is expensive on iOS.
@@ -2638,19 +2688,27 @@ export const AudioPlayer = () => {
 
   const handleEnded = useCallback(() => {
     if (playbackSource !== 'cached' && playbackSource !== 'r2') return;
+
+    // If the DJ crossfade already fired nextTrack at T-6s, DON'T
+    // fire it again here. The crossfade trigger set isCrossfadingRef
+    // and already called nextTrack. We just need the telemetry.
+    const alreadyCrossfaded = isCrossfadingRef.current || crossfadeArmedRef.current;
+
     // Capture current state for the deferred work
     const track = currentTrack;
     const currentTime = audioRef.current?.currentTime || 0;
     const completionRate = trackProgressRef.current;
-    // Capture whether this was an edge-stream track (for cache fallback below)
     const wasEdgeStream = isEdgeStreamRef.current;
     const cacheNotYetTriggered = !hasTriggered85PercentCacheRef.current;
-    // Advance to next track IMMEDIATELY — autoplay must be instant.
-    // Haptic pulse: subtle "beat" on auto-transition so the user feels
-    // the track boundary physically (multimodal: hear silence gap +
-    // feel the tap + see the art crossfade).
-    haptics.light();
-    nextTrack();
+
+    if (alreadyCrossfaded) {
+      // Crossfade already advanced the track — just do telemetry
+      devLog('[VOYO] handleEnded: crossfade already fired nextTrack, telemetry only');
+    } else {
+      // No crossfade (short track <15s, or disabled) — advance now
+      haptics.light();
+      nextTrack();
+    }
     // Defer the telemetry/learning chain + cache fallback to next macrotask.
     // Same pattern as recordPlayEvent: avoid blocking the audio thread right
     // when the next track is starting.
