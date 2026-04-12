@@ -1146,7 +1146,10 @@ export const AudioPlayer = () => {
   //
   // Falls through to muteMasterGainInstantly for the final silent-swap
   // (the loadTrack effect still needs the chain at 0 before src change).
-  const crossfadeMuteMs = 1500; // 1.5 seconds — adjustable per user pref later
+  // DJ crossfade: 600ms exponential fade-out. Short enough to not be
+  // obvious during the last notes, long enough to feel mixed (not cut).
+  // Was 1500ms which made the volume drop noticeable during the final
+  // chorus. 600ms is the sweet spot — same timing DJs use for a quick mix.
   const crossfadeMute = () => {
     if (!gainNodeRef.current || !audioContextRef.current) return;
     const ctx = audioContextRef.current;
@@ -1154,10 +1157,7 @@ export const AudioPlayer = () => {
     const param = gainNodeRef.current.gain;
     param.cancelScheduledValues(now);
     param.setValueAtTime(param.value, now);
-    // Exponential ramp sounds more natural than linear for fade-outs
-    // (perceived loudness follows a logarithmic curve). Target 0.001
-    // instead of 0 because exponentialRamp can't reach 0.
-    param.exponentialRampToValueAtTime(0.001, now + crossfadeMuteMs / 1000);
+    param.exponentialRampToValueAtTime(0.001, now + 0.6);
   };
 
   // Short fade-in ramp from silence → target. Called from canplaythrough
@@ -1605,7 +1605,7 @@ export const AudioPlayer = () => {
                 // Schedule the fade-in BEFORE play() so the ramp is already
                 // queued when the first sample lands. 400ms premium settle-in
                 // so each fresh track eases in smoothly.
-                fadeInMasterGain(800);
+                fadeInMasterGain(200);
                 audioRef.current.play().then(() => {
                   clearLoadWatchdog();
                   recordPlayEvent();
@@ -1678,7 +1678,7 @@ export const AudioPlayer = () => {
               if (shouldAutoResume) {
                 fadeInVolume(1200);
               } else {
-                fadeInMasterGain(800);
+                fadeInMasterGain(200);
               }
               audioRef.current.play().then(() => {
                 clearLoadWatchdog();
@@ -1745,7 +1745,7 @@ export const AudioPlayer = () => {
                   fadeInVolume(1200);
                 } else {
                   // 400ms premium settle-in for every fresh R2 track start.
-                  fadeInMasterGain(800);
+                  fadeInMasterGain(200);
                 }
                 audioRef.current.play().then(() => {
                   clearLoadWatchdog();
@@ -1826,7 +1826,7 @@ export const AudioPlayer = () => {
                     if (shouldAutoResume) {
                       fadeInVolume(1200);
                     } else {
-                      fadeInMasterGain(800);
+                      fadeInMasterGain(200);
                     }
                     audioRef.current.play().then(() => {
                       clearLoadWatchdog();
@@ -2599,7 +2599,7 @@ export const AudioPlayer = () => {
     // crossfadeArmedRef prevents double-firing (the trigger condition
     // is true for ~12 handleTimeUpdate ticks).
     const remaining = el.duration - el.currentTime;
-    if (remaining > 0 && remaining < 3 && !crossfadeArmedRef.current && el.duration > 10) {
+    if (remaining > 0 && remaining < 1.5 && !crossfadeArmedRef.current && el.duration > 10) {
       crossfadeArmedRef.current = true;
       devLog(`[VOYO] DJ crossfade: ${remaining.toFixed(1)}s remaining — fading out`);
       crossfadeMute(); // 1.5s exponential fade-out
