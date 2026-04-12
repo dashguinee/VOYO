@@ -2655,7 +2655,11 @@ export const AudioPlayer = () => {
     // the old track finishes its fade, brief silence, then new track
     // fades in. Either way: smoother than a hard cut.
     const remaining = el.duration - el.currentTime;
-    if (remaining > 0 && remaining < 6 && !crossfadeArmedRef.current && el.duration > 15 && !el.ended) {
+    // CRITICAL: only crossfade when app is in FOREGROUND. If backgrounded,
+    // the crossfade's setTimeout(nextTrack) queues up (throttled to 1Hz by
+    // Chrome), then on return EVERYTHING fires at once = app freeze/crash.
+    // In background, let the track end naturally via handleEnded.
+    if (remaining > 0 && remaining < 6 && !crossfadeArmedRef.current && el.duration > 15 && !el.ended && !document.hidden) {
       crossfadeArmedRef.current = true;
 
       // Read current energy from the frequency pump (0-1 scale)
