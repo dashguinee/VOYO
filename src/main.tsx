@@ -18,7 +18,7 @@ if ('serviceWorker' in navigator) {
       .then((reg) => {
         setInterval(() => { reg.update(); }, 5 * 60 * 1000);
       })
-      .catch((err) => console.warn('[VOYO] SW registration failed:', err));
+      .catch(() => { /* SW registration failed — non-critical, app works without it */ });
   });
 
   navigator.serviceWorker.addEventListener('message', (e) => {

@@ -73,7 +73,7 @@ function recordGeminiFailure(): void {
     const cooldown = Math.min(10 * 60 * 1000 * Math.pow(2, steps), 60 * 60 * 1000);
     geminiDisabledUntil = Date.now() + cooldown;
     if (!geminiWarnedForCurrentWindow) {
-      console.warn(`[Brain] Gemini unavailable, degrading to pool-only recommendations for ${Math.round(cooldown / 60000)}min`);
+      devWarn(`[Brain] Gemini unavailable, degrading to pool-only recommendations for ${Math.round(cooldown / 60000)}min`);
       geminiWarnedForCurrentWindow = true;
     }
   }

@@ -10,6 +10,7 @@
 
 import { createClient } from '@supabase/supabase-js';
 import { supabase } from '../supabase';
+import { devLog, devWarn } from '../../utils/logger';
 
 // Command Center's Supabase credentials (social data)
 // Only create a separate client if CC-specific env vars are set
@@ -135,7 +136,7 @@ export type AppCode = typeof APP_CODES[keyof typeof APP_CODES];
 export const friendsAPI = {
   async getFriends(userId: string, appFilter?: AppCode): Promise<Friend[]> {
     if (!ccSupabase) {
-      console.warn('[DAHUB] Command Center Supabase not configured');
+      devWarn('[DAHUB] Command Center Supabase not configured');
       return [];
     }
 
@@ -168,7 +169,7 @@ export const friendsAPI = {
 
       // RPC failed, fall back to shared account members as "friends"
       // (No friendships table exists - friends are people on same accounts)
-      console.log('[DAHUB] Using shared account members as friends');
+      devLog('[DAHUB] Using shared account members as friends');
 
       // Get shared account members and treat them as friends
       const sharedMembers = await this.getSharedAccountMembers(userId);
@@ -267,7 +268,7 @@ export const friendsAPI = {
         .eq('core_id', userId);
 
       if (userServicesError || !userServices?.length) {
-        console.log('[DAHUB] No shared accounts found for user');
+        devLog('[DAHUB] No shared accounts found for user');
         return [];
       }
 
@@ -282,7 +283,7 @@ export const friendsAPI = {
         .neq('core_id', userId);
 
       if (membersError || !sharedMembers?.length) {
-        console.log('[DAHUB] No shared members found:', membersError);
+        devLog('[DAHUB] No shared members found:', membersError);
         return [];
       }
 

@@ -127,7 +127,7 @@ export const VoyoSplash = ({ onComplete, minDuration = 1500 }: VoyoSplashProps) 
         opacity: hidden ? 0 : 1,
         transition: 'opacity 220ms ease-out',
         pointerEvents: hidden ? 'none' : 'auto',
-        fontFamily: "'Outfit', system-ui, sans-serif",
+        fontFamily: "'Satoshi', system-ui, sans-serif",
       }}
     >
       {/* ── Boom expand: rings + particles, one-shot at mount ── */}

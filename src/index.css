@@ -33,20 +33,9 @@
   /* === ACCENT COLORS — Purple + African Gold Bronze === */
   --voyo-accent: #D4A053;          /* African Gold Bronze — THE accent */
   --voyo-accent-glow: rgba(212, 160, 83, 0.4);
-  --voyo-pink: #8b5cf6;            /* Was pamplo pink → now purple */
-  --voyo-pink-glow: rgba(139, 92, 246, 0.4);
-  --glow-accent: rgba(139, 92, 246, 0.4);
-
   /* === FUNCTIONAL COLORS === */
-  --voyo-blue: #818cf8;            /* Indigo-400 - cool accent */
-  --voyo-blue-glow: rgba(129, 140, 248, 0.4);
   --voyo-red: #ef4444;             /* Red-500 - errors + live only */
   --voyo-red-glow: rgba(239, 68, 68, 0.4);
-  --voyo-cyan: #818cf8;            /* Indigo-400 */
-  --voyo-gold: #D4A053;            /* African Gold Bronze */
-  --voyo-neon-green: #8b5cf6;      /* → purple */
-  --voyo-amber: #D4A053;           /* African Gold Bronze */
-  --voyo-success: #8b5cf6;         /* → purple */
 
   /* OYÉ Zone Colors */
   --oye-hot: #D4A053;              /* Bronze for hot */

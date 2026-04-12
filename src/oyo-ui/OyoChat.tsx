@@ -25,6 +25,7 @@ import {
   useState,
 } from 'react';
 import { oyo } from '../oyo';
+import { devWarn } from '../utils/logger';
 
 export type ChatRole = 'user' | 'oyo';
 
@@ -136,7 +137,7 @@ export const OyoChat = forwardRef<OyoChatHandle, OyoChatProps>(function OyoChat(
         },
       ]);
     } catch (err) {
-      console.warn('[OyoChat] think failed', err);
+      devWarn('[OyoChat] think failed', err);
       setTurns((prev) => [
         ...prev,
         {
@@ -180,7 +181,7 @@ export const OyoChat = forwardRef<OyoChatHandle, OyoChatProps>(function OyoChat(
                 key={t.id}
                 className="text-center max-w-[88%] pointer-events-auto"
                 style={{
-                  fontFamily: "'Outfit', system-ui, sans-serif",
+                  fontFamily: "'Satoshi', system-ui, sans-serif",
                   fontSize: 18,
                   fontWeight: 500,
                   color: '#f3e9d1',
@@ -201,7 +202,7 @@ export const OyoChat = forwardRef<OyoChatHandle, OyoChatProps>(function OyoChat(
               key={t.id}
               className="self-end max-w-[78%] pointer-events-auto"
               style={{
-                fontFamily: "'Outfit', system-ui, sans-serif",
+                fontFamily: "'Satoshi', system-ui, sans-serif",
                 fontSize: 15,
                 fontWeight: 400,
                 color: 'rgba(255,255,255,0.85)',
@@ -256,7 +257,7 @@ export const OyoChat = forwardRef<OyoChatHandle, OyoChatProps>(function OyoChat(
               border: 'none',
               outline: 'none',
               color: 'white',
-              fontFamily: "'Outfit', system-ui, sans-serif",
+              fontFamily: "'Satoshi', system-ui, sans-serif",
               fontSize: 15,
               fontWeight: 400,
               letterSpacing: '0.005em',

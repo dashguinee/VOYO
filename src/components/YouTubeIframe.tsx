@@ -244,7 +244,7 @@ export const YouTubeIframe = memo(() => {
 
           if (errorCode === 100) {
             // Genuinely unavailable — track gone
-            console.warn('[YouTubeIframe] Video not found:', videoId);
+            devLog('[YouTubeIframe] Video not found:', videoId);
             if (videoId) markTrackAsFailed(videoId, errorCode);
             // Re-check on fire: if the hot-swap completed during this
             // 500ms window, the audio element is already playing the
@@ -273,7 +273,7 @@ export const YouTubeIframe = memo(() => {
               return;
             }
             // Audio source is iframe itself AND iframe blocked → nothing to play
-            console.warn('[YouTubeIframe] Embed blocked, no alternative source:', videoId);
+            devLog('[YouTubeIframe] Embed blocked, no alternative source:', videoId);
             if (videoId) markTrackAsFailed(videoId, errorCode);
             // Same re-check as the 100 path: hot-swap may have won the
             // race during the 500ms delay. Don't skip a newly-ready track.

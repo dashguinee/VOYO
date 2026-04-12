@@ -1001,7 +1001,7 @@ function UpdateButton() {
     return (
       <div className="fixed inset-0 z-[9999] bg-[#050508] flex items-center justify-center">
         <div className="text-center">
-          <h1 className="text-lg font-bold text-white mb-2" style={{ fontFamily: "'Outfit', sans-serif" }}>Updating VOYO</h1>
+          <h1 className="text-lg font-bold text-white mb-2" style={{ fontFamily: "'Satoshi', sans-serif" }}>Updating VOYO</h1>
           <div className="w-10 h-[2px] mx-auto rounded-full overflow-hidden bg-white/5">
             <div className="h-full w-full rounded-full" style={{ background: 'rgba(139, 92, 246, 0.5)', animation: 'voyo-loading-bar 1.5s ease-in-out infinite' }} />
           </div>
@@ -1027,7 +1027,7 @@ function UpdateButton() {
         background: 'rgba(139, 92, 246, 0.15)',
         border: '1px solid rgba(139, 92, 246, 0.35)',
         boxShadow: '0 10px 30px rgba(139, 92, 246, 0.25)',
-        fontFamily: "'Outfit', sans-serif",
+        fontFamily: "'Satoshi', sans-serif",
       }}
     >
       <span className="w-2 h-2 rounded-full animate-ping" style={{ background: '#a78bfa' }} />
