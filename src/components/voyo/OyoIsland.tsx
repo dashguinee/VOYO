@@ -14,7 +14,7 @@
  * - Tap mic → voice search
  */
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, memo } from 'react';
 import { getProfile } from '../../services/oyoDJ';
 import {
   voiceSearch,
@@ -101,7 +101,11 @@ export function OyoIsland({ visible, onHide, onActivity }: OyoIslandProps) {
   const autoHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const currentTrack = usePlayerStore(state => state.currentTrack);
-  const currentTime = usePlayerStore(state => state.currentTime);
+  // NOTE: currentTime is deliberately NOT subscribed at this level. The
+  // lyrics-segment sync lives in an isolated LyricsSegmentSync sub-
+  // component at the bottom of this file — it subscribes to currentTime
+  // in a render-null wrapper, so the ~900-line OyoIsland tree doesn't
+  // re-render at 4Hz during playback.
 
   const djProfile = getProfile();
 
@@ -138,13 +142,9 @@ export function OyoIsland({ visible, onHide, onActivity }: OyoIslandProps) {
     onActivity?.();
   }, [mode, onHide, onActivity]);
 
-  // Update lyrics segment based on playback time
-  useEffect(() => {
-    if (lyrics && currentTime !== undefined) {
-      const segment = getCurrentSegment(lyrics, currentTime);
-      setCurrentLyricSegment(segment);
-    }
-  }, [lyrics, currentTime]);
+  // Lyrics-segment sync is handled by the LyricsSegmentSync sub-component
+  // (rendered below). It subscribes to currentTime independently so the
+  // OyoIsland body doesn't re-render at 4Hz.
 
   // Voice search handler - THE SHAZAM KILLER
   const handleVoiceSearch = useCallback(async () => {
@@ -395,6 +395,12 @@ export function OyoIsland({ visible, onHide, onActivity }: OyoIslandProps) {
           onClose={collapseToIsland}
         />
       )}
+
+      {/* LYRICS SYNC — isolated sub-component. Subscribes to currentTime
+          at 4Hz and computes the active segment, calling setCurrentLyricSegment
+          on the parent. Produces no DOM (returns null). Lets the parent
+          OyoIsland body skip 4Hz re-renders during playback. */}
+      {lyrics && <LyricsSegmentSync lyrics={lyrics} onSegmentChange={setCurrentLyricSegment} />}
     </>
   );
 }
@@ -402,6 +408,26 @@ export function OyoIsland({ visible, onHide, onActivity }: OyoIslandProps) {
 // ============================================================================
 // SUB-COMPONENTS
 // ============================================================================
+
+// LyricsSegmentSync — renders null. Its only job is to subscribe to
+// currentTime and translate it into a parent state update. React.memo
+// plus the stable setter prop means this is the ONLY thing in the
+// OyoIsland tree that re-renders at the 4Hz store-write cadence.
+const LyricsSegmentSync = memo(({
+  lyrics,
+  onSegmentChange,
+}: {
+  lyrics: EnrichedLyrics;
+  onSegmentChange: (seg: TranslatedSegment | null) => void;
+}) => {
+  const currentTime = usePlayerStore(state => state.currentTime);
+  useEffect(() => {
+    if (currentTime === undefined) return;
+    onSegmentChange(getCurrentSegment(lyrics, currentTime));
+  }, [lyrics, currentTime, onSegmentChange]);
+  return null;
+});
+LyricsSegmentSync.displayName = 'LyricsSegmentSync';
 
 function CollapsedIsland({
   djName,

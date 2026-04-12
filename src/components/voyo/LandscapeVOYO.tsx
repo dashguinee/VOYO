@@ -14,7 +14,7 @@
  * - User never leaves VOYO ecosystem
  */
 
-import { useRef, useEffect, useState, useCallback } from 'react';
+import { useRef, useEffect, useState, useCallback, memo } from 'react';
 import { SkipBack, SkipForward, Play, Pause, Plus, Volume2, Smartphone, Loader2 } from 'lucide-react';
 import { usePlayerStore } from '../../store/playerStore';
 import { BoostButton } from '../ui/BoostButton';
@@ -275,25 +275,22 @@ const YouTubeInterceptor = ({ onVideoExtracted }: InterceptorProps) => {
   // Random style - changes each time interceptor appears
   const [style, setStyle] = useState<InterceptorStyle>('floaty');
 
-  // Get playback state to know when to show interceptor
-  const currentTime = usePlayerStore(state => state.currentTime);
-  const duration = usePlayerStore(state => state.duration);
+  // Non-time-dependent subscriptions. The 4Hz-changing fields
+  // (currentTime, derived zone state) live in InterceptorTimeSync below.
   const currentTrack = usePlayerStore(state => state.currentTrack);
 
-  // FORMULA: YouTube shows suggestions ~10-15 seconds before end
-  // We arrive 5 SECONDS EARLIER. Already glowing when YouTube's appear.
-  // Our layer is on TOP. User sees VOYO, not YouTube.
-  const VOYO_ARRIVES_EARLY = 20;  // We show up at -20s
-  const YOUTUBE_SHOWS_AT = 15;    // YouTube shows at -15s (5s after us)
+  // Zone state is updated by InterceptorTimeSync only when values change,
+  // so this component re-renders ~1Hz (during countdown) or 0Hz (otherwise)
+  // instead of at the full 4Hz store-write cadence.
+  const [zoneState, setZoneState] = useState<{
+    show: boolean;
+    seconds: number;
+    inSuggestionZone: boolean;
+  }>({ show: false, seconds: 0, inSuggestionZone: false });
 
-  const isInSuggestionZone = duration > 0 && currentTime > (duration - VOYO_ARRIVES_EARLY);
-  const secondsUntilEnd = duration > 0 ? Math.ceil(duration - currentTime) : 0;
-
-  // Also show briefly at the start (first 5 seconds) for discovery
-  const isInStartZone = currentTime < 5 && currentTime > 0.5;
-
-  // Show interceptor when in either zone
-  const showInterceptor = isInSuggestionZone || isInStartZone;
+  const isInSuggestionZone = zoneState.inSuggestionZone;
+  const secondsUntilEnd = zoneState.seconds;
+  const showInterceptor = zoneState.show;
 
   // Randomize style when interceptor appears
   useEffect(() => {
@@ -354,6 +351,12 @@ const YouTubeInterceptor = ({ onVideoExtracted }: InterceptorProps) => {
 
   return (
     <>
+      {/* Time-driven zone state sync. Subscribes to currentTime at 4Hz,
+          only writes to parent state when the derived values change —
+          so the parent re-renders ~1Hz during suggestion zone (countdown)
+          and 0Hz otherwise. */}
+      <InterceptorTimeSync onChange={setZoneState} />
+
       {/* INTERCEPTOR ZONES - Appear EXACTLY when YouTube shows suggestions */}
       {/* Formula: Last 15 seconds OR first 5 seconds */}
       {showInterceptor && (
@@ -466,6 +469,39 @@ const YouTubeInterceptor = ({ onVideoExtracted }: InterceptorProps) => {
   );
 };
 
+// InterceptorTimeSync — renders null. Subscribes to currentTime + duration
+// and writes zone state to the parent only when values actually change.
+// Parent (YouTubeInterceptor) ends up re-rendering ~1Hz (countdown) or
+// 0Hz (outside zones) instead of at the 4Hz store-write cadence.
+const InterceptorTimeSync = memo(({
+  onChange,
+}: {
+  onChange: (s: { show: boolean; seconds: number; inSuggestionZone: boolean }) => void;
+}) => {
+  const currentTime = usePlayerStore(state => state.currentTime);
+  const duration = usePlayerStore(state => state.duration);
+  const lastRef = useRef<{ show: boolean; seconds: number; inSuggestionZone: boolean }>({
+    show: false,
+    seconds: 0,
+    inSuggestionZone: false,
+  });
+  useEffect(() => {
+    const VOYO_ARRIVES_EARLY = 20;
+    const inSug = duration > 0 && currentTime > (duration - VOYO_ARRIVES_EARLY);
+    const inStart = currentTime < 5 && currentTime > 0.5;
+    const show = inSug || inStart;
+    const seconds = duration > 0 ? Math.ceil(duration - currentTime) : 0;
+    const prev = lastRef.current;
+    if (prev.show !== show || prev.seconds !== seconds || prev.inSuggestionZone !== inSug) {
+      const next = { show, seconds, inSuggestionZone: inSug };
+      lastRef.current = next;
+      onChange(next);
+    }
+  }, [currentTime, duration, onChange]);
+  return null;
+});
+InterceptorTimeSync.displayName = 'InterceptorTimeSync';
+
 export const LandscapeVOYO = ({ onVideoMode }: LandscapeVOYOProps) => {
   // Fine-grained selectors — huge landscape view, must avoid full re-render
   // on every progress/currentTime tick.
@@ -485,7 +521,10 @@ export const LandscapeVOYO = ({ onVideoMode }: LandscapeVOYOProps) => {
   const togglePlay = usePlayerStore(s => s.togglePlay);
   const playbackSource = usePlayerStore(s => s.playbackSource);
   const setPlaybackSource = usePlayerStore(s => s.setPlaybackSource);
-  const currentTime = usePlayerStore(s => s.currentTime);
+  // currentTime is NOT subscribed here — it was dead weight causing the
+  // whole LandscapeVOYO component to re-render at 4Hz during playback.
+  // YouTubeInterceptor manages its own currentTime subscription in an
+  // isolated sub-component.
   const setVideoTarget = usePlayerStore(s => s.setVideoTarget);
 
   // Set video target to landscape on mount, hidden on unmount

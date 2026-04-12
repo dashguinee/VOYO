@@ -2421,6 +2421,25 @@ export const AudioPlayer = () => {
   // IMPROVED: Immediate cache check first (should be ready with 3s auto-cache),
   // seamless position-preserving swap, max 500ms silence target
   const handleAudioError = useCallback(async (e: React.SyntheticEvent<HTMLAudioElement, Event>) => {
+    // During iframe phase, the main audio element is playing the silent
+    // WAV as a background-play keeper. If that errors (rare — blob URL
+    // is stable in-memory), we don't need full recovery since the iframe
+    // is providing audible sound. Just re-arm the silent keeper and let
+    // the hot-swap path (or next track) take over naturally.
+    if (playbackSource === 'iframe') {
+      devWarn('[VOYO] Silent WAV keeper errored during iframe phase — re-arming');
+      if (audioRef.current && silentKeeperUrlRef.current) {
+        try {
+          audioRef.current.loop = true;
+          audioRef.current.src = silentKeeperUrlRef.current;
+          audioRef.current.load();
+          // play() is not forced here — the onPause guard handles the
+          // transient state, and if the user is actively on iframe the
+          // element will re-attach when ready.
+        } catch {}
+      }
+      return;
+    }
     if (playbackSource !== 'cached' && playbackSource !== 'r2') return;
 
     const audio = e.currentTarget;
@@ -2458,10 +2477,18 @@ export const AudioPlayer = () => {
       muteMasterGainInstantly();
     }
 
+    // STALE GUARD: Capture this recovery's load attempt so a rapid skip
+    // during async recovery work doesn't fire stale oncanplay callbacks
+    // over a freshly-started loadTrack. If loadAttemptRef advances, we
+    // bail before touching audio.src.
+    const recoveryAttempt = loadAttemptRef.current;
+    const recoveryIsStale = () => loadAttemptRef.current !== recoveryAttempt;
+
     // RECOVERY 1 (FASTEST): Check local cache IMMEDIATELY
     // With 3s auto-cache delay, cache should be ready for most tracks
     try {
       const cachedUrl = await checkCache(currentTrack.trackId);
+      if (recoveryIsStale()) return;
       if (cachedUrl && audioRef.current) {
         const swapStart = performance.now();
         devLog('🔄 [VOYO] FAST RECOVERY - switching to local cache');
@@ -2474,6 +2501,7 @@ export const AudioPlayer = () => {
         audioRef.current.oncanplay = () => {
           if (!audioRef.current) return;
           audioRef.current.oncanplay = null; // Clear to prevent re-trigger
+          if (recoveryIsStale()) return; // late fire, newer load owns the element
           if (savedPos > 2) audioRef.current.currentTime = savedPos;
           isEdgeStreamRef.current = false;
           setPlaybackSource('cached');
@@ -2492,12 +2520,14 @@ export const AudioPlayer = () => {
     try {
       devLog('🔄 [VOYO] Recovery 2 - checking R2 collective cache');
       const r2Result = await checkR2Cache(currentTrack.trackId);
+      if (recoveryIsStale()) return;
       if (r2Result.exists && r2Result.url && audioRef.current) {
         audioRef.current.src = r2Result.url;
         audioRef.current.load();
         audioRef.current.oncanplay = () => {
           if (!audioRef.current) return;
           audioRef.current.oncanplay = null;
+          if (recoveryIsStale()) return;
           if (savedPos > 2) audioRef.current.currentTime = savedPos;
           isEdgeStreamRef.current = false;
           setPlaybackSource('r2');
@@ -2518,13 +2548,16 @@ export const AudioPlayer = () => {
       const streamResponse = await fetch(`${EDGE_WORKER_URL}/stream?v=${currentTrack.trackId}`, {
         signal: AbortSignal.timeout(5000),
       });
+      if (recoveryIsStale()) return;
       const streamData = await streamResponse.json();
+      if (recoveryIsStale()) return;
       if (streamData.url && audioRef.current) {
         audioRef.current.src = streamData.url;
         audioRef.current.load();
         audioRef.current.oncanplay = () => {
           if (!audioRef.current) return;
           audioRef.current.oncanplay = null;
+          if (recoveryIsStale()) return;
           if (savedPos > 2) audioRef.current.currentTime = savedPos;
           isEdgeStreamRef.current = true;
           fadeInMasterGain(80);
@@ -2538,6 +2571,7 @@ export const AudioPlayer = () => {
     } catch {}
 
     // RECOVERY 4: Skip to next track (music never stops)
+    if (recoveryIsStale()) return; // a newer loadTrack is already in motion
     const elapsed = performance.now() - recoveryStart;
     devLog(`🚨 [VOYO] Cannot recover after ${elapsed.toFixed(0)}ms - skipping to next track`);
     // NOTE: Do NOT clear audio.src — it can break the MediaElementAudioSourceNode.
