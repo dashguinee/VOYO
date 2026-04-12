@@ -43,6 +43,7 @@ import { recordPlay as djRecordPlay } from '../services/intelligentDJ';
 import { onTrackPlay as oyoOnTrackPlay, onTrackComplete as oyoOnTrackComplete } from '../services/oyoDJ';
 import { registerTrackPlay as viRegisterPlay } from '../services/videoIntelligence';
 import { useMiniPiP } from '../hooks/useMiniPiP';
+import { notifyNextUp } from '../services/oyoNotifications';
 import {
   preloadNextTrack,
   getPreloadedTrack,
@@ -463,10 +464,13 @@ export const AudioPlayer = () => {
 
     const timeoutIds: ReturnType<typeof setTimeout>[] = [];
 
-    // Stagger preloads: 3s, 8s, 15s — first preload was at 500ms which
-    // competed with the current track's audio buffer fill during the
-    // critical first seconds. 3s gives the decoder time to stabilize.
-    const staggerDelays = [3000, 8000, 15000];
+    // Stagger preloads: 1.5s, 6s, 12s — first preload fires after the
+    // current track's decoder stabilizes (~500ms for cached, ~1s for R2).
+    // 1.5s is safe: the current track is playing by then, and preload
+    // uses a SEPARATE audio element so it doesn't compete for the main
+    // element's decode pipeline. Earlier = more likely the next track
+    // is ready when handleEnded fires.
+    const staggerDelays = [1500, 6000, 12000];
 
     tracksToPreload.forEach((track, index) => {
       const delay = staggerDelays[index] || staggerDelays[staggerDelays.length - 1];
@@ -1602,23 +1606,25 @@ export const AudioPlayer = () => {
           if (audioRef.current && preloaded.url) {
             audioRef.current.volume = 1.0; // Pinned — all loudness via masterGain
             audioRef.current.src = preloaded.url;
-            audioRef.current.load();
+            // Skip audio.load() for preloaded blob URLs — the data is in
+            // memory and setting .src alone triggers the load algorithm.
+            // Calling load() would force a full reset of the decode pipeline,
+            // adding 30-80ms of latency. For non-blob URLs, load() is needed.
+            if (!preloaded.url.startsWith('blob:')) audioRef.current.load();
 
-            // Since we preloaded, audio should be ready almost instantly
-            audioRef.current.oncanplaythrough = () => {
+            // Use canplay (readyState >= 3) not canplaythrough — the audio
+            // data is already local (preloaded blob). No need to wait for
+            // the browser's full-buffer estimation which adds 50-200ms on
+            // mobile for no benefit when the source is in-memory.
+            const playHandler = () => {
               if (!audioRef.current) return;
-              // STALE GUARD: the canplaythrough callback can fire LATE —
-              // after the user has already skipped to the next track. If we
-              // don't check, we'd start playing the stale preloaded track
-              // on top of whatever the newer loadTrack wired up.
+              audioRef.current.removeEventListener('canplay', playHandler);
+              audioRef.current.oncanplaythrough = null;
               if (isStale()) return;
 
               const { isPlaying: shouldPlay } = usePlayerStore.getState();
               if (shouldPlay && audioRef.current.paused) {
                 audioContextRef.current?.state === 'suspended' && audioContextRef.current.resume().catch(() => {});
-                // Schedule the fade-in BEFORE play() so the ramp is already
-                // queued when the first sample lands. 400ms premium settle-in
-                // so each fresh track eases in smoothly.
                 fadeInMasterGain(80);
                 audioRef.current.play().then(() => {
                   clearLoadWatchdog();
@@ -1626,9 +1632,8 @@ export const AudioPlayer = () => {
                   devLog('🔮 [VOYO] Preloaded playback started!');
                 }).catch(e => handlePlayFailure(e, 'Preloaded'));
               }
-              // Paused state: masterGain stays muted. When user taps play,
-              // the play/pause effect's applyMasterGain() ramps it back up.
             };
+            audioRef.current.addEventListener('canplay', playHandler, { once: true });
           }
 
           // Cleanup the preloaded element
@@ -1659,12 +1664,20 @@ export const AudioPlayer = () => {
         if (audioRef.current) {
           audioRef.current.volume = 1.0; // Pinned — all loudness via masterGain
           audioRef.current.src = cachedUrl;
-          audioRef.current.load();
+          // Cached URLs are blob: from IndexedDB — data is in memory.
+          // Skip load() for blobs (setting src triggers the load algorithm).
+          // For non-blob URLs (edge case), keep load().
+          if (!cachedUrl.startsWith('blob:')) audioRef.current.load();
 
-          audioRef.current.oncanplaythrough = () => {
+          // canplay (readyState >= 3) fires faster than canplaythrough for
+          // local blob sources. The data is already in memory — no need to
+          // wait for the browser's full playthrough estimate (~50-200ms extra
+          // on mobile). For remote URLs we'd want canplaythrough, but cached
+          // tracks are always local blobs.
+          const cachedPlayHandler = () => {
             if (!audioRef.current) return;
-            // STALE GUARD: late-firing canplaythrough after a skip would
-            // start the wrong track. Bail before touching play state.
+            audioRef.current.removeEventListener('canplay', cachedPlayHandler);
+            audioRef.current.oncanplaythrough = null;
             if (isStale()) return;
 
             // Restore position on initial load
@@ -1673,22 +1686,14 @@ export const AudioPlayer = () => {
               isInitialLoadRef.current = false;
             }
 
-            // FIX: Get fresh state to avoid stale closure bug
-            // The isPlaying from closure might be outdated when callback fires
             const { isPlaying: shouldPlay } = usePlayerStore.getState();
-
-            // RESUME FIX: Also auto-play if we detected a session resume (even if isPlaying is false)
             const shouldAutoResume = shouldAutoResumeRef.current;
             if (shouldAutoResume) {
-              shouldAutoResumeRef.current = false; // Only auto-resume once
+              shouldAutoResumeRef.current = false;
             }
 
             if ((shouldPlay || shouldAutoResume) && audioRef.current.paused) {
               audioContextRef.current?.state === 'suspended' && audioContextRef.current.resume().catch(() => {});
-              // Session resume uses the longer 1.2s fade; normal playback
-              // gets a 400ms premium settle-in fade on every fresh track.
-              // Both scheduled BEFORE play() so the ramp is queued when the
-              // first sample lands.
               if (shouldAutoResume) {
                 fadeInVolume(1200);
               } else {
@@ -1697,16 +1702,14 @@ export const AudioPlayer = () => {
               audioRef.current.play().then(() => {
                 clearLoadWatchdog();
                 recordPlayEvent();
-                // Update store to reflect playing state if we auto-resumed
                 if (shouldAutoResume && !shouldPlay) {
                   usePlayerStore.getState().togglePlay();
                 }
                 devLog('🎵 [VOYO] Playback started (cached)');
               }).catch(e => handlePlayFailure(e, 'Cached'));
             }
-            // Paused state: masterGain stays muted; play/pause effect will
-            // ramp it up via applyMasterGain() when the user taps play.
           };
+          audioRef.current.addEventListener('canplay', cachedPlayHandler, { once: true });
         }
       } else {
         // 📡 NOT IN LOCAL CACHE - Check R2 collective cache before iframe
@@ -1820,10 +1823,13 @@ export const AudioPlayer = () => {
                 audioRef.current.loop = false;
                 audioRef.current.volume = 1.0;
                 audioRef.current.src = blobUrl;
-                audioRef.current.load();
+                // Blob URL — data is in memory, skip load() for faster start
 
-                audioRef.current.oncanplaythrough = () => {
+                // canplay fires faster than canplaythrough for blob sources
+                const vpsPlayHandler = () => {
                   if (!audioRef.current) return;
+                  audioRef.current.removeEventListener('canplay', vpsPlayHandler);
+                  audioRef.current.oncanplaythrough = null;
                   if (isStale()) return;
 
                   if (isInitialLoadRef.current && savedCurrentTime > 5) {
@@ -1852,6 +1858,7 @@ export const AudioPlayer = () => {
                     }).catch(e => handlePlayFailure(e, 'VPS'));
                   }
                 };
+                audioRef.current.addEventListener('canplay', vpsPlayHandler, { once: true });
               }
             }
           } catch (e) {
@@ -1974,10 +1981,13 @@ export const AudioPlayer = () => {
                   if (cachedUrlRef.current) URL.revokeObjectURL(cachedUrlRef.current);
                   cachedUrlRef.current = blobUrl;
                   audioRef.current.src = blobUrl;
-                  audioRef.current.load();
+                  // Blob — skip load()
 
-                  audioRef.current.oncanplaythrough = () => {
-                    if (!audioRef.current || isStale()) return;
+                  const hotSwapHandler = () => {
+                    if (!audioRef.current) return;
+                    audioRef.current.removeEventListener('canplay', hotSwapHandler);
+                    audioRef.current.oncanplaythrough = null;
+                    if (isStale()) return;
 
                     const iframePos = usePlayerStore.getState().currentTime;
                     if (iframePos > 1) audioRef.current.currentTime = iframePos;
@@ -1996,6 +2006,7 @@ export const AudioPlayer = () => {
                       devLog('🎵 [VOYO] VPS hot-swap complete — boosted + background play enabled');
                     }).catch(e => handlePlayFailure(e, 'VPS-hot-swap'));
                   };
+                  audioRef.current.addEventListener('canplay', hotSwapHandler, { once: true });
                 }
               }
             }
@@ -2691,6 +2702,11 @@ export const AudioPlayer = () => {
     // Advance to next track. Clean gapless transition.
     haptics.light();
     nextTrack();
+    // OYO: pre-announce the next track (ambient notification)
+    const nextState = usePlayerStore.getState();
+    if (nextState.currentTrack) {
+      notifyNextUp(nextState.currentTrack.title, nextState.currentTrack.artist);
+    }
     // Defer the telemetry/learning chain + cache fallback to next macrotask.
     // Same pattern as recordPlayEvent: avoid blocking the audio thread right
     // when the next track is starting.
@@ -2985,6 +3001,14 @@ export const AudioPlayer = () => {
         // resolve cleanly → autoplay doesn't fire. Check audio.ended
         // (which is true by the time the pause event fires on natural end).
         if (audioRef.current?.ended) return;
+        // GUARD 3: browser-initiated pause during background. The OS or
+        // browser may suspend the audio element while the page is hidden.
+        // If we sync isPlaying=false here, the visibilitychange re-kick
+        // handler sees false and skips the resume → audio dies on return.
+        // Lock-screen pause is safe: mediaSession handler already set
+        // isPlaying=false via togglePlay() before audio.pause() fires,
+        // so this guard is a no-op for user-initiated pauses.
+        if (document.hidden) return;
         usePlayerStore.getState().setIsPlaying(false);
       }}
       style={{ display: 'none' }}
