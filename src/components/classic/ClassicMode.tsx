@@ -97,18 +97,36 @@ const MiniPlayer = ({ onVOYOClick, onOpenFull }: { onVOYOClick: () => void; onOp
     }
   }, [currentTrack?.title]);
 
-  // Handle swipe gestures
-  const handleDragEnd = useCallback((event: any, info: { offset: { x: number; y: number } }) => {
+  // Handle swipe gestures — native pointer events (framer-motion was stripped).
+  // Tracks pointer start position, fires next/prev on horizontal release >80px.
+  const swipeStartRef = useRef<{ x: number; t: number } | null>(null);
+  const swipeFiredRef = useRef(false);
+
+  const handleSwipeDown = useCallback((e: React.PointerEvent) => {
+    swipeStartRef.current = { x: e.clientX, t: Date.now() };
+    swipeFiredRef.current = false;
+  }, []);
+
+  const handleSwipeUp = useCallback((e: React.PointerEvent) => {
+    const start = swipeStartRef.current;
+    swipeStartRef.current = null;
+    if (!start) return;
+
+    const dx = e.clientX - start.x;
+    const elapsed = Date.now() - start.t;
+    const velocity = Math.abs(dx) / Math.max(1, elapsed);
     const threshold = 80;
-    if (info.offset.x < -threshold) {
-      // Swipe left = next track
-      setSwipeDirection('left');
-      nextTrack();
-      setTimeout(() => setSwipeDirection(null), 300);
-    } else if (info.offset.x > threshold) {
-      // Swipe right = previous track
-      setSwipeDirection('right');
-      prevTrack();
+
+    // Commit if dragged past threshold OR fast flick (>0.5 px/ms)
+    if (Math.abs(dx) > threshold || (velocity > 0.5 && Math.abs(dx) > 30)) {
+      swipeFiredRef.current = true; // eat the trailing click
+      if (dx < 0) {
+        setSwipeDirection('left');
+        nextTrack();
+      } else {
+        setSwipeDirection('right');
+        prevTrack();
+      }
       setTimeout(() => setSwipeDirection(null), 300);
     }
   }, [nextTrack, prevTrack]);
@@ -196,8 +214,12 @@ const MiniPlayer = ({ onVOYOClick, onOpenFull }: { onVOYOClick: () => void; onOp
         style={{
           background: 'rgba(28, 28, 35, 0.65)',
           borderColor: 'rgba(139, 92, 246, 0.12)',
+          touchAction: 'pan-y', // allow vertical scroll, capture horizontal swipe
         }}
-        onClick={handleTap}
+        onClick={() => { if (swipeFiredRef.current) { swipeFiredRef.current = false; return; } handleTap(); }}
+        onPointerDown={handleSwipeDown}
+        onPointerUp={handleSwipeUp}
+        onPointerCancel={() => { swipeStartRef.current = null; }}
       >
         {/* Wave Progress Bar - VOYO gradient style */}
         <div className="absolute bottom-0 left-0 right-0 h-[3px] bg-white/10 overflow-hidden rounded-full">
