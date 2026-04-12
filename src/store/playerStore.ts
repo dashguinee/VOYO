@@ -1159,18 +1159,16 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       });
     }, 100);
 
-    // CLOUD SYNC: Sync queue to cloud (debounced)
-    setTimeout(async () => {
+    // CLOUD SYNC: deferred to idle — import() microtask was blocking audio thread
+    const w = window as unknown as { requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => void };
+    const syncQueue = async () => {
       try {
         const { useUniverseStore } = await import('./universeStore');
-        const universeStore = useUniverseStore.getState();
-        if (universeStore.isLoggedIn) {
-          universeStore.syncToCloud();
-        }
-      } catch {
-        // Ignore sync errors
-      }
-    }, 1000);
+        if (useUniverseStore.getState().isLoggedIn) useUniverseStore.getState().syncToCloud();
+      } catch {}
+    };
+    if (typeof w.requestIdleCallback === 'function') w.requestIdleCallback(() => syncQueue(), { timeout: 5000 });
+    else setTimeout(() => syncQueue(), 2000);
   },
 
   removeFromQueue: (index) => {
@@ -1266,18 +1264,16 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       devLog('[VOYO] History saved:', state.history.slice(-1)[0]?.track?.title);
     }, 100);
 
-    // CLOUD SYNC: Sync history to cloud (debounced)
-    setTimeout(async () => {
+    // CLOUD SYNC: deferred to idle — same pattern as queue sync
+    const wh = window as unknown as { requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => void };
+    const syncHistory = async () => {
       try {
         const { useUniverseStore } = await import('./universeStore');
-        const universeStore = useUniverseStore.getState();
-        if (universeStore.isLoggedIn) {
-          universeStore.syncToCloud();
-        }
-      } catch {
-        // Ignore sync errors
-      }
-    }, 2000);
+        if (useUniverseStore.getState().isLoggedIn) useUniverseStore.getState().syncToCloud();
+      } catch {}
+    };
+    if (typeof wh.requestIdleCallback === 'function') wh.requestIdleCallback(() => syncHistory(), { timeout: 5000 });
+    else setTimeout(() => syncHistory(), 2000);
   },
 
   // Recommendation Actions
