@@ -148,26 +148,33 @@ export const useDownloadStore = create<DownloadStore>((set, get) => ({
   initialize: async () => {
     if (get().isInitialized) return;
 
-    // Migrate old VOYO IDs to raw YouTube IDs (one-time fix for existing cached tracks)
-    await migrateVoyoIds();
+    try {
+      // Migrate old VOYO IDs to raw YouTube IDs (one-time fix for existing cached tracks)
+      await migrateVoyoIds();
 
-    const setting = getDownloadSetting();
-    const tracks = await getCachedTracks();
-    const size = await getCacheSize();
+      const setting = getDownloadSetting();
+      const tracks = await getCachedTracks();
+      const size = await getCacheSize();
 
-    set({
-      downloadSetting: setting,
-      cachedTracks: tracks.map(t => ({
-        id: t.id,
-        title: t.title,
-        artist: t.artist,
-        size: t.size,
-        quality: t.quality,
-        downloadedAt: t.downloadedAt,
-      })),
-      cacheSize: size,
-      isInitialized: true,
-    });
+      set({
+        downloadSetting: setting,
+        cachedTracks: tracks.map(t => ({
+          id: t.id,
+          title: t.title,
+          artist: t.artist,
+          size: t.size,
+          quality: t.quality,
+          downloadedAt: t.downloadedAt,
+        })),
+        cacheSize: size,
+        isInitialized: true,
+      });
+    } catch (e) {
+      // IndexedDB unavailable (private browsing, storage blocked).
+      // Initialize with empty state so the app still works.
+      devWarn('[DownloadStore] Init failed (private browsing?):', e);
+      set({ downloadSetting: getDownloadSetting(), isInitialized: true });
+    }
   },
 
   checkCache: async (trackId: string) => {
@@ -275,10 +282,12 @@ export const useDownloadStore = create<DownloadStore>((set, get) => ({
 
         // Increment manual boost count
         const newCount = manualBoostCount + 1;
-        localStorage.setItem('voyo-manual-boost-count', String(newCount));
+        try { localStorage.setItem('voyo-manual-boost-count', String(newCount)); } catch {}
 
         // Show auto-boost prompt after 3 manual boosts (if not already enabled)
-        const shouldPrompt = newCount >= 3 && !autoBoostEnabled && !localStorage.getItem('voyo-auto-boost-dismissed');
+        let dismissed = false;
+        try { dismissed = !!localStorage.getItem('voyo-auto-boost-dismissed'); } catch {}
+        const shouldPrompt = newCount >= 3 && !autoBoostEnabled && !dismissed;
 
         set({
           downloads: finalDownloads,
@@ -486,17 +495,17 @@ export const useDownloadStore = create<DownloadStore>((set, get) => ({
 
   // Auto-boost management
   enableAutoBoost: () => {
-    localStorage.setItem('voyo-auto-boost', 'true');
+    try { localStorage.setItem('voyo-auto-boost', 'true'); } catch {}
     set({ autoBoostEnabled: true, showAutoBoostPrompt: false });
   },
 
   disableAutoBoost: () => {
-    localStorage.setItem('voyo-auto-boost', 'false');
+    try { localStorage.setItem('voyo-auto-boost', 'false'); } catch {}
     set({ autoBoostEnabled: false });
   },
 
   dismissAutoBoostPrompt: () => {
-    localStorage.setItem('voyo-auto-boost-dismissed', 'true');
+    try { localStorage.setItem('voyo-auto-boost-dismissed', 'true'); } catch {}
     set({ showAutoBoostPrompt: false });
   },
 }));

@@ -299,10 +299,14 @@ export const useReactionStore = create<ReactionStore>((set, get) => ({
 
       const reactions = data as Reaction[];
 
-      // Cache locally
+      // Cache locally (LRU: keep last 200 tracks to prevent unbounded growth)
       set((state) => {
         const newMap = new Map(state.trackReactions);
         newMap.set(trackId, reactions);
+        if (newMap.size > 200) {
+          const oldest = newMap.keys().next().value;
+          if (oldest) newMap.delete(oldest);
+        }
         return { trackReactions: newMap };
       });
 
@@ -351,10 +355,14 @@ export const useReactionStore = create<ReactionStore>((set, get) => ({
 
       const stats = data as TrackStats;
 
-      // Cache locally
+      // Cache locally (LRU: keep last 200 tracks)
       set((state) => {
         const newMap = new Map(state.trackStats);
         newMap.set(trackId, stats);
+        if (newMap.size > 200) {
+          const oldest = newMap.keys().next().value;
+          if (oldest) newMap.delete(oldest);
+        }
         return { trackStats: newMap };
       });
 

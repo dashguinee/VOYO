@@ -393,23 +393,31 @@ function learnFromBehavior(behavior: {
     );
 
     if (existingSkips.length >= 3) {
-      // Add to disliked if skipped 3+ times
       if (!djProfile.relationship.dislikedArtists.includes(skippedArtist)) {
         djProfile.relationship.dislikedArtists.push(skippedArtist);
+        // Cap at 50 to prevent unbounded growth
+        if (djProfile.relationship.dislikedArtists.length > 50) {
+          djProfile.relationship.dislikedArtists = djProfile.relationship.dislikedArtists.slice(-50);
+        }
       }
+    }
+    // Cap learnedPreferences at 200 entries
+    if (djProfile.relationship.learnedPreferences.length > 200) {
+      djProfile.relationship.learnedPreferences = djProfile.relationship.learnedPreferences.slice(-200);
     }
   }
 
-  // Track peak hours
+  // Track peak hours (max 24 unique values naturally, but keep array clean)
   const hour = new Date().getHours();
   if (!djProfile.relationship.peakListeningHours.includes(hour)) {
     djProfile.relationship.peakListeningHours.push(hour);
   }
 
-  // Track moods
+  // Track moods — keep last 30 for vibe shift detection
   if (track.mood && type === 'complete') {
-    if (!djProfile.relationship.favoriteMoods.includes(track.mood)) {
-      djProfile.relationship.favoriteMoods.push(track.mood);
+    djProfile.relationship.favoriteMoods.push(track.mood);
+    if (djProfile.relationship.favoriteMoods.length > 30) {
+      djProfile.relationship.favoriteMoods = djProfile.relationship.favoriteMoods.slice(-30);
     }
   }
 
@@ -762,7 +770,13 @@ export async function onTrackReaction(track: Track): Promise<void> {
 /**
  * Called when a track completes
  */
-let _lastInsightMood: string | null = null;
+// Initialize from persisted profile so reload doesn't re-fire the same insight
+let _lastInsightMood: string | null = (() => {
+  try {
+    const saved = localStorage.getItem('voyo-last-insight-mood');
+    return saved || null;
+  } catch { return null; }
+})();
 export function onTrackComplete(track: Track, listenDuration: number): void {
   djProfile.relationship.totalTimeListened += listenDuration / 60; // Convert to minutes
   learnFromBehavior({ type: 'complete', track });
@@ -779,6 +793,7 @@ export function onTrackComplete(track: Track, listenDuration: number): void {
       const dominant = Object.entries(freq).sort((a, b) => b[1] - a[1])[0];
       if (dominant && dominant[0] !== _lastInsightMood && dominant[1] >= 2) {
         _lastInsightMood = dominant[0];
+        try { localStorage.setItem('voyo-last-insight-mood', dominant[0]); } catch {}
         notifyInsight(`Your vibe shifted to ${dominant[0]} tonight`);
       }
     }

@@ -175,8 +175,12 @@ function OyoNotificationsSection() {
   const handleSubscribe = async () => {
     setStatus('loading');
     haptics.light();
-    const result = await subscribe();
-    setStatus(result === 'success' ? 'done' : 'idle');
+    try {
+      const result = await subscribe();
+      setStatus(result === 'success' ? 'done' : 'idle');
+    } catch {
+      setStatus('idle');
+    }
   };
 
   return (

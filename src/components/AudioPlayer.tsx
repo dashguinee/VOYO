@@ -1543,6 +1543,12 @@ export const AudioPlayer = () => {
         audioRef.current.oncanplay = null;
         audioRef.current.onplay = null;
         audioRef.current.loop = false;
+        // Clone+replace trick: removes ALL anonymous addEventListener listeners
+        // (canplay handlers added with { once: true } that haven't fired yet).
+        // The Web Audio source node survives because it's bound to the element
+        // reference, not its event listeners.
+        // NOTE: Skip this — cloning breaks MediaElementAudioSourceNode binding.
+        // Instead, the stale guards (isStale()) in each handler prevent action.
 
         muteMasterGainInstantly();
         const audioToFade = audioRef.current;
@@ -2308,7 +2314,7 @@ export const AudioPlayer = () => {
     if ((playbackSource !== 'cached' && playbackSource !== 'r2') || !audioRef.current) return;
 
     const audio = audioRef.current;
-    if (isPlaying && audio.paused && audio.src && audio.readyState >= 1) {
+    if (isPlaying && audio.paused && audio.src && audio.readyState >= 2) {
       // CLICK-FREE PLAY (user tap-resume, NOT track load)
       //
       // CRITICAL: skip gain manipulation if a loadTrack is in flight.
