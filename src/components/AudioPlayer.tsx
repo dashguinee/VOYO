@@ -1932,84 +1932,116 @@ export const AudioPlayer = () => {
             }
           }
 
-          // Parallel stream fetch for hot-swap upgrade.
+          // VPS-FIRST HOT-SWAP: fire VPS to extract + normalize + encode + R2 upload
+          // in ONE operation. The iframe handles the user, VPS handles the infrastructure.
+          // When VPS responds (~3-8s), hot-swap from iframe to the processed audio.
+          // The track is now in R2 for ALL future users — one listen boosts it forever.
+          //
+          // Falls back to /stream (raw edge worker URL) if VPS fails.
+          let hotSwapDone = false;
+
+          // TRY 1: VPS server (extract + process + cache to R2)
           try {
-            const streamResponse = await fetch(
-              `${EDGE_WORKER_URL}/stream?v=${trackId}`,
-              { signal: AbortSignal.timeout(5000) },
+            devLog(`[VOYO] Firing VPS for background boost: ${trackId}`);
+            const vpsRes = await fetch(
+              `${VPS_AUDIO_URL}/voyo/audio/${trackId}?quality=high`,
+              { signal: AbortSignal.timeout(15000) }, // 15s — VPS needs time to extract+process
             );
-            if (isStale()) { devLog(`[AudioPlayer] cancelled stale stream fetch for ${trackId}`); return; }
-            const streamData = await streamResponse.json();
-            if (isStale()) { devLog(`[AudioPlayer] cancelled stale stream json for ${trackId}`); return; }
+            if (isStale()) return;
 
-            if (!streamData.url) {
-              devLog('🎵 [VOYO] No stream URL — iframe stays as audio source (no background play for this track)');
-              return;
-            }
+            if (vpsRes.ok) {
+              const audioBlob = await vpsRes.blob();
+              if (isStale()) return;
+              if (audioBlob.size > 1000) {
+                const blobUrl = URL.createObjectURL(audioBlob);
+                hotSwapDone = true;
+                devLog(`[VOYO] VPS boost complete (${(audioBlob.size/1024/1024).toFixed(1)}MB) — hot-swapping`);
 
-            devLog(`🎵 [VOYO] Got stream URL (${streamData.bitrate}bps ${streamData.mimeType}) — hot-swapping iframe → audio element`);
+                const { boostProfile: profile } = usePlayerStore.getState();
+                setupAudioEnhancement(profile);
 
-            const { boostProfile: profile } = usePlayerStore.getState();
-            setupAudioEnhancement(profile);
+                if (audioRef.current) {
+                  isLoadingTrackRef.current = true;
+                  audioRef.current.loop = false;
+                  audioRef.current.volume = 1.0;
+                  if (cachedUrlRef.current) URL.revokeObjectURL(cachedUrlRef.current);
+                  cachedUrlRef.current = blobUrl;
+                  audioRef.current.src = blobUrl;
+                  audioRef.current.load();
 
-            if (audioRef.current) {
-              // Guard onPause during the silent-WAV → real-URL src swap.
-              // Setting src fires pause first, and without this guard the
-              // onPause handler would set isPlaying=false in the store.
-              isLoadingTrackRef.current = true;
-              audioRef.current.loop = false; // clear the silent-WAV loop flag
-              audioRef.current.volume = 1.0; // Pinned — loudness via masterGain
-              audioRef.current.src = streamData.url;
-              audioRef.current.load();
+                  audioRef.current.oncanplaythrough = () => {
+                    if (!audioRef.current || isStale()) return;
 
-              audioRef.current.oncanplaythrough = () => {
-                if (!audioRef.current) return;
-                if (isStale()) return;
+                    const iframePos = usePlayerStore.getState().currentTime;
+                    if (iframePos > 1) audioRef.current.currentTime = iframePos;
 
-                // Seek audio element to the iframe's current position so
-                // the hot-swap is near-seamless. The store's currentTime is
-                // synced from the iframe at 4Hz, so at worst ~250ms off.
-                const iframePos = usePlayerStore.getState().currentTime;
-                if (isInitialLoadRef.current && savedCurrentTime > 5) {
-                  audioRef.current.currentTime = savedCurrentTime;
-                  isInitialLoadRef.current = false;
-                } else if (iframePos > 1) {
-                  audioRef.current.currentTime = iframePos;
+                    const { isPlaying: shouldPlay } = usePlayerStore.getState();
+                    if (!shouldPlay) return;
+
+                    isEdgeStreamRef.current = false;
+                    setPlaybackSource('cached');
+                    audioContextRef.current?.state === 'suspended' && audioContextRef.current.resume().catch(() => {});
+                    fadeInMasterGain(80);
+
+                    audioRef.current.play().then(() => {
+                      clearLoadWatchdog();
+                      recordPlayEvent();
+                      devLog('🎵 [VOYO] VPS hot-swap complete — boosted + background play enabled');
+                    }).catch(e => handlePlayFailure(e, 'VPS-hot-swap'));
+                  };
                 }
-
-                const { isPlaying: shouldPlay } = usePlayerStore.getState();
-                if (!shouldPlay) return; // user paused during the swap, don't play
-
-                // HOT SWAP BEGINS.
-                // Flip the source flag — YouTubeIframe's own effect sees
-                // playbackSource become 'cached' and mutes/pauses the iframe
-                // automatically (its line ~253 effect). The audio element
-                // plays via the Web Audio chain with EQ + VOYEX applied.
-                isEdgeStreamRef.current = true;
-                setPlaybackSource('cached');
-
-                audioContextRef.current?.state === 'suspended' && audioContextRef.current.resume().catch(() => {});
-                fadeInMasterGain(140); // slightly longer fade so the iframe→audio transition is inaudible
-
-                audioRef.current.play().then(() => {
-                  clearLoadWatchdog();
-                  recordPlayEvent();
-                  devLog('🎵 [VOYO] Hot-swap complete — audio element is now the source, background play enabled');
-                }).catch(e => handlePlayFailure(e, 'Hot-swap'));
-              };
-
-              // Keep onplay wired but empty — cache triggers fire from the
-              // 85% progress milestone + onEnded fallback.
-              audioRef.current.onplay = () => {
-                if (isStale()) return;
-              };
+              }
             }
-          } catch (streamError) {
-            devWarn('[VOYO] Stream fetch failed — iframe continues as audio source (no background play for this track):', streamError);
-            // Intentionally DO NOT call nextTrack(). The iframe is playing.
-            // Foreground playback works. Background play doesn't, but the
-            // user hears their track instead of watching it disappear.
+          } catch (e) {
+            devLog(`[VOYO] VPS boost failed: ${(e as Error)?.message}`);
           }
+
+          // TRY 2: Edge worker /stream (raw YouTube URL — fallback)
+          if (!hotSwapDone && !isStale()) {
+            try {
+              const streamResponse = await fetch(
+                `${EDGE_WORKER_URL}/stream?v=${trackId}`,
+                { signal: AbortSignal.timeout(5000) },
+              );
+              if (isStale()) return;
+              const streamData = await streamResponse.json();
+              if (isStale()) return;
+
+              if (streamData.url) {
+                devLog(`[VOYO] Edge stream fallback — hot-swapping`);
+                const { boostProfile: profile } = usePlayerStore.getState();
+                setupAudioEnhancement(profile);
+
+                if (audioRef.current) {
+                  isLoadingTrackRef.current = true;
+                  audioRef.current.loop = false;
+                  audioRef.current.volume = 1.0;
+                  audioRef.current.src = streamData.url;
+                  audioRef.current.load();
+
+                  audioRef.current.oncanplaythrough = () => {
+                    if (!audioRef.current || isStale()) return;
+                    const iframePos = usePlayerStore.getState().currentTime;
+                    if (iframePos > 1) audioRef.current.currentTime = iframePos;
+                    const { isPlaying: shouldPlay } = usePlayerStore.getState();
+                    if (!shouldPlay) return;
+                    isEdgeStreamRef.current = true;
+                    setPlaybackSource('cached');
+                    audioContextRef.current?.state === 'suspended' && audioContextRef.current.resume().catch(() => {});
+                    fadeInMasterGain(80);
+                    audioRef.current.play().then(() => {
+                      clearLoadWatchdog();
+                      recordPlayEvent();
+                      devLog('🎵 [VOYO] Edge stream hot-swap complete');
+                    }).catch(e => handlePlayFailure(e, 'Stream-hot-swap'));
+                  };
+                }
+              }
+            } catch (e) {
+              devLog(`[VOYO] Edge stream also failed — iframe stays as audio source`);
+            }
+          }
+
         }
       }
     };
