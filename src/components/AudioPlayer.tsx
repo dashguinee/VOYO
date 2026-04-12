@@ -1548,6 +1548,7 @@ export const AudioPlayer = () => {
       hasTriggered75PercentKeptRef.current = false; // Reset 75% kept trigger for new track
       hasTriggered30sListenRef.current = false; // Reset 30s listen flag for new track
       crossfadeArmedRef.current = false; // Reset crossfade trigger for new track
+      isCrossfadingRef.current = false; // Reset so user-skip gets 200ms fade, not 3s
 
       // ── FLOW WATCHDOG ─────────────────────────────────────────────────
       // Arm an 8s timer. If play() doesn't clear it, loadTrack is stuck —
