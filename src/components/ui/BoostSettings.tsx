@@ -9,7 +9,7 @@
  */
 
 import { useState, useEffect, useRef } from 'react';
-import { Zap, Trash2, X, HardDrive, Settings, Sliders, Flame, Wind, Moon, Timer } from 'lucide-react';
+import { Zap, Trash2, X, HardDrive, Settings, Sliders, Flame, Moon, Timer } from 'lucide-react';
 import { useDownloadStore } from '../../store/downloadStore';
 import { usePlayerStore } from '../../store/playerStore';
 import { haptics } from '../../utils/haptics';
@@ -331,27 +331,33 @@ export const BoostSettings = ({ isOpen, onClose }: BoostSettingsProps) => {
 
               <button
                 onClick={() => setBoostProfile('calm')}
-                className={`flex flex-col items-center gap-1 p-3 rounded-xl border transition-all voyo-tap-scale ${
+                className={`flex flex-col items-center gap-1 p-3 rounded-xl border transition-all voyo-tap-scale relative overflow-hidden ${
                   boostProfile === 'calm'
-                    ? 'bg-gradient-to-br from-white/8 to-white/[0.03] border-white/25'
+                    ? 'bg-gradient-to-br from-[#1a2a3a]/40 to-[#0d1926]/25 border-[#5BA4CF]/30'
                     : 'bg-white/5 border-white/10 hover:bg-white/10'
                 }`}
               >
-                <Wind
-                  size={22}
-                  strokeWidth={1.6}
-                  style={{
-                    color: boostProfile === 'calm' ? 'rgba(220,225,235,0.9)' : 'rgba(180,185,195,0.45)',
-                    filter: boostProfile === 'calm' ? 'drop-shadow(0 0 5px rgba(220,225,235,0.4))' : 'none',
-                  }}
-                />
+                {/* Swarovski blue shimmer — crystal sparkle on the Daily preset */}
+                {boostProfile === 'calm' && (
+                  <div
+                    className="absolute inset-0 pointer-events-none"
+                    style={{
+                      background: 'linear-gradient(110deg, transparent 30%, rgba(91,164,207,0.12) 45%, rgba(130,200,240,0.06) 55%, transparent 70%)',
+                      backgroundSize: '300% 100%',
+                      animation: 'voyo-araba-shimmer 5s ease-in-out infinite',
+                    }}
+                  />
+                )}
                 <span
-                  className="text-[11px] font-bold"
-                  style={{ color: boostProfile === 'calm' ? 'rgba(220,225,235,0.9)' : 'rgba(255,255,255,0.55)' }}
+                  className="text-[11px] font-bold relative z-10"
+                  style={{
+                    color: boostProfile === 'calm' ? '#8EC8E8' : 'rgba(255,255,255,0.55)',
+                    filter: boostProfile === 'calm' ? 'drop-shadow(0 0 4px rgba(91,164,207,0.5))' : 'none',
+                  }}
                 >
-                  Cool
+                  Flow
                 </span>
-                <span className="text-[9px] opacity-60 text-white">Balanced</span>
+                <span className="text-[9px] opacity-50 text-white relative z-10">Balanced</span>
               </button>
 
               <button
@@ -389,7 +395,7 @@ export const BoostSettings = ({ isOpen, onClose }: BoostSettingsProps) => {
             </div>
             <div className="text-[10px] text-gray-500 mt-3 text-center">
               {boostProfile === 'boosted' && 'Warm bass with speaker protection'}
-              {boostProfile === 'calm' && 'Cool clarity — balanced air'}
+              {boostProfile === 'calm' && 'Perfectly Balanced · Daily enjoyment'}
               {boostProfile === 'voyex' && 'Studio energy — full immersion'}
             </div>
           </div>
