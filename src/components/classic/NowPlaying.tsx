@@ -620,7 +620,7 @@ export const NowPlaying = ({ isOpen, onClose }: NowPlayingProps) => {
                     </div>
                     <div>
                       <p className="text-white font-bold text-base">Up Next</p>
-                      <p className="text-white/50 text-xs">{queue.length} tracks in queue</p>
+                      <p className="text-white/50 text-xs">{queue.length} tracks in bucket</p>
                     </div>
                   </div>
                   <button
@@ -636,8 +636,8 @@ export const NowPlaying = ({ isOpen, onClose }: NowPlayingProps) => {
                   {queue.length === 0 ? (
                     <div className="flex flex-col items-center justify-center h-full text-center py-12">
                       <ListMusic className="w-16 h-16 text-white/20 mb-4" />
-                      <p className="text-white/50 text-lg font-medium mb-2">Queue is empty</p>
-                      <p className="text-white/30 text-sm">Add tracks to build your queue</p>
+                      <p className="text-white/50 text-lg font-medium mb-2">Bucket is empty</p>
+                      <p className="text-white/30 text-sm">Add tracks to fill your bucket</p>
                     </div>
                   ) : (
                     queue.map((item, index) => (

@@ -837,7 +837,7 @@ const DynamicIsland = () => {
                           className="px-2.5 py-1 rounded-full bg-black/10 text-[10px] font-medium text-black/70"
                           onClick={(e) => { e.stopPropagation(); handleAction('queue'); }}
                         >
-                          +Queue
+                          +Bucket
                         </button>
                         <button
                           className="px-2 py-1 rounded-full bg-black/10 text-[10px] font-medium text-black/70"

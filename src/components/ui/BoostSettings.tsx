@@ -9,10 +9,11 @@
  */
 
 import { useState, useEffect, useRef } from 'react';
-import { Zap, Trash2, X, HardDrive, Settings, Sliders, Flame, Moon, Timer } from 'lucide-react';
+import { Zap, Trash2, X, HardDrive, Settings, Sliders, Flame, Moon, Timer, Bell, BellOff } from 'lucide-react';
 import { useDownloadStore } from '../../store/downloadStore';
 import { usePlayerStore } from '../../store/playerStore';
 import { haptics } from '../../utils/haptics';
+import { usePushNotifications } from '../../hooks/usePushNotifications';
 
 interface BoostSettingsProps {
   isOpen: boolean;
@@ -156,6 +157,67 @@ function SleepTimerSection() {
             {label}
           </button>
         ))}
+      </div>
+    </div>
+  );
+}
+
+// ============================================
+// OYO NOTIFICATIONS — ambient, non-cringe alerts.
+// "Next up", "Vibe shift", "Take a break?" etc.
+// ============================================
+function OyoNotificationsSection() {
+  const { supported, isSubscribed, subscribe, dismiss } = usePushNotifications();
+  const [status, setStatus] = useState<'idle' | 'loading' | 'done'>('idle');
+
+  if (!supported) return null;
+
+  const handleSubscribe = async () => {
+    setStatus('loading');
+    haptics.light();
+    const result = await subscribe();
+    setStatus(result === 'success' ? 'done' : 'idle');
+  };
+
+  return (
+    <div className="bg-white/5 rounded-2xl p-4">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          {isSubscribed ? (
+            <Bell size={18} style={{ color: 'rgba(160,120,60,0.7)' }} />
+          ) : (
+            <BellOff size={18} className="text-gray-500" />
+          )}
+          <div>
+            <div className="text-sm font-medium text-white">OYO Notifications</div>
+            <div className="text-[10px] text-gray-500">
+              {isSubscribed ? 'Next up, vibe shifts, milestones' : 'Know what\'s playing next'}
+            </div>
+          </div>
+        </div>
+        {!isSubscribed ? (
+          <button
+            onClick={handleSubscribe}
+            disabled={status === 'loading'}
+            className="text-xs font-medium px-3 py-1.5 rounded-lg active:scale-95 transition-all"
+            style={{
+              background: 'linear-gradient(135deg, rgba(160,120,60,0.25), rgba(120,90,40,0.15))',
+              border: '1px solid rgba(160,120,60,0.30)',
+              color: '#C4945A',
+            }}
+          >
+            {status === 'loading' ? 'Enabling...' : status === 'done' ? 'Enabled' : 'Enable'}
+          </button>
+        ) : (
+          <div className="text-[10px] font-medium px-2 py-1 rounded-lg"
+            style={{
+              background: 'rgba(160,120,60,0.12)',
+              color: 'rgba(160,120,60,0.7)',
+            }}
+          >
+            Active
+          </div>
+        )}
       </div>
     </div>
   );
@@ -572,6 +634,9 @@ export const BoostSettings = ({ isOpen, onClose }: BoostSettingsProps) => {
 
           {/* Sleep Timer */}
           <SleepTimerSection />
+
+          {/* OYO Notifications */}
+          <OyoNotificationsSection />
 
           {/* Storage Info */}
           <div className="bg-white/5 rounded-2xl p-4">

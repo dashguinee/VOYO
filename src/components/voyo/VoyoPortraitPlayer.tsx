@@ -488,7 +488,7 @@ const NeonBillboardCard = memo(({
               <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
                 <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
               </svg>
-              Vibe Queued!
+              Bucketed!
             </div>
           </div>
         )}
@@ -1604,7 +1604,7 @@ const StreamCard = memo(({ track, onTap, isPlayed, modeColor, onQueueAdd }: {
               <svg className="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 20 20">
                 <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
               </svg>
-              Queued
+              Bucketed
             </div>
           </div>
         )}
@@ -2370,9 +2370,9 @@ const ReactionBar = memo(({
     } else if (input.includes('add') || input.includes('play') || input.includes('queue')) {
       const songMatch = input.replace(/^(add|play|queue)\s*/i, '').trim();
       if (songMatch) {
-        setChatResponse(`🎵 Adding "${songMatch}" to queue...`);
+        setChatResponse(`🎵 Adding "${songMatch}" to bucket...`);
         setTimeout(() => {
-          setChatResponse(`✓ "${songMatch}" queued up next!`);
+          setChatResponse(`✓ "${songMatch}" bucketed up next!`);
           setTimeout(() => setIsChatMode(false), 2000);
         }, 1000);
       } else {
@@ -4836,7 +4836,7 @@ export const VoyoPortraitPlayer = ({
               ))
             ) : (
               // Empty queue - show DASH placeholder
-              <DashPlaceholder onClick={onSearch} label="queue" />
+              <DashPlaceholder onClick={onSearch} label="bucket" />
             )}
           </div>
         </div>

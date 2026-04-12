@@ -6,7 +6,7 @@
  * typography. Mature with attitude. White hierarchy for text + a single
  * bronze accent for OYÉ moments. No more multi-colour text rainbow.
  *
- * Font: Outfit (matches Tivi+ — DASH ecosystem shares one font)
+ * Font: Satoshi (geometric sans — Wakanda-tier premium typography)
  * Background: single canvas at #050508 with subtle radial ambient
  * Icons: Phosphor (cooler than Lucide, duotone variants)
  */
@@ -68,7 +68,7 @@
 
 /* === Tailwind v4 theme tokens (bridges CSS vars into utility classes) === */
 @theme {
-  --font-sans: 'Outfit', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-sans: 'Satoshi', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-display: 'Space Grotesk', system-ui, sans-serif;
   --color-canvas: #050508;
   --color-bronze: #D4A053;
@@ -89,7 +89,7 @@ html, body, #root {
 }
 
 body {
-  font-family: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  font-family: 'Satoshi', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
   /* Single continuous canvas with a barely-there sunset ambient. The
      gradient is fixed (not scrolling) so sections inherit the same
      atmosphere instead of cutting against their own colour blocks. */

@@ -18,6 +18,7 @@
 
 import { Track } from '../types';
 import { devLog, devWarn } from '../utils/logger';
+import { notifyMilestone, notifyInsight, notifyTrackContext } from './oyoNotifications';
 
 // ============================================
 // CONFIGURATION
@@ -475,6 +476,23 @@ function checkMilestones(): DJMilestone | null {
     };
     milestones.push(milestone);
     saveProfile();
+    notifyMilestone(1);
+    return milestone;
+  }
+
+  // Hourly milestones (2h, 3h, etc.)
+  const hours = Math.floor(rel.totalTimeListened / 60);
+  if (hours >= 2 && !milestones.find(m => m.id === `hour-${hours}`)) {
+    const milestone: DJMilestone = {
+      id: `hour-${hours}`,
+      title: `${hours} Hours Deep`,
+      description: `${hours} hours of vibes. ${djProfile.name} is impressed!`,
+      unlockedAt: new Date().toISOString(),
+      celebrated: false,
+    };
+    milestones.push(milestone);
+    saveProfile();
+    notifyMilestone(hours);
     return milestone;
   }
 
@@ -744,10 +762,28 @@ export async function onTrackReaction(track: Track): Promise<void> {
 /**
  * Called when a track completes
  */
+let _lastInsightMood: string | null = null;
 export function onTrackComplete(track: Track, listenDuration: number): void {
   djProfile.relationship.totalTimeListened += listenDuration / 60; // Convert to minutes
   learnFromBehavior({ type: 'complete', track });
   checkMilestones();
+
+  // INSIGHT: detect vibe shifts — fire when dominant mood changes
+  if (track.mood && track.mood !== _lastInsightMood) {
+    const moods = djProfile.relationship.favoriteMoods;
+    if (moods.length >= 3) {
+      // Count last 5 moods to detect a shift
+      const recent = moods.slice(-5);
+      const freq: Record<string, number> = {};
+      for (const m of recent) { freq[m] = (freq[m] || 0) + 1; }
+      const dominant = Object.entries(freq).sort((a, b) => b[1] - a[1])[0];
+      if (dominant && dominant[0] !== _lastInsightMood && dominant[1] >= 2) {
+        _lastInsightMood = dominant[0];
+        notifyInsight(`Your vibe shifted to ${dominant[0]} tonight`);
+      }
+    }
+  }
+
   saveProfile();
 }
 

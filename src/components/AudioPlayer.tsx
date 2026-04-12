@@ -189,6 +189,7 @@ export const AudioPlayer = () => {
   const isEdgeStreamRef = useRef<boolean>(false); // True when playing from Edge Worker stream URL (not IndexedDB)
   const hasTriggered75PercentKeptRef = useRef<boolean>(false); // 75% permanent cache trigger
   const hasTriggered30sListenRef = useRef<boolean>(false); // 30s artist discovery listen tracking
+  const hasTriggeredContextNotifRef = useRef<boolean>(false); // OYO track context notification (10s)
   // Throttle guards for handleTimeUpdate → setCurrentTime/setProgress writes.
   // Browser fires ontimeupdate at 4Hz (Chrome) up to 66Hz (Safari). Each
   // store write re-renders 9 subscribing components (OyoIsland, NowPlaying,
@@ -413,6 +414,24 @@ export const AudioPlayer = () => {
         devLog('🎵 [VOYO] 30s listen reached — flagging for R2 download');
         import('../lib/supabase').then(({ videoIntelligenceAPI }) => {
           videoIntelligenceAPI.flagForDownload(track.trackId);
+        });
+      }
+    }
+    // OYO CONTEXT: ~10s into a track from a favorite artist → ambient notification.
+    // "This is a special one" — conversational, non-intrusive.
+    if (!hasTriggeredContextNotifRef.current) {
+      const elapsed = (track.duration || 300) * (progress / 100);
+      if (elapsed >= 10) {
+        hasTriggeredContextNotifRef.current = true;
+        // Check if this is a "special" track (favorite artist or high reactions)
+        import('../services/oyoDJ').then(({ getInsights }) => {
+          const insights = getInsights();
+          const isFavArtist = insights.favoriteArtists?.includes(track.artist);
+          if (isFavArtist) {
+            import('../services/oyoNotifications').then(({ notifyTrackContext }) => {
+              notifyTrackContext(`${track.artist} — this is a special one`);
+            });
+          }
         });
       }
     }
@@ -1552,6 +1571,7 @@ export const AudioPlayer = () => {
       isEdgeStreamRef.current = false; // Reset edge stream flag for new track
       hasTriggered75PercentKeptRef.current = false; // Reset 75% kept trigger for new track
       hasTriggered30sListenRef.current = false; // Reset 30s listen flag for new track
+      hasTriggeredContextNotifRef.current = false; // Reset OYO context notification for new track
       // crossfade refs removed — clean gapless transitions only
 
       // ── FLOW WATCHDOG ─────────────────────────────────────────────────

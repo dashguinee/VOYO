@@ -24,7 +24,7 @@ import { PlaylistModal } from '../playlist/PlaylistModal';
 const BASE_FILTERS = [
   { id: 'all', label: 'All', color: 'bg-white/10' },
   { id: 'liked', label: 'Liked', color: 'bg-purple-500/20 text-purple-400' },
-  { id: 'queue', label: 'Queue', color: 'bg-violet-500/20 text-violet-400' },
+  { id: 'queue', label: 'Bucket', color: 'bg-violet-500/20 text-violet-400' },
   { id: 'history', label: 'History', color: 'bg-white/5 text-white/40' },
   { id: 'offline', label: 'Offline', color: 'bg-purple-500/10 text-purple-300' },
 ];
@@ -347,7 +347,7 @@ export const Library = ({ onTrackClick }: LibraryProps) => {
         <p className="text-white/40 text-sm">
           {filteredTracks.length} {
             activeFilter === 'offline' ? 'offline songs' :
-            activeFilter === 'queue' ? 'in queue' :
+            activeFilter === 'queue' ? 'in bucket' :
             activeFilter === 'history' ? 'played' :
             activeFilter === 'liked' ? 'liked' :
             activeFilter.startsWith('playlist:') ? 'in playlist' :
@@ -357,7 +357,7 @@ export const Library = ({ onTrackClick }: LibraryProps) => {
             <span className="block text-xs mt-1">Play songs to build your offline library!</span>
           )}
           {activeFilter === 'queue' && filteredTracks.length === 0 && (
-            <span className="block text-xs mt-1">Add tracks to your queue to see them here!</span>
+            <span className="block text-xs mt-1">Add tracks to your bucket to see them here!</span>
           )}
           {activeFilter === 'history' && filteredTracks.length === 0 && (
             <span className="block text-xs mt-1">Your listening history will appear here</span>

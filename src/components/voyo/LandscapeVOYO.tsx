@@ -220,7 +220,7 @@ const MiniCard = ({ track, onClick }: { track: Track; onClick: () => void }) => 
         <div
           className="absolute -top-8 left-1/2 -translate-x-1/2 z-50 bg-purple-500 text-white text-[9px] font-bold px-3 py-1.5 rounded-full shadow-lg whitespace-nowrap animate-[voyo-scale-in_0.2s_ease]"
         >
-          Added to Queue
+          Added to Bucket
         </div>
       )}
 
@@ -390,7 +390,7 @@ const YouTubeInterceptor = ({ onVideoExtracted }: InterceptorProps) => {
                 ) : (
                   <div className="flex items-center gap-3">
                     <Plus className="w-6 h-6 text-white stroke-[3]" />
-                    <span className="text-white font-black text-base tracking-wide">ADD TO QUEUE</span>
+                    <span className="text-white font-black text-base tracking-wide">ADD TO BUCKET</span>
                   </div>
                 )}
               </div>
@@ -419,7 +419,7 @@ const YouTubeInterceptor = ({ onVideoExtracted }: InterceptorProps) => {
                 ) : (
                   <div className="flex items-center gap-3">
                     <Plus className="w-6 h-6 text-purple-400 stroke-[3]" />
-                    <span className="text-white font-black text-base tracking-widest">+ QUEUE</span>
+                    <span className="text-white font-black text-base tracking-widest">+ BUCKET</span>
                   </div>
                 )}
               </div>

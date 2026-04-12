@@ -106,8 +106,8 @@ const TrackItem = memo(({
         <button
           className="p-2 rounded-full bg-purple-500/15 border border-purple-500/20 active:scale-90 transition-transform min-w-[44px] min-h-[44px] flex items-center justify-center"
           onClick={handleQueueClick}
-          aria-label="Add to queue"
-          title="Add to Queue"
+          aria-label="Add to bucket"
+          title="Add to Bucket"
         >
           <ListPlus className="w-4 h-4 text-purple-400" />
         </button>
@@ -372,7 +372,7 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap }: SearchOverlayP
     const track = resultToTrack(result);
     addSearchResultsToPool([track]);
     addToQueue(track);
-    showToast('Added to queue', 'queue');
+    showToast('Added to bucket', 'queue');
   }, [resultToTrack, addToQueue, showToast]);
 
   const handleAddToDiscovery = useCallback((result: SearchResult) => {
