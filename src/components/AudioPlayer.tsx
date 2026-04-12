@@ -600,8 +600,12 @@ export const AudioPlayer = () => {
 
     const pump = () => {
       rafId = requestAnimationFrame(pump);
-      // Skip 2 out of 3 frames → ~20fps on a 60fps display.
-      if (++frameCount % 3 !== 0) return;
+      // Skip 5 out of 6 frames → ~10fps on a 60fps display.
+      // Was 20fps (every 3rd frame) which added too much style-recalc
+      // pressure — BigCenterCard transform + progress dot shadow + orb
+      // scale all trigger GPU recomposition. 10fps is visually smooth
+      // enough for bass-pulse and saves 50% of the main-thread budget.
+      if (++frameCount % 6 !== 0) return;
       // Don't pump when tab is hidden — saves 100% of this work.
       if (document.hidden) return;
 

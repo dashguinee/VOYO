@@ -1725,7 +1725,11 @@ const BigCenterCard = memo(({ track, onExpandVideo, onShowLyrics, hideThumb, isI
       transition: hideThumb
         ? 'transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.3s ease-out'
         : 'opacity 0.3s ease-out',
-      willChange: 'transform',
+      // will-change deliberately NOT set — it forces a separate GPU layer
+      // that the compositor must upload to on every CSS custom property
+      // change (10fps from frequency pump). Without will-change, the
+      // browser uses its own heuristics for compositing, which on modern
+      // Chrome/Safari is already optimized for transform changes.
       backfaceVisibility: 'hidden',
     }}
   >
