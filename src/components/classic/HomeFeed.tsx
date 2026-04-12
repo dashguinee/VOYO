@@ -529,7 +529,7 @@ const TrackCard = memo(({ track, onPlay, showBoostBadge = false }: TrackCardProp
       onPointerDown={handlePrefDown}
       onPointerMove={handlePrefMove}
       onPointerUp={handlePrefUp}
-      onPointerCancel={() => { setPrefMode(false); setPrefDx(0); if (holdTimerRef.current) clearTimeout(holdTimerRef.current); }}
+      onPointerCancel={() => { setPrefMode(false); setPrefDx(0); swipeAxisRef.current = null; prefStartRef.current = null; if (holdTimerRef.current) clearTimeout(holdTimerRef.current); }}
     >
       <div
         ref={cardRef}

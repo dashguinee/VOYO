@@ -1112,17 +1112,16 @@ export const AudioPlayer = () => {
   // change. The 25ms ramp is short enough to feel instant.
   const applyMasterGain = () => {
     if (!gainNodeRef.current) return;
+    // CRITICAL: skip during track load. loadTrack's fadeInMasterGain owns
+    // the gain ramp. If we cancelScheduledValues here, we kill the fade-in
+    // mid-flight → gain jumps from 0.0001 to current → speaker pop.
+    // The next applyMasterGain after load completes will set it correctly.
+    if (isLoadingTrackRef.current) return;
     const target = computeMasterTarget();
     const ctx = audioContextRef.current;
     if (ctx) {
       const now = ctx.currentTime;
       const param = gainNodeRef.current.gain;
-      // Textbook click-free param write: cancel any pending automation,
-      // anchor at the current value, then linearly ramp to the target
-      // over 25ms. linearRampToValueAtTime guarantees we hit the target
-      // exactly at the specified time (setTargetAtTime never reaches it,
-      // it asymptotes — this is the difference between "reduces clicks"
-      // and "eliminates clicks").
       param.cancelScheduledValues(now);
       param.setValueAtTime(param.value, now);
       param.linearRampToValueAtTime(target, now + 0.025);
