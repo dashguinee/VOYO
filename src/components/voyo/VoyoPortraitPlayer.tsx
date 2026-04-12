@@ -4855,7 +4855,14 @@ export const VoyoPortraitPlayer = ({
         className={`flex flex-col items-center justify-end relative z-10 flex-1 ${
           oyeBarBehavior === 'fade' ? 'pt-12' : 'pt-10'
         }`}
-        style={{ transform: 'translateY(28px)' }}
+        style={{
+          transform: 'translateY(28px)',
+          // pan-y on the CENTER section: vertical scroll still works (portal
+          // reveal) but horizontal swipes are captured by our pointer handlers
+          // for the card drag gesture. The OUTER container keeps 'manipulation'
+          // so horizontal shelves (PortalBelt, history/queue rails) scroll fine.
+          touchAction: 'pan-y',
+        }}
       >
 
         {/* RIGHT-SIDE TOOLBAR - Always visible */}
