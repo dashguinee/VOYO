@@ -2221,15 +2221,27 @@ export const AudioPlayer = () => {
 
     const audio = audioRef.current;
     if (isPlaying && audio.paused && audio.src && audio.readyState >= 1) {
-      // CLICK-FREE PLAY:
-      // 1. Ensure audio context is live
-      // 2. Anchor gain at silence BEFORE .play() so first samples aren't loud
-      // 3. Start playback
-      // 4. Ramp gain up to target (60ms) — buries the transient
-      // ALWAYS resume — iOS sometimes reports 'running' after a lock-screen
-      // interruption when the context is actually 'interrupted'. resume() is
-      // a no-op when already running, so calling it unconditionally is safe.
+      // CLICK-FREE PLAY (user tap-resume, NOT track load)
+      //
+      // CRITICAL: skip gain manipulation if a loadTrack is in flight.
+      // loadTrack's canplaythrough handler already schedules its own
+      // fade-in via fadeInMasterGain(200). If we ALSO cancel + re-anchor
+      // + fade here, we get TWO competing ramps on the same AudioParam:
+      // the gain jumps from wherever loadTrack's ramp was → 0.0001 (click)
+      // → 60ms new ramp. That jump IS the crackling.
+      //
+      // This effect should ONLY manage gain on user-initiated play/pause
+      // (tap the button), not on autoplay from track load.
       audioContextRef.current?.resume().catch(() => {});
+
+      if (isLoadingTrackRef.current) {
+        // loadTrack owns the gain ramp — just resume the audio element.
+        // The loadTrack canplaythrough handler will fade in properly.
+        audio.volume = 1.0;
+        audio.play().catch(() => {});
+        return;
+      }
+
       if (audioEnhancedRef.current && gainNodeRef.current && audioContextRef.current) {
         const ctx = audioContextRef.current;
         const now = ctx.currentTime;

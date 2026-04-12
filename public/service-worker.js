@@ -4,7 +4,7 @@
  * BACKGROUND PLAYBACK: Enhanced to cache audio streams
  */
 
-const CACHE_NAME = 'voyo-v61';
+const CACHE_NAME = 'voyo-v62';
 const AUDIO_CACHE_NAME = 'voyo-audio-v2';
 const STATIC_ASSETS = [
   '/',
