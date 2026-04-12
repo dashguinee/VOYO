@@ -300,6 +300,8 @@ const NeonBillboardCard = memo(({
   const [showTapBurst, setShowTapBurst] = useState(false);
   const [isDraggingToQueue, setIsDraggingToQueue] = useState(false);
   const [showQueuedFeedback, setShowQueuedFeedback] = useState(false);
+  // Swipe-up-to-bucket gesture
+  const neonSwipeStartRef = useRef<{ y: number } | null>(null);
   const [showReactionFeedback, setShowReactionFeedback] = useState(false); // NEW: Double-tap feedback
   const [flyingEmoji, setFlyingEmoji] = useState<string | null>(null); // NEW: Flying emoji animation
   const lastTapTimeRef = useRef(0); // NEW: For double-tap detection
@@ -410,6 +412,23 @@ const NeonBillboardCard = memo(({
     <button
       ref={cardRef}
       className="flex-shrink-0 w-32 h-16 rounded-lg relative overflow-hidden group"
+      onPointerDown={(e) => { neonSwipeStartRef.current = { y: e.clientY }; }}
+      onPointerUp={(e) => {
+        if (neonSwipeStartRef.current) {
+          const dy = e.clientY - neonSwipeStartRef.current.y;
+          neonSwipeStartRef.current = null;
+          // Swipe up → bucket this vibe
+          if (dy < -35 && onDragToQueue) {
+            setIsDraggingToQueue(true);
+            setShowQueuedFeedback(true);
+            try { navigator.vibrate?.([15, 8, 15]); } catch {}
+            onDragToQueue();
+            setTimeout(() => { setIsDraggingToQueue(false); setShowQueuedFeedback(false); }, 600);
+            return;
+          }
+        }
+      }}
+      onPointerCancel={() => { neonSwipeStartRef.current = null; }}
       onClick={() => {
         if (isDraggingToQueue) return; // Don't trigger tap if we just dragged
 
@@ -419,7 +438,6 @@ const NeonBillboardCard = memo(({
 
         // DOUBLE-TAP DETECTION (< 300ms between taps)
         if (timeSinceLastTap < 300 && onDoubleTap) {
-          // Double-tap = REACT to community!
           haptics?.success?.();
           setFlyingEmoji(reactionEmoji);
           setShowReactionFeedback(true);

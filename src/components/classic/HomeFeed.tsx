@@ -406,23 +406,30 @@ const TrackCard = memo(({ track, onPlay, showBoostBadge = false }: TrackCardProp
   const boostTrack = useDownloadStore(s => s.boostTrack);
   const addToQueue = usePlayerStore(s => s.addToQueue);
 
-  // ── HOLD-TO-PREFERENCE GESTURE ──────────────────────────────────
+  // ── HOLD-TO-PREFERENCE + SWIPE-UP-TO-BUCKET GESTURE ─────────────
   // Hold 400ms → card enters preference mode. Two shimmers appear:
   // left (grey = "not interested") and right (golden = "interested").
   // Slide the card on its own axis to commit. Release right → auto-
   // queue. Release left → skip signal. Release center → cancel.
+  //
+  // SWIPE UP (no hold required): quick flick upward → add to bucket.
+  // iPod-smooth — the card lifts, shrinks, and fades as it flies up.
   const [prefMode, setPrefMode] = useState(false);
   const [prefDx, setPrefDx] = useState(0);
+  const [bucketFly, setBucketFly] = useState(false); // Card flying to bucket animation
   const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const prefStartRef = useRef<{ x: number } | null>(null);
+  const prefStartRef = useRef<{ x: number; y: number } | null>(null);
   const cardRef = useRef<HTMLDivElement>(null);
   const didPrefRef = useRef(false);
+  const swipeAxisRef = useRef<'x' | 'y' | null>(null); // Lock to first significant axis
 
-  const PREF_THRESHOLD = 35; // px to commit
+  const PREF_THRESHOLD = 35; // px to commit (horizontal)
+  const BUCKET_THRESHOLD = 40; // px to commit (vertical swipe up)
 
   const handlePrefDown = (e: React.PointerEvent) => {
     didPrefRef.current = false;
-    prefStartRef.current = { x: e.clientX };
+    swipeAxisRef.current = null;
+    prefStartRef.current = { x: e.clientX, y: e.clientY };
     holdTimerRef.current = setTimeout(() => {
       setPrefMode(true);
       didPrefRef.current = true;
@@ -431,19 +438,49 @@ const TrackCard = memo(({ track, onPlay, showBoostBadge = false }: TrackCardProp
   };
 
   const handlePrefMove = (e: React.PointerEvent) => {
-    if (!prefMode || !prefStartRef.current) return;
+    if (!prefStartRef.current) return;
     const dx = e.clientX - prefStartRef.current.x;
-    setPrefDx(Math.max(-60, Math.min(60, dx))); // clamp
+    const dy = e.clientY - prefStartRef.current.y;
+
+    // Lock axis on first significant movement (>8px)
+    if (!swipeAxisRef.current && (Math.abs(dx) > 8 || Math.abs(dy) > 8)) {
+      swipeAxisRef.current = Math.abs(dy) > Math.abs(dx) ? 'y' : 'x';
+      // Vertical swipe detected early — cancel hold timer (no pref mode)
+      if (swipeAxisRef.current === 'y' && holdTimerRef.current) {
+        clearTimeout(holdTimerRef.current);
+        holdTimerRef.current = null;
+      }
+    }
+
+    if (prefMode && swipeAxisRef.current !== 'y') {
+      setPrefDx(Math.max(-60, Math.min(60, dx))); // clamp horizontal
+    }
   };
 
-  const handlePrefUp = () => {
+  const handlePrefUp = (e: React.PointerEvent) => {
     if (holdTimerRef.current) { clearTimeout(holdTimerRef.current); holdTimerRef.current = null; }
-    if (!prefMode) { prefStartRef.current = null; return; }
+
+    // ── SWIPE-UP-TO-BUCKET (no hold needed) ──
+    if (prefStartRef.current && swipeAxisRef.current === 'y') {
+      const dy = e.clientY - prefStartRef.current.y;
+      if (dy < -BUCKET_THRESHOLD) {
+        // Swiped up past threshold → bucket it!
+        didPrefRef.current = true;
+        addToQueue(track, 0); // Next up
+        try { navigator.vibrate?.([15, 8, 15]); } catch {}
+        // Fly animation
+        setBucketFly(true);
+        setTimeout(() => setBucketFly(false), 500);
+        prefStartRef.current = null;
+        swipeAxisRef.current = null;
+        return;
+      }
+    }
+
+    if (!prefMode) { prefStartRef.current = null; swipeAxisRef.current = null; return; }
 
     if (prefDx > PREF_THRESHOLD) {
       // ── INTERESTED: golden flash → auto-queue ──
-      // 60% chance insert at position 0 (plays next if vibe fits),
-      // 40% insert at random position (OYO DJ decides when).
       const position = Math.random() < 0.6 ? 0 : undefined;
       addToQueue(track, position);
       try { navigator.vibrate?.([20, 10, 20]); } catch {}
@@ -465,6 +502,7 @@ const TrackCard = memo(({ track, onPlay, showBoostBadge = false }: TrackCardProp
     setPrefMode(false);
     setPrefDx(0);
     prefStartRef.current = null;
+    swipeAxisRef.current = null;
   };
 
   const handleOye = (e: React.MouseEvent) => {
@@ -497,9 +535,15 @@ const TrackCard = memo(({ track, onPlay, showBoostBadge = false }: TrackCardProp
         ref={cardRef}
         className="relative w-32 h-32 rounded-xl overflow-hidden mb-2 bg-[#1c1c22] border border-[#28282f]/50 group-active:border-white/15 transition-colors"
         style={{
-          // Card slides on its own axis during preference mode
-          transform: prefMode ? `translateX(${prefDx}px) rotate(${prefDx / 8}deg)` : 'none',
-          transition: prefMode ? 'none' : 'transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)',
+          // Card slides on its own axis during preference mode,
+          // or flies up + shrinks when swiped to bucket
+          transform: bucketFly
+            ? 'translateY(-80px) scale(0.7)'
+            : prefMode ? `translateX(${prefDx}px) rotate(${prefDx / 8}deg)` : 'none',
+          opacity: bucketFly ? 0 : 1,
+          transition: bucketFly
+            ? 'transform 0.4s cubic-bezier(0.2, 0.8, 0.3, 1), opacity 0.35s ease-out'
+            : prefMode ? 'none' : 'transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)',
         }}
       >
         <SmartImage
@@ -552,6 +596,17 @@ const TrackCard = memo(({ track, onPlay, showBoostBadge = false }: TrackCardProp
               }}
             />
           </>
+        )}
+        {/* BUCKET FLY: purple flash overlay during swipe-up animation */}
+        {bucketFly && (
+          <div
+            className="absolute inset-0 pointer-events-none flex items-center justify-center"
+            style={{
+              background: 'linear-gradient(to top, rgba(139,92,246,0.5), rgba(139,92,246,0.2))',
+            }}
+          >
+            <span className="text-white text-[10px] font-bold tracking-wider">BUCKETED</span>
+          </div>
         )}
         {isHovered && !prefMode && (
           <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
