@@ -502,15 +502,22 @@ export const AudioPlayer = () => {
         return;
       }
 
-      // RETURNING FROM BACKGROUND — ensure audio is actually playing.
-      // Some mobile browsers pause the audio element's internal scheduler
-      // during background even if the AudioContext stays running. A safety
-      // play() call re-kicks the scheduler. Only fires if the store says
-      // we should be playing AND the audio element is paused (desync).
-      if (shouldPlay && audioRef.current?.paused && (ps === 'cached' || ps === 'r2')) {
-        audioRef.current.play().catch(() => {});
-        devLog('🔄 [VOYO] Re-kicked audio element on foreground return');
-      }
+      // RETURNING FROM BACKGROUND — stagger the resume work to prevent
+      // a main-thread freeze. On return, audioEngine.ts already calls
+      // ctx.resume() synchronously. The frequency pump restarts via rAF.
+      // Any deferred setTimeout callbacks from background fire. If we ALSO
+      // call audio.play() + do state reads synchronously, everything lands
+      // in the same frame = 50-200ms freeze.
+      //
+      // Defer the audio re-kick by 100ms so it lands in the NEXT frame
+      // after the initial burst settles.
+      setTimeout(() => {
+        const { isPlaying: sp, playbackSource: pbs } = usePlayerStore.getState();
+        if (sp && audioRef.current?.paused && (pbs === 'cached' || pbs === 'r2')) {
+          audioRef.current.play().catch(() => {});
+          devLog('🔄 [VOYO] Re-kicked audio element on foreground return');
+        }
+      }, 100);
     };
     document.addEventListener('visibilitychange', handleVisibility);
     return () => document.removeEventListener('visibilitychange', handleVisibility);
