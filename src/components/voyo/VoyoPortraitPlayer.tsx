@@ -548,7 +548,9 @@ const NeonBillboardCard = memo(({
 
       {/* Content */}
       <div className="relative z-10 h-full flex flex-col items-center justify-center px-2">
-        {/* Title - with enhanced neon text glow */}
+        {/* Title - dynamic treatment per mood.
+            Energetic (Heating Up RN): heat shimmer effect — the text
+            subtly waves like hot air rising. Other moods: static neon glow. */}
         <div
           className="text-[11px] font-black tracking-wider uppercase"
           style={{
@@ -556,9 +558,13 @@ const NeonBillboardCard = memo(({
             textShadow: `
               0 0 5px ${neon},
               0 0 10px ${glow},
-              0 0 20px ${glow},
-              0 0 30px ${glow}
-            `
+              0 0 20px ${glow}
+            `,
+            // Heat shimmer: subtle Y-axis distortion on energetic cards
+            ...(mood === 'energetic' ? {
+              animation: 'voyo-heat-shimmer 2s ease-in-out infinite',
+              filter: `drop-shadow(0 0 8px ${glow})`,
+            } : {}),
             }}
         >
           {title}
