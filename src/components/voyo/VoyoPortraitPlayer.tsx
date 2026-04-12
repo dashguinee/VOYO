@@ -4376,20 +4376,25 @@ export const VoyoPortraitPlayer = ({
       return;
     }
 
-    // Single tap → Toggle OYO Island DJ widget + controls
-    // OYO Island handles chat/voice internally - tap OYO for chat, tap mic for voice search
-    if (!isReactionsRevealed) {
-      const wasHidden = !isControlsRevealed;
-      setIsControlsRevealed(prev => !prev);
+    // Single tap when reactions/OYE discussion is open → CLOSE IT.
+    // Previously this was a no-op (the `if (!isReactionsRevealed)` guard
+    // skipped everything), leaving the user stuck until the 4s auto-hide.
+    if (isReactionsRevealed) {
+      setIsReactionsRevealed(false);
+      setIsControlsRevealed(false);
+      setShowOyoIsland(false);
+      return;
+    }
 
-      // Show OYO Island when revealing controls
-      if (wasHidden) {
-        setShowOyoIsland(true);
-        haptics.light();
-      } else {
-        // Hiding controls also hides OYO Island
-        setShowOyoIsland(false);
-      }
+    // Single tap → Toggle OYO Island DJ widget + controls
+    const wasHidden = !isControlsRevealed;
+    setIsControlsRevealed(prev => !prev);
+
+    if (wasHidden) {
+      setShowOyoIsland(true);
+      haptics.light();
+    } else {
+      setShowOyoIsland(false);
     }
   }, [isControlsRevealed, isReactionsRevealed, showDJWakeToast]);
 
