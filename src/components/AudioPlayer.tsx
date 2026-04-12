@@ -463,8 +463,10 @@ export const AudioPlayer = () => {
 
     const timeoutIds: ReturnType<typeof setTimeout>[] = [];
 
-    // Stagger preloads: 500ms, 5500ms, 10500ms to avoid bandwidth competition
-    const staggerDelays = [500, 5500, 10500];
+    // Stagger preloads: 3s, 8s, 15s — first preload was at 500ms which
+    // competed with the current track's audio buffer fill during the
+    // critical first seconds. 3s gives the decoder time to stabilize.
+    const staggerDelays = [3000, 8000, 15000];
 
     tracksToPreload.forEach((track, index) => {
       const delay = staggerDelays[index] || staggerDelays[staggerDelays.length - 1];
