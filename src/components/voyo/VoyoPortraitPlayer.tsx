@@ -32,7 +32,7 @@ import { devLog } from '../../utils/logger';
 import { useAuth } from '../../hooks/useAuth';
 import { getCurrentSegment, type EnrichedLyrics, type LyricsGenerationProgress } from '../../services/lyricsEngine';
 import { findLyrics } from '../../services/lyricsAgent';
-import { getVideoStreamUrl } from '../../services/piped';
+// getVideoStreamUrl removed — no longer needed after LyricsAgent replaced Whisper pipeline
 import { translateWord, type TranslationMatch } from '../../services/lexiconService';
 import { voiceSearch, recordFromMicrophone, isConfigured as isWhisperConfigured } from '../../services/whisperService';
 import { searchAlbums, getAlbumTracks } from '../../services/piped';

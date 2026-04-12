@@ -2661,10 +2661,17 @@ export const AudioPlayer = () => {
       isCrossfadingRef.current = true;
       crossfadeMute(fadeDuration);
 
-      // Fire nextTrack NOW — loadTrack starts while old track is still
-      // fading. The loading time IS the crossfade time.
-      haptics.light();
-      nextTrack();
+      // Fire nextTrack in a deferred microtask — NOT synchronously inside
+      // handleTimeUpdate. If nextTrack or any downstream store action
+      // throws, it won't crash the audio event handler (which would kill
+      // progress tracking + milestone checks for the rest of the track).
+      try {
+        haptics.light();
+        setTimeout(() => nextTrack(), 0);
+      } catch (e) {
+        devWarn('[VOYO] Crossfade nextTrack failed:', e);
+        isCrossfadingRef.current = false;
+      }
     }
 
     // 1Hz throttle for mediaSession — native bridge is expensive on iOS.
