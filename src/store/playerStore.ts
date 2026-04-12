@@ -634,8 +634,25 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     const flooredSec = Math.floor(time);
     if (time > 0 && flooredSec % 5 === 0 && flooredSec !== _lastPersistedSec) {
       _lastPersistedSec = flooredSec;
-      const current = loadPersistedState();
-      savePersistedState({ ...current, currentTime: time });
+      // Defer the persist to idle time. loadPersistedState + JSON.parse +
+      // JSON.stringify + localStorage.setItem is synchronous main-thread
+      // I/O (~1-5ms). Running it inside setCurrentTime (which fires at 4Hz)
+      // was one of the last remaining audio-thread starvation sources.
+      const t = time;
+      const w = window as unknown as {
+        requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => void;
+      };
+      if (typeof w.requestIdleCallback === 'function') {
+        w.requestIdleCallback(() => {
+          const current = loadPersistedState();
+          savePersistedState({ ...current, currentTime: t });
+        }, { timeout: 2000 });
+      } else {
+        setTimeout(() => {
+          const current = loadPersistedState();
+          savePersistedState({ ...current, currentTime: t });
+        }, 100);
+      }
     }
 
     // PORTAL SYNC: Update now_playing every 10 seconds for live position.

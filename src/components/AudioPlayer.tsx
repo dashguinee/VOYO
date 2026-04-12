@@ -649,13 +649,23 @@ export const AudioPlayer = () => {
       treble = (treble / 48) / 255;
       const energy = (total / len) / 255;
 
-      // Write CSS custom properties — the ONLY DOM touch per frame.
-      // Components read via var(), composited by GPU, no layout thrash.
+      // DELTA-GATED CSS WRITES: only touch the DOM when the value has
+      // changed by >5% (0.05 on the 0-1 scale). Most frames during
+      // steady playback, treble/mid barely move — skipping those writes
+      // saves 2-3 style recalcs per frame that were triggering GPU
+      // recomposition for zero visual change.
       const root = document.documentElement;
-      root.style.setProperty('--voyo-bass', bass.toFixed(3));
-      root.style.setProperty('--voyo-mid', mid.toFixed(3));
-      root.style.setProperty('--voyo-treble', treble.toFixed(3));
-      root.style.setProperty('--voyo-energy', energy.toFixed(3));
+      const DELTA = 0.05;
+      const prev = {
+        bass: parseFloat(root.style.getPropertyValue('--voyo-bass') || '0'),
+        mid: parseFloat(root.style.getPropertyValue('--voyo-mid') || '0'),
+        treble: parseFloat(root.style.getPropertyValue('--voyo-treble') || '0'),
+        energy: parseFloat(root.style.getPropertyValue('--voyo-energy') || '0'),
+      };
+      if (Math.abs(bass - prev.bass) > DELTA) root.style.setProperty('--voyo-bass', bass.toFixed(3));
+      if (Math.abs(mid - prev.mid) > DELTA) root.style.setProperty('--voyo-mid', mid.toFixed(3));
+      if (Math.abs(treble - prev.treble) > DELTA) root.style.setProperty('--voyo-treble', treble.toFixed(3));
+      if (Math.abs(energy - prev.energy) > DELTA) root.style.setProperty('--voyo-energy', energy.toFixed(3));
     };
 
     rafId = requestAnimationFrame(pump);
