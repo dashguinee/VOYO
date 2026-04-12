@@ -2611,10 +2611,10 @@ export const AudioPlayer = () => {
     // crossfadeArmedRef prevents double-firing (the trigger condition
     // is true for ~12 handleTimeUpdate ticks).
     const remaining = el.duration - el.currentTime;
-    if (remaining > 0 && remaining < 1.5 && !crossfadeArmedRef.current && el.duration > 10) {
+    if (remaining > 0 && remaining < 1.5 && !crossfadeArmedRef.current && el.duration > 10 && !el.ended) {
       crossfadeArmedRef.current = true;
       devLog(`[VOYO] DJ crossfade: ${remaining.toFixed(1)}s remaining — fading out`);
-      crossfadeMute(); // 1.5s exponential fade-out
+      crossfadeMute();
     }
 
     // 1Hz throttle for mediaSession — native bridge is expensive on iOS.

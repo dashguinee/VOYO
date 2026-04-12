@@ -116,8 +116,13 @@ async function tryClient(videoId, clientConfig) {
   // "real" clients vs bots. Format is a base64-encoded protobuf containing
   // a random visitor ID. Without this, YouTube returns "Sign in to confirm
   // you're not a bot" for most videos from datacenter IPs.
-  const visitorId = 'CgtV' + Array.from(crypto.getRandomValues(new Uint8Array(12)))
-    .map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 16);
+  // Generate a valid-looking visitorData token. YouTube uses protobuf-encoded
+  // visitor IDs. A real token is ~28 base64 chars. We generate a random one
+  // that matches the expected length/format. Not a true protobuf but YouTube's
+  // parser accepts it for basic bot detection bypass.
+  const randBytes = Array.from(crypto.getRandomValues(new Uint8Array(18)))
+    .map(b => b.toString(16).padStart(2, '0')).join('');
+  const visitorId = 'CgtV' + randBytes;
 
   const response = await fetch(`https://www.youtube.com/youtubei/v1/player?key=${INNERTUBE_API_KEY}&prettyPrint=false`, {
     method: 'POST',
