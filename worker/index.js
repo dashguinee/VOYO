@@ -30,7 +30,7 @@
 
 // Current InnerTube signatureTimestamp (as of 2026-Q1).
 // If extraction starts returning ciphered-only URLs, bump this.
-const SIGNATURE_TIMESTAMP = 20250;
+const SIGNATURE_TIMESTAMP = 20350;
 
 // InnerTube public API key (shared by all YouTube clients — not a secret,
 // embedded in ytcfg on youtube.com). Used only as the ?key= query param.
@@ -40,88 +40,85 @@ const INNERTUBE_API_KEY = 'AIzaSyA8eiZmM1FaDVjRy-df2KTyQ_vz_yYM39w';
 // IOS is the most reliable for audio extraction as of late-2025; returns
 // un-ciphered URLs. ANDROID_VR is less throttled but sometimes returns
 // lower-bitrate formats. WEB_EMBEDDED_PLAYER is the final browser fallback.
+// Client configurations — UPDATED 2026-04-12.
+// YouTube periodically blocks old client versions. These are the latest
+// working versions as of Q2 2026. Priority: IOS > ANDROID_VR > WEB_CREATOR.
+//
+// ANDROID_MUSIC removed — YouTube requires sign-in for all music clients.
+// WEB_EMBEDDED_PLAYER removed — returns "unavailable" for most videos.
+// TVHTML5 removed — "no longer supported" error.
+// Added WEB_CREATOR — returns unciphered URLs, no sign-in required.
 const CLIENTS = [
   {
     name: 'IOS',
     context: {
       client: {
         clientName: 'IOS',
-        clientVersion: '19.32.8',
+        clientVersion: '19.45.4',
         deviceMake: 'Apple',
         deviceModel: 'iPhone16,2',
         osName: 'iPhone',
-        osVersion: '17.6.1.21G93',
+        osVersion: '18.2.1.22C161',
         hl: 'en',
         gl: 'US',
       }
     },
-    userAgent: 'com.google.ios.youtube/19.32.8 (iPhone16,2; U; CPU iOS 17_6_1 like Mac OS X; en_US)'
+    userAgent: 'com.google.ios.youtube/19.45.4 (iPhone16,2; U; CPU iOS 18_2_1 like Mac OS X; en_US)'
   },
   {
     name: 'ANDROID_VR',
     context: {
       client: {
         clientName: 'ANDROID_VR',
-        clientVersion: '1.60.19',
+        clientVersion: '1.62.27',
         deviceMake: 'Oculus',
         deviceModel: 'Quest 3',
-        androidSdkVersion: 32,
+        androidSdkVersion: 34,
         osName: 'Android',
-        osVersion: '12L',
+        osVersion: '14',
         hl: 'en',
         gl: 'US',
       }
     },
-    userAgent: 'com.google.android.apps.youtube.vr.oculus/1.60.19 (Linux; U; Android 12L; en_US; Quest 3)'
+    userAgent: 'com.google.android.apps.youtube.vr.oculus/1.62.27 (Linux; U; Android 14; en_US; Quest 3)'
   },
   {
-    name: 'ANDROID_MUSIC',
+    name: 'WEB_CREATOR',
     context: {
       client: {
-        clientName: 'ANDROID_MUSIC',
-        clientVersion: '7.27.52',
-        androidSdkVersion: 33,
+        clientName: 'WEB_CREATOR',
+        clientVersion: '1.20260401.01.00',
+        hl: 'en',
+        gl: 'US',
+      }
+    },
+    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36'
+  },
+  {
+    name: 'ANDROID',
+    context: {
+      client: {
+        clientName: 'ANDROID',
+        clientVersion: '19.44.38',
+        androidSdkVersion: 34,
         osName: 'Android',
-        osVersion: '13',
+        osVersion: '14',
         hl: 'en',
         gl: 'US',
       }
     },
-    userAgent: 'com.google.android.apps.youtube.music/7.27.52 (Linux; U; Android 13) gzip'
+    userAgent: 'com.google.android.youtube/19.44.38 (Linux; U; Android 14) gzip'
   },
-  {
-    name: 'WEB_EMBEDDED_PLAYER',
-    context: {
-      client: {
-        clientName: 'WEB_EMBEDDED_PLAYER',
-        clientVersion: '1.20241205.01.00',
-        hl: 'en',
-        gl: 'US',
-      },
-      thirdParty: {
-        embedUrl: 'https://www.youtube.com/'
-      }
-    },
-    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
-  },
-  {
-    name: 'TVHTML5_SIMPLY_EMBEDDED_PLAYER',
-    context: {
-      client: {
-        clientName: 'TVHTML5_SIMPLY_EMBEDDED_PLAYER',
-        clientVersion: '2.0',
-        hl: 'en',
-        gl: 'US',
-      },
-      thirdParty: {
-        embedUrl: 'https://www.youtube.com/'
-      }
-    },
-    userAgent: 'Mozilla/5.0 (SMART-TV; Linux; Tizen 6.0) AppleWebKit/538.1 (KHTML, like Gecko) SamsungBrowser/5.0 TV Safari/538.1'
-  }
 ];
 
 async function tryClient(videoId, clientConfig) {
+  // Generate a fresh visitorData token. YouTube requires this to identify
+  // "real" clients vs bots. Format is a base64-encoded protobuf containing
+  // a random visitor ID. Without this, YouTube returns "Sign in to confirm
+  // you're not a bot" for most videos from datacenter IPs.
+  const visitorId = 'CgtV' + Array.from(crypto.getRandomValues(new Uint8Array(12)))
+    .map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 16);
+
   const response = await fetch(`https://www.youtube.com/youtubei/v1/player?key=${INNERTUBE_API_KEY}&prettyPrint=false`, {
     method: 'POST',
     headers: {
@@ -129,6 +126,7 @@ async function tryClient(videoId, clientConfig) {
       'User-Agent': clientConfig.userAgent,
       'X-YouTube-Client-Name': clientConfig.context.client.clientName,
       'X-YouTube-Client-Version': clientConfig.context.client.clientVersion,
+      'X-Goog-Visitor-Id': visitorId,
       'Origin': 'https://www.youtube.com',
       'Referer': 'https://www.youtube.com/',
       'Accept': 'application/json',
@@ -136,7 +134,13 @@ async function tryClient(videoId, clientConfig) {
     },
     body: JSON.stringify({
       videoId: videoId,
-      context: clientConfig.context,
+      context: {
+        ...clientConfig.context,
+        client: {
+          ...clientConfig.context.client,
+          visitorData: visitorId,
+        },
+      },
       playbackContext: {
         contentPlaybackContext: {
           signatureTimestamp: SIGNATURE_TIMESTAMP,
