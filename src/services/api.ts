@@ -380,7 +380,7 @@ export async function healthCheck(): Promise<boolean> {
 export async function getTrending(region: string = 'US'): Promise<SearchResult[]> {
   try {
     // Use search with trending terms as fallback
-    return searchMusic('trending music 2025', 20);
+    return searchMusic(`trending music ${new Date().getFullYear()}`, 20);
   } catch (error) {
     return [];
   }

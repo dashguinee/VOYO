@@ -11,7 +11,7 @@
  * NEVER unmounts - CSS positioning changes only
  */
 
-import { useEffect, useRef, useCallback, memo, useState } from 'react';
+import { useEffect, useRef, useCallback, memo, useState, type Dispatch, type SetStateAction } from 'react';
 import { usePlayerStore } from '../store/playerStore';
 import { markTrackAsFailed } from '../services/trackVerifier';
 import { devLog } from '../utils/logger';
@@ -40,6 +40,56 @@ function getYouTubeId(trackId: string): string {
   return trackId;
 }
 
+// OverlayTimingSync — renders null. Subscribes to currentTime at 4Hz,
+// computes overlay visibility states, writes to parent ONLY on zone
+// transitions. Prevents the entire YouTubeIframe tree from re-rendering
+// at the store-write cadence.
+const OverlayTimingSync = memo(({
+  videoTarget,
+  upcomingTrack,
+  setShowNowPlaying,
+  setShowNextUp,
+  setShowPortraitNextUp,
+}: {
+  videoTarget: string;
+  upcomingTrack: any;
+  setShowNowPlaying: Dispatch<SetStateAction<boolean>>;
+  setShowNextUp: Dispatch<SetStateAction<boolean>>;
+  setShowPortraitNextUp: Dispatch<SetStateAction<boolean>>;
+}) => {
+  const currentTime = usePlayerStore((s) => s.currentTime);
+  const duration = usePlayerStore((s) => s.duration);
+  const lastRef = useRef({ np: false, nu: false, pnu: false });
+
+  useEffect(() => {
+    if (videoTarget === 'hidden') {
+      if (lastRef.current.np || lastRef.current.nu || lastRef.current.pnu) {
+        setShowNowPlaying(false);
+        setShowNextUp(false);
+        setShowPortraitNextUp(false);
+        lastRef.current = { np: false, nu: false, pnu: false };
+      }
+      return;
+    }
+    const np = currentTime < 5 && currentTime > 0;
+    const timeRemaining = duration - currentTime;
+    const midTrack = currentTime > 30 && duration > 60 && currentTime >= duration * 0.45 && currentTime < duration * 0.55;
+    const endTrack = timeRemaining > 0 && timeRemaining < 20;
+    const nu = (midTrack || endTrack) && !!upcomingTrack;
+    const portraitEndZone = timeRemaining > 0 && timeRemaining < 8;
+    const pnu = videoTarget === 'portrait' && portraitEndZone && !!upcomingTrack;
+
+    const prev = lastRef.current;
+    if (prev.np !== np) { setShowNowPlaying(np); }
+    if (prev.nu !== nu) { setShowNextUp(nu); }
+    if (prev.pnu !== pnu) { setShowPortraitNextUp(pnu); }
+    lastRef.current = { np, nu, pnu };
+  }, [currentTime, duration, videoTarget, upcomingTrack, setShowNowPlaying, setShowNextUp, setShowPortraitNextUp]);
+
+  return null;
+});
+OverlayTimingSync.displayName = 'OverlayTimingSync';
+
 export const YouTubeIframe = memo(() => {
   const playerRef = useRef<YT.Player | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -54,7 +104,13 @@ export const YouTubeIframe = memo(() => {
   const playbackSource = usePlayerStore((s) => s.playbackSource);
   const videoTarget = usePlayerStore((s) => s.videoTarget);
   const seekPosition = usePlayerStore((s) => s.seekPosition);
-  const currentTime = usePlayerStore((s) => s.currentTime);
+  // NOTE: currentTime and duration are NOT subscribed at this level.
+  // They drive overlay visibility (Now Playing / Next Up / portrait
+  // end-zone) which is computed by the OverlayTimingSync sub-component
+  // below. That sub-component renders null and writes to these state
+  // setters only when the derived values actually change, so the full
+  // YouTubeIframe body re-renders ~1-2x per track (zone transitions)
+  // instead of at the 4Hz store-write cadence.
   const duration = usePlayerStore((s) => s.duration);
   const queue = usePlayerStore((s) => s.queue);
 
@@ -76,27 +132,9 @@ export const YouTubeIframe = memo(() => {
   const upcomingTrack = queue[0]?.track || null;
 
 
-  // Update overlay visibility based on playback time
-  useEffect(() => {
-    if (videoTarget === 'hidden') {
-      setShowNowPlaying(false);
-      setShowNextUp(false);
-      setShowPortraitNextUp(false);
-      return;
-    }
-    // Now Playing: first 5 seconds
-    setShowNowPlaying(currentTime < 5 && currentTime > 0);
-    // Next Up: 45-55% or last 20 seconds
-    const timeRemaining = duration - currentTime;
-    const midTrack = currentTime > 30 && duration > 60 && currentTime >= duration * 0.45 && currentTime < duration * 0.55;
-    const endTrack = timeRemaining > 0 && timeRemaining < 20;
-    setShowNextUp((midTrack || endTrack) && !!upcomingTrack);
-
-    // Portrait: Full thumbnail takeover in last 8 seconds (YouTube shows at ~5s)
-    // Disguised as intentional "Up Next" preview - not blocking, featuring!
-    const portraitEndZone = timeRemaining > 0 && timeRemaining < 8;
-    setShowPortraitNextUp(videoTarget === 'portrait' && portraitEndZone && !!upcomingTrack);
-  }, [currentTime, duration, videoTarget, upcomingTrack]);
+  // Overlay visibility is driven by OverlayTimingSync (renders null,
+  // subscribes to currentTime, writes to state only on zone transitions).
+  // See the <OverlayTimingSync> in the render tree below.
 
   // Load YouTube API once
   useEffect(() => {
@@ -476,6 +514,18 @@ export const YouTubeIframe = memo(() => {
     <div
       style={getContainerStyle()}
     >
+      {/* OVERLAY TIMING SYNC — renders null. Subscribes to currentTime at
+          4Hz, computes overlay zones (Now Playing, Next Up, portrait end),
+          writes to parent state ONLY on zone transitions. Prevents the
+          entire YouTubeIframe from re-rendering at 4Hz. */}
+      <OverlayTimingSync
+        videoTarget={videoTarget}
+        upcomingTrack={upcomingTrack}
+        setShowNowPlaying={setShowNowPlaying}
+        setShowNextUp={setShowNextUp}
+        setShowPortraitNextUp={setShowPortraitNextUp}
+      />
+
       {/* Video container */}
       <div style={getVideoStyle()}>
         <div ref={containerRef} style={{ width: '100%', height: '100%' }} />

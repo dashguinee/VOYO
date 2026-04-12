@@ -134,9 +134,11 @@ export const useDownloadStore = create<DownloadStore>((set, get) => ({
   downloadSetting: 'wifi-only',
   isInitialized: false,
 
-  // Boost tracking
-  manualBoostCount: parseInt(localStorage.getItem('voyo-manual-boost-count') || '0', 10),
-  autoBoostEnabled: localStorage.getItem('voyo-auto-boost') === 'true',
+  // Boost tracking — wrapped in try-catch because localStorage throws
+  // in private/incognito browsing mode. Defaults to 0/false if storage
+  // is unavailable so the app still works.
+  manualBoostCount: (() => { try { return parseInt(localStorage.getItem('voyo-manual-boost-count') || '0', 10); } catch { return 0; } })(),
+  autoBoostEnabled: (() => { try { return localStorage.getItem('voyo-auto-boost') === 'true'; } catch { return false; } })(),
   showAutoBoostPrompt: false,
 
   // Hot-swap tracking (for DJ rewind feature)
