@@ -1166,7 +1166,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       const current = loadPersistedState();
       savePersistedState({
         ...current,
-        queue: state.queue.map(q => ({
+        queue: state.queue.filter(q => q.track).map(q => ({
           trackId: q.track.id,
           title: q.track.title,
           artist: q.track.artist,
@@ -1200,7 +1200,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       const current = loadPersistedState();
       savePersistedState({
         ...current,
-        queue: state.queue.map(q => ({
+        queue: state.queue.filter(q => q.track).map(q => ({
           trackId: q.track.id,
           title: q.track.title,
           artist: q.track.artist,
@@ -1236,7 +1236,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       const current = loadPersistedState();
       savePersistedState({
         ...current,
-        queue: state.queue.map(q => ({
+        queue: state.queue.filter(q => q.track).map(q => ({
           trackId: q.track.id,
           title: q.track.title,
           artist: q.track.artist,
@@ -1307,7 +1307,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     // Exclude currently playing, queued, and recent history
     const excludeIds = new Set([
       state.currentTrack?.id,
-      ...state.queue.map((q) => q.track.id),
+      ...state.queue.map((q) => q.track?.id),
       ...state.history.slice(-30).map((h) => h.track?.id),
     ].filter(Boolean) as string[]);
 
@@ -1463,7 +1463,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     const state = get();
     const excludeIds = [
       track.id,
-      ...state.queue.map((q) => q.track.id),
+      ...state.queue.map((q) => q.track?.id),
       ...state.discoverTracks.map((t) => t.id), // Don't duplicate existing
     ].filter(Boolean) as string[];
 

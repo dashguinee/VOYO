@@ -754,7 +754,7 @@ export const useKnowledgeStore = create<KnowledgeState>()(
             serialized.state.tracksByArtist[k] = setToArray(v);
           });
 
-          localStorage.setItem(name, JSON.stringify(serialized));
+          try { localStorage.setItem(name, JSON.stringify(serialized)); } catch { /* quota — knowledge store won't persist this cycle */ }
         },
         removeItem: (name) => localStorage.removeItem(name)
       }
