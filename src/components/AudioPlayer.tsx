@@ -2898,6 +2898,10 @@ export const AudioPlayer = () => {
 
   const handleEnded = useCallback(() => {
     if (playbackSource !== 'cached' && playbackSource !== 'r2') return;
+    // Dedup with direct listener — prevent double nextTrack()
+    if (endedHandledRef.current) return;
+    endedHandledRef.current = true;
+    requestAnimationFrame(() => { endedHandledRef.current = false; });
 
     const track = currentTrack;
     const currentTime = audioRef.current?.currentTime || 0;
@@ -2945,19 +2949,27 @@ export const AudioPlayer = () => {
   }, [playbackSource, currentTrack, nextTrack, endListenSession, cacheTrack]);
 
   // BACKGROUND AUTO-NEXT: Direct ended listener on the audio element.
-  // React's onEnded JSX prop may not fire reliably in background on Android
-  // (deferred renders can leave stale callbacks). This native listener reads
-  // fresh state from the store, not closures. Belt-and-suspenders with onEnded.
+  // React's onEnded JSX prop may not fire reliably in background on Android.
+  // This native listener reads fresh state from the store, not closures.
+  // REPLACES the React onEnded — only ONE handler to prevent double-skip.
+  const endedHandledRef = useRef(false);
   useEffect(() => {
     const el = audioRef.current;
     if (!el) return;
 
     const onEndedDirect = () => {
+      // Dedup: prevent double-skip if both React onEnded and this fire
+      if (endedHandledRef.current) return;
+      endedHandledRef.current = true;
+      requestAnimationFrame(() => { endedHandledRef.current = false; });
+
       const { playbackSource: ps, isPlaying: playing } = usePlayerStore.getState();
       if (ps !== 'cached' && ps !== 'r2') return;
       if (!playing) return;
-      devLog('🔄 [VOYO] Direct ended listener fired — advancing to next track');
+      devLog('🔄 [VOYO] Track ended — advancing to next');
+      haptics.light();
       nextTrack();
+      navigator.mediaSession.playbackState = 'playing';
     };
 
     el.addEventListener('ended', onEndedDirect);
