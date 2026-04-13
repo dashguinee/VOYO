@@ -1,51 +1,39 @@
 # VOYO Music - Optimization Roadmap
 
-**Analysis Date**: January 17, 2026  
-**Current Build Size**: 1.7MB (JS) / 462.71KB (gzip)  
-**Status**: Production Live on Vercel  
+**Analysis Date**: April 13, 2026 (updated from January 17 baseline)  
+**Current Build Size**: ~1.5MB assets / 208KB main bundle (gzip: ~63KB)  
+**Status**: Production Live on Vercel — code splitting + manual chunks active  
 
 ---
 
 ## EXECUTIVE SUMMARY
 
-VOYO has **significant optimization opportunities** that can reduce bundle size by 30-40% and improve initial load time. The main issues are:
+Major optimizations completed since January 2026:
 
-1. **Monolithic bundle** - Single 1.7MB JS chunk with no code splitting
-2. **Unused dependencies** - `tesseract.js` (94KB) used only in 1 service
-3. **Duplicate DJ systems** - 4 DJ services (voyoDJ, oyoDJ, intelligentDJ, centralDJ)
-4. **Missing memoization** - Large components with 100+ hooks not using React.memo
-5. **Mixed import patterns** - Static + dynamic imports prevent proper tree-shaking
-6. **Lottie animations** - Fetched dynamically, no caching or code-splitting
-7. **Large stores in memory** - No selectors, entire state subscribed
+- ✅ **Code splitting** — React.lazy() for PortraitVOYO, LandscapeVOYO, VideoMode, ClassicMode
+- ✅ **Manual chunks** — vendor-react, vendor-zustand, vendor-supabase, vendor-icons, app-services, app-knowledge split in vite.config.ts
+- ✅ **voyoDJ.ts deleted** — 710 lines of dead code removed
+- ✅ **Lottie replaced** — pure CSS pulse animations, 307KB vendor chunk eliminated
+- ✅ **Store selectors** — fine-grained Zustand selectors in AudioPlayer, PlayerStore consumers
+
+**Remaining opportunities** (lower priority, post-launch):
+
+1. **Tesseract.js** — still statically imported (94KB), only used in videoIntelligence.ts
+2. **VoyoPortraitPlayer.tsx** — 6085 lines in single file, could extract sub-components
+3. **DJ consolidation** — 3 DJ systems remain (oyoDJ, intelligentDJ, centralDJ) with overlap
 
 ---
 
-## CRITICAL ISSUES (Blocking Performance)
+## COMPLETED OPTIMIZATIONS
 
-### 1. Bundle Size Warning - 1.7MB Single Chunk
-**Impact**: Initial load >5s on 4G, poor SEO, high bounce rate  
-**Effort**: HIGH (requires vite config + route changes)  
-**Priority**: CRITICAL
+### 1. Bundle Size — Code Splitting + Manual Chunks ✅
+**Status**: DONE (April 2026)
 
-**Problem**:
-- Vite warning: "Some chunks are larger than 500 kB after minification"
-- All components, stores, services bundled together
-- YouTube iframe + Lottie + Tesseract included in main bundle
-
-**Root Cause**:
-```
-vite.config.ts only has: plugins: [react(), tailwindcss()]
-→ No manualChunks configuration
-→ No dynamic import enforcement
-```
-
-**Affected Files**:
-- `/home/dash/voyo-music/vite.config.ts` (missing rollupOptions)
-
-**Solution Priority**:
-1. **Quick Win**: Add `build.rollupOptions.output.manualChunks` to vite.config.ts
-2. **Medium**: Split stores into separate chunks (playerStore, universeStore, etc.)
-3. **Long**: Lazy-load entire mode sections (Landscape, VideoMode, Classic)
+**What was done**:
+- `vite.config.ts` — `rollupOptions.output.manualChunks` splits vendor-react, vendor-zustand, vendor-supabase, vendor-icons, app-services, app-knowledge
+- `App.tsx` — `React.lazy()` for PortraitVOYO, LandscapeVOYO, VideoMode, ClassicMode
+- Brain/knowledge chunks load via dynamic import behind `requestIdleCallback`
+- Result: main bundle 208KB (gzip 63KB), mode chunks load on demand
 
 ---
 
@@ -82,31 +70,24 @@ import Tesseract from 'tesseract.js';  // Only 11 uses, heavily feature-gated
 
 ---
 
-### 3. Four DJ Systems - Code Duplication
-**Impact**: ~3,000 lines of duplicated/unused code  
-**Effort**: MEDIUM  
-**Priority**: HIGH
+### 3. DJ Systems — Partial Consolidation ✅
+**Status**: PARTIALLY DONE
 
-**Problem**:
+**Completed**:
+- ✅ `voyoDJ.ts` deleted (710 lines, 0 imports — dead code removed)
+
+**Remaining** (3 systems, ~2,300 lines):
 ```
-voyoDJ.ts        - 710 lines (UNUSED - never imported)
-intelligentDJ.ts - 752 lines (imported in AudioPlayer.tsx only)
-oyoDJ.ts         - 878 lines (imported in AudioPlayer.tsx, OyoIsland.tsx)
-centralDJ.ts     - 681 lines (imported 5 times, main system)
+oyoDJ.ts         - ~950 lines (OYO personality, vibe insights, notifications)
+intelligentDJ.ts - ~752 lines (MixBoard-driven recommendations)
+centralDJ.ts     - ~681 lines (core DJ system, mode training)
 ```
 
-**Audit Results**:
-- **voyoDJ.ts** - DEAD CODE (0 imports in codebase)
-- **intelligentDJ.ts** - Only 1 file imports it (AudioPlayer), but functions are mostly unused
-- **oyoDJ.ts** - Only 2 files import it, overlaps with centralDJ
-- **centralDJ.ts** - Actively used, is the real DJ system
+**Post-launch consideration**:
+- oyoDJ handles personality/insights — distinct from centralDJ's recommendation math
+- intelligentDJ bridges MixBoard UI to centralDJ — potential merge target
 
-**Solution**:
-1. **Phase 1 - Immediate (Quick Win)**:
-   - Delete `/home/dash/voyo-music/src/services/voyoDJ.ts` (710 lines, 0 usage)
-   - Saves: 710 lines, ~35KB minified
-
-2. **Phase 2 - Week 1**:
+2. **Phase 2 - Post-launch**:
    - Consolidate `intelligentDJ` + `oyoDJ` into `centralDJ`
    - Merge only the actively used functions
    - Saves: ~1,500 lines, ~75KB minified

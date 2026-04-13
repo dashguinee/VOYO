@@ -208,9 +208,13 @@ export async function uploadToR2(
       }
     );
 
+    if (!response.ok) {
+      return { success: false, error: `Upload failed (${response.status})` };
+    }
+
     const data = await response.json();
 
-    if (response.ok && data.success) {
+    if (data.success) {
       devLog(`🌐 [R2] Uploaded ${youtubeId} to collective (${data.status})`);
       return { success: true, status: data.status };
     }

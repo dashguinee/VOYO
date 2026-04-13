@@ -36,9 +36,21 @@ VOYO Music is an African music streaming PWA built for markets with unreliable c
 
 The audio pipeline is the heart of VOYO. It consists of three layers: the AudioContext singleton (created once), the VOYEX Araba enhancement chain (multiband mastering), and the frequency pump (real-time visualization).
 
+### Recent Audio Surgery (April 2026)
+
+Session 11 fixed 13 root causes in the audio chain. Key changes:
+- **3ms micro-ramp** replaces 10ms — first beat arrives at 95%+ volume
+- **Cold start crackle** fixed — limiter threshold -1→-0.3, ratio 20→8
+- **latencyHint: 'playback'** — 256-512 sample buffers, fewer underruns
+- **preservesPitch: false** — kills expensive resampler per buffer
+- **Skip hiccup** fixed — gain ramp fully drains (10ms) before pause
+- **Volume slider lag** fixed — localStorage persist debounced 200ms
+- **Auto-resume** — always triggers on reload regardless of saved position
+- See `docs/session-11-handoff.md` and `docs/CLIENT_AUDIO_CHAIN.md` for full details.
+
 ### audioEngine.ts — AudioContext Singleton
 
-**File**: `src/services/audioEngine.ts` (693 lines)
+**File**: `src/services/audioEngine.ts` (697 lines)
 
 The module manages a single `AudioContext` and `MediaElementAudioSourceNode` that persist across track changes. Key design:
 
@@ -50,7 +62,7 @@ The module manages a single `AudioContext` and `MediaElementAudioSourceNode` tha
 
 ### AudioPlayer.tsx — The Playback Controller
 
-**File**: `src/components/AudioPlayer.tsx` (2988 lines)
+**File**: `src/components/AudioPlayer.tsx` (3051 lines)
 
 A headless React component (renders a hidden `<audio>` element) that orchestrates all playback. Core responsibilities:
 
@@ -213,7 +225,7 @@ Each attempt generates a fresh `visitorData` token (base64-encoded protobuf with
 
 ## State Management
 
-### playerStore.ts (1656 lines)
+### playerStore.ts (1690 lines)
 
 **File**: `src/store/playerStore.ts`
 
@@ -300,7 +312,7 @@ Six vibe modes: `afro-heat`, `chill-vibes`, `party-mode`, `late-night`, `workout
 
 ## UI Architecture
 
-### VoyoPortraitPlayer (6065 lines)
+### VoyoPortraitPlayer (6085 lines)
 
 **File**: `src/components/voyo/VoyoPortraitPlayer.tsx`
 
@@ -525,7 +537,7 @@ Brain + scouts subsystem deferred to `requestIdleCallback` in App.tsx (not on pl
 ### State Management
 | File | Lines | Description |
 |------|-------|-------------|
-| `src/store/playerStore.ts` | 1656 | Central player state: track, queue, history, playback, persistence |
+| `src/store/playerStore.ts` | 1690 | Central player state: track, queue, history, playback, persistence |
 | `src/store/trackPoolStore.ts` | 581 | Dynamic hot/cold track pools with intent-weighted scoring |
 | `src/store/downloadStore.ts` | 502 | Local cache state: boost tracking, auto-boost, download progress |
 | `src/store/intentStore.ts` | 489 | Vibe mode intent signals from MixBoard interactions |
@@ -557,7 +569,7 @@ Brain + scouts subsystem deferred to `requestIdleCallback` in App.tsx (not on pl
 ### Services (Intelligence Layer)
 | File | Lines | Description |
 |------|-------|-------------|
-| `src/services/oyoDJ.ts` | 899 | OYO AI DJ: personality, Gemini-powered responses, taste learning |
+| `src/services/oyoDJ.ts` | 950 | OYO AI DJ: personality, Gemini-powered responses, taste learning |
 | `src/services/personalisation.ts` | 863 | Pool-aware hot/discovery track selection, engagement recording |
 | `src/services/intelligentDJ.ts` | 768 | Play recording, skip detection, transition analysis |
 | `src/services/centralDJ.ts` | 692 | Collective intelligence flywheel: vibe training, Supabase sync |
