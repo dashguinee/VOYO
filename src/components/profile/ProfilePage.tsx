@@ -398,7 +398,7 @@ export const ProfilePage = () => {
                       <div className="h-1 bg-white/10 rounded-full overflow-hidden">
                         <div
                           className="h-full bg-gradient-to-r from-purple-500 to-[#D4A053]"
-                          style={{ width: `${(nowPlaying.currentTime / nowPlaying.duration) * 100}%` }}
+                          style={{ width: `${nowPlaying.duration > 0 ? (nowPlaying.currentTime / nowPlaying.duration) * 100 : 0}%` }}
                         />
                       </div>
                       <div className="flex justify-between text-[10px] text-white/40">

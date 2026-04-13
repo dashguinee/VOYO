@@ -547,9 +547,10 @@ export const useReactionStore = create<ReactionStore>((set, get) => ({
           typeCounts[r.reaction_type]++;
         });
 
-        // Find dominant type
-        const dominantType = (Object.entries(typeCounts) as [ReactionType, number][])
-          .sort((a, b) => b[1] - a[1])[0][0];
+        // Find dominant type (safe — typeCounts always has 3 entries, but guard anyway)
+        const sorted = (Object.entries(typeCounts) as [ReactionType, number][])
+          .sort((a, b) => b[1] - a[1]);
+        const dominantType: ReactionType = sorted[0]?.[0] ?? 'oye';
 
         return {
           position: z.position,
@@ -559,10 +560,14 @@ export const useReactionStore = create<ReactionStore>((set, get) => ({
         };
       });
 
-    // Update state
+    // Update state (LRU eviction at 200 tracks to prevent OOM on long sessions)
     set((state) => {
       const newMap = new Map(state.trackHotspots);
       newMap.set(trackId, hotspots);
+      if (newMap.size > 200) {
+        const oldest = newMap.keys().next().value;
+        if (oldest) newMap.delete(oldest);
+      }
       return { trackHotspots: newMap };
     });
 

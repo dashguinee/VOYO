@@ -680,7 +680,8 @@ export const useKnowledgeStore = create<KnowledgeState>()(
           const str = localStorage.getItem(name);
           if (!str) return null;
 
-          const data = JSON.parse(str);
+          let data: any;
+          try { data = JSON.parse(str); } catch { return null; /* corrupted — reset store */ }
           return {
             state: {
               ...data.state,

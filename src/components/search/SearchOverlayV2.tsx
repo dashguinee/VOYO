@@ -161,8 +161,10 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap }: SearchOverlayP
 
   // Load search history
   useEffect(() => {
-    const history = localStorage.getItem(SEARCH_HISTORY_KEY);
-    if (history) setSearchHistory(JSON.parse(history));
+    try {
+      const history = localStorage.getItem(SEARCH_HISTORY_KEY);
+      if (history) setSearchHistory(JSON.parse(history));
+    } catch { /* corrupted — start fresh */ }
   }, []);
 
   // Save to history

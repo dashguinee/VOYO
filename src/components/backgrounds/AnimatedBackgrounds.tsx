@@ -152,7 +152,7 @@ export const CustomBackdropSettings = ({ onClose }: CustomBackdropSettingsProps)
     reader.onload = (e) => {
       const base64 = e.target?.result as string;
       setImageData(base64);
-      localStorage.setItem(STORAGE_KEYS.IMAGE, base64);
+      try { localStorage.setItem(STORAGE_KEYS.IMAGE, base64); } catch { /* quota exceeded — image too large for storage */ }
     };
     reader.readAsDataURL(file);
   };

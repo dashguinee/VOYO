@@ -888,8 +888,8 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
 
     // Add last 20 played tracks to exclusion (check both id and trackId)
     state.history.slice(-20).forEach(h => {
-      if (h.track.id) recentHistoryIds.add(h.track.id);
-      if (h.track.trackId) recentHistoryIds.add(h.track.trackId);
+      if (h.track?.id) recentHistoryIds.add(h.track.id);
+      if (h.track?.trackId) recentHistoryIds.add(h.track.trackId);
     });
 
     // CRITICAL: Always exclude the current track to prevent immediate replay
@@ -1027,8 +1027,8 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
 
     // Add last 20 played tracks to exclusion
     state.history.slice(-20).forEach(h => {
-      if (h.track.id) recentHistoryIds.add(h.track.id);
-      if (h.track.trackId) recentHistoryIds.add(h.track.trackId);
+      if (h.track?.id) recentHistoryIds.add(h.track.id);
+      if (h.track?.trackId) recentHistoryIds.add(h.track.trackId);
     });
 
     // Exclude current track
@@ -1269,7 +1269,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       const current = loadPersistedState();
       savePersistedState({
         ...current,
-        history: state.history.slice(-50).map(h => ({
+        history: state.history.slice(-50).filter(h => h.track).map(h => ({
           trackId: h.track.trackId || h.track.id,
           title: h.track.title,
           artist: h.track.artist,
@@ -1308,7 +1308,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     const excludeIds = new Set([
       state.currentTrack?.id,
       ...state.queue.map((q) => q.track.id),
-      ...state.history.slice(-30).map((h) => h.track.id),
+      ...state.history.slice(-30).map((h) => h.track?.id),
     ].filter(Boolean) as string[]);
 
     // VIBES FIRST v5.0: MERGE mode - accumulate, don't replace
