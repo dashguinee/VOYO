@@ -1591,9 +1591,13 @@ export const AudioPlayer = () => {
         }
       }
 
-      // RESUME FIX: On initial load, if we have a saved position > 5s, auto-resume playback
-      // This fixes the bug where track seeks correctly on refresh but audio doesn't play
-      if (isInitialLoadRef.current && savedCurrentTime > 5) {
+      // RESUME FIX: On initial load, always auto-resume playback.
+      // Previously gated on `savedCurrentTime > 5`, which meant tracks with
+      // position 0-5s (just started, or persist hadn't fired yet) never auto-
+      // played — isPlaying is always false on reload, so the first track sat
+      // silent until the user manually tapped play. Now we always set the flag;
+      // position restore is still gated at > 5s in the canplay handlers.
+      if (isInitialLoadRef.current) {
         shouldAutoResumeRef.current = true;
         devLog(`🔄 [VOYO] Session resume detected (position: ${savedCurrentTime.toFixed(1)}s) - will auto-play`);
       }

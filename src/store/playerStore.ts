@@ -53,6 +53,10 @@ let currentTrackAbortController: AbortController | null = null;
 // Dedup trackers for setCurrentTime persistence — see setCurrentTime impl
 let _lastPersistedSec = -1;
 let _lastPortalSyncSec = -1;
+// Debounce timer for volume persist — slider fires dozens of times during
+// a drag. Synchronous localStorage.setItem on every position blocks the
+// main thread (1-5ms each) and causes visible UI lag + audio stutter.
+let _volumePersistTimer: ReturnType<typeof setTimeout> | null = null;
 
 // ============================================
 // PERSISTENCE HELPERS - Remember state on refresh
@@ -708,8 +712,14 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   setShouldOpenNowPlaying: (should) => set({ shouldOpenNowPlaying: should }),
 
   setVolume: (volume) => {
-    localStorage.setItem('voyo-volume', String(volume));
     set({ volume });
+    // Debounce persist — slider drag fires dozens of times. Only write
+    // localStorage once the user stops dragging (200ms settle).
+    if (_volumePersistTimer) clearTimeout(_volumePersistTimer);
+    _volumePersistTimer = setTimeout(() => {
+      localStorage.setItem('voyo-volume', String(volume));
+      _volumePersistTimer = null;
+    }, 200);
   },
 
   nextTrack: () => {
