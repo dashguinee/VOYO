@@ -469,7 +469,7 @@ export const AudioPlayer = () => {
       };
 
       // VPS (slower but cached to R2)
-      fetch(`${VPS_AUDIO_URL}/voyo/audio/${retryTrackId}?quality=high`, { signal: AbortSignal.timeout(10000) })
+      fetch(`${VPS_AUDIO_URL}/voyo/audio/${retryTrackId}?quality=high`, { signal: AbortSignal.timeout(20000) })
         .then(async (res) => {
           if (!res.ok || usePlayerStore.getState().playbackSource !== 'iframe') return;
           const blob = await res.blob();
@@ -2015,11 +2015,12 @@ export const AudioPlayer = () => {
 
           let vpsHandled = false;
           try {
-            // 12s timeout — VPS processes new tracks in 3-8s. Previous 8s
-            // timeout missed slow tracks, forcing them into the retry loop.
+            // 20s timeout — VPS processes new tracks in 3-18s depending on
+            // length and server load. Test showed 14.7s for a standard track.
+            // Previous 12s timeout missed slower tracks entirely.
             const vpsResponse = await fetch(
               `${VPS_AUDIO_URL}/voyo/audio/${trackId}?quality=high`,
-              { signal: AbortSignal.timeout(12000) },
+              { signal: AbortSignal.timeout(20000) },
             );
             if (isStale()) return;
 
@@ -2142,15 +2143,13 @@ export const AudioPlayer = () => {
           const tryAudioSource = async (attempt: number) => {
             if (resolved || isStale()) return;
             if (attempt >= MAX_RETRIES) {
+              // Track genuinely unplayable after 5 attempts — skip ALWAYS,
+              // including background. Previous guard waited for foreground
+              // but this left the player stuck forever on broken tracks.
+              devWarn(`[VOYO] All ${MAX_RETRIES} retries failed for ${trackId} — skipping`);
               isLoadingTrackRef.current = false;
-              // In foreground, skip to keep flow. In background, DON'T skip —
-              // the user can't see it, and the foreground return will re-kick.
-              if (document.hidden) {
-                devWarn(`[VOYO] All ${MAX_RETRIES} retries failed (bg) — waiting for foreground`);
-              } else {
-                devWarn(`[VOYO] All ${MAX_RETRIES} retries failed — skipping`);
-                nextTrack();
-              }
+              nextTrack();
+              navigator.mediaSession.playbackState = 'playing';
               return;
             }
 
@@ -2210,8 +2209,8 @@ export const AudioPlayer = () => {
             };
 
             try {
-              // VPS (10s timeout per retry)
-              const vpsP = fetch(`${VPS_AUDIO_URL}/voyo/audio/${trackId}?quality=high`, { signal: AbortSignal.timeout(10000) })
+              // VPS (20s timeout per retry — some tracks need 15-18s to process)
+              const vpsP = fetch(`${VPS_AUDIO_URL}/voyo/audio/${trackId}?quality=high`, { signal: AbortSignal.timeout(20000) })
                 .then(async (res) => {
                   if (resolved || isStale() || !res.ok) return;
                   if (res.redirected) {
