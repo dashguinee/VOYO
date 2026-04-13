@@ -796,10 +796,23 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
           isPlaying: true,
           progress: 0,
           currentTime: 0,
-          seekPosition: null, // Clear seek position
-          // SKEEP FIX: Reset playback rate when changing tracks
+          seekPosition: null,
           playbackRate: 1,
           isSkeeping: false,
+        });
+
+        // PERSIST current track — nextTrack uses set() directly, not
+        // setCurrentTrack action. Without this, the track was never saved
+        // to localStorage → reload restored the wrong (old) track.
+        const trk = nextPlayable.track;
+        const cur = loadPersistedState();
+        savePersistedState({
+          ...cur,
+          currentTrackId: trk.id || trk.trackId,
+          currentTrackTitle: trk.title,
+          currentTrackArtist: trk.artist,
+          currentTrackCoverUrl: trk.coverUrl || getThumb(trk.trackId || trk.id),
+          currentTime: 0,
         });
 
         // Persist queue after consuming track. Was setTimeout(100) which
@@ -958,10 +971,20 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
         isPlaying: true,
         progress: 0,
         currentTime: 0,
-        seekPosition: null, // Clear seek position
-        // SKEEP FIX: Reset playback rate when changing tracks
+        seekPosition: null,
         playbackRate: 1,
         isSkeeping: false,
+      });
+
+      // PERSIST — same fix as queue path above.
+      const cur = loadPersistedState();
+      savePersistedState({
+        ...cur,
+        currentTrackId: nextTrack.id || nextTrack.trackId,
+        currentTrackTitle: nextTrack.title,
+        currentTrackArtist: nextTrack.artist,
+        currentTrackCoverUrl: nextTrack.coverUrl || getThumb(nextTrack.trackId || nextTrack.id),
+        currentTime: 0,
       });
     }
   },
@@ -993,10 +1016,21 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
         isPlaying: true,
         progress: 0,
         currentTime: 0,
-        seekPosition: null, // Clear seek position
-        // SKEEP FIX: Reset playback rate when changing tracks
+        seekPosition: null,
         playbackRate: 1,
         isSkeeping: false,
+      });
+
+      // PERSIST — same fix as nextTrack paths.
+      const trk = lastPlayed.track;
+      const cur = loadPersistedState();
+      savePersistedState({
+        ...cur,
+        currentTrackId: trk.id || trk.trackId,
+        currentTrackTitle: trk.title,
+        currentTrackArtist: trk.artist,
+        currentTrackCoverUrl: trk.coverUrl || getThumb(trk.trackId || trk.id),
+        currentTime: 0,
       });
     } else {
       // No history - restart current track
