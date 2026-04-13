@@ -436,11 +436,14 @@ export const YouTubeIframe = memo(() => {
     if (playbackSource !== 'iframe' || !isPlaying) return;
 
     intervalRef.current = setInterval(() => {
+      // GUARD: Don't update store when backgrounded — iframe is frozen,
+      // getCurrentTime() returns stale/0 data that corrupts the position.
+      if (document.hidden) return;
       const player = playerRef.current;
       if (!player?.getCurrentTime || !player?.getDuration) return;
       const time = player.getCurrentTime() || 0;
       const dur = player.getDuration() || 0;
-      if (dur > 0) {
+      if (dur > 0 && time > 0) {
         // Single atomic state update — all 4 values in one set() call.
         usePlayerStore.setState({
           currentTime: time,

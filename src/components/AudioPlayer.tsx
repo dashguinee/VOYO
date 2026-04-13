@@ -191,6 +191,12 @@ export const AudioPlayer = () => {
   const hasTriggered30sListenRef = useRef<boolean>(false); // 30s artist discovery listen tracking
   const hasTriggeredContextNotifRef = useRef<boolean>(false); // OYO track context notification (10s)
   const hasTriggeredIframeRetryRef = useRef<boolean>(false); // 15% iframe→audio retry for background playback
+  // BACKGROUND GUARD: On some mobile browsers, the `pause` event fires BEFORE
+  // `visibilitychange`. If onPause sets isPlaying=false during this window,
+  // the return-from-background re-kick sees isPlaying=false and doesn't play.
+  // This ref is set TRUE synchronously in a capturing visibilitychange listener
+  // (fires before pagehide/freeze), so onPause can check it.
+  const isTransitioningToBackgroundRef = useRef<boolean>(false);
   // Throttle guards for handleTimeUpdate → setCurrentTime/setProgress writes.
   // Browser fires ontimeupdate at 4Hz (Chrome) up to 66Hz (Safari). Each
   // store write re-renders 9 subscribing components (OyoIsland, NowPlaying,
@@ -608,9 +614,12 @@ export const AudioPlayer = () => {
   // Background playback continues automatically because we never pause it.
   useEffect(() => {
     const handleVisibility = () => {
-      const { isPlaying: shouldPlay, playbackSource: ps } = usePlayerStore.getState();
-
       if (document.visibilityState === 'hidden') {
+        // Set the background flag FIRST — before the browser pauses audio.
+        // This prevents onPause from setting isPlaying=false during transition.
+        isTransitioningToBackgroundRef.current = true;
+
+        const { isPlaying: shouldPlay } = usePlayerStore.getState();
         // BATTERY: suspend context ONLY when paused + hidden.
         // Never suspend when playing — audio must continue in background.
         if (!shouldPlay && audioContextRef.current?.state === 'running') {
@@ -620,13 +629,9 @@ export const AudioPlayer = () => {
         return;
       }
 
-      // RETURNING FROM BACKGROUND — re-kick the audio element if needed.
-      // The crossfade system (which caused the freeze on return) has been
-      // removed, so we can fire this immediately now. No setTimeout delay.
-      //
-      // Covers ALL sources — cached, r2, AND iframe (the silent keeper
-      // needs to stay playing to hold audio focus). Previously only
-      // checked cached/r2, leaving iframe audio dead on return.
+      // RETURNING FROM BACKGROUND — clear the flag and re-kick audio.
+      isTransitioningToBackgroundRef.current = false;
+
       const { isPlaying: sp } = usePlayerStore.getState();
       if (sp && audioRef.current?.paused && audioRef.current.src) {
         audioContextRef.current?.resume().catch(() => {});
@@ -634,8 +639,9 @@ export const AudioPlayer = () => {
         devLog('🔄 [VOYO] Re-kicked audio element on foreground return');
       }
     };
-    document.addEventListener('visibilitychange', handleVisibility);
-    return () => document.removeEventListener('visibilitychange', handleVisibility);
+    // Use CAPTURE phase so this fires before any other visibilitychange handlers
+    document.addEventListener('visibilitychange', handleVisibility, true);
+    return () => document.removeEventListener('visibilitychange', handleVisibility, true);
   }, [playbackSource]);
 
   // Wake lock
@@ -3124,21 +3130,13 @@ export const AudioPlayer = () => {
         // GUARD 1: skip during a track-load pause (loadTrack pauses the
         // element to swap src). Without this, skip didn't auto-play.
         if (isLoadingTrackRef.current) return;
-        // GUARD 2: skip during a natural-end pause. When a track ends,
-        // the browser fires `pause` BEFORE `ended`. Without this guard,
-        // the pause sets isPlaying=false → handleEnded runs nextTrack()
-        // which races to set it back to true → React commit may not
-        // resolve cleanly → autoplay doesn't fire. Check audio.ended
-        // (which is true by the time the pause event fires on natural end).
+        // GUARD 2: skip during a natural-end pause.
         if (audioRef.current?.ended) return;
-        // GUARD 3: browser-initiated pause during background. The OS or
-        // browser may suspend the audio element while the page is hidden.
-        // If we sync isPlaying=false here, the visibilitychange re-kick
-        // handler sees false and skips the resume → audio dies on return.
-        // Lock-screen pause is safe: mediaSession handler already set
-        // isPlaying=false via togglePlay() before audio.pause() fires,
-        // so this guard is a no-op for user-initiated pauses.
-        if (document.hidden) return;
+        // GUARD 3: browser-initiated pause during background. Checks both
+        // document.hidden AND the transition ref. On some mobile browsers
+        // the pause event fires BEFORE visibilitychange — document.hidden
+        // is still false but we're transitioning. The ref catches that.
+        if (document.hidden || isTransitioningToBackgroundRef.current) return;
         usePlayerStore.getState().setIsPlaying(false);
       }}
       style={{ display: 'none' }}
