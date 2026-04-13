@@ -779,7 +779,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
         devLog('[PlayerStore] No playable tracks in queue, trying other sources...');
         set({ queue: [] }); // Clear the dead queue
       } else {
-        if (state.currentTrack && state.currentTime > 5) {
+        if (state.currentTrack && state.currentTime > 0) {
           get().addToHistory(state.currentTrack, state.currentTime);
         }
         // POOL ENGAGEMENT: Record play for next track
@@ -842,7 +842,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     if (state.repeatMode === 'all' && state.history.length > 0) {
       // REPEAT ALL FIX: Rebuild queue from history and play first track
       // This ensures proper looping through all played tracks
-      if (state.currentTrack && state.currentTime > 5) {
+      if (state.currentTrack && state.currentTime > 0) {
         get().addToHistory(state.currentTrack, state.currentTime);
       }
 
@@ -948,7 +948,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
         }
       }
 
-      if (state.currentTrack && state.currentTime > 5) {
+      if (state.currentTrack && state.currentTime > 0) {
         get().addToHistory(state.currentTrack, state.currentTime);
       }
       // POOL ENGAGEMENT: Record play for next track
