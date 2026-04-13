@@ -9,6 +9,12 @@
  * 2. Convert to video stream
  * 3. Request PiP when backgrounded
  * 4. MediaSession handles controls (already implemented)
+ *
+ * Crash guards (April 2026):
+ * - mountedRef prevents state updates after unmount
+ * - canvasRef re-checked after every async gap (image load, PiP request)
+ * - exitPiP runs before SW update reload
+ * - enteringRef prevents visibility race (exit + re-entry fighting)
  */
 
 import { useRef, useCallback, useEffect } from 'react';
@@ -23,6 +29,8 @@ export function useMiniPiP() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const isActiveRef = useRef(false);
+  const mountedRef = useRef(true); // Prevents crashes after unmount
+  const enteringRef = useRef(false); // Prevents visibility race
 
   const currentTrack = usePlayerStore(s => s.currentTrack);
   const isPlaying = usePlayerStore(s => s.isPlaying);
@@ -54,6 +62,7 @@ export function useMiniPiP() {
     // Handle PiP window close
     video.addEventListener('leavepictureinpicture', () => {
       isActiveRef.current = false;
+      enteringRef.current = false;
       devLog('[VOYO PiP] Mini player closed');
     });
 
@@ -62,7 +71,8 @@ export function useMiniPiP() {
 
   // Draw VOYO card on canvas (album art + gradient overlay + title/artist)
   const drawAlbumArt = useCallback(async (trackId: string, title?: string, artist?: string) => {
-    if (!canvasRef.current) return;
+    // Guard: canvas must exist and component must be mounted
+    if (!canvasRef.current || !mountedRef.current) return;
 
     const ctx = canvasRef.current.getContext('2d');
     if (!ctx) return;
@@ -83,12 +93,17 @@ export function useMiniPiP() {
         img.src = thumbnailUrl;
       });
 
+      // Re-check after async image load — canvas may have been destroyed
+      if (!canvasRef.current || !mountedRef.current) return;
+
       // Draw album art (centered crop to square)
       const size = Math.min(img.width, img.height);
       const sx = (img.width - size) / 2;
       const sy = (img.height - size) / 2;
       ctx.drawImage(img, sx, sy, size, size, 0, 0, PIP_SIZE, PIP_SIZE);
     } catch {
+      // Re-check after async catch
+      if (!canvasRef.current || !mountedRef.current) return;
       // Fallback gradient if image fails
       const gradient = ctx.createLinearGradient(0, 0, PIP_SIZE, PIP_SIZE);
       gradient.addColorStop(0, '#7c3aed');
@@ -96,6 +111,9 @@ export function useMiniPiP() {
       ctx.fillStyle = gradient;
       ctx.fillRect(0, 0, PIP_SIZE, PIP_SIZE);
     }
+
+    // Re-check before final draws
+    if (!canvasRef.current || !mountedRef.current) return;
 
     // Bottom gradient overlay (VOYO card style)
     const overlay = ctx.createLinearGradient(0, PIP_SIZE * 0.55, 0, PIP_SIZE);
@@ -156,41 +174,58 @@ export function useMiniPiP() {
 
   // Enter PiP mode
   const enterPiP = useCallback(async () => {
-    if (!isSupported()) {
-      devLog('[VOYO PiP] Not supported');
+    if (!isSupported() || !mountedRef.current) {
       return false;
     }
 
-    if (isActiveRef.current) {
-      devLog('[VOYO PiP] Already active');
-      return true;
+    if (isActiveRef.current || enteringRef.current) {
+      return isActiveRef.current;
     }
 
+    enteringRef.current = true;
     initElements();
 
-    if (!videoRef.current || !currentTrack) return false;
+    if (!videoRef.current || !currentTrack) {
+      enteringRef.current = false;
+      return false;
+    }
 
     try {
       // Draw VOYO card (album art + title + artist)
       await drawAlbumArt(currentTrack.trackId, currentTrack.title, currentTrack.artist);
 
+      // Re-check after async draw — component may have unmounted
+      if (!mountedRef.current || !videoRef.current) {
+        enteringRef.current = false;
+        return false;
+      }
+
       // Play video (required for PiP)
       await videoRef.current.play();
+
+      // Re-check again before PiP request
+      if (!mountedRef.current || !videoRef.current) {
+        enteringRef.current = false;
+        return false;
+      }
 
       // Request PiP
       await videoRef.current.requestPictureInPicture();
       isActiveRef.current = true;
+      enteringRef.current = false;
 
       devLog('[VOYO PiP] Entered mini player mode');
       return true;
     } catch (err) {
       devWarn('[VOYO PiP] Failed to enter:', err);
+      enteringRef.current = false;
       return false;
     }
   }, [isSupported, initElements, drawAlbumArt, currentTrack]);
 
   // Exit PiP mode
   const exitPiP = useCallback(async () => {
+    enteringRef.current = false; // Cancel any pending entry
     if (!isActiveRef.current) return;
 
     try {
@@ -199,8 +234,9 @@ export function useMiniPiP() {
       }
       isActiveRef.current = false;
       devLog('[VOYO PiP] Exited mini player mode');
-    } catch (err) {
-      // Ignore errors
+    } catch {
+      // Ignore errors — PiP may already be gone
+      isActiveRef.current = false;
     }
   }, []);
 
@@ -215,20 +251,19 @@ export function useMiniPiP() {
 
   // Update card when track changes (while PiP is active)
   useEffect(() => {
-    if (isActiveRef.current && currentTrack) {
+    if (isActiveRef.current && currentTrack && mountedRef.current) {
       drawAlbumArt(currentTrack.trackId, currentTrack.title, currentTrack.artist);
     }
   }, [currentTrack?.trackId, drawAlbumArt]);
 
   // Auto-enter PiP when app goes to background (SAFETY NET)
   // Shows floating album art when user switches away while music is playing
-  // This ensures visibility of playback controls even if iframe background playback struggles
   useEffect(() => {
     const handleVisibilityChange = () => {
-      if (document.visibilityState === 'hidden' && isPlaying && currentTrack) {
+      if (document.visibilityState === 'hidden' && isPlaying && currentTrack && !enteringRef.current) {
         // Small delay to avoid triggering on quick tab switches
         setTimeout(() => {
-          if (document.visibilityState === 'hidden') {
+          if (document.visibilityState === 'hidden' && mountedRef.current && !enteringRef.current) {
             enterPiP();
           }
         }, 500);
@@ -239,13 +274,20 @@ export function useMiniPiP() {
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   }, [isPlaying, currentTrack, enterPiP]);
 
-  // Cleanup
+  // Cleanup — set mounted=false FIRST to kill all async paths
   useEffect(() => {
+    mountedRef.current = true;
     return () => {
+      mountedRef.current = false;
+      enteringRef.current = false;
       exitPiP();
       if (videoRef.current) {
+        videoRef.current.pause();
+        videoRef.current.srcObject = null;
         videoRef.current.remove();
+        videoRef.current = null;
       }
+      canvasRef.current = null;
     };
   }, [exitPiP]);
 

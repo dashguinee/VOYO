@@ -976,6 +976,10 @@ function UpdateButton() {
         if (data.version && data.version !== __APP_VERSION__) {
           if (data.force) {
             setForceUpdate(true);
+            // Exit PiP before reload — destroying DOM mid-PiP crashes the app
+            if (document.pictureInPictureElement) {
+              try { await document.exitPictureInPicture(); } catch {}
+            }
             if ('caches' in window) {
               const keys = await caches.keys();
               await Promise.all(keys.map(k => caches.delete(k)));
@@ -1016,6 +1020,9 @@ function UpdateButton() {
   return (
     <button
       onClick={async () => {
+        if (document.pictureInPictureElement) {
+          try { await document.exitPictureInPicture(); } catch {}
+        }
         if ('caches' in window) {
           const keys = await caches.keys();
           await Promise.all(keys.map(k => caches.delete(k)));
