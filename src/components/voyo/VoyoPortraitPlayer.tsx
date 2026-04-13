@@ -4623,7 +4623,9 @@ export const VoyoPortraitPlayer = ({
 
       // Clear the flag after a short delay (after onClick would have fired)
       // OPTIMIZED: 50ms instead of 100ms for faster skip response
-      setTimeout(() => { wasSkeeping.current = false; }, 50);
+      // Clear on next microtask — blocks the current event's bubbled click
+      // but doesn't create a 50ms dead zone for intentional taps.
+      requestAnimationFrame(() => { wasSkeeping.current = false; });
     }
   }, [isScrubbing, setPlaybackRate, handlePlayPause]);
 
