@@ -272,23 +272,13 @@ export function useMiniPiP() {
     }
   }, [currentTrack?.trackId, drawAlbumArt]);
 
-  // Auto-enter PiP when app goes to background (SAFETY NET)
-  // Shows floating album art when user switches away while music is playing
-  useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'hidden' && isPlaying && currentTrack && !enteringRef.current) {
-        // Small delay to avoid triggering on quick tab switches
-        setTimeout(() => {
-          if (document.visibilityState === 'hidden' && mountedRef.current && !enteringRef.current) {
-            enterPiP();
-          }
-        }, 500);
-      }
-    };
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, [isPlaying, currentTrack, enterPiP]);
+  // AUTO-PIP DISABLED — was killing background audio.
+  // video.play() + requestPictureInPicture() from a visibility handler
+  // (no user gesture) creates a competing media element that steals
+  // audio focus. The PiP request fails (NotAllowedError) but the video
+  // element stays in play state, causing the browser to pause the main
+  // audio element. MediaSession API provides lock screen controls
+  // without PiP — PiP is user-triggered only via the toggle button.
 
   // Cleanup — set mounted=false FIRST to kill all async paths
   useEffect(() => {
