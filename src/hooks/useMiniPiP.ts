@@ -44,29 +44,39 @@ export function useMiniPiP() {
   const initElements = useCallback(() => {
     if (canvasRef.current) return; // Already initialized
 
-    // Create canvas for album art
-    const canvas = document.createElement('canvas');
-    canvas.width = PIP_SIZE;
-    canvas.height = PIP_SIZE;
-    canvasRef.current = canvas;
+    try {
+      // Create canvas for album art
+      const canvas = document.createElement('canvas');
+      canvas.width = PIP_SIZE;
+      canvas.height = PIP_SIZE;
 
-    // Create video element from canvas stream
-    const video = document.createElement('video');
-    video.srcObject = canvas.captureStream(1); // 1 FPS is enough for static image
-    video.muted = true;
-    video.playsInline = true;
-    video.style.display = 'none';
-    document.body.appendChild(video);
-    videoRef.current = video;
+      // captureStream() can throw NotSupportedError on some Android WebViews
+      const stream = canvas.captureStream(1); // 1 FPS is enough for static image
 
-    // Handle PiP window close
-    video.addEventListener('leavepictureinpicture', () => {
-      isActiveRef.current = false;
-      enteringRef.current = false;
-      devLog('[VOYO PiP] Mini player closed');
-    });
+      canvasRef.current = canvas;
 
-    devLog('[VOYO PiP] Initialized');
+      // Create video element from canvas stream
+      const video = document.createElement('video');
+      video.srcObject = stream;
+      video.muted = true;
+      video.playsInline = true;
+      video.style.display = 'none';
+      document.body.appendChild(video);
+      videoRef.current = video;
+
+      // Handle PiP window close
+      video.addEventListener('leavepictureinpicture', () => {
+        isActiveRef.current = false;
+        enteringRef.current = false;
+        devLog('[VOYO PiP] Mini player closed');
+      });
+
+      devLog('[VOYO PiP] Initialized');
+    } catch (err) {
+      devWarn('[VOYO PiP] Init failed (captureStream unsupported?):', err);
+      canvasRef.current = null;
+      videoRef.current = null;
+    }
   }, []);
 
   // Draw VOYO card on canvas (album art + gradient overlay + title/artist)
@@ -183,7 +193,13 @@ export function useMiniPiP() {
     }
 
     enteringRef.current = true;
-    initElements();
+
+    try {
+      initElements();
+    } catch {
+      enteringRef.current = false;
+      return false;
+    }
 
     if (!videoRef.current || !currentTrack) {
       enteringRef.current = false;
