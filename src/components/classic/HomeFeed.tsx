@@ -1186,12 +1186,25 @@ interface VibeCardProps {
 // as embossed artwork — matching shades, low contrast, premium.
 const VibeCard = memo(({ vibe, onSelect }: VibeCardProps) => {
   const isHero = vibe.id === 'afro-heat';
+  const cardRef = useRef<HTMLDivElement>(null);
+  const [sparks, setSparks] = useState<{ id: number; x: number; y: number }[]>([]);
 
   // Darker shade of the vibe color for the embossed title. For the hero
   // card we go deeper into the bronze; for the purple cards we drop into
   // a near-black violet so the title reads as "faded dark bold fat".
   const titleShade = isHero ? '#7a3a00' : '#1a0f2e';
   const titleGlow = isHero ? 'rgba(244,162,62,0.35)' : 'rgba(0,0,0,0.35)';
+
+  // Hero card: tap spawns small fire sparks at touch position
+  const handleTouch = useCallback((e: React.PointerEvent) => {
+    if (!isHero || !cardRef.current) return;
+    const rect = cardRef.current.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    const id = Date.now();
+    setSparks(prev => [...prev.slice(-4), { id, x, y }]); // max 5 at once
+    setTimeout(() => setSparks(prev => prev.filter(s => s.id !== id)), 700);
+  }, [isHero]);
 
   return (
     <button
@@ -1208,7 +1221,9 @@ const VibeCard = memo(({ vibe, onSelect }: VibeCardProps) => {
         }}
       />
       <div
+        ref={cardRef}
         className="relative rounded-[22px] overflow-hidden"
+        onPointerDown={handleTouch}
         style={{
           aspectRatio: '0.9',
           background: `linear-gradient(135deg, ${vibe.color} 0%, ${vibe.color}dd 50%, ${vibe.color}bb 100%)`,
@@ -1225,30 +1240,48 @@ const VibeCard = memo(({ vibe, onSelect }: VibeCardProps) => {
           background: 'linear-gradient(130deg, rgba(255,255,255,0.3) 0%, transparent 30%, transparent 70%, rgba(0,0,0,0.15) 100%)',
         }} />
 
-        {/* Embossed big title (shared by all cards, including hero) */}
-        <div
-          className="absolute inset-0 flex items-center justify-center px-2 pointer-events-none select-none"
-        >
-          <h3
-            className="font-black text-center leading-[0.85] tracking-tight"
-            style={{
-              fontSize: vibe.name.length > 8 ? '22px' : '28px',
-              color: titleShade,
-              textShadow: `0 1px 0 ${titleGlow}, 0 2px 8px rgba(0,0,0,0.25)`,
-              opacity: 0.55,
-              letterSpacing: '-0.02em',
-            }}
+        {/* Embossed big title — hero card: clean canvas (no title), others keep it */}
+        {!isHero && (
+          <div
+            className="absolute inset-0 flex items-center justify-center px-2 pointer-events-none select-none"
           >
-            {vibe.name}
-          </h3>
-        </div>
-
-        {/* Hero-only: fire lottie floats in the top-right as a premium accent */}
-        {isHero && (
-          <div className="absolute top-2 right-2 drop-shadow-lg pointer-events-none">
-            <LottieIcon lottieUrl="/lottie/fire.json" fallbackEmoji="🔥" size={36} loop={true} />
+            <h3
+              className="font-black text-center leading-[0.85] tracking-tight"
+              style={{
+                fontSize: vibe.name.length > 8 ? '22px' : '28px',
+                color: titleShade,
+                textShadow: `0 1px 0 ${titleGlow}, 0 2px 8px rgba(0,0,0,0.25)`,
+                opacity: 0.55,
+                letterSpacing: '-0.02em',
+              }}
+            >
+              {vibe.name}
+            </h3>
           </div>
         )}
+
+        {/* Hero: scattered small fires — ambient, not heavy */}
+        {isHero && (
+          <>
+            <div className="absolute top-2 right-2 pointer-events-none" style={{ fontSize: 18, animation: 'voyo-lottie-pulse 2s ease-in-out infinite' }}>🔥</div>
+            <div className="absolute bottom-6 left-2.5 pointer-events-none" style={{ fontSize: 12, opacity: 0.6, animation: 'voyo-lottie-pulse 2.5s ease-in-out infinite 0.4s' }}>🔥</div>
+            <div className="absolute top-1/3 left-1/2 pointer-events-none" style={{ fontSize: 10, opacity: 0.35, animation: 'voyo-lottie-pulse 3s ease-in-out infinite 0.8s' }}>🔥</div>
+          </>
+        )}
+
+        {/* Touch sparks — small fires bloom at tap position and fade out */}
+        {sparks.map(s => (
+          <span
+            key={s.id}
+            className="absolute pointer-events-none"
+            style={{
+              left: s.x - 8,
+              top: s.y - 8,
+              fontSize: 16,
+              animation: 'voyo-fire-spark 0.7s ease-out forwards',
+            }}
+          >🔥</span>
+        ))}
 
         {/* Description at the bottom, muted */}
         <div className="absolute left-0 right-0 bottom-2 text-center px-2">
