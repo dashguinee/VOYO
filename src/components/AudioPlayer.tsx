@@ -566,12 +566,11 @@ export const AudioPlayer = () => {
     const timeoutIds: ReturnType<typeof setTimeout>[] = [];
 
     // Stagger preloads: 1.5s, 6s, 12s — first preload fires after the
-    // current track's decoder stabilizes (~500ms for cached, ~1s for R2).
-    // 1.5s is safe: the current track is playing by then, and preload
-    // uses a SEPARATE audio element so it doesn't compete for the main
-    // element's decode pipeline. Earlier = more likely the next track
-    // is ready when handleEnded fires.
-    const staggerDelays = [1500, 6000, 12000];
+    // current track's decoder stabilizes. In BACKGROUND, fire first
+    // preload immediately — setTimeout is throttled to 1/min, so a
+    // 1.5s delay becomes 60s. The next track needs to be ready BEFORE
+    // the current one ends.
+    const staggerDelays = document.hidden ? [0, 2000, 5000] : [1500, 6000, 12000];
 
     tracksToPreload.forEach((track, index) => {
       const delay = staggerDelays[index] || staggerDelays[staggerDelays.length - 1];
@@ -2007,9 +2006,11 @@ export const AudioPlayer = () => {
 
           let vpsHandled = false;
           try {
+            // 12s timeout — VPS processes new tracks in 3-8s. Previous 8s
+            // timeout missed slow tracks, forcing them into the retry loop.
             const vpsResponse = await fetch(
               `${VPS_AUDIO_URL}/voyo/audio/${trackId}?quality=high`,
-              { signal: AbortSignal.timeout(8000) },
+              { signal: AbortSignal.timeout(12000) },
             );
             if (isStale()) return;
 
@@ -2132,9 +2133,15 @@ export const AudioPlayer = () => {
           const tryAudioSource = async (attempt: number) => {
             if (resolved || isStale()) return;
             if (attempt >= MAX_RETRIES) {
-              devWarn(`[VOYO] All ${MAX_RETRIES} audio source retries failed for ${trackId} — skipping`);
               isLoadingTrackRef.current = false;
-              nextTrack();
+              // In foreground, skip to keep flow. In background, DON'T skip —
+              // the user can't see it, and the foreground return will re-kick.
+              if (document.hidden) {
+                devWarn(`[VOYO] All ${MAX_RETRIES} retries failed (bg) — waiting for foreground`);
+              } else {
+                devWarn(`[VOYO] All ${MAX_RETRIES} retries failed — skipping`);
+                nextTrack();
+              }
               return;
             }
 
@@ -2242,7 +2249,17 @@ export const AudioPlayer = () => {
               }
             } catch {
               if (!resolved && !isStale()) {
-                await new Promise(r => setTimeout(r, 2000));
+                // Use MessageChannel in background (setTimeout throttled to 1/min)
+                await new Promise<void>(resolve => {
+                  if (document.hidden) {
+                    let t = 0;
+                    const mc = new MessageChannel();
+                    mc.port1.onmessage = () => { t++; if (t < 200) mc.port2.postMessage(null); else { mc.port1.close(); resolve(); } };
+                    mc.port2.postMessage(null);
+                  } else {
+                    setTimeout(resolve, 2000);
+                  }
+                });
                 tryAudioSource(attempt + 1);
               }
             }
@@ -2759,13 +2776,38 @@ export const AudioPlayer = () => {
     navigator.mediaSession.setActionHandler('pause', () => usePlayerStore.getState().isPlaying && togglePlay());
     navigator.mediaSession.setActionHandler('nexttrack', () => {
       nextTrack();
-      // Immediately signal OS we're still playing — prevents Android
-      // from killing the media session during the source swap gap.
+      // Immediately signal OS we're still active — update metadata for
+      // the new track + reassert playing state. Prevents Android from
+      // killing the media session during the source swap gap.
       navigator.mediaSession.playbackState = 'playing';
+      const next = usePlayerStore.getState().currentTrack;
+      if (next) {
+        navigator.mediaSession.metadata = new MediaMetadata({
+          title: next.title,
+          artist: next.artist,
+          album: 'VOYO Music',
+          artwork: [
+            { src: `https://voyo-edge.dash-webtv.workers.dev/cdn/art/${next.trackId}?quality=high`, sizes: '512x512', type: 'image/jpeg' },
+            { src: `https://i.ytimg.com/vi/${next.trackId}/hqdefault.jpg`, sizes: '480x360', type: 'image/jpeg' },
+          ],
+        });
+      }
     });
     navigator.mediaSession.setActionHandler('previoustrack', () => {
       usePlayerStore.getState().prevTrack();
       navigator.mediaSession.playbackState = 'playing';
+      const prev = usePlayerStore.getState().currentTrack;
+      if (prev) {
+        navigator.mediaSession.metadata = new MediaMetadata({
+          title: prev.title,
+          artist: prev.artist,
+          album: 'VOYO Music',
+          artwork: [
+            { src: `https://voyo-edge.dash-webtv.workers.dev/cdn/art/${prev.trackId}?quality=high`, sizes: '512x512', type: 'image/jpeg' },
+            { src: `https://i.ytimg.com/vi/${prev.trackId}/hqdefault.jpg`, sizes: '480x360', type: 'image/jpeg' },
+          ],
+        });
+      }
     });
 
     // SEEK FORWARD / BACKWARD — used by headset hardware buttons, car
