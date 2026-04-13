@@ -1693,16 +1693,19 @@ export const AudioPlayer = () => {
         }
         if (isStale()) { devLog(`[AudioPlayer] cancelled stale load for ${trackId} after fade timeout`); return; }
         if (audioRef.current === audioToFade) {
-          // BACKGROUND: Don't call pause() — it fires a pause event that
-          // tells the OS "playback stopped." Android then kills the media
-          // session → lock screen controls disappear → skip stops working.
-          // Instead, just reset position. The src change (below) stops the
-          // old track automatically without triggering a pause event.
-          // In foreground, pause is safe (OS sees the app is visible).
-          if (!document.hidden) {
+          if (document.hidden && silentKeeperUrlRef.current) {
+            // BACKGROUND BRIDGE: Instead of pausing (which kills the media
+            // session), switch to a silent WAV and keep playing. This holds
+            // Android's audio focus alive during the source swap. The real
+            // new source replaces the silent WAV when canplay fires.
+            audioRef.current.loop = true;
+            audioRef.current.src = silentKeeperUrlRef.current;
+            audioRef.current.currentTime = 0;
+            audioRef.current.play().catch(() => {});
+          } else {
             audioRef.current.pause();
+            audioRef.current.currentTime = 0;
           }
-          audioRef.current.currentTime = 0;
         }
       }
 
