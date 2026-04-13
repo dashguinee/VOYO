@@ -174,6 +174,8 @@ VPS streaming: R2 redirects use direct CDN URL for progressive decode (no full b
 - The `isTransitioningToBackgroundRef` guard in `onPause`. Removing it kills background playback on some mobile browsers.
 - The `setTimeout(0)` wrapper around `recordPlayEvent`. Removing it brings back the per-track-start crack.
 - The `document.hidden` guard in YouTubeIframe's time tracking interval. Removing it causes false seek positions on return from background.
+- The auto-PiP removal in `useMiniPiP.ts`. Re-adding auto-enter PiP on background kills background audio — `video.play()` from a visibility handler steals audio focus even when muted.
+- The `document.hidden` pause guard on Moments r2_video elements. Removing it lets video compete with main audio in background.
 - The early-return path for 'off' preset. Removing it forces raw mode through 12+ nodes.
 - The `latencyHint: 'playback'` on AudioContext. Switching to 'interactive' brings back audio thread underruns on weak devices.
 - The `preservesPitch = false` on the audio element. Re-enabling adds an expensive resampler that runs every buffer.

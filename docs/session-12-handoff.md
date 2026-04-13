@@ -1,7 +1,7 @@
 # Session 12 Handoff — Launch Hardening Pass
 
 **Date**: April 13, 2026  
-**Commits**: 20 (d8270f0 → a583786)  
+**Commits**: 24 (d8270f0 → 31bcc2f)  
 **Focus**: Bug fixes, crash hardening, background playback, UX polish  
 
 ---
@@ -19,8 +19,11 @@
 | False seek on return | YouTubeIframe.tsx | Iframe time tracking skips updates when `document.hidden` |
 | VPS streaming | AudioPlayer.tsx | R2 redirects stream directly from CDN (no full blob download) |
 | Iframe retry at 15% | AudioPlayer.tsx | Retries VPS/edge hot-swap, ~95%→98% background coverage |
+| Auto-PiP killing audio | useMiniPiP.ts | REMOVED auto-enter PiP on background — `video.play()` from visibility handler stole audio focus from main element |
+| Moment video competing | VoyoMoments.tsx | r2_video elements now pause on `visibilitychange=hidden` |
+| PiP captureStream crash | useMiniPiP.ts | `initElements()` wrapped in try/catch — `captureStream` throws on some devices |
 
-### Crash fixes (16 paths patched)
+### Crash fixes (17 paths patched)
 | Crash | File | Fix |
 |-------|------|-----|
 | SearchOverlay JSON.parse | SearchOverlayV2.tsx | try/catch on mount |
