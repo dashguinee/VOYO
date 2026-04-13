@@ -1188,7 +1188,7 @@ export const AudioPlayer = () => {
     const param = gainNodeRef.current.gain;
     param.cancelScheduledValues(now);
     param.setValueAtTime(param.value, now);
-    param.linearRampToValueAtTime(0.0001, now + 0.015); // 15ms fade out
+    param.linearRampToValueAtTime(0.0001, now + 0.008); // 8ms fade out (352 samples, click-free)
     armGainWatchdog('mute-before-load');
   };
 
@@ -1537,6 +1537,12 @@ export const AudioPlayer = () => {
       // Skip if same track
       if (lastTrackIdRef.current === trackId) return;
 
+      // FAST-PATH CHECK: if the next track is preloaded, we can do a much
+      // tighter transition. Peek at preload BEFORE the mute+wait cycle.
+      const preloadPeek = getPreloadedTrack(trackId);
+      const hasInstantSource = preloadPeek?.audioElement && preloadPeek?.url &&
+        (preloadPeek.source === 'cached' || preloadPeek.source === 'r2');
+
       // STOP old audio immediately before loading new track.
       // NOTE: Do NOT set src = '' — this can break MediaElementAudioSourceNode in some browsers.
       // The source node stays wired through src changes automatically (Web Audio API design).
@@ -1561,9 +1567,23 @@ export const AudioPlayer = () => {
         // NOTE: Skip this — cloning breaks MediaElementAudioSourceNode binding.
         // Instead, the stale guards (isStale()) in each handler prevent action.
 
-        muteMasterGainInstantly();
+        // FAST MUTE: 8ms ramp (352 samples — smooth zero-crossing, no click)
+        // + 10ms wait for the ramp to drain. Total: 18ms before pause.
+        // Previously 15ms ramp + 18ms wait = 33ms which added perceptible
+        // silence on every skip. 18ms is below human temporal resolution.
+        if (gainNodeRef.current && audioContextRef.current) {
+          const ctx = audioContextRef.current;
+          const now = ctx.currentTime;
+          const p = gainNodeRef.current.gain;
+          p.cancelScheduledValues(now);
+          p.setValueAtTime(p.value, now);
+          p.linearRampToValueAtTime(0.0001, now + 0.008);
+        }
+        armGainWatchdog('mute-before-load');
         const audioToFade = audioRef.current;
-        await new Promise<void>(resolve => setTimeout(resolve, 18));
+        // Preloaded tracks: 2ms wait (gain snaps fast, data is in memory).
+        // Non-preloaded: 10ms wait (let the 8ms ramp drain fully).
+        await new Promise<void>(resolve => setTimeout(resolve, hasInstantSource ? 2 : 10));
         if (isStale()) { devLog(`[AudioPlayer] cancelled stale load for ${trackId} after fade timeout`); return; }
         if (audioRef.current === audioToFade) {
           audioRef.current.pause();
@@ -2321,7 +2341,7 @@ export const AudioPlayer = () => {
         param.setValueAtTime(0.0001, now);
         audio.volume = 1.0;
         audio.play().then(() => {
-          fadeInMasterGain(60); // Ramp up to target post-play
+          fadeInMasterGain(15); // Snap to target — 3ms ramp, matches track load
         }).catch(e => {
           devWarn('🎵 [Playback] Resume play failed:', e.name);
           usePlayerStore.getState().setIsPlaying(false);
