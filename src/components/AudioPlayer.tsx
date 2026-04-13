@@ -1940,29 +1940,57 @@ export const AudioPlayer = () => {
               // VPS served the audio (either stream or R2 redirect).
               // The fetch API follows redirects automatically, so
               // vpsResponse.url is the final URL (R2 CDN or VPS stream).
-              devLog('🎵 [VOYO] VPS server responded — playing server-processed audio');
+              //
+              // STREAMING vs BLOB: If VPS redirected to R2 CDN, stream from
+              // the CDN URL directly — browser handles progressive decode, audio
+              // starts in 1-2s regardless of file size (critical for DJ mixes).
+              // If VPS processed live (no redirect), use blob — the processing
+              // already started on this connection, restarting would waste it.
+              const wasRedirected = vpsResponse.redirected;
+              devLog(`🎵 [VOYO] VPS responded (${wasRedirected ? 'R2 redirect — streaming' : 'direct — blob'})`);
               vpsHandled = true;
 
-              // Create a blob URL from the response for the audio element
-              const audioBlob = await vpsResponse.blob();
-              if (isStale()) return;
-              const blobUrl = URL.createObjectURL(audioBlob);
+              if (wasRedirected) {
+                // R2 CDN redirect — stream directly from CDN URL
+                const streamUrl = vpsResponse.url;
+                vpsResponse.body?.cancel().catch(() => {});
 
-              isEdgeStreamRef.current = false;
-              setPlaybackSource('cached'); // Treat server audio as cached
+                isEdgeStreamRef.current = false;
+                setPlaybackSource('r2');
 
-              const { boostProfile: profile } = usePlayerStore.getState();
-              setupAudioEnhancement(profile);
+                const { boostProfile: profile } = usePlayerStore.getState();
+                setupAudioEnhancement(profile);
+
+                if (audioRef.current) {
+                  if (cachedUrlRef.current) URL.revokeObjectURL(cachedUrlRef.current);
+                  cachedUrlRef.current = null;
+                  audioRef.current.loop = false;
+                  audioRef.current.volume = 1.0;
+                  audioRef.current.src = streamUrl;
+                  audioRef.current.load();
+                }
+              } else {
+                // Direct VPS processing — use blob (connection already active)
+                const audioBlob = await vpsResponse.blob();
+                if (isStale()) return;
+                const blobUrl = URL.createObjectURL(audioBlob);
+
+                isEdgeStreamRef.current = false;
+                setPlaybackSource('cached');
+
+                const { boostProfile: profile } = usePlayerStore.getState();
+                setupAudioEnhancement(profile);
+
+                if (audioRef.current) {
+                  if (cachedUrlRef.current) URL.revokeObjectURL(cachedUrlRef.current);
+                  cachedUrlRef.current = blobUrl;
+                  audioRef.current.loop = false;
+                  audioRef.current.volume = 1.0;
+                  audioRef.current.src = blobUrl;
+                }
+              }
 
               if (audioRef.current) {
-                if (cachedUrlRef.current) URL.revokeObjectURL(cachedUrlRef.current);
-                cachedUrlRef.current = blobUrl;
-                audioRef.current.loop = false;
-                audioRef.current.volume = 1.0;
-                audioRef.current.src = blobUrl;
-                // Blob URL — data is in memory, skip load() for faster start
-
-                // canplay fires faster than canplaythrough for blob sources
                 const vpsPlayHandler = () => {
                   if (!audioRef.current) return;
                   audioRef.current.removeEventListener('canplay', vpsPlayHandler);
