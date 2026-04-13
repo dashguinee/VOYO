@@ -2030,10 +2030,11 @@ export const AudioPlayer = () => {
             // our recovery handler (cache→R2→edge→skip) catches it.
             const vpsUrl = `${VPS_AUDIO_URL}/voyo/audio/${trackId}?quality=high`;
             devLog('🎵 [VOYO] VPS streaming — pointing audio.src directly');
-            vpsHandled = true;
+            // Don't set vpsHandled here — wait for canplay to confirm.
+            // If VPS fails, vpsHandled stays false → retry loop runs.
 
             isEdgeStreamRef.current = false;
-            setPlaybackSource('r2'); // Streaming from URL (browser handles progressive decode)
+            setPlaybackSource('r2');
 
             const { boostProfile: profile } = usePlayerStore.getState();
             setupAudioEnhancement(profile);
@@ -2069,6 +2070,7 @@ export const AudioPlayer = () => {
                     } else {
                       fadeInMasterGain(80);
                     }
+                    vpsHandled = true; // NOW we know VPS works
                     audioRef.current.play().then(() => {
                       clearLoadWatchdog();
                       recordPlayEvent();
@@ -2085,8 +2087,23 @@ export const AudioPlayer = () => {
             devLog(`[VOYO] VPS server unavailable (${(e as Error)?.message}) — falling back to iframe pipeline`);
           }
 
-          // If VPS handled it, we're done. Otherwise retry VPS + edge.
-          if (vpsHandled) return;
+          // VPS streaming is in progress (audio.src = vpsUrl, waiting for
+          // canplay). Don't start the retry loop immediately — give VPS 5s
+          // to stream enough data. If canplay fires, vpsHandled=true and
+          // the retry loop exits. If not, retry loop takes over.
+          await new Promise<void>(resolve => {
+            if (document.hidden) {
+              let t = 0;
+              const mc = new MessageChannel();
+              mc.port1.onmessage = () => { t++; if (t < 500 || vpsHandled) { if (!vpsHandled) mc.port2.postMessage(null); else { mc.port1.close(); resolve(); } } else { mc.port1.close(); resolve(); } };
+              mc.port2.postMessage(null);
+            } else {
+              setTimeout(resolve, 5000);
+            }
+          });
+          if (vpsHandled || isStale()) return;
+
+          devLog('[VOYO] VPS stream not ready after 5s — falling back to retry loop');
 
           // Disarm load watchdog — the retry loop below has its own skip
           // mechanism (5 retries then nextTrack). Without this, the 5s
@@ -2108,7 +2125,7 @@ export const AudioPlayer = () => {
           const MAX_RETRIES = 5; // 5 × 4s = 20s max wait
 
           const tryAudioSource = async (attempt: number) => {
-            if (resolved || isStale()) return;
+            if (resolved || isStale() || vpsHandled) return;
             if (attempt >= MAX_RETRIES) {
               // Track genuinely unplayable after 5 attempts — skip ALWAYS,
               // including background. Previous guard waited for foreground
