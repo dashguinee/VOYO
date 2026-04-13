@@ -1835,7 +1835,7 @@ export const AudioPlayer = () => {
               const shouldAutoResume = shouldAutoResumeRef.current;
               if (shouldAutoResume) shouldAutoResumeRef.current = false;
 
-              if ((shouldPlay || shouldAutoResume) && audioRef.current.paused) {
+              if ((shouldPlay || shouldAutoResume) && (audioRef.current.paused || document.hidden)) {
                 audioContextRef.current?.state === 'suspended' && audioContextRef.current.resume().catch(() => {});
                 if (shouldAutoResume) {
                   fadeInVolume(1200);
@@ -1911,7 +1911,7 @@ export const AudioPlayer = () => {
               shouldAutoResumeRef.current = false;
             }
 
-            if ((shouldPlay || shouldAutoResume) && audioRef.current.paused) {
+            if ((shouldPlay || shouldAutoResume) && (audioRef.current.paused || document.hidden)) {
               audioContextRef.current?.state === 'suspended' && audioContextRef.current.resume().catch(() => {});
               if (shouldAutoResume) {
                 fadeInVolume(1200);
@@ -1978,7 +1978,7 @@ export const AudioPlayer = () => {
                 shouldAutoResumeRef.current = false; // Only auto-resume once
               }
 
-              if ((shouldPlay || shouldAutoResume) && audioRef.current.paused) {
+              if ((shouldPlay || shouldAutoResume) && (audioRef.current.paused || document.hidden)) {
                 audioContextRef.current?.state === 'suspended' && audioContextRef.current.resume().catch(() => {});
                 if (shouldAutoResume) {
                   fadeInVolume(1200);
@@ -2093,7 +2093,7 @@ export const AudioPlayer = () => {
                   const shouldAutoResume = shouldAutoResumeRef.current;
                   if (shouldAutoResume) shouldAutoResumeRef.current = false;
 
-                  if ((shouldPlay || shouldAutoResume) && audioRef.current.paused) {
+                  if ((shouldPlay || shouldAutoResume) && (audioRef.current.paused || document.hidden)) {
                     audioContextRef.current?.state === 'suspended' && audioContextRef.current.resume().catch(() => {});
                     if (shouldAutoResume) {
                       fadeInVolume(1200);
@@ -2189,7 +2189,7 @@ export const AudioPlayer = () => {
                 const shouldAutoResume = shouldAutoResumeRef.current;
                 if (shouldAutoResume) shouldAutoResumeRef.current = false;
 
-                if ((shouldPlay || shouldAutoResume) && audioRef.current.paused) {
+                if ((shouldPlay || shouldAutoResume) && (audioRef.current.paused || document.hidden)) {
                   audioContextRef.current?.state === 'suspended' && audioContextRef.current.resume().catch(() => {});
                   if (shouldAutoResume) {
                     fadeInVolume(1200);
@@ -2450,7 +2450,7 @@ export const AudioPlayer = () => {
 
         // FIXED: Only switch playbackSource AFTER audio element is ready
         // This ensures iframe keeps playing until cached audio can take over seamlessly
-        if (shouldPlayNow && audioRef.current.paused) {
+        if (shouldPlayNow && (audioRef.current.paused || document.hidden)) {
           audioContextRef.current?.state === 'suspended' && audioContextRef.current.resume().catch(() => {});
           // Schedule fade-in BEFORE .play() so the ramp is queued when the
           // first sample lands — click-free upgrade from stream to cached.
