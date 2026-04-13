@@ -1,7 +1,7 @@
 # Session 12 Handoff — Launch Hardening Pass
 
 **Date**: April 13, 2026  
-**Commits**: 24 (d8270f0 → 31bcc2f)  
+**Commits**: 28 (d8270f0 → a828ed8)  
 **Focus**: Bug fixes, crash hardening, background playback, UX polish  
 
 ---
@@ -22,6 +22,9 @@
 | Auto-PiP killing audio | useMiniPiP.ts | REMOVED auto-enter PiP on background — `video.play()` from visibility handler stole audio focus from main element |
 | Moment video competing | VoyoMoments.tsx | r2_video elements now pause on `visibilitychange=hidden` |
 | PiP captureStream crash | useMiniPiP.ts | `initElements()` wrapped in try/catch — `captureStream` throws on some devices |
+| Background skip stall | AudioPlayer.tsx | `setTimeout(10)` in loadTrack bypassed when `document.hidden` — Chrome throttles to 1/min |
+| Background seek stall | AudioPlayer.tsx | MediaSession seek mute→fade bypassed when hidden — same throttle issue |
+| Background gain silence | AudioPlayer.tsx | Gain watchdog `setTimeout(6000)` backed by `MessageChannel` (not throttled, ~3s) |
 
 ### Crash fixes (17 paths patched)
 | Crash | File | Fix |

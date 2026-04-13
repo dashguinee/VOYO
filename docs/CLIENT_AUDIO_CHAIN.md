@@ -165,6 +165,16 @@ YouTubeIframe time tracking interval skips updates when `document.hidden` — pr
 
 VPS streaming: R2 redirects use direct CDN URL for progressive decode (no full blob download). Direct VPS processing still uses blob (connection already active, can't restart).
 
+### Chrome background timer throttling
+
+Chrome throttles `setTimeout`/`setInterval` to 1 call per minute when page is hidden. Three critical paths were affected:
+
+1. **loadTrack gain ramp wait** (`setTimeout(10)`) — 10ms becomes 60s. Fix: skip when `document.hidden` (user can't hear click-free transition anyway).
+2. **Gain watchdog** (`setTimeout(6000)`) — 6s becomes 60s. Fix: parallel `MessageChannel` rescue loop (300 messages ≈ 3s, not throttled by Chrome). Only activates when backgrounded.
+3. **MediaSession seek handlers** (`setTimeout(30)` for mute→fade) — 30ms becomes 60s. Fix: seek directly when `document.hidden`, no mute cycle.
+
+**Not throttled by Chrome**: `MessageChannel`, `queueMicrotask`, `AudioParam` scheduled ramps, `fetch()`, IndexedDB, audio element playback, `canplay`/`canplaythrough` events.
+
 ---
 
 ## What NOT to touch without consultation
@@ -179,5 +189,8 @@ VPS streaming: R2 redirects use direct CDN URL for progressive decode (no full b
 - The early-return path for 'off' preset. Removing it forces raw mode through 12+ nodes.
 - The `latencyHint: 'playback'` on AudioContext. Switching to 'interactive' brings back audio thread underruns on weak devices.
 - The `preservesPitch = false` on the audio element. Re-enabling adds an expensive resampler that runs every buffer.
+- The `document.hidden` bypass on loadTrack's `setTimeout(10)`. Removing it makes background skip stall for 60 seconds.
+- The `MessageChannel` backup in `armGainWatchdog`. Removing it makes background gain rescue take 60 seconds instead of 3.
+- The `document.hidden` bypass on MediaSession seek handlers. Removing it makes lock screen seek stall for 60 seconds.
 
 If a fix is needed in any of these, ask first.
