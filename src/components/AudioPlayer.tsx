@@ -1048,13 +1048,15 @@ export const AudioPlayer = () => {
       masterGain.connect(comp);
 
       // ── BRICKWALL LIMITER (always active, safety net for all presets) ──
-      // RELAXED: was threshold=-1/ratio=20 which clamps down on almost every
-      // modern track (regularly peak at -0.1 to -0.5dBFS). That constant
-      // gain reduction sounds like "compression pumping" / muffling. New
-      // values catch true clips (>-0.3dBFS) without squashing normal peaks.
+      // TRANSPARENT: only catches true digital overs (>-0.1dBFS). Previous
+      // -0.3dB threshold with ratio 8 was clamping normal peaks in modern
+      // masters (which regularly sit at -0.3 to 0dBFS). That constant gain
+      // reduction was the "muffle" feeling on loud tracks. Now at -0.1dB
+      // with ratio 20 and instant attack — a pure safety net that only
+      // fires on actual clipping, never on normal musical dynamics.
       const limiter = ctx.createDynamicsCompressor();
-      limiter.threshold.value = -0.3; limiter.knee.value = 0; limiter.ratio.value = 8;
-      limiter.attack.value = 0.001; limiter.release.value = 0.05;
+      limiter.threshold.value = -0.1; limiter.knee.value = 0; limiter.ratio.value = 20;
+      limiter.attack.value = 0.0005; limiter.release.value = 0.01;
       comp.connect(limiter); limiter.connect(spInput);
 
       // ANALYSER TAP: connect the AnalyserNode (from audioEngine) in
@@ -1216,16 +1218,20 @@ export const AudioPlayer = () => {
     isLoadingTrackRef.current = false;
     if (!gainNodeRef.current || !audioContextRef.current) return;
     const ctx = audioContextRef.current;
+    // Ensure context is running before scheduling. On cold start, the
+    // context may still be suspended — scheduling a ramp against a frozen
+    // clock puts the target time in the past. When the context finally
+    // runs, the ramp is already "complete" → gain jumps instead of ramping.
+    if (ctx.state === 'suspended' || (ctx as any).state === 'interrupted') {
+      ctx.resume().catch(() => {});
+    }
     const now = ctx.currentTime;
     const param = gainNodeRef.current.gain;
     const target = computeMasterTarget();
     // NEAR-INSTANT PRESENCE: 3ms micro-ramp from near-silence to target.
-    // Previously 10ms which ate the first beat (ramp started before decoded
-    // audio arrived → first samples entered at partial volume). 3ms is
-    // 132 samples at 44.1kHz — long enough for a smooth zero-crossing
-    // (no click), short enough that the first beat arrives at >95% volume.
-    // The latencyHint: 'playback' audio buffer (256+ samples ≈ 6ms) means
-    // the ramp completes before the buffer drains to the speakers.
+    // 3ms = 132 samples at 44.1kHz — smooth zero-crossing, no click,
+    // first beat at >95% volume. Within the latencyHint: 'playback'
+    // buffer window (256+ samples ≈ 6ms).
     param.cancelScheduledValues(now);
     param.setValueAtTime(0.0001, now);
     param.linearRampToValueAtTime(target, now + 0.003);
