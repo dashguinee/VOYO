@@ -400,8 +400,10 @@ const CenterFocusedCarousel = ({ tracks, onPlay }: CenterCarouselProps) => {
 interface TrackCardProps {
   track: Track;
   onPlay: () => void;
-  /** Show the bronze OYÉ boost badge — only for Continue Listening + Discover More */
+  /** Show the bronze OYÉ boost badge */
   showBoostBadge?: boolean;
+  /** Track is actually cached/boosted — full opacity. False = faded + smaller */
+  isBoosted?: boolean;
 }
 
 const TrackCard = memo(({ track, onPlay, showBoostBadge = false }: TrackCardProps) => {
@@ -649,7 +651,7 @@ TrackCard.displayName = 'TrackCard';
 // WIDE TRACK CARD - 16:9 for Continue Listening
 // ============================================
 
-const WideTrackCard = memo(({ track, onPlay, showBoostBadge = false }: TrackCardProps) => {
+const WideTrackCard = memo(({ track, onPlay, showBoostBadge = false, isBoosted = false }: TrackCardProps) => {
   const [isHovered, setIsHovered] = useState(false);
   const [oyeActive, setOyeActive] = useState(false);
   const createReaction = useReactionStore(s => s.createReaction);
@@ -697,20 +699,23 @@ const WideTrackCard = memo(({ track, onPlay, showBoostBadge = false }: TrackCard
             </div>
           </div>
         )}
-        {/* OYE Button - Top Right — only on boosted tracks */}
+        {/* OYE Button - Top Right — full when boosted, faded+smaller when not */}
         {showBoostBadge && (
           <button
             className="absolute top-2 right-2 z-10"
             onClick={handleOye}
           >
             <div
-              className="w-7 h-7 rounded-full flex items-center justify-center"
+              className={`${isBoosted ? 'w-7 h-7' : 'w-5.5 h-5.5'} rounded-full flex items-center justify-center`}
               style={{
+                width: isBoosted ? 28 : 22,
+                height: isBoosted ? 28 : 22,
                 background: 'linear-gradient(135deg, #D4A053, #C4943D)',
-                boxShadow: oyeActive ? '0 0 15px rgba(212, 160, 83, 0.6)' : '0 2px 8px rgba(0,0,0,0.3)',
+                opacity: isBoosted ? 1 : 0.45,
+                boxShadow: oyeActive ? '0 0 15px rgba(212, 160, 83, 0.6)' : isBoosted ? '0 2px 8px rgba(0,0,0,0.3)' : 'none',
               }}
             >
-              <Zap className="w-4 h-4 text-white" style={{ fill: 'white' }} />
+              <Zap className={isBoosted ? 'w-4 h-4' : 'w-3 h-3'} style={{ color: 'white', fill: 'white' }} />
             </div>
           </button>
         )}
@@ -1536,11 +1541,11 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
       {/* VoyoLiveCard - "Vibes on Vibes" → Opens VOYO Player */}
       <SignInPrompt onSwitchToVOYO={onSwitchToVOYO} />
 
-      {/* Continue Listening — OYE badge only on boosted (cached) tracks */}
+      {/* Continue Listening — always show OYE badge, brighter if boosted */}
       {hasHistory && (
         <ShelfWithRefresh title="Continue Listening" onRefresh={handleRefresh} isRefreshing={isRefreshing}>
           {recentlyPlayed.slice(0, 12).map((track) => (
-            <WideTrackCard key={track.id} track={track} onPlay={() => onTrackPlay(track)} showBoostBadge={boostedIds.has(track.trackId)} />
+            <WideTrackCard key={track.id} track={track} onPlay={() => onTrackPlay(track)} showBoostBadge isBoosted={boostedIds.has(track.trackId)} />
           ))}
         </ShelfWithRefresh>
       )}
