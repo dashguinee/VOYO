@@ -81,11 +81,15 @@ if (typeof document !== 'undefined') {
   const installGestureListener = () => {
     if (gestureListenerActive) return;
     gestureListenerActive = true;
+    let attempts = 0;
     const resumeOnce = () => {
       resumeCtx();
+      attempts++;
       // Wait one tick — if context successfully ran, remove the listener.
+      // Also clean up after 20 failed attempts to prevent stale listeners
+      // sitting on every tap when context is truly unrecoverable.
       setTimeout(() => {
-        if (_audioCtx && _audioCtx.state === 'running') {
+        if ((_audioCtx && _audioCtx.state === 'running') || attempts >= 20) {
           document.removeEventListener('touchstart', resumeOnce);
           document.removeEventListener('click', resumeOnce);
           gestureListenerActive = false;
