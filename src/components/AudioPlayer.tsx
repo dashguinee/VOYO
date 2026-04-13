@@ -1870,7 +1870,10 @@ export const AudioPlayer = () => {
                 clearLoadWatchdog();
                 recordPlayEvent();
                 if (shouldAutoResume && !shouldPlay) {
-                  usePlayerStore.getState().togglePlay();
+                  // Use setIsPlaying (idempotent) not togglePlay.
+                  // onPlay handler already set isPlaying=true — togglePlay
+                  // would flip it BACK to false, killing the audio.
+                  usePlayerStore.getState().setIsPlaying(true);
                 }
                 devLog('🎵 [VOYO] Playback started (cached)');
               }).catch(e => handlePlayFailure(e, 'Cached'));
