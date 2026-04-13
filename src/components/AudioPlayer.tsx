@@ -1224,25 +1224,47 @@ export const AudioPlayer = () => {
   // net. Cancel it when the real canplaythrough fires. Per-load timer so
   // rapid track skips don't stack watchdogs.
   const watchdogTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const rescueGain = useCallback((label: string) => {
+    if (!audioRef.current || !gainNodeRef.current || !audioContextRef.current) return;
+    if (audioRef.current.paused) return;
+    const param = gainNodeRef.current.gain;
+    if (param.value > 0.01) return; // Already recovered
+    devWarn(`🩹 [VOYO] Watchdog rescue (${label}) — forcing fade-in`);
+    const ctx = audioContextRef.current;
+    if (ctx.state === 'suspended' || (ctx as any).state === 'interrupted') {
+      ctx.resume().catch(() => {});
+    }
+    const now = ctx.currentTime;
+    const target = computeMasterTarget();
+    param.cancelScheduledValues(now);
+    param.setValueAtTime(0.0001, now);
+    param.linearRampToValueAtTime(target, now + 0.2);
+  }, []);
   const armGainWatchdog = (label: string, timeoutMs: number = 6000) => {
     if (watchdogTimerRef.current) clearTimeout(watchdogTimerRef.current);
+    // In background, setTimeout is throttled to 1/min by Chrome.
+    // Use a faster rescue cycle: 2s via setTimeout (fires at ~60s worst case)
+    // PLUS an immediate MessageChannel check at 3s (not throttled).
     watchdogTimerRef.current = setTimeout(() => {
       watchdogTimerRef.current = null;
-      if (!audioRef.current || !gainNodeRef.current || !audioContextRef.current) return;
-      // If the element is still paused, nothing to rescue — let the play
-      // flow retry naturally when user interacts.
-      if (audioRef.current.paused) return;
-      // Element is playing but gain is stuck at silence → rescue.
-      const param = gainNodeRef.current.gain;
-      if (param.value > 0.01) return; // Already recovered on its own
-      devWarn(`🩹 [VOYO] Watchdog rescue (${label}) — canplaythrough never fired, forcing fade-in`);
-      const ctx = audioContextRef.current;
-      const now = ctx.currentTime;
-      const target = computeMasterTarget();
-      param.cancelScheduledValues(now);
-      param.setValueAtTime(0.0001, now);
-      param.linearRampToValueAtTime(target, now + 0.2);
+      rescueGain(label);
     }, timeoutMs);
+    // MessageChannel is NOT throttled in background — fires within ms.
+    // Schedule a backup check at 3s using nested MessageChannel delays.
+    if (document.hidden) {
+      let checks = 0;
+      const mc = new MessageChannel();
+      mc.port1.onmessage = () => {
+        checks++;
+        if (checks < 300) { // 300 × 10ms = 3s
+          mc.port2.postMessage(null);
+        } else {
+          rescueGain(`${label}-bg`);
+          mc.port1.close();
+        }
+      };
+      mc.port2.postMessage(null);
+    }
   };
   const disarmGainWatchdog = () => {
     if (watchdogTimerRef.current) {
