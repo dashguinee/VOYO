@@ -78,24 +78,32 @@ if (typeof document !== 'undefined') {
   // interaction. Now we install on-demand and remove after the first
   // successful resume.
   let gestureListenerActive = false;
+  let totalGestureAttempts = 0; // Tracks across install cycles — give up after 30
+  let currentResumeOnce: (() => void) | null = null;
   const installGestureListener = () => {
-    if (gestureListenerActive) return;
+    if (gestureListenerActive || totalGestureAttempts >= 30) return;
     gestureListenerActive = true;
-    let attempts = 0;
     const resumeOnce = () => {
       resumeCtx();
-      attempts++;
-      // Wait one tick — if context successfully ran, remove the listener.
-      // Also clean up after 20 failed attempts to prevent stale listeners
-      // sitting on every tap when context is truly unrecoverable.
+      totalGestureAttempts++;
       setTimeout(() => {
-        if ((_audioCtx && _audioCtx.state === 'running') || attempts >= 20) {
+        if (_audioCtx && _audioCtx.state === 'running') {
+          // Success — clean up and reset attempts for future lock/unlock cycles
           document.removeEventListener('touchstart', resumeOnce);
           document.removeEventListener('click', resumeOnce);
           gestureListenerActive = false;
+          totalGestureAttempts = 0; // Reset on success so future suspensions work
+          currentResumeOnce = null;
+        } else if (totalGestureAttempts >= 30) {
+          // Give up — context is truly unrecoverable
+          document.removeEventListener('touchstart', resumeOnce);
+          document.removeEventListener('click', resumeOnce);
+          gestureListenerActive = false;
+          currentResumeOnce = null;
         }
       }, 50);
     };
+    currentResumeOnce = resumeOnce;
     document.addEventListener('touchstart', resumeOnce, { once: false, passive: true });
     document.addEventListener('click', resumeOnce, { passive: true });
   };
@@ -105,7 +113,6 @@ if (typeof document !== 'undefined') {
       installGestureListener();
     }
   }, 2000);
-  // Cleanup interval on page unload (best effort)
   window.addEventListener('beforeunload', () => clearInterval(watchContextState));
 }
 

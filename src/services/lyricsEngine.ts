@@ -827,7 +827,8 @@ export function reportIssue(
   // Store in localStorage for now
   const issuesKey = `voyo_lyrics_issues_${trackId}`;
   const existingData = localStorage.getItem(issuesKey);
-  const issues: LyricIssue[] = existingData ? JSON.parse(existingData) : [];
+  let issues: LyricIssue[] = [];
+  try { if (existingData) issues = JSON.parse(existingData); } catch { /* corrupted — start fresh */ }
 
   issues.push({
     segmentIndex,
