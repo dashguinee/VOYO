@@ -2103,6 +2103,11 @@ export const AudioPlayer = () => {
           // If VPS handled it, we're done. Otherwise retry VPS + edge.
           if (vpsHandled) return;
 
+          // Disarm load watchdog — the retry loop below has its own skip
+          // mechanism (5 retries then nextTrack). Without this, the 5s
+          // MessageChannel watchdog fires mid-retry and skips the track.
+          clearLoadWatchdog();
+
           // 📡 AUDIO-ONLY RETRY — NO IFRAME AUDIO.
           //
           // Iframe audio freezes when phone locks → broken background play.
