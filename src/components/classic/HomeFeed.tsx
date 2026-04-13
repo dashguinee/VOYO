@@ -360,18 +360,23 @@ const CenterFocusedCarousel = ({ tracks, onPlay }: CenterCarouselProps) => {
                   artist={track.artist}
                   title={track.title}
                 />
+                {/* Center card: glass play button + glow ring — premium, doesn't cover art */}
                 {isCenter && (
-                  <div
-                    className="absolute inset-0 flex items-center justify-center bg-black/30"
-                  >
-                    <div className="w-12 h-12 rounded-full bg-purple-500/90 flex items-center justify-center">
-                      <Play className="w-6 h-6 text-white ml-1" fill="white" />
+                  <>
+                    <div className="absolute bottom-2 right-2">
+                      <div
+                        className="w-8 h-8 rounded-full flex items-center justify-center backdrop-blur-md"
+                        style={{
+                          background: 'rgba(139, 92, 246, 0.45)',
+                          border: '1px solid rgba(255,255,255,0.15)',
+                          boxShadow: '0 4px 12px rgba(139, 92, 246, 0.3)',
+                        }}
+                      >
+                        <Play className="w-4 h-4 text-white ml-0.5" fill="white" />
+                      </div>
                     </div>
-                  </div>
-                )}
-                {/* Glow ring for center */}
-                {isCenter && (
-                  <div className="absolute inset-0 rounded-xl ring-2 ring-purple-500/50" />
+                    <div className="absolute inset-0 rounded-xl ring-2 ring-purple-500/50 pointer-events-none" />
+                  </>
                 )}
               </div>
               <p className={`text-sm font-medium truncate ${isCenter ? 'text-white' : 'text-white/60'}`}>
@@ -644,7 +649,7 @@ TrackCard.displayName = 'TrackCard';
 // WIDE TRACK CARD - 16:9 for Continue Listening
 // ============================================
 
-const WideTrackCard = memo(({ track, onPlay }: TrackCardProps) => {
+const WideTrackCard = memo(({ track, onPlay, showBoostBadge = false }: TrackCardProps) => {
   const [isHovered, setIsHovered] = useState(false);
   const [oyeActive, setOyeActive] = useState(false);
   const createReaction = useReactionStore(s => s.createReaction);
@@ -692,21 +697,23 @@ const WideTrackCard = memo(({ track, onPlay }: TrackCardProps) => {
             </div>
           </div>
         )}
-        {/* OYE Button - Top Right — African Gold Bronze */}
-        <button
-          className="absolute top-2 right-2 z-10"
-          onClick={handleOye}
-        >
-          <div
-            className="w-7 h-7 rounded-full flex items-center justify-center"
-            style={{
-              background: 'linear-gradient(135deg, #D4A053, #C4943D)',
-              boxShadow: oyeActive ? '0 0 15px rgba(212, 160, 83, 0.6)' : '0 2px 8px rgba(0,0,0,0.3)',
-            }}
+        {/* OYE Button - Top Right — only on boosted tracks */}
+        {showBoostBadge && (
+          <button
+            className="absolute top-2 right-2 z-10"
+            onClick={handleOye}
           >
-            <Zap className="w-4 h-4 text-white" style={{ fill: 'white' }} />
-          </div>
-        </button>
+            <div
+              className="w-7 h-7 rounded-full flex items-center justify-center"
+              style={{
+                background: 'linear-gradient(135deg, #D4A053, #C4943D)',
+                boxShadow: oyeActive ? '0 0 15px rgba(212, 160, 83, 0.6)' : '0 2px 8px rgba(0,0,0,0.3)',
+              }}
+            >
+              <Zap className="w-4 h-4 text-white" style={{ fill: 'white' }} />
+            </div>
+          </button>
+        )}
         <div className="absolute bottom-0 left-0 right-0 p-2">
           <p className="text-white text-xs font-semibold truncate drop-shadow-lg">{track.title}</p>
         </div>
@@ -1271,6 +1278,9 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
   const discoverTracks = usePlayerStore(s => s.discoverTracks);
   const refreshRecommendations = usePlayerStore(s => s.refreshRecommendations);
   const hotPool = useTrackPoolStore(s => s.hotPool);
+  const cachedTracks = useDownloadStore(s => s.cachedTracks);
+  // Set of boosted track IDs — OYE badge only shows on actually cached tracks
+  const boostedIds = useMemo(() => new Set(cachedTracks.map(t => t.id)), [cachedTracks]);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [showNotificationHint, setShowNotificationHint] = useState(false);
   // Session seed drives shelf rotation — every reload / pull-to-refresh gets
@@ -1526,11 +1536,11 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
       {/* VoyoLiveCard - "Vibes on Vibes" → Opens VOYO Player */}
       <SignInPrompt onSwitchToVOYO={onSwitchToVOYO} />
 
-      {/* Continue Listening */}
+      {/* Continue Listening — OYE badge only on boosted (cached) tracks */}
       {hasHistory && (
         <ShelfWithRefresh title="Continue Listening" onRefresh={handleRefresh} isRefreshing={isRefreshing}>
           {recentlyPlayed.slice(0, 12).map((track) => (
-            <WideTrackCard key={track.id} track={track} onPlay={() => onTrackPlay(track)} />
+            <WideTrackCard key={track.id} track={track} onPlay={() => onTrackPlay(track)} showBoostBadge={boostedIds.has(track.trackId)} />
           ))}
         </ShelfWithRefresh>
       )}
@@ -1658,11 +1668,11 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
         </div>
       )}
 
-      {/* Discover More - LLM curated expansion beyond comfort zone → COMMUNAL (auto-boosted, keeps OYÉ badge) */}
+      {/* Discover More - LLM curated expansion beyond comfort zone */}
       {hasDiscoverMore && (
         <ShelfWithRefresh title="Discover More" onRefresh={handleRefresh} isRefreshing={isRefreshing}>
           {discoverMoreTracks.slice(0, 12).map((track) => (
-            <TrackCard key={track.id} track={track} onPlay={() => onTrackPlay(track, { openFull: true })} showBoostBadge />
+            <TrackCard key={track.id} track={track} onPlay={() => onTrackPlay(track, { openFull: true })} />
           ))}
         </ShelfWithRefresh>
       )}
@@ -1857,10 +1867,9 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
                         {artistNeedsScroll ? <>{track.artist}<span className="mx-3">•</span>{track.artist}<span className="mx-3">•</span></> : track.artist}
                       </p>
                     </div>
-                    <div className="flex items-center justify-center gap-1 mt-0.5">
-                      <span className="text-purple-400 text-[9px]">⭐</span>
-                      <span className="text-purple-400/80 text-[9px] font-medium">
-                        {track.oyeScore ? (track.oyeScore / 1000).toFixed(1) : ((10 - index) * 1.2).toFixed(1)}
+                    <div className="flex items-center justify-center mt-0.5">
+                      <span className="text-[8px] font-bold" style={{ color: '#D4A053' }}>
+                        {track.oyeScore ? (track.oyeScore / 1000).toFixed(0) + 'K OYE' : (10 - index) * 1.2 > 1 ? Math.round((10 - index) * 1.2) + 'K OYE' : ''}
                       </span>
                     </div>
                   </div>

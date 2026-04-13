@@ -1581,9 +1581,11 @@ export const AudioPlayer = () => {
         }
         armGainWatchdog('mute-before-load');
         const audioToFade = audioRef.current;
-        // Preloaded tracks: 2ms wait (gain snaps fast, data is in memory).
-        // Non-preloaded: 10ms wait (let the 8ms ramp drain fully).
-        await new Promise<void>(resolve => setTimeout(resolve, hasInstantSource ? 2 : 10));
+        // Wait for the 8ms gain ramp to fully drain before pausing.
+        // Previously preloaded used 2ms — but the ramp takes 8ms, so
+        // pause() fired while gain was still ~75%, causing a micro-click.
+        // 10ms covers the ramp + 2ms margin for AudioContext clock jitter.
+        await new Promise<void>(resolve => setTimeout(resolve, 10));
         if (isStale()) { devLog(`[AudioPlayer] cancelled stale load for ${trackId} after fade timeout`); return; }
         if (audioRef.current === audioToFade) {
           audioRef.current.pause();
