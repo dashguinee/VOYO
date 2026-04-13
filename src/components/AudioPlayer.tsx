@@ -261,10 +261,17 @@ export const AudioPlayer = () => {
       devLog('[VOYO] Autoplay blocked — waiting for first user gesture to resume');
       return;
     }
-    // Real failure — advance immediately rather than waiting 8s for the
-    // watchdog to skip. Flow stays uninterrupted.
-    isLoadingTrackRef.current = false;
-    nextTrack();
+    // Real failure. In foreground, skip immediately for flow.
+    // In background, DON'T skip — the failure might be transient
+    // (AbortError from src swap, network blip). Let the retry loop
+    // or watchdog handle it with proper timeout.
+    if (!document.hidden) {
+      isLoadingTrackRef.current = false;
+      nextTrack();
+    } else {
+      devWarn(`[VOYO] Play failed in background (${e.name}) — NOT skipping, letting retry handle it`);
+      isLoadingTrackRef.current = false;
+    }
   };
 
   // Store state — fine-grained selectors so AudioPlayer only re-renders when
@@ -3143,9 +3150,16 @@ export const AudioPlayer = () => {
     // RECOVERY 4: Skip to next track (music never stops)
     if (recoveryIsStale()) return; // a newer loadTrack is already in motion
     const elapsed = performance.now() - recoveryStart;
+
+    // In background, don't skip — the failure might be transient (network
+    // blip, AudioContext suspension). The user can't see the error state
+    // and the next foreground return will re-kick the audio.
+    if (document.hidden) {
+      devWarn(`🚨 [VOYO] Recovery failed in background (${elapsed.toFixed(0)}ms) — NOT skipping`);
+      return;
+    }
+
     devLog(`🚨 [VOYO] Cannot recover after ${elapsed.toFixed(0)}ms - skipping to next track`);
-    // NOTE: Do NOT clear audio.src — it can break the MediaElementAudioSourceNode.
-    // Just pause and let the next track load set a new src.
     audio.pause();
     if (cachedUrlRef.current) {
       URL.revokeObjectURL(cachedUrlRef.current);
