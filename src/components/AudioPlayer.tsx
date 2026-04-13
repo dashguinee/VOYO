@@ -1601,6 +1601,10 @@ export const AudioPlayer = () => {
       lastTrackIdRef.current = trackId;
       hasRecordedPlayRef.current = false;
       trackProgressRef.current = 0;
+      // Reset store position immediately so hot-swap and error recovery don't
+      // read the PREVIOUS track's position and seek to it on the new track.
+      usePlayerStore.getState().setCurrentTime(0);
+      usePlayerStore.getState().setProgress(0);
       hasTriggered50PercentCacheRef.current = false; // Reset 50% trigger for new track
       hasTriggered85PercentCacheRef.current = false; // Reset 85% trigger for new track
       lastProgressWriteBucketRef.current = -1; // Reset throttle bucket → first frame of new track writes
