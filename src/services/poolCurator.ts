@@ -548,11 +548,16 @@ setTimeout(async () => {
   const newStats = poolStore.getPoolStats();
   if (newStats.hot < 30) {
     devLog(`[Pool Curator] Pool has ${newStats.hot} tracks, expanding with searches...`);
-    bootstrapPool(); // This does API searches to add more variety
+    await bootstrapPool(); // This does API searches to add more variety
   } else {
     devLog(`[Pool Curator] Pool has ${newStats.hot} tracks, ready`);
     isBootstrapped = true;
   }
+
+  // Curate sections (classics, west-african, trending) so shelves like
+  // "Timeless Classics" and "African Vibes" have properly tagged content.
+  // bootstrapPool tags everything as 'trending' — this fills the gaps.
+  curateAllSections().catch(() => {});
 }, 1500);
 
 // ============================================

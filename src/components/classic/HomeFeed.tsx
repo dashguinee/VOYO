@@ -1867,10 +1867,19 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
                         {artistNeedsScroll ? <>{track.artist}<span className="mx-3">•</span>{track.artist}<span className="mx-3">•</span></> : track.artist}
                       </p>
                     </div>
-                    <div className="flex items-center justify-center mt-0.5">
-                      <span className="text-[8px] font-bold" style={{ color: '#D4A053' }}>
-                        {track.oyeScore ? (track.oyeScore / 1000).toFixed(0) + 'K OYE' : (10 - index) * 1.2 > 1 ? Math.round((10 - index) * 1.2) + 'K OYE' : ''}
-                      </span>
+                    <div className="flex items-center justify-center gap-0.5 mt-0.5">
+                      {index < 3 ? (
+                        <>
+                          <Zap className="w-2.5 h-2.5" style={{ color: '#D4A053', fill: '#D4A053', filter: 'drop-shadow(0 0 3px rgba(212,160,83,0.5))' }} />
+                          <span className="text-[8px] font-bold" style={{ color: '#D4A053' }}>
+                            {track.oyeScore ? (track.oyeScore / 1000).toFixed(0) + 'K' : Math.round((10 - index) * 1.2) + 'K'}
+                          </span>
+                        </>
+                      ) : (
+                        <span className="text-[8px] font-bold" style={{ color: '#D4A053' }}>
+                          OYE {track.oyeScore ? (track.oyeScore / 1000).toFixed(0) + 'K' : Math.round((10 - index) * 1.2) + 'K'}
+                        </span>
+                      )}
                     </div>
                   </div>
                 </button>
