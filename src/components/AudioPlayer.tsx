@@ -1740,13 +1740,32 @@ export const AudioPlayer = () => {
       clearLoadWatchdog();
       loadWatchdogRef.current = setTimeout(() => {
         loadWatchdogRef.current = null;
-        if (isStale()) return; // newer loadTrack took over
+        if (isStale()) return;
         const store = usePlayerStore.getState();
-        if (!store.isPlaying) return; // user paused, respect intent
+        if (!store.isPlaying) return;
         devWarn(`[VOYO] Load watchdog fired for ${trackId} — 8s without playback, skipping`);
         isLoadingTrackRef.current = false;
         nextTrack();
       }, 8000);
+      // BACKGROUND: setTimeout is throttled to 1/min. MessageChannel backup
+      // fires in ~5s (not throttled) to skip stuck tracks faster.
+      if (document.hidden) {
+        let ticks = 0;
+        const mc = new MessageChannel();
+        mc.port1.onmessage = () => {
+          ticks++;
+          if (ticks < 500) { mc.port2.postMessage(null); return; } // ~5s
+          mc.port1.close();
+          if (isStale() || !loadWatchdogRef.current) return; // already resolved
+          const store = usePlayerStore.getState();
+          if (!store.isPlaying) return;
+          devWarn(`[VOYO] Load watchdog (bg) fired for ${trackId} — skipping`);
+          clearLoadWatchdog();
+          isLoadingTrackRef.current = false;
+          nextTrack();
+        };
+        mc.port2.postMessage(null);
+      }
 
       // End previous session
       endListenSession(audioRef.current?.currentTime || 0, 0);
@@ -1790,12 +1809,22 @@ export const AudioPlayer = () => {
               if (isStale()) return;
 
               const { isPlaying: shouldPlay } = usePlayerStore.getState();
-              if (shouldPlay && audioRef.current.paused) {
+              const shouldAutoResume = shouldAutoResumeRef.current;
+              if (shouldAutoResume) shouldAutoResumeRef.current = false;
+
+              if ((shouldPlay || shouldAutoResume) && audioRef.current.paused) {
                 audioContextRef.current?.state === 'suspended' && audioContextRef.current.resume().catch(() => {});
-                fadeInMasterGain(80);
+                if (shouldAutoResume) {
+                  fadeInVolume(1200);
+                } else {
+                  fadeInMasterGain(80);
+                }
                 audioRef.current.play().then(() => {
                   clearLoadWatchdog();
                   recordPlayEvent();
+                  if (shouldAutoResume && !shouldPlay) {
+                    usePlayerStore.getState().setIsPlaying(true);
+                  }
                   devLog('🔮 [VOYO] Preloaded playback started!');
                 }).catch(e => handlePlayFailure(e, 'Preloaded'));
               }
@@ -2798,6 +2827,17 @@ export const AudioPlayer = () => {
   //     1s resolution is plenty for the OS/lockscreen display.
   const handleTimeUpdate = useCallback(() => {
     if ((playbackSource !== 'cached' && playbackSource !== 'r2') || !audioRef.current?.duration) return;
+
+    // BACKGROUND KEEP-ALIVE: Chrome may suspend AudioContext for battery
+    // during long background sessions. The audio element still fires
+    // timeupdate (based on its internal clock), but the Web Audio chain
+    // is frozen → silence. Resume if needed. Fires at 4Hz, the check
+    // is a single property read → negligible cost.
+    if (document.hidden && audioContextRef.current &&
+        (audioContextRef.current.state === 'suspended' || (audioContextRef.current as any).state === 'interrupted')) {
+      audioContextRef.current.resume().catch(() => {});
+    }
+
     const el = audioRef.current;
     const progress = (el.currentTime / el.duration) * 100;
     // Always update the ref — zero cost, no re-render, keeps milestone
