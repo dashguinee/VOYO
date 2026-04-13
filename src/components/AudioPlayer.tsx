@@ -2015,70 +2015,38 @@ export const AudioPlayer = () => {
 
           let vpsHandled = false;
           try {
-            // 20s timeout — VPS processes new tracks in 3-18s depending on
-            // length and server load. Test showed 14.7s for a standard track.
-            // Previous 12s timeout missed slower tracks entirely.
-            const vpsResponse = await fetch(
-              `${VPS_AUDIO_URL}/voyo/audio/${trackId}?quality=high`,
-              { signal: AbortSignal.timeout(20000) },
-            );
-            if (isStale()) return;
+            // PROGRESSIVE STREAMING — don't download full blob.
+            // Point audio.src at the VPS URL directly. The browser's
+            // media decoder handles chunked responses natively — audio
+            // starts in 2-3s even when the full file takes 15s+ to
+            // process. VPS sends chunks as FFmpeg produces them.
+            //
+            // For R2-cached tracks, VPS returns 302 → browser follows
+            // the redirect automatically → streams from CDN.
+            // For new tracks, VPS starts processing on request →
+            // streams audio chunks as they're ready.
+            //
+            // If VPS is down, the audio element fires 'error' →
+            // our recovery handler (cache→R2→edge→skip) catches it.
+            const vpsUrl = `${VPS_AUDIO_URL}/voyo/audio/${trackId}?quality=high`;
+            devLog('🎵 [VOYO] VPS streaming — pointing audio.src directly');
+            vpsHandled = true;
 
-            if (vpsResponse.ok || vpsResponse.status === 302) {
-              // VPS served the audio (either stream or R2 redirect).
-              // The fetch API follows redirects automatically, so
-              // vpsResponse.url is the final URL (R2 CDN or VPS stream).
-              //
-              // STREAMING vs BLOB: If VPS redirected to R2 CDN, stream from
-              // the CDN URL directly — browser handles progressive decode, audio
-              // starts in 1-2s regardless of file size (critical for DJ mixes).
-              // If VPS processed live (no redirect), use blob — the processing
-              // already started on this connection, restarting would waste it.
-              const wasRedirected = vpsResponse.redirected;
-              devLog(`🎵 [VOYO] VPS responded (${wasRedirected ? 'R2 redirect — streaming' : 'direct — blob'})`);
-              vpsHandled = true;
+            isEdgeStreamRef.current = false;
+            setPlaybackSource('r2'); // Streaming from URL (browser handles progressive decode)
 
-              if (wasRedirected) {
-                // R2 CDN redirect — stream directly from CDN URL
-                const streamUrl = vpsResponse.url;
-                vpsResponse.body?.cancel().catch(() => {});
+            const { boostProfile: profile } = usePlayerStore.getState();
+            setupAudioEnhancement(profile);
 
-                isEdgeStreamRef.current = false;
-                setPlaybackSource('r2');
+            if (audioRef.current) {
+              if (cachedUrlRef.current) URL.revokeObjectURL(cachedUrlRef.current);
+              cachedUrlRef.current = null;
+              audioRef.current.loop = false;
+              audioRef.current.volume = 1.0;
+              audioRef.current.src = vpsUrl;
+              audioRef.current.load();
 
-                const { boostProfile: profile } = usePlayerStore.getState();
-                setupAudioEnhancement(profile);
-
-                if (audioRef.current) {
-                  if (cachedUrlRef.current) URL.revokeObjectURL(cachedUrlRef.current);
-                  cachedUrlRef.current = null;
-                  audioRef.current.loop = false;
-                  audioRef.current.volume = 1.0;
-                  audioRef.current.src = streamUrl;
-                  audioRef.current.load();
-                }
-              } else {
-                // Direct VPS processing — use blob (connection already active)
-                const audioBlob = await vpsResponse.blob();
-                if (isStale()) return;
-                const blobUrl = URL.createObjectURL(audioBlob);
-
-                isEdgeStreamRef.current = false;
-                setPlaybackSource('cached');
-
-                const { boostProfile: profile } = usePlayerStore.getState();
-                setupAudioEnhancement(profile);
-
-                if (audioRef.current) {
-                  if (cachedUrlRef.current) URL.revokeObjectURL(cachedUrlRef.current);
-                  cachedUrlRef.current = blobUrl;
-                  audioRef.current.loop = false;
-                  audioRef.current.volume = 1.0;
-                  audioRef.current.src = blobUrl;
-                }
-              }
-
-              if (audioRef.current) {
+              // canplay fires when browser has buffered enough to play (2-3s)
                 const vpsPlayHandler = () => {
                   if (!audioRef.current) return;
                   audioRef.current.removeEventListener('canplay', vpsPlayHandler);
@@ -2105,14 +2073,13 @@ export const AudioPlayer = () => {
                       clearLoadWatchdog();
                       recordPlayEvent();
                       if (shouldAutoResume && !shouldPlay) {
-                        usePlayerStore.getState().togglePlay();
+                        usePlayerStore.getState().setIsPlaying(true);
                       }
-                      devLog('🎵 [VOYO] Playback started (VPS server-processed)');
+                      devLog('🎵 [VOYO] Playback started (VPS streaming)');
                     }).catch(e => handlePlayFailure(e, 'VPS'));
                   }
                 };
                 audioRef.current.addEventListener('canplay', vpsPlayHandler, { once: true });
-              }
             }
           } catch (e) {
             devLog(`[VOYO] VPS server unavailable (${(e as Error)?.message}) — falling back to iframe pipeline`);
@@ -2209,18 +2176,16 @@ export const AudioPlayer = () => {
             };
 
             try {
-              // VPS (20s timeout per retry — some tracks need 15-18s to process)
-              const vpsP = fetch(`${VPS_AUDIO_URL}/voyo/audio/${trackId}?quality=high`, { signal: AbortSignal.timeout(20000) })
+              // VPS — stream directly from URL (no blob download).
+              // Browser handles progressive decode, plays in 2-3s.
+              // 5s HEAD-like check: if VPS responds at all, stream from it.
+              const vpsP = fetch(`${VPS_AUDIO_URL}/voyo/audio/${trackId}?quality=high`, { signal: AbortSignal.timeout(5000) })
                 .then(async (res) => {
-                  if (resolved || isStale() || !res.ok) return;
-                  if (res.redirected) {
-                    // R2 redirect — stream from CDN
+                  if (resolved || isStale()) return;
+                  if (res.ok || res.redirected) {
                     res.body?.cancel().catch(() => {});
-                    playFromUrl(res.url, 'VPS-R2', false);
-                  } else {
-                    const blob = await res.blob();
-                    if (resolved || isStale() || blob.size < 1000) return;
-                    playFromUrl(URL.createObjectURL(blob), 'VPS', true);
+                    // Use the final URL (follows redirects to R2)
+                    playFromUrl(`${VPS_AUDIO_URL}/voyo/audio/${trackId}?quality=high`, 'VPS', false);
                   }
                 }).catch(() => {});
 
