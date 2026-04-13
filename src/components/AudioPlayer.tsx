@@ -1698,10 +1698,16 @@ export const AudioPlayer = () => {
             // session), switch to a silent WAV and keep playing. This holds
             // Android's audio focus alive during the source swap. The real
             // new source replaces the silent WAV when canplay fires.
-            audioRef.current.loop = true;
-            audioRef.current.src = silentKeeperUrlRef.current;
-            audioRef.current.currentTime = 0;
-            audioRef.current.play().catch(() => {});
+            try {
+              audioRef.current.loop = true;
+              audioRef.current.src = silentKeeperUrlRef.current;
+              // Don't set currentTime before load — can throw InvalidStateError.
+              // Default is 0 after src change anyway.
+              audioRef.current.play().catch(() => {});
+            } catch {
+              // Silent WAV failed — fall back to no-pause approach
+              devWarn('[VOYO] Silent bridge failed, continuing without');
+            }
           } else {
             audioRef.current.pause();
             audioRef.current.currentTime = 0;
