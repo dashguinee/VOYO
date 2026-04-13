@@ -546,18 +546,24 @@ const MomentCard = memo(({ moment, isOyed, onOye, isActive, isMuted, onToggleMut
   })();
 
   // Auto-play/pause based on active state (only for r2_video format)
+  // Also pauses on background to avoid competing with main audio element
   useEffect(() => {
     const vid = videoRef.current;
     if (!vid || format !== 'r2_video') return;
 
-    if (isActive) {
+    if (isActive && !document.hidden) {
       vid.currentTime = 0;
-      vid.play().catch(() => {
-        // Autoplay blocked - keep showing thumbnail
-      });
+      vid.play().catch(() => {});
     } else {
       vid.pause();
     }
+
+    // Pause moment video when app backgrounds — prevents audio focus theft
+    const onVis = () => {
+      if (document.hidden && vid) vid.pause();
+    };
+    document.addEventListener('visibilitychange', onVis);
+    return () => document.removeEventListener('visibilitychange', onVis);
   }, [isActive, format]);
 
   // Sync muted state
