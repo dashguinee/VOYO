@@ -141,12 +141,29 @@ The 50% auto-boost cacheTrack is also deferred 5s and only fires if `bufferHealt
 
 | Trigger | When | What |
 |---------|------|------|
-| 50% auto-boost (R2 sources) | progress > 50% + 5s defer + buffer healthy | Download HIGH quality version to local cache for next play |
-| 30s onplay defer (edge stream sources) | 30s after play start | Download stream to local cache for next play |
-| 75% kept | progress > 75% | Mark track as permanent (no auto-evict) |
+| 15% iframe retry | progress > 15% + still on iframe | Retry VPS/edge hot-swap for background playback |
+| 50% auto-boost (R2 sources) | progress > 50% + 5s defer + buffer healthy | Download HIGH quality version to local cache |
 | 30s flag (iframe sources) | 30s elapsed | Flag in `video_intelligence` for batch R2 download |
+| 75% kept | progress > 75% | Mark track as permanent (no auto-evict) |
+| 85% edge-stream cache | progress > 85% + edge source | Cache + upload to R2 for next play |
 
 **Mid-track hot-swap is skipped if progress > 35%**. The cache is ready for next play either way; interrupting current playback for a hard cut isn't worth the audible glitch.
+
+---
+
+## Background playback guards (Session 12 — April 13, 2026)
+
+The `onPause` handler in AudioPlayer.tsx has 4 guards:
+1. `isLoadingTrackRef` — skip during track-load src swap
+2. `audioRef.current?.ended` — skip during natural-end (ended fires after pause)
+3. `document.hidden` — skip browser-initiated background pause
+4. `isTransitioningToBackgroundRef` — skip pause events that fire BEFORE `visibilitychange` (some mobile browsers fire pause first → `document.hidden` is still false → isPlaying would be set to false → audio dies on return)
+
+The background transition ref is set in a **capturing** `visibilitychange` listener (fires before all others). This ensures the flag is set before any `pause` event can check it.
+
+YouTubeIframe time tracking interval skips updates when `document.hidden` — prevents stale/zero position data from the frozen iframe corrupting the store.
+
+VPS streaming: R2 redirects use direct CDN URL for progressive decode (no full blob download). Direct VPS processing still uses blob (connection already active, can't restart).
 
 ---
 
@@ -154,7 +171,9 @@ The 50% auto-boost cacheTrack is also deferred 5s and only fires if `bufferHealt
 
 - The cross-fade ramp duration (25ms). Faster = audible step. Slower = noticeable morph between presets.
 - The `isLoadingTrackRef` guard in `onPause`. Removing it brings back the skip auto-play bug.
+- The `isTransitioningToBackgroundRef` guard in `onPause`. Removing it kills background playback on some mobile browsers.
 - The `setTimeout(0)` wrapper around `recordPlayEvent`. Removing it brings back the per-track-start crack.
+- The `document.hidden` guard in YouTubeIframe's time tracking interval. Removing it causes false seek positions on return from background.
 - The early-return path for 'off' preset. Removing it forces raw mode through 12+ nodes.
 - The `latencyHint: 'playback'` on AudioContext. Switching to 'interactive' brings back audio thread underruns on weak devices.
 - The `preservesPitch = false` on the audio element. Re-enabling adds an expensive resampler that runs every buffer.

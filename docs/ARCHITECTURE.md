@@ -38,19 +38,28 @@ The audio pipeline is the heart of VOYO. It consists of three layers: the AudioC
 
 ### Recent Audio Surgery (April 2026)
 
-Session 11 fixed 13 root causes in the audio chain. Key changes:
+**Session 11** fixed 13 root causes in the audio chain:
 - **3ms micro-ramp** replaces 10ms — first beat arrives at 95%+ volume
 - **Cold start crackle** fixed — limiter threshold -1→-0.3, ratio 20→8
 - **latencyHint: 'playback'** — 256-512 sample buffers, fewer underruns
 - **preservesPitch: false** — kills expensive resampler per buffer
+- See `docs/session-11-handoff.md` and `docs/CLIENT_AUDIO_CHAIN.md` for full details.
+
+**Session 12 (April 13)** — launch hardening pass (20 commits):
 - **Skip hiccup** fixed — gain ramp fully drains (10ms) before pause
 - **Volume slider lag** fixed — localStorage persist debounced 200ms
 - **Auto-resume** — always triggers on reload regardless of saved position
-- See `docs/session-11-handoff.md` and `docs/CLIENT_AUDIO_CHAIN.md` for full details.
+- **Background playback** — `isTransitioningToBackgroundRef` prevents `onPause` from killing `isPlaying` during browser background transitions
+- **False seek data** — iframe time tracking skips updates when `document.hidden`
+- **VPS streaming** — R2 redirects stream directly from CDN (no full blob download), critical for long tracks/DJ mixes
+- **Iframe retry at 15%** — retries VPS/edge hot-swap for iframe tracks, boosting background playback coverage ~95%→98%
+- **PiP crash fixes** — 7 crash paths patched in `useMiniPiP.ts` (mounted guards, ref cleanup, race prevention)
+- **Deep crash audit** — 16 crash paths fixed across SearchOverlay, KnowledgeStore, reactionStore, playerStore, ProfilePage
+- **Skip button** — `wasSkeeping` dead zone reduced from 50ms `setTimeout` to `requestAnimationFrame`
 
 ### audioEngine.ts — AudioContext Singleton
 
-**File**: `src/services/audioEngine.ts` (697 lines)
+**File**: `src/services/audioEngine.ts` (704 lines)
 
 The module manages a single `AudioContext` and `MediaElementAudioSourceNode` that persist across track changes. Key design:
 
@@ -62,7 +71,7 @@ The module manages a single `AudioContext` and `MediaElementAudioSourceNode` tha
 
 ### AudioPlayer.tsx — The Playback Controller
 
-**File**: `src/components/AudioPlayer.tsx` (3051 lines)
+**File**: `src/components/AudioPlayer.tsx` (3147 lines)
 
 A headless React component (renders a hidden `<audio>` element) that orchestrates all playback. Core responsibilities:
 
