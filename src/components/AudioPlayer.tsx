@@ -2011,99 +2011,12 @@ export const AudioPlayer = () => {
           // Returns: audio/ogg (Opus) stream, chunked transfer encoding
           // On cache hit: 302 redirect to R2 CDN (zero VPS bandwidth)
           // On miss: stream while processing (3-8s FFmpeg startup)
-          devLog('🎵 [VOYO] R2 miss — trying VPS server first...');
-
-          let vpsHandled = false;
-          try {
-            // PROGRESSIVE STREAMING — don't download full blob.
-            // Point audio.src at the VPS URL directly. The browser's
-            // media decoder handles chunked responses natively — audio
-            // starts in 2-3s even when the full file takes 15s+ to
-            // process. VPS sends chunks as FFmpeg produces them.
-            //
-            // For R2-cached tracks, VPS returns 302 → browser follows
-            // the redirect automatically → streams from CDN.
-            // For new tracks, VPS starts processing on request →
-            // streams audio chunks as they're ready.
-            //
-            // If VPS is down, the audio element fires 'error' →
-            // our recovery handler (cache→R2→edge→skip) catches it.
-            const vpsUrl = `${VPS_AUDIO_URL}/voyo/audio/${trackId}?quality=high`;
-            devLog('🎵 [VOYO] VPS streaming — pointing audio.src directly');
-            // Don't set vpsHandled here — wait for canplay to confirm.
-            // If VPS fails, vpsHandled stays false → retry loop runs.
-
-            isEdgeStreamRef.current = false;
-            setPlaybackSource('r2');
-
-            const { boostProfile: profile } = usePlayerStore.getState();
-            setupAudioEnhancement(profile);
-
-            if (audioRef.current) {
-              if (cachedUrlRef.current) URL.revokeObjectURL(cachedUrlRef.current);
-              cachedUrlRef.current = null;
-              audioRef.current.loop = false;
-              audioRef.current.volume = 1.0;
-              audioRef.current.src = vpsUrl;
-              audioRef.current.load();
-
-              // canplay fires when browser has buffered enough to play (2-3s)
-                const vpsPlayHandler = () => {
-                  if (!audioRef.current) return;
-                  audioRef.current.removeEventListener('canplay', vpsPlayHandler);
-                  audioRef.current.oncanplaythrough = null;
-                  if (isStale()) return;
-
-                  if (isInitialLoadRef.current && savedCurrentTime > 5) {
-                    audioRef.current.currentTime = savedCurrentTime;
-                    isInitialLoadRef.current = false;
-                  }
-
-                  const { isPlaying: shouldPlay } = usePlayerStore.getState();
-                  const shouldAutoResume = shouldAutoResumeRef.current;
-                  if (shouldAutoResume) shouldAutoResumeRef.current = false;
-
-                  if ((shouldPlay || shouldAutoResume) && (audioRef.current.paused || document.hidden)) {
-                    audioContextRef.current?.state === 'suspended' && audioContextRef.current.resume().catch(() => {});
-                    if (shouldAutoResume) {
-                      fadeInVolume(1200);
-                    } else {
-                      fadeInMasterGain(80);
-                    }
-                    vpsHandled = true; // NOW we know VPS works
-                    audioRef.current.play().then(() => {
-                      clearLoadWatchdog();
-                      recordPlayEvent();
-                      if (shouldAutoResume && !shouldPlay) {
-                        usePlayerStore.getState().setIsPlaying(true);
-                      }
-                      devLog('🎵 [VOYO] Playback started (VPS streaming)');
-                    }).catch(e => handlePlayFailure(e, 'VPS'));
-                  }
-                };
-                audioRef.current.addEventListener('canplay', vpsPlayHandler, { once: true });
-            }
-          } catch (e) {
-            devLog(`[VOYO] VPS server unavailable (${(e as Error)?.message}) — falling back to iframe pipeline`);
-          }
-
-          // VPS streaming is in progress (audio.src = vpsUrl, waiting for
-          // canplay). Don't start the retry loop immediately — give VPS 5s
-          // to stream enough data. If canplay fires, vpsHandled=true and
-          // the retry loop exits. If not, retry loop takes over.
-          await new Promise<void>(resolve => {
-            if (document.hidden) {
-              let t = 0;
-              const mc = new MessageChannel();
-              mc.port1.onmessage = () => { t++; if (t < 500 || vpsHandled) { if (!vpsHandled) mc.port2.postMessage(null); else { mc.port1.close(); resolve(); } } else { mc.port1.close(); resolve(); } };
-              mc.port2.postMessage(null);
-            } else {
-              setTimeout(resolve, 5000);
-            }
-          });
-          if (vpsHandled || isStale()) return;
-
-          devLog('[VOYO] VPS stream not ready after 5s — falling back to retry loop');
+          // PARALLEL RACE: VPS + edge simultaneously. No sequential
+          // first-try-then-retry. Edge returns a stream URL in 3-5s.
+          // VPS processes and caches to R2 (slower but builds the
+          // collective cache). First success wins → instant playback.
+          // The silent WAV bridge keeps audio focus alive during the race.
+          devLog('🎵 [VOYO] R2 miss — parallel VPS + edge race');
 
           // Disarm load watchdog — the retry loop below has its own skip
           // mechanism (5 retries then nextTrack). Without this, the 5s
@@ -2125,7 +2038,7 @@ export const AudioPlayer = () => {
           const MAX_RETRIES = 5; // 5 × 4s = 20s max wait
 
           const tryAudioSource = async (attempt: number) => {
-            if (resolved || isStale() || vpsHandled) return;
+            if (resolved || isStale()) return;
             if (attempt >= MAX_RETRIES) {
               // Track genuinely unplayable after 5 attempts — skip ALWAYS,
               // including background. Previous guard waited for foreground
