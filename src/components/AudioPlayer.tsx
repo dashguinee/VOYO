@@ -1657,10 +1657,12 @@ export const AudioPlayer = () => {
         armGainWatchdog('mute-before-load');
         const audioToFade = audioRef.current;
         // Wait for the 8ms gain ramp to fully drain before pausing.
-        // Previously preloaded used 2ms — but the ramp takes 8ms, so
-        // pause() fired while gain was still ~75%, causing a micro-click.
-        // 10ms covers the ramp + 2ms margin for AudioContext clock jitter.
-        await new Promise<void>(resolve => setTimeout(resolve, 10));
+        // BACKGROUND SKIP: skip the wait when hidden — setTimeout is
+        // throttled to 1/min in background, turning a 10ms wait into 60s.
+        // User can't hear the transition anyway, so no click risk.
+        if (!document.hidden) {
+          await new Promise<void>(resolve => setTimeout(resolve, 10));
+        }
         if (isStale()) { devLog(`[AudioPlayer] cancelled stale load for ${trackId} after fade timeout`); return; }
         if (audioRef.current === audioToFade) {
           audioRef.current.pause();
@@ -2731,9 +2733,15 @@ export const AudioPlayer = () => {
         audioRef.current.duration || 0,
         audioRef.current.currentTime + dir * offset,
       ));
-      muteMasterGainInstantly();
-      audioRef.current.currentTime = newTime;
-      setTimeout(() => fadeInMasterGain(80), 30);
+      // In background, skip the mute→wait→fade cycle — setTimeout is
+      // throttled to 1/min. Just seek directly; user can't hear the click.
+      if (document.hidden) {
+        audioRef.current.currentTime = newTime;
+      } else {
+        muteMasterGainInstantly();
+        audioRef.current.currentTime = newTime;
+        setTimeout(() => fadeInMasterGain(80), 30);
+      }
     };
     navigator.mediaSession.setActionHandler('seekforward', (d) => {
       seekOffset(1, d.seekOffset || 10);
@@ -2749,9 +2757,13 @@ export const AudioPlayer = () => {
         return;
       }
       if (!audioRef.current) return;
-      muteMasterGainInstantly();
-      audioRef.current.currentTime = d.seekTime;
-      setTimeout(() => fadeInMasterGain(80), 30);
+      if (document.hidden) {
+        audioRef.current.currentTime = d.seekTime;
+      } else {
+        muteMasterGainInstantly();
+        audioRef.current.currentTime = d.seekTime;
+        setTimeout(() => fadeInMasterGain(80), 30);
+      }
     });
 
     // STOP — some OS widgets and Bluetooth controls fire this instead of
