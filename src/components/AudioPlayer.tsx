@@ -2962,9 +2962,9 @@ export const AudioPlayer = () => {
   const handleEnded = useCallback(() => {
     if (playbackSource !== 'cached' && playbackSource !== 'r2') return;
     // Dedup with direct listener — prevent double nextTrack()
-    if (endedHandledRef.current) return;
-    endedHandledRef.current = true;
-    queueMicrotask(() => { endedHandledRef.current = false; });
+    const cid = currentTrack?.trackId;
+    if (!cid || lastEndedTrackIdRef.current === cid) return;
+    lastEndedTrackIdRef.current = cid;
 
     const track = currentTrack;
     const currentTime = audioRef.current?.currentTime || 0;
@@ -3015,19 +3015,18 @@ export const AudioPlayer = () => {
   // React's onEnded JSX prop may not fire reliably in background on Android.
   // This native listener reads fresh state from the store, not closures.
   // REPLACES the React onEnded — only ONE handler to prevent double-skip.
-  const endedHandledRef = useRef(false);
+  // Track-ID-based dedup — no timer needed. Each track has a unique ID,
+  // so checking "did we already handle ended for THIS track?" is reliable
+  // in both foreground and background. No rAF/microtask/setTimeout issues.
+  const lastEndedTrackIdRef = useRef<string | null>(null);
   useEffect(() => {
     const el = audioRef.current;
     if (!el) return;
 
     const onEndedDirect = () => {
-      // Dedup: prevent double-skip if both React onEnded and this fire
-      if (endedHandledRef.current) return;
-      endedHandledRef.current = true;
-      // Reset after all handlers for this event complete. queueMicrotask
-      // fires after synchronous handlers finish but is NOT paused in
-      // background (unlike requestAnimationFrame which Chrome freezes).
-      queueMicrotask(() => { endedHandledRef.current = false; });
+      const trackId = usePlayerStore.getState().currentTrack?.trackId;
+      if (!trackId || lastEndedTrackIdRef.current === trackId) return;
+      lastEndedTrackIdRef.current = trackId;
 
       const { playbackSource: ps, isPlaying: playing } = usePlayerStore.getState();
       if (ps !== 'cached' && ps !== 'r2') return;
