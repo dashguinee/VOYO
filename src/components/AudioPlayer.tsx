@@ -2964,7 +2964,7 @@ export const AudioPlayer = () => {
     // Dedup with direct listener — prevent double nextTrack()
     if (endedHandledRef.current) return;
     endedHandledRef.current = true;
-    requestAnimationFrame(() => { endedHandledRef.current = false; });
+    queueMicrotask(() => { endedHandledRef.current = false; });
 
     const track = currentTrack;
     const currentTime = audioRef.current?.currentTime || 0;
@@ -3024,7 +3024,10 @@ export const AudioPlayer = () => {
       // Dedup: prevent double-skip if both React onEnded and this fire
       if (endedHandledRef.current) return;
       endedHandledRef.current = true;
-      requestAnimationFrame(() => { endedHandledRef.current = false; });
+      // Reset after all handlers for this event complete. queueMicrotask
+      // fires after synchronous handlers finish but is NOT paused in
+      // background (unlike requestAnimationFrame which Chrome freezes).
+      queueMicrotask(() => { endedHandledRef.current = false; });
 
       const { playbackSource: ps, isPlaying: playing } = usePlayerStore.getState();
       if (ps !== 'cached' && ps !== 'r2') return;
