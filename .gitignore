@@ -32,3 +32,4 @@ dist-ssr
 data/canonized_*.json
 data/artists_*_v5_*.json
 cookies.txt
+.cookies-*.txt

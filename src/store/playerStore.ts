@@ -40,6 +40,7 @@ async function getDatabaseDiscovery() {
   return databaseDiscoveryModule;
 }
 import { isKnownUnplayable } from '../services/trackVerifier';
+import { isBlocked as isBlocklisted } from '../services/trackBlocklist';
 import { getInsights as getOyoInsights, onTrackSkip as oyoOnTrackSkip } from '../services/oyoDJ';
 import { devLog, devWarn } from '../utils/logger';
 
@@ -765,8 +766,9 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
 
       while (queueToProcess.length > 0 && !nextPlayable) {
         const [candidate, ...remaining] = queueToProcess;
-        if (candidate.track.trackId && isKnownUnplayable(candidate.track.trackId)) {
-          devWarn(`[PlayerStore] Skipping unplayable track in queue: ${candidate.track.title}`);
+        const cid = candidate.track.trackId;
+        if (cid && (isKnownUnplayable(cid) || isBlocklisted(cid))) {
+          devWarn(`[PlayerStore] Skipping unplayable/blocked track in queue: ${candidate.track.title}`);
           queueToProcess = remaining;
         } else {
           nextPlayable = candidate;
@@ -1122,9 +1124,9 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
         return state; // Don't add duplicate
       }
 
-      // FIX 5: Reject known unplayable tracks
-      if (track.trackId && isKnownUnplayable(track.trackId)) {
-        devWarn(`[PlayerStore] Rejected unplayable track from queue: ${track.title}`);
+      // FIX 5: Reject known unplayable / blocklisted tracks
+      if (track.trackId && (isKnownUnplayable(track.trackId) || isBlocklisted(track.trackId))) {
+        devWarn(`[PlayerStore] Rejected unplayable/blocked track from queue: ${track.title}`);
         return state; // Don't add unplayable track
       }
 

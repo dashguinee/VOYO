@@ -3234,6 +3234,15 @@ export const AudioPlayer = () => {
           setBufferHealth(100, 'healthy');
         }
         usePlayerStore.getState().setIsPlaying(true);
+        // Silent WAV keeper fires onPlay during track switches to hold
+        // media session alive. That's not a real track play — don't log
+        // play_success or flip isPlaying from its bridge state.
+        const src = audioRef.current?.src;
+        if (src && silentKeeperUrlRef.current && src === silentKeeperUrlRef.current) return;
+        // Only log play_success when a real source is bound. playbackSource
+        // is null until the preload/retry path resolves — during that window
+        // the onPlay fire is from the silent bridge, not the real track.
+        if (playbackSource !== 'cached' && playbackSource !== 'r2') return;
         const track = usePlayerStore.getState().currentTrack;
         if (track?.trackId) {
           logPlaybackEvent({
@@ -3241,7 +3250,7 @@ export const AudioPlayer = () => {
             track_id: track.trackId,
             track_title: track.title,
             track_artist: track.artist,
-            source: (playbackSource as any) || 'r2',
+            source: playbackSource === 'cached' ? 'cache' : playbackSource,
           });
         }
       }}

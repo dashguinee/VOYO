@@ -75,7 +75,11 @@ export async function refreshBlocklist(force = false): Promise<void> {
  */
 export function isBlocked(trackId: string): boolean {
   if (!trackId) return false;
-  return blocklist.has(trackId) || blocklist.has(trackId.replace('VOYO_', ''));
+  if (blocklist.has(trackId)) return true;
+  // Strip either VOYO_ or vyo_ prefix — tracks from DJ/verified pools
+  // carry these prefixes but telemetry rows the raw YouTube id.
+  const stripped = trackId.replace(/^(VOYO_|vyo_)/, '');
+  return stripped !== trackId && blocklist.has(stripped);
 }
 
 /**
