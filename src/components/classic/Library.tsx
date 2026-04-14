@@ -10,7 +10,7 @@
  */
 
 import { useState, useEffect, useMemo } from 'react';
-import { Search, Heart, Music, Clock, MoreVertical, Play, ListPlus, Plus } from 'lucide-react';
+import { Search, Heart, Music, Clock, MoreVertical, Play, ListPlus, Plus, Shuffle, Sparkles } from 'lucide-react';
 import { usePlayerStore } from '../../store/playerStore';
 import { useDownloadStore } from '../../store/downloadStore';
 import { usePreferenceStore } from '../../store/preferenceStore';
@@ -20,13 +20,15 @@ import { SmartImage } from '../ui/SmartImage';
 import { Track } from '../../types';
 import { PlaylistModal } from '../playlist/PlaylistModal';
 
-// Base filter tabs
+// Base filter tabs — VOYO Disco DNA palette: bronze-gold for active states,
+// platform purple as accent. Consistent with Search overlay tabs (v161+).
 const BASE_FILTERS = [
   { id: 'all', label: 'All', color: 'bg-white/10' },
-  { id: 'liked', label: 'Liked', color: 'bg-purple-500/20 text-purple-400' },
-  { id: 'queue', label: 'Bucket', color: 'bg-violet-500/20 text-violet-400' },
-  { id: 'history', label: 'History', color: 'bg-white/5 text-white/40' },
-  { id: 'offline', label: 'Offline', color: 'bg-purple-500/10 text-purple-300' },
+  { id: 'liked', label: 'Liked', color: '' },
+  { id: 'queue', label: 'Bucket', color: '' },
+  { id: 'recent', label: 'Recently Added', color: '' },
+  { id: 'history', label: 'History', color: '' },
+  { id: 'offline', label: 'Offline', color: '' },
 ];
 
 // Song Row Component with Hover Preview
@@ -273,18 +275,53 @@ export const Library = ({ onTrackClick }: LibraryProps) => {
         .filter((t): t is Track => t !== undefined && matchesSearch(t));
     }
 
+    // LIKED — Smart Mix (anti-burial). Other apps sort liked songs chronologically
+    // by like-date, which buries old favorites. We use a tiered surface:
+    //   Tier 0 (top): liked but never played → highest priority to surface
+    //   Tier 1: liked but not played in 30+ days → re-discovery
+    //   Tier 2: liked, played 7-30 days ago → still fresh-ish
+    //   Tier 3: played in last 7 days → recent enough
+    // Within each tier, deterministic daily shuffle so order rotates per day
+    // without thrashing within a session.
+    if (activeFilter === 'liked') {
+      const liked = TRACKS.filter(t => likedTracks.has(t.id) && matchesSearch(t));
+      if (liked.length === 0) return [];
+      const now = Date.now();
+      const day7 = 7 * 24 * 60 * 60 * 1000;
+      const day30 = 30 * 24 * 60 * 60 * 1000;
+      const dayKey = Math.floor(now / 86400000);
+      const seedHash = (s: string) => { let h = dayKey * 9301; for (let i = 0; i < s.length; i++) h = ((h << 5) - h + s.charCodeAt(i)) | 0; return h; };
+      const tierFor = (t: Track): number => {
+        const lp = trackPreferences[t.id]?.lastPlayedAt;
+        if (!lp) return 0;
+        const age = now - new Date(lp).getTime();
+        if (age > day30) return 1;
+        if (age > day7) return 2;
+        return 3;
+      };
+      return liked
+        .map(t => ({ t, tier: tierFor(t), shuffle: seedHash(t.id) }))
+        .sort((a, b) => a.tier - b.tier || a.shuffle - b.shuffle)
+        .map(x => x.t);
+    }
+
+    // RECENTLY ADDED — sorted by lastPlayedAt desc (the closest signal we have
+    // for "I touched this recently"). Top 50 to keep it browsable.
+    if (activeFilter === 'recent') {
+      return TRACKS
+        .map(t => ({ t, when: trackPreferences[t.id]?.lastPlayedAt }))
+        .filter(x => x.when && matchesSearch(x.t))
+        .sort((a, b) => new Date(b.when!).getTime() - new Date(a.when!).getTime())
+        .slice(0, 50)
+        .map(x => x.t);
+    }
+
     // All other filters: use TRACKS
     return TRACKS.filter(track => {
       if (!matchesSearch(track)) return false;
-
-      switch (activeFilter) {
-        case 'liked':
-          return likedTracks.has(track.id);
-        default:
-          return true;
-      }
+      return true;
     });
-  }, [activeFilter, searchQuery, boostedTracks, queue, history, playlists, likedTracks]);
+  }, [activeFilter, searchQuery, boostedTracks, queue, history, playlists, likedTracks, trackPreferences]);
 
   const handleTrackClick = (track: Track) => {
     // Use onTrackClick which goes through PlaybackOrchestrator
@@ -300,12 +337,19 @@ export const Library = ({ onTrackClick }: LibraryProps) => {
 
   return (
     <div className="flex flex-col h-full">
-      {/* Header */}
-      <header className="px-4 py-4">
-        <h1 className="text-2xl font-bold text-white">Your Library</h1>
+      {/* Header — "Your Disco" in faded bronze-gold, matching Search overlay
+          language. Tagline beneath it gives the page a music-soul subtitle. */}
+      <header className="px-4 pt-5 pb-2">
+        <h1
+          className="text-3xl font-display font-bold tracking-tight"
+          style={{ color: 'rgba(232, 208, 158, 0.96)', textShadow: '0 0 18px rgba(212,175,110,0.20)', letterSpacing: '-0.01em' }}
+        >
+          Your Disco
+        </h1>
+        <p className="text-white/35 text-[12px] mt-1 tracking-wide">your sound, your selection</p>
       </header>
 
-      {/* Search Bar */}
+      {/* Search Bar — bronze focus ring (was purple) */}
       <div className="px-4 py-2">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-white/40" />
@@ -313,34 +357,86 @@ export const Library = ({ onTrackClick }: LibraryProps) => {
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search in library..."
-            className="w-full pl-10 pr-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white placeholder:text-white/30 focus:outline-none focus:border-purple-500/50"
+            placeholder="Search in your disco..."
+            className="w-full pl-10 pr-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white placeholder:text-white/30 focus:outline-none transition-colors"
+            style={{ borderColor: undefined }}
+            onFocus={(e) => { e.currentTarget.style.borderColor = 'rgba(212,175,110,0.45)'; }}
+            onBlur={(e) => { e.currentTarget.style.borderColor = ''; }}
           />
         </div>
       </div>
 
-      {/* Filter Tabs */}
+      {/* Filter Tabs — bronze-gold for active state, consistent with Search */}
       <div className="flex gap-2 px-4 py-3 overflow-x-auto scrollbar-hide">
-        {filters.map((filter) => (
-          <button
-            key={filter.id}
-            className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-colors ${
-              activeFilter === filter.id
-                ? 'bg-purple-500 text-white'
-                : filter.color || 'bg-white/10 text-white/70 hover:bg-white/20'
-            }`}
-            onClick={() => setActiveFilter(filter.id)}
-          >
-            {filter.label}
-            {/* Show count badge for queue */}
-            {filter.id === 'queue' && queue.length > 0 && (
-              <span className="ml-1.5 px-1.5 py-0.5 text-xs bg-purple-500/30 rounded-full">
-                {queue.length}
-              </span>
-            )}
-          </button>
-        ))}
+        {filters.map((filter) => {
+          const isActive = activeFilter === filter.id;
+          const isPlaylist = filter.id.startsWith('playlist:');
+          return (
+            <button
+              key={filter.id}
+              className="px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all"
+              style={
+                isActive
+                  ? {
+                      background: 'rgba(212, 175, 110, 0.14)',
+                      color: 'rgba(232, 208, 158, 0.97)',
+                      border: '1px solid rgba(212, 175, 110, 0.32)',
+                      boxShadow: '0 0 14px -6px rgba(212,175,110,0.45)',
+                    }
+                  : isPlaylist
+                  ? {
+                      background: 'rgba(139, 92, 246, 0.08)',
+                      color: 'rgba(196, 181, 253, 0.85)',
+                      border: '1px solid rgba(139, 92, 246, 0.18)',
+                    }
+                  : { background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.55)', border: '1px solid transparent' }
+              }
+              onClick={() => setActiveFilter(filter.id)}
+            >
+              {filter.label}
+              {filter.id === 'queue' && queue.length > 0 && (
+                <span className="ml-1.5 px-1.5 py-0.5 text-[10px] rounded-full"
+                      style={{ background: isActive ? 'rgba(20,12,6,0.35)' : 'rgba(212,175,110,0.18)', color: 'rgba(232,208,158,0.95)' }}>
+                  {queue.length}
+                </span>
+              )}
+            </button>
+          );
+        })}
       </div>
+
+      {/* Smart Mix banner — only shown on the Liked tab. Calls out the
+          anti-burial algorithm so users understand why old favorites surface.
+          Metallic shuffle icon (champagne tone) + sparkles tag. */}
+      {activeFilter === 'liked' && filteredTracks.length > 0 && (
+        <div className="px-4 pb-2">
+          <div
+            className="flex items-center gap-2.5 px-3 py-2 rounded-xl"
+            style={{
+              background: 'linear-gradient(135deg, rgba(212,175,110,0.12) 0%, rgba(232,208,158,0.06) 50%, rgba(139,92,246,0.08) 100%)',
+              border: '1px solid rgba(212,175,110,0.22)',
+              boxShadow: 'inset 0 0 18px rgba(212,175,110,0.05)',
+            }}
+          >
+            <div
+              className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0"
+              style={{
+                background: 'linear-gradient(135deg, #E8D09E 0%, #C9A96C 50%, #8B6F3F 100%)',
+                boxShadow: '0 2px 8px rgba(212,175,110,0.35), inset 0 1px 0 rgba(255,255,255,0.4)',
+              }}
+            >
+              <Shuffle className="w-3.5 h-3.5" style={{ color: '#3a2410' }} strokeWidth={2.5} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-1.5">
+                <span className="text-[12px] font-semibold" style={{ color: 'rgba(232,208,158,0.95)' }}>Smart Mix</span>
+                <Sparkles className="w-3 h-3" style={{ color: 'rgba(212,175,110,0.7)' }} />
+              </div>
+              <p className="text-[10px] text-white/40 leading-tight">surfaces forgotten favorites — old likes don't get buried</p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Song Count */}
       <div className="px-4 py-2">
@@ -349,7 +445,8 @@ export const Library = ({ onTrackClick }: LibraryProps) => {
             activeFilter === 'offline' ? 'offline songs' :
             activeFilter === 'queue' ? 'in bucket' :
             activeFilter === 'history' ? 'played' :
-            activeFilter === 'liked' ? 'liked' :
+            activeFilter === 'liked' ? 'liked · shuffled smart' :
+            activeFilter === 'recent' ? 'recently played' :
             activeFilter.startsWith('playlist:') ? 'in playlist' :
             'songs'
           }
@@ -361,6 +458,9 @@ export const Library = ({ onTrackClick }: LibraryProps) => {
           )}
           {activeFilter === 'history' && filteredTracks.length === 0 && (
             <span className="block text-xs mt-1">Your listening history will appear here</span>
+          )}
+          {activeFilter === 'recent' && filteredTracks.length === 0 && (
+            <span className="block text-xs mt-1">Tracks you've played recently will appear here</span>
           )}
         </p>
       </div>
