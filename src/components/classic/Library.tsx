@@ -9,7 +9,7 @@
  * - Tap to play, opens Classic Now Playing
  */
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { Search, Heart, Music, Clock, MoreVertical, Play, ListPlus, Plus, Shuffle, Sparkles } from 'lucide-react';
 import { VoyoIcon } from '../ui/VoyoIcon';
 import { usePlayerStore } from '../../store/playerStore';
@@ -188,6 +188,20 @@ export const Library = ({ onTrackClick }: LibraryProps) => {
   const trackPreferences = usePreferenceStore(s => s.trackPreferences);
   const setExplicitLike = usePreferenceStore(s => s.setExplicitLike);
 
+  // Scroll-driven UX (matches Search overlay): "My Disco" header fades on
+  // scroll past 15% so the user owns the screen with results, search bar
+  // slides to bottom (thumb zone) past 45% so refining stays one-handed.
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const [scrollPct, setScrollPct] = useState(0);
+  const handleScroll = useCallback(() => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    const max = Math.max(1, el.scrollHeight - el.clientHeight);
+    setScrollPct(Math.min(1, Math.max(0, el.scrollTop / max)));
+  }, []);
+  const headerOpacity = Math.max(0, 1 - Math.max(0, (scrollPct - 0.15)) / 0.10);
+  const searchAtBottom = scrollPct >= 0.45;
+
   // Build dynamic filter tabs: base + playlists
   const filters = useMemo(() => {
     const playlistFilters = playlists.map(p => ({
@@ -337,10 +351,13 @@ export const Library = ({ onTrackClick }: LibraryProps) => {
   };
 
   return (
-    <div className="flex flex-col h-full">
-      {/* Header — "My Disco" in faded bronze-gold. Icon removed (Dash's call:
-          stripped chrome, let the type carry it). */}
-      <header className="px-4 pt-5 pb-2">
+    <div className="flex flex-col h-full relative">
+      {/* Header — "My Disco" fades on scroll past 15% (chrome retreats so the
+          user owns the screen with results). */}
+      <header
+        className="px-4 pt-5 pb-2"
+        style={{ opacity: headerOpacity, transition: 'opacity 220ms ease' }}
+      >
         <h1
           className="text-3xl font-display font-bold tracking-tight"
           style={{ color: 'rgba(232, 208, 158, 0.96)', textShadow: '0 0 18px rgba(212,175,110,0.20)', letterSpacing: '-0.01em' }}
@@ -350,22 +367,39 @@ export const Library = ({ onTrackClick }: LibraryProps) => {
         <p className="text-white/35 text-[12px] mt-1 tracking-wide">your sound, your selection</p>
       </header>
 
-      {/* Search Bar — bronze focus ring (was purple) */}
-      <div className="px-4 py-2">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-white/40" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search in your disco..."
-            className="w-full pl-10 pr-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white placeholder:text-white/30 focus:outline-none transition-colors"
-            style={{ borderColor: undefined }}
-            onFocus={(e) => { e.currentTarget.style.borderColor = 'rgba(212,175,110,0.45)'; }}
-            onBlur={(e) => { e.currentTarget.style.borderColor = ''; }}
-          />
+      {/* Search bar + filter tabs — block slides from top to bottom (thumb zone)
+          past 45% scroll. Position: absolute so the slide doesn't reflow the
+          song list. The list adds padding-top/bottom to compensate. */}
+      <div
+        style={{
+          position: 'absolute',
+          left: 0, right: 0,
+          top: searchAtBottom ? 'auto' : 88,    // below the My Disco header (~88px)
+          bottom: searchAtBottom ? 'max(76px, env(safe-area-inset-bottom, 16px))' : 'auto',
+          zIndex: 10,
+          transition: 'top 320ms cubic-bezier(0.4, 0, 0.2, 1), bottom 320ms cubic-bezier(0.4, 0, 0.2, 1)',
+          background: searchAtBottom
+            ? 'linear-gradient(180deg, rgba(11,7,3,0) 0%, rgba(11,7,3,0.65) 35%, rgba(11,7,3,0.92) 100%)'
+            : 'transparent',
+          paddingTop: searchAtBottom ? 16 : 0,
+          paddingBottom: searchAtBottom ? 6 : 0,
+        }}
+      >
+        {/* Search Bar — bronze focus ring (was purple) */}
+        <div className="px-4 py-2">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-white/40" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search in your disco..."
+              className="w-full pl-10 pr-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white placeholder:text-white/30 focus:outline-none transition-colors"
+              onFocus={(e) => { e.currentTarget.style.borderColor = 'rgba(212,175,110,0.45)'; }}
+              onBlur={(e) => { e.currentTarget.style.borderColor = ''; }}
+            />
+          </div>
         </div>
-      </div>
 
       {/* Filter Tabs — bronze-gold for active state, consistent with Search */}
       <div className="flex gap-2 px-4 py-3 overflow-x-auto scrollbar-hide">
@@ -405,6 +439,7 @@ export const Library = ({ onTrackClick }: LibraryProps) => {
           );
         })}
       </div>
+      </div>{/* end of slide-block (search bar + filters) */}
 
       {/* Smart Mix banner — only shown on the Liked tab. Calls out the
           anti-burial algorithm so users understand why old favorites surface.
@@ -458,8 +493,22 @@ export const Library = ({ onTrackClick }: LibraryProps) => {
         </p>
       </div>
 
-      {/* Song List */}
-      <div className="flex-1 overflow-y-auto pb-20">
+      {/* Song List — the scroll surface that drives header fade + bar slide.
+          Top padding reserves space for the absolutely-positioned search-bar
+          block (when at top: ~200px for header+bar+tabs; when at bottom: just
+          the smart-mix banner if visible). */}
+      <div
+        ref={scrollContainerRef}
+        onScroll={handleScroll}
+        className="flex-1 overflow-y-auto"
+        style={{
+          paddingTop: searchAtBottom ? 8 : 200,
+          paddingBottom: searchAtBottom
+            ? 'calc(180px + max(76px, env(safe-area-inset-bottom, 16px)))'
+            : 80,
+          transition: 'padding-top 320ms ease, padding-bottom 320ms ease',
+        }}
+      >
         {filteredTracks.length > 0 ? (
           filteredTracks.map((track, index) => (
             <SongRow
