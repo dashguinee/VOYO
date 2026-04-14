@@ -192,5 +192,13 @@ Chrome throttles `setTimeout`/`setInterval` to 1 call per minute when page is hi
 - The `document.hidden` bypass on loadTrack's `setTimeout(10)`. Removing it makes background skip stall for 60 seconds.
 - The `MessageChannel` backup in `armGainWatchdog`. Removing it makes background gain rescue take 60 seconds instead of 3.
 - The `document.hidden` bypass on MediaSession seek handlers. Removing it makes lock screen seek stall for 60 seconds.
+- The `!document.hidden` guard on `audio.pause()` in loadTrack. Removing it kills the Android media session mid-track-swap → skip stops working in background.
+- The silent WAV bridge in loadTrack (background only). Removing it breaks the media session continuity during source swaps.
+- The track-ID-based ended dedup (`lastEndedTrackIdRef`). Do NOT replace with `requestAnimationFrame` (frozen in background) or `queueMicrotask` (fires too fast, causes double-skip).
+- The direct `addEventListener('ended')` (supplements React's `onEnded`). React's synthetic events can be stale in background — this is the reliable path.
+- The `(paused || document.hidden)` check in canplay handlers. Removing the `document.hidden` part breaks background next-track — silent WAV bridge leaves `paused = false`.
+- The 20s VPS timeouts. Shorter timeouts miss VPS processing time (some tracks need 15-18s).
+- The VPS+edge parallel race (no VPS first-try). Sequential VPS-then-retry added 5s of dead silence waiting for VPS to respond.
+- The 10s stall timer + buffer runway check. 4s was too aggressive — caused reload gaps bigger than the stall.
 
 If a fix is needed in any of these, ask first.

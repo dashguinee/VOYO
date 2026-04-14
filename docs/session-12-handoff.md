@@ -1,7 +1,7 @@
 # Session 12 Handoff — Launch Hardening Pass
 
 **Date**: April 13, 2026  
-**Commits**: 28 (d8270f0 → a828ed8)  
+**Commits**: 46 (d8270f0 → de5d86a) across Sessions 12 + 13  
 **Focus**: Bug fixes, crash hardening, background playback, UX polish  
 
 ---
