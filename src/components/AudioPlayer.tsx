@@ -1581,8 +1581,14 @@ export const AudioPlayer = () => {
 
       const trackId = currentTrack.trackId;
 
-      // Skip if same track
+      // RACE-FREE GUARD: claim the trackId SYNCHRONOUSLY before any await.
+      // The previous version checked the ref here but set it 100+ lines later,
+      // after a 10ms setTimeout await. During that window, concurrent loadTrack
+      // calls (from rapid effect re-runs) could all pass the guard, leading to
+      // 3-5x duplicate play_start events per track and audio fight-for-control.
+      // Setting the ref now makes the guard atomic with the lock.
       if (lastTrackIdRef.current === trackId) return;
+      lastTrackIdRef.current = trackId;
 
       // COLLECTIVE FAILURE MEMORY — check if this track has failed ≥3 times
       // across any user in the last 7 days. If so, skip immediately instead
@@ -1687,7 +1693,7 @@ export const AudioPlayer = () => {
         devLog(`🔄 [VOYO] Session resume detected (position: ${savedCurrentTime.toFixed(1)}s) - will auto-play`);
       }
 
-      lastTrackIdRef.current = trackId;
+      // lastTrackIdRef.current already set at the top of loadTrack for race-free guarding
       hasRecordedPlayRef.current = false;
       trackProgressRef.current = 0;
       // Reset store position immediately so hot-swap and error recovery don't
