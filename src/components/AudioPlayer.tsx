@@ -44,7 +44,7 @@ import { onTrackPlay as oyoOnTrackPlay, onTrackComplete as oyoOnTrackComplete } 
 import { registerTrackPlay as viRegisterPlay } from '../services/videoIntelligence';
 import { useMiniPiP } from '../hooks/useMiniPiP';
 import { notifyNextUp } from '../services/oyoNotifications';
-import { logPlaybackEvent } from '../services/telemetry';
+import { logPlaybackEvent, trace } from '../services/telemetry';
 import { isBlocked, markBlocked } from '../services/trackBlocklist';
 import {
   preloadNextTrack,
@@ -232,6 +232,7 @@ export const AudioPlayer = () => {
   // (stream died, decode error — skip immediately). Either way clears the
   // watchdog so it doesn't fire redundantly.
   const handlePlayFailure = (e: Error | DOMException, label: string) => {
+    trace('play_failure', usePlayerStore.getState().currentTrack?.trackId, { label, err: e.name, hidden: document.hidden, msg: e.message?.slice(0, 80) });
     devWarn(`[Playback] ${label} play failed:`, e.name);
     clearLoadWatchdog();
     const track = usePlayerStore.getState().currentTrack;
@@ -572,6 +573,7 @@ export const AudioPlayer = () => {
   // Background playback continues automatically because we never pause it.
   useEffect(() => {
     const handleVisibility = () => {
+      trace('visibility', usePlayerStore.getState().currentTrack?.trackId, { state: document.visibilityState, isPlaying: usePlayerStore.getState().isPlaying });
       if (document.visibilityState === 'hidden') {
         // Set the background flag FIRST — before the browser pauses audio.
         // This prevents onPause from setting isPlaying=false during transition.
@@ -1601,14 +1603,13 @@ export const AudioPlayer = () => {
       // calls (from rapid effect re-runs) could all pass the guard, leading to
       // 3-5x duplicate play_start events per track and audio fight-for-control.
       // Setting the ref now makes the guard atomic with the lock.
-      if (lastTrackIdRef.current === trackId) return;
+      trace('load_enter', trackId, { hidden: document.hidden, isPlaying: usePlayerStore.getState().isPlaying, prevId: lastTrackIdRef.current });
+      if (lastTrackIdRef.current === trackId) {
+        trace('load_guard', trackId, { why: 'same_track_id', bailed: true });
+        return;
+      }
       lastTrackIdRef.current = trackId;
-      // Reset the ENDED dedup so this new track's natural end will fire
-      // auto-advance. Previously the ref was set-once and never reset, so
-      // replaying the same track to completion silently failed to advance.
       lastEndedTrackIdRef.current = null;
-      // Reset play_success dedup — fresh load means we expect a play_success
-      // for this trackId. Without reset, replaying same track wouldn't log.
       lastPlaySuccessIdRef.current = null;
 
       // COLLECTIVE FAILURE MEMORY — check if this track has failed ≥3 times
@@ -1622,11 +1623,13 @@ export const AudioPlayer = () => {
       // unbounded. Counter resets ONLY when a non-blocked track arrives.
       if (isBlocked(trackId)) {
         if (blocklistCascadeRef.current >= 5) {
+          trace('cascade_brake', trackId, { why: 'cascade_ge_5', source: 'blocklist' });
           devWarn(`[VOYO] Blocklist cascade depth >= 5, stopping skip chain on ${trackId}`);
           usePlayerStore.getState().setIsPlaying(false);
           return;
         }
         blocklistCascadeRef.current++;
+        trace('blocklist_skip', trackId, { cascade: blocklistCascadeRef.current, hidden: document.hidden });
         devWarn(`[VOYO] Track ${trackId} on blocklist — skip (cascade ${blocklistCascadeRef.current}/5)`);
         logPlaybackEvent({
           event_type: 'skip_auto',
@@ -1696,15 +1699,11 @@ export const AudioPlayer = () => {
         if (isStale()) { devLog(`[AudioPlayer] cancelled stale load for ${trackId} after fade timeout`); return; }
         if (audioRef.current === audioToFade) {
           if (document.hidden && silentKeeperUrlRef.current) {
-            // BACKGROUND BRIDGE: Instead of pausing (which kills the media
-            // session), switch to a silent WAV and keep playing. This holds
-            // Android's audio focus alive during the source swap. The real
-            // new source replaces the silent WAV when canplay fires.
+            // BACKGROUND BRIDGE: silent WAV holds audio focus during src swap.
+            trace('silent_wav_engage', trackId, { why: 'bg_load_bridge' });
             try {
               audioRef.current.loop = true;
               audioRef.current.src = silentKeeperUrlRef.current;
-              // Don't set currentTime before load — can throw InvalidStateError.
-              // Default is 0 after src change anyway.
               audioRef.current.play().catch(() => {});
             } catch {
               // Silent WAV failed — fall back to no-pause approach
@@ -1858,14 +1857,16 @@ export const AudioPlayer = () => {
                 } else {
                   fadeInMasterGain(80);
                 }
+                trace('play_call', trackId, { path: 'preload', hidden: document.hidden });
                 audioRef.current.play().then(() => {
                   clearLoadWatchdog();
                   recordPlayEvent();
                   if (shouldAutoResume && !shouldPlay) {
                     usePlayerStore.getState().setIsPlaying(true);
                   }
+                  trace('play_resolved', trackId, { path: 'preload' });
                   devLog('🔮 [VOYO] Preloaded playback started!');
-                }).catch(e => handlePlayFailure(e, 'Preloaded'));
+                }).catch(e => { trace('play_rejected', trackId, { path: 'preload', err: e.name, msg: e.message?.slice(0,80) }); handlePlayFailure(e, 'Preloaded'); });
               }
             };
             audioRef.current.addEventListener('canplay', playHandler, { once: true });
@@ -1937,17 +1938,16 @@ export const AudioPlayer = () => {
               } else {
                 fadeInMasterGain(80);
               }
+              trace('play_call', trackId, { path: 'cached', hidden: document.hidden });
               audioRef.current.play().then(() => {
                 clearLoadWatchdog();
                 recordPlayEvent();
                 if (shouldAutoResume && !shouldPlay) {
-                  // Use setIsPlaying (idempotent) not togglePlay.
-                  // onPlay handler already set isPlaying=true — togglePlay
-                  // would flip it BACK to false, killing the audio.
                   usePlayerStore.getState().setIsPlaying(true);
                 }
+                trace('play_resolved', trackId, { path: 'cached' });
                 devLog('🎵 [VOYO] Playback started (cached)');
-              }).catch(e => handlePlayFailure(e, 'Cached'));
+              }).catch(e => { trace('play_rejected', trackId, { path: 'cached', err: e.name, msg: e.message?.slice(0,80) }); handlePlayFailure(e, 'Cached'); });
             }
           };
           audioRef.current.addEventListener('canplay', cachedPlayHandler, { once: true });
@@ -2178,14 +2178,16 @@ export const AudioPlayer = () => {
                   } else {
                     fadeInMasterGain(80);
                   }
+                  trace('play_call', trackId, { path: `retry_${source}`, attempt: attempt + 1, hidden: document.hidden });
                   audioRef.current.play().then(() => {
                     clearLoadWatchdog();
                     recordPlayEvent();
                     if (shouldAutoResume && !shouldPlay) {
                       usePlayerStore.getState().setIsPlaying(true);
                     }
+                    trace('play_resolved', trackId, { path: `retry_${source}`, attempt: attempt + 1 });
                     devLog(`🎵 [VOYO] Playback started (${source} retry ${attempt + 1})`);
-                  }).catch(e => handlePlayFailure(e, `${source}-retry`));
+                  }).catch(e => { trace('play_rejected', trackId, { path: `retry_${source}`, attempt: attempt + 1, err: e.name }); handlePlayFailure(e, `${source}-retry`); });
                 }
               };
               audioRef.current.addEventListener('canplay', handler, { once: true });
@@ -2780,9 +2782,10 @@ export const AudioPlayer = () => {
       ],
     });
 
-    navigator.mediaSession.setActionHandler('play', () => !usePlayerStore.getState().isPlaying && togglePlay());
-    navigator.mediaSession.setActionHandler('pause', () => usePlayerStore.getState().isPlaying && togglePlay());
+    navigator.mediaSession.setActionHandler('play', () => { trace('mediasession_play', usePlayerStore.getState().currentTrack?.trackId, { hidden: document.hidden, storeIsPlaying: usePlayerStore.getState().isPlaying }); !usePlayerStore.getState().isPlaying && togglePlay(); });
+    navigator.mediaSession.setActionHandler('pause', () => { trace('mediasession_pause', usePlayerStore.getState().currentTrack?.trackId, { hidden: document.hidden, storeIsPlaying: usePlayerStore.getState().isPlaying }); usePlayerStore.getState().isPlaying && togglePlay(); });
     navigator.mediaSession.setActionHandler('nexttrack', () => {
+      trace('mediasession_next', usePlayerStore.getState().currentTrack?.trackId, { hidden: document.hidden });
       nextTrack();
       // Immediately signal OS: playing state + fresh metadata + ZERO position.
       // The position reset is critical — otherwise the OS sees the old track's
@@ -2974,12 +2977,16 @@ export const AudioPlayer = () => {
   const runEndedAdvance = useCallback(() => {
     const state = usePlayerStore.getState();
     const trackId = state.currentTrack?.trackId;
-    if (!trackId || lastEndedTrackIdRef.current === trackId) return;
+    trace('ended_fire', trackId || '-', { hidden: document.hidden, prevEndedRef: lastEndedTrackIdRef.current });
+    if (!trackId || lastEndedTrackIdRef.current === trackId) {
+      trace('ended_dedup', trackId || '-', { why: 'ref_already_set' });
+      return;
+    }
     lastEndedTrackIdRef.current = trackId;
 
     const { playbackSource: ps, isPlaying: playing, currentTrack: track } = state;
-    if (ps !== 'cached' && ps !== 'r2') return;
-    if (!playing) return;
+    if (ps !== 'cached' && ps !== 'r2') { trace('ended_bail', trackId, { why: `src_${ps}` }); return; }
+    if (!playing) { trace('ended_bail', trackId, { why: 'not_playing' }); return; }
 
     // Capture state BEFORE nextTrack advances the store
     const currentTime = audioRef.current?.currentTime || 0;
@@ -3356,17 +3363,11 @@ export const AudioPlayer = () => {
       onStalled={handleStalled}
       onSuspend={() => clearStallTimer()}
       onPause={() => {
-        // Sync the store to the actual audio state. No more force-resume.
-        // GUARD 1: skip during a track-load pause (loadTrack pauses the
-        // element to swap src). Without this, skip didn't auto-play.
-        if (isLoadingTrackRef.current) return;
-        // GUARD 2: skip during a natural-end pause.
-        if (audioRef.current?.ended) return;
-        // GUARD 3: browser-initiated pause during background. Checks both
-        // document.hidden AND the transition ref. On some mobile browsers
-        // the pause event fires BEFORE visibilitychange — document.hidden
-        // is still false but we're transitioning. The ref catches that.
-        if (document.hidden || isTransitioningToBackgroundRef.current) return;
+        const tid = usePlayerStore.getState().currentTrack?.trackId;
+        if (isLoadingTrackRef.current) { trace('pause_guard', tid, { why: 'loading' }); return; }
+        if (audioRef.current?.ended) { trace('pause_guard', tid, { why: 'ended' }); return; }
+        if (document.hidden || isTransitioningToBackgroundRef.current) { trace('pause_guard', tid, { why: 'bg_transition', hidden: document.hidden }); return; }
+        trace('pause_accept', tid, { storeSet: false });
         usePlayerStore.getState().setIsPlaying(false);
       }}
       style={{ display: 'none' }}

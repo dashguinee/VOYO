@@ -28,7 +28,12 @@ export type PlaybackEventType =
   | 'play_fail'        // audio.play() rejected (not autoplay-block)
   | 'source_resolved'  // a source (cache/r2/vps/edge) delivered the track
   | 'stall'            // playback stalled during streaming
-  | 'skip_auto';       // track auto-skipped (watchdog / max-retry / recovery)
+  | 'skip_auto'        // track auto-skipped (watchdog / max-retry / recovery)
+  | 'trace';           // full-session debug trace — only fires when
+                       // localStorage.voyoDebug = '1'. Carries per-event
+                       // `meta.subtype` describing what decision was made,
+                       // `meta.why` for the reason, plus whatever context
+                       // matters (guards, paths, latencies).
 
 export type PlaybackSource =
   | 'preload'
@@ -185,13 +190,36 @@ if (typeof window !== 'undefined') {
 }
 
 /**
- * DEBUG: expose telemetry to window for manual testing.
+ * TRACE helper — fires a full-context trace event at every pipeline decision
+ * point. Always-on for now (user is solo, full visibility desired). Cheap —
+ * just an enqueue into the existing batch buffer.
+ *
+ * Caller pattern:
+ *   trace('load_guard', trackId, { why: 'same-track' });
+ *   trace('play_call', trackId, { path: 'preload', hidden: document.hidden });
+ */
+export function trace(subtype: string, trackId: string | null | undefined, meta: Record<string, unknown> = {}): void {
+  if (typeof window === 'undefined') return;
+  logPlaybackEvent({
+    event_type: 'trace',
+    track_id: trackId || '-',
+    meta: { subtype, ...meta },
+  });
+}
+
+/**
+ * DEBUG: expose telemetry + trace control to window for manual testing.
  * `voyoTelemetry.flush()` — force immediate flush
  * `voyoTelemetry.stats()` — see buffer state
+ * `voyoTelemetry.enableDebug()` — turn trace ON for this device (persists)
+ * `voyoTelemetry.disableDebug()` — turn trace OFF
  */
-if (typeof window !== 'undefined' && import.meta.env.DEV) {
+if (typeof window !== 'undefined') {
   (window as any).voyoTelemetry = {
     flush,
-    stats: () => ({ bufferSize: buffer.length, sessionId, consecutiveFailures }),
+    stats: () => ({ bufferSize: buffer.length, sessionId, consecutiveFailures, debug: typeof localStorage !== 'undefined' && localStorage.getItem('voyoDebug') === '1' }),
+    enableDebug: () => { try { localStorage.setItem('voyoDebug', '1'); console.log('[VOYO] trace ON — session:', sessionId); } catch {} },
+    disableDebug: () => { try { localStorage.removeItem('voyoDebug'); console.log('[VOYO] trace OFF'); } catch {} },
+    sessionId: () => sessionId,
   };
 }
