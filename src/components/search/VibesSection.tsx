@@ -6,6 +6,7 @@
 
 import { useState, useCallback, useEffect, useMemo } from 'react';
 import { Play, Loader2, ChevronLeft, Music2, Zap } from 'lucide-react';
+import { VoyoIcon } from '../ui/VoyoIcon';
 import { usePlayerStore } from '../../store/playerStore';
 import { Track } from '../../types';
 import { getThumb } from '../../utils/thumbnail';
@@ -197,10 +198,11 @@ export const VibesSection = ({ query, isVisible }: VibesSectionProps) => {
 
   return (
     <div className="space-y-4 py-4">
-      {/* Header */}
+      {/* Header — VOYO 3D radio-vibes icon, glowing */}
       <div className="flex items-center gap-2 px-3">
-        <Music2 className="w-4 h-4 text-purple-400" />
-        <h3 className="text-white/80 text-sm font-semibold font-display">Vibes</h3>
+        <VoyoIcon name="radio-vibes" size={22} glow />
+        <h3 className="text-white text-base font-bold font-display tracking-tight"
+            style={{ color: 'rgba(232,208,158,0.97)' }}>Vibes</h3>
         <span className="text-white/30 text-xs">{vibes.length} moods</span>
       </div>
 
@@ -434,8 +436,9 @@ export const VibesSection = ({ query, isVisible }: VibesSectionProps) => {
                         }
                   }
                 >
-                  {/* Vibe Icon — African vibes get the bronze-gold treatment too,
-                      with a faint platform-purple glow ring so it ties back to VOYO. */}
+                  {/* Vibe Icon — African vibes get the bronze-gold backdrop +
+                      VOYO 3D vinyl-disc icon. Other vibes keep the lucide
+                      Music2 in their category color (lighter visual weight). */}
                   <div
                     className="w-12 h-12 rounded-lg flex items-center justify-center flex-shrink-0"
                     style={
@@ -448,10 +451,11 @@ export const VibesSection = ({ query, isVisible }: VibesSectionProps) => {
                         : { background: `${getVibeColor(vibe)}33` }
                     }
                   >
-                    <Music2
-                      className="w-6 h-6"
-                      style={{ color: isAfricanVibe(vibe) ? '#E8D09E' : getVibeColor(vibe) }}
-                    />
+                    {isAfricanVibe(vibe) ? (
+                      <VoyoIcon name="vinyl-disc" size={36} />
+                    ) : (
+                      <Music2 className="w-6 h-6" style={{ color: getVibeColor(vibe) }} />
+                    )}
                   </div>
 
                   {/* Vibe Info — Space Grotesk display, weight bumped from

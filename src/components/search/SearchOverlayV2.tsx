@@ -5,6 +5,7 @@
 
 import { useState, useRef, useEffect, useCallback, memo } from 'react';
 import { Search, X, Loader2, Music2, Clock, Play, ListPlus, Compass, Disc3, Radio, User } from 'lucide-react';
+import { VoyoIcon, VoyoIconName } from '../ui/VoyoIcon';
 import { usePlayerStore } from '../../store/playerStore';
 import { Track } from '../../types';
 import { searchMusic, SearchResult } from '../../services/api';
@@ -510,20 +511,19 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap }: SearchOverlayP
                 </button>
               </div>
 
-              {/* Tabs */}
+              {/* Tabs — VOYO 3D icons (bronze-gold + amethyst) replace the
+                  generic lucide outlines. Active tab gets a soft glow ring. */}
               <div className="flex gap-1 mt-3">
                 {([
-                  { key: 'tracks' as const, icon: Music2, label: 'Tracks' },
-                  { key: 'artists' as const, icon: User, label: 'Artists' },
-                  { key: 'albums' as const, icon: Disc3, label: 'Albums' },
-                  { key: 'vibes' as const, icon: Radio, label: 'Vibes' },
-                ]).map(({ key, icon: Icon, label }) => (
+                  { key: 'tracks' as const, voyo: 'music-note' as VoyoIconName, label: 'Tracks' },
+                  { key: 'artists' as const, voyo: 'orb-artist' as VoyoIconName, label: 'Artists' },
+                  { key: 'albums' as const, voyo: 'vinyl-disc' as VoyoIconName, label: 'Albums' },
+                  { key: 'vibes' as const, voyo: 'radio-vibes' as VoyoIconName, label: 'Vibes' },
+                ]).map(({ key, voyo, label }) => (
                   <button
                     key={key}
-                    className="flex-1 py-2 rounded-xl text-sm font-medium transition-all"
+                    className="flex-1 py-2 rounded-xl text-sm font-medium transition-all flex items-center justify-center gap-1.5"
                     style={{
-                      // Same faded bronze-gold language as the Disco label.
-                      // Replaces Silicon Valley purple for a music-soul palette.
                       background: activeTab === key ? 'rgba(212, 175, 110, 0.10)' : 'transparent',
                       color: activeTab === key ? 'rgba(232, 208, 158, 0.95)' : 'rgba(255,255,255,0.38)',
                       border: activeTab === key ? '1px solid rgba(212, 175, 110, 0.20)' : '1px solid transparent',
@@ -531,7 +531,7 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap }: SearchOverlayP
                     }}
                     onClick={() => setActiveTab(key)}
                   >
-                    <Icon className="w-3.5 h-3.5 inline-block mr-1" />
+                    <VoyoIcon name={voyo} size={18} glow={activeTab === key} style={{ opacity: activeTab === key ? 1 : 0.55 }} />
                     {label}
                   </button>
                 ))}

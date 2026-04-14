@@ -11,6 +11,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { Search, Heart, Music, Clock, MoreVertical, Play, ListPlus, Plus, Shuffle, Sparkles } from 'lucide-react';
+import { VoyoIcon } from '../ui/VoyoIcon';
 import { usePlayerStore } from '../../store/playerStore';
 import { useDownloadStore } from '../../store/downloadStore';
 import { usePreferenceStore } from '../../store/preferenceStore';
@@ -337,16 +338,19 @@ export const Library = ({ onTrackClick }: LibraryProps) => {
 
   return (
     <div className="flex flex-col h-full">
-      {/* Header — "Your Disco" in faded bronze-gold, matching Search overlay
-          language. Tagline beneath it gives the page a music-soul subtitle. */}
-      <header className="px-4 pt-5 pb-2">
-        <h1
-          className="text-3xl font-display font-bold tracking-tight"
-          style={{ color: 'rgba(232, 208, 158, 0.96)', textShadow: '0 0 18px rgba(212,175,110,0.20)', letterSpacing: '-0.01em' }}
-        >
-          Your Disco
-        </h1>
-        <p className="text-white/35 text-[12px] mt-1 tracking-wide">your sound, your selection</p>
+      {/* Header — "Your Disco" with the VOYO compass-disco icon glowing
+          beside it. Bronze-gold display type, music-soul tagline. */}
+      <header className="px-4 pt-5 pb-2 flex items-center gap-3">
+        <VoyoIcon name="compass-disco" size={44} glow />
+        <div className="flex-1 min-w-0">
+          <h1
+            className="text-3xl font-display font-bold tracking-tight leading-none"
+            style={{ color: 'rgba(232, 208, 158, 0.96)', textShadow: '0 0 18px rgba(212,175,110,0.20)', letterSpacing: '-0.01em' }}
+          >
+            Your Disco
+          </h1>
+          <p className="text-white/35 text-[12px] mt-1 tracking-wide">your sound, your selection</p>
+        </div>
       </header>
 
       {/* Search Bar — bronze focus ring (was purple) */}
@@ -418,19 +422,11 @@ export const Library = ({ onTrackClick }: LibraryProps) => {
               boxShadow: 'inset 0 0 18px rgba(212,175,110,0.05)',
             }}
           >
-            <div
-              className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0"
-              style={{
-                background: 'linear-gradient(135deg, #E8D09E 0%, #C9A96C 50%, #8B6F3F 100%)',
-                boxShadow: '0 2px 8px rgba(212,175,110,0.35), inset 0 1px 0 rgba(255,255,255,0.4)',
-              }}
-            >
-              <Shuffle className="w-3.5 h-3.5" style={{ color: '#3a2410' }} strokeWidth={2.5} />
-            </div>
+            <VoyoIcon name="sparkle-smart" size={32} glow />
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-1.5">
-                <span className="text-[12px] font-semibold" style={{ color: 'rgba(232,208,158,0.95)' }}>Smart Mix</span>
-                <Sparkles className="w-3 h-3" style={{ color: 'rgba(212,175,110,0.7)' }} />
+                <span className="text-[12px] font-semibold tracking-wide" style={{ color: 'rgba(232,208,158,0.97)' }}>Smart Mix</span>
+                <Shuffle className="w-3 h-3" style={{ color: 'rgba(212,175,110,0.65)' }} />
               </div>
               <p className="text-[10px] text-white/40 leading-tight">surfaces forgotten favorites — old likes don't get buried</p>
             </div>
@@ -482,9 +478,9 @@ export const Library = ({ onTrackClick }: LibraryProps) => {
             />
           ))
         ) : (
-          <div className="flex flex-col items-center justify-center h-40 text-white/40">
-            <Music className="w-12 h-12 mb-2" />
-            <p>No songs found</p>
+          <div className="flex flex-col items-center justify-center h-48 text-white/40">
+            <VoyoIcon name="vinyl-disc" size={72} glow style={{ opacity: 0.55, marginBottom: 12 }} />
+            <p className="text-sm">No songs here yet</p>
           </div>
         )}
       </div>
