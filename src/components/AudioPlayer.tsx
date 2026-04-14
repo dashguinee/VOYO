@@ -2013,7 +2013,13 @@ export const AudioPlayer = () => {
           devLog('🎵 [VOYO] R2 + VPS miss — retrying VPS/edge (no iframe audio)');
 
           let resolved = false;
-          const MAX_RETRIES = 5; // 5 × 4s = 20s max wait
+          let firstFailLogged = false;
+          // Tightened from 5×4s=20s to 3×2s=6s. Most extractions succeed on
+          // attempt 1 if they're going to succeed at all. A 20s wait when the
+          // track is structurally dead (cookies stale, video gone) just makes
+          // users sit through silence before the auto-skip. 6s is the band of
+          // patience users actually have before manually skipping.
+          const MAX_RETRIES = 3;
 
           const tryAudioSource = async (attempt: number) => {
             if (resolved || isStale()) return;
@@ -2156,7 +2162,26 @@ export const AudioPlayer = () => {
               // Wait for both to settle
               await Promise.allSettled([vpsP, edgeP]);
 
-              // If neither resolved, wait 4s and retry
+              // FAILURE FLYWHEEL — log play_fail on the FIRST failed attempt
+              // (don't wait for max_retries exhaustion). Users skip within 5-10s,
+              // so if we only log on exhaustion the blocklist never accumulates
+              // and dead tracks haunt every user. One play_fail per attempt-1
+              // failure means 3 users hitting the same dead track = blocklisted
+              // for everyone. The flywheel matches the success-side R2 flywheel.
+              if (!resolved && !isStale() && !firstFailLogged) {
+                firstFailLogged = true;
+                const failedTrack = usePlayerStore.getState().currentTrack;
+                logPlaybackEvent({
+                  event_type: 'play_fail',
+                  track_id: trackId,
+                  track_title: failedTrack?.title,
+                  track_artist: failedTrack?.artist,
+                  error_code: 'vps_timeout',
+                  meta: { attempt: attempt + 1, source: 'vps+edge' },
+                });
+              }
+
+              // If neither resolved, wait 2s and retry (was 4s — see MAX_RETRIES comment)
               if (!resolved && !isStale()) {
                 await new Promise<void>(resolve => {
                   // Use MessageChannel for background (not throttled)
@@ -2165,12 +2190,12 @@ export const AudioPlayer = () => {
                     const mc = new MessageChannel();
                     mc.port1.onmessage = () => {
                       ticks++;
-                      if (ticks < 400) mc.port2.postMessage(null); // ~4s
+                      if (ticks < 200) mc.port2.postMessage(null); // ~2s
                       else { mc.port1.close(); resolve(); }
                     };
                     mc.port2.postMessage(null);
                   } else {
-                    setTimeout(resolve, 4000);
+                    setTimeout(resolve, 2000);
                   }
                 });
                 tryAudioSource(attempt + 1);

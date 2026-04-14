@@ -12,8 +12,8 @@
  */
 :root {
   /* === CORE BACKGROUNDS — Single Dark Canvas === */
-  --voyo-bg-void: #050508;         /* The ONE canvas — matches Tivi+ */
-  --voyo-bg-deep: #0a0a0e;         /* Section base if we need depth */
+  --voyo-bg-void: #0B0703;         /* Cozy 1900K firelight-tinted black — was #050508 cool grey, swapped for warm amber-base 2026-04-14 */
+  --voyo-bg-deep: #110b06;         /* Section base — same warm direction, slightly lifted */
   --voyo-bg-card: rgba(255, 255, 255, 0.03);  /* Glass cards — translucent white over the canvas */
   --voyo-bg-elevated: rgba(255, 255, 255, 0.05); /* Elevated cards (hover, focus) */
   --voyo-border: rgba(255, 255, 255, 0.06);

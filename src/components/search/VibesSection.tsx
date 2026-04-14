@@ -409,15 +409,18 @@ export const VibesSection = ({ query, isVisible }: VibesSectionProps) => {
                     <Music2 className="w-6 h-6" style={{ color: getVibeColor(vibe) }} />
                   </div>
 
-                  {/* Vibe Info */}
+                  {/* Vibe Info — Space Grotesk display, weight bumped from
+                      medium to bold, and pulled to bright white so multi-word
+                      names like "African Heat" actually read on the dark card. */}
                   <div className="flex-1 min-w-0">
-                    <h4 className="text-white/90 text-sm font-medium truncate">
+                    <h4 className="text-white text-[15px] font-bold tracking-tight truncate font-display"
+                        style={{ letterSpacing: '-0.005em' }}>
                       {vibe.name}
                     </h4>
-                    <p className="text-white/40 text-[10px] truncate">{vibe.description}</p>
-                    <div className="flex items-center gap-2 mt-0.5 text-[9px] text-white/30">
-                      <span className="capitalize">{vibe.category}</span>
-                      <span>•</span>
+                    <p className="text-white/55 text-[11px] truncate mt-0.5">{vibe.description}</p>
+                    <div className="flex items-center gap-2 mt-1 text-[10px] text-white/40">
+                      <span className="capitalize font-medium">{vibe.category}</span>
+                      <span className="text-white/20">•</span>
                       <span>{getEnergyBars(vibe.energy_level)}</span>
                     </div>
                   </div>

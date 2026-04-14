@@ -17,6 +17,7 @@ import { getYouTubeThumbnail } from './data/tracks';
 import { setupMobileAudioUnlock } from './utils/mobileAudioUnlock';
 import { AnimatedBackground, BackgroundPicker, BackgroundType, ReactionCanvas } from './components/backgrounds/AnimatedBackgrounds';
 import { AudioPlayer } from './components/AudioPlayer';
+import { AtmosphereLayer } from './components/atmosphere/AtmosphereLayer';
 import { YouTubeIframe } from './components/YouTubeIframe';
 import { InstallButton } from './components/ui/InstallButton';
 import { OfflineIndicator } from './components/ui/OfflineIndicator';
@@ -1625,6 +1626,11 @@ function App() {
         )}
       
 
+
+      {/* Atmosphere — global cozy field (top fade + drifting amber motes +
+          subtle vignette). Mounted high in the tree so every screen sits
+          inside the firelight wash, not just specific surfaces. */}
+      <AtmosphereLayer />
 
       {/* Audio Player - Boost (cached audio) handles playback */}
       <AudioPlayer />

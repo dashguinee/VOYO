@@ -33,25 +33,24 @@ export async function refreshBlocklist(force = false): Promise<void> {
   if (!supabase) return;
 
   try {
-    // Query tracks where max_retries fired ≥3 times across all users.
-    // PostgREST doesn't support HAVING directly — we fetch skip_auto events
-    // and aggregate client-side. Only last 7 days (fresh failures matter,
-    // old ones might have been fixed by VPS updates / yt-dlp updates).
+    // Failure-flywheel query: count play_fail (logged per attempt) AND
+    // skip_auto/max_retries (logged on full exhaustion). play_fail accumulates
+    // fast even when users skip manually before the retry loop completes.
+    // 7-day window: fresh failures matter; old ones may be VPS-recovered.
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
     const { data, error } = await supabase
       .from('voyo_playback_events')
-      .select('track_id')
-      .eq('event_type', 'skip_auto')
-      .eq('error_code', 'max_retries')
+      .select('track_id, event_type, error_code')
+      .or('event_type.eq.play_fail,and(event_type.eq.skip_auto,error_code.eq.max_retries)')
       .gte('created_at', sevenDaysAgo)
-      .limit(5000);
+      .limit(10000);
 
     if (error) {
       devWarn('[Blocklist] Load failed:', error.message);
       return;
     }
 
-    // Count occurrences per track_id
+    // Count occurrences per track_id (any failure type counts)
     const counts = new Map<string, number>();
     for (const row of data ?? []) {
       counts.set(row.track_id, (counts.get(row.track_id) ?? 0) + 1);

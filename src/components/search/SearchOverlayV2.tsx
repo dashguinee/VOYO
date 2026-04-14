@@ -159,6 +159,20 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap }: SearchOverlayP
   const addToQueue = usePlayerStore(s => s.addToQueue);
   const updateDiscoveryForTrack = usePlayerStore(s => s.updateDiscoveryForTrack);
 
+  // Scroll-driven UX: section header fades 15-25%, search bar slides to
+  // bottom (thumb-zone) at 45%+. Lets users keep refining without scrolling
+  // back up — common pattern in music apps.
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const [scrollPct, setScrollPct] = useState(0);
+  const handleResultsScroll = useCallback(() => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    const max = Math.max(1, el.scrollHeight - el.clientHeight);
+    setScrollPct(Math.min(1, Math.max(0, el.scrollTop / max)));
+  }, []);
+  const sectionHeaderOpacity = Math.max(0, 1 - Math.max(0, (scrollPct - 0.15)) / 0.10);
+  const searchAtBottom = scrollPct >= 0.45;
+
   // Load search history
   useEffect(() => {
     try {
@@ -250,59 +264,66 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap }: SearchOverlayP
       return unique;
     };
 
-    let dbResults: SearchResult[] = [];
+    // SECTIONED LAYOUT — Dash's call (2026-04-14):
+    //   "i wanna add below normal library search the youtube/player search
+    //    results and have the ui clearly reflect"
+    // Library (DB/pool) sits on top; YouTube fresh results below with a
+    // labeled divider. No more spaghetti — clean mental model: "what we
+    // already have" then "what's out there".
 
-    // PHASE 1: Database search — fast, show results immediately
-    if (isSupabaseConfigured) {
-      try {
-        const essence = getVibeEssence();
-        const { data } = await supabase!.rpc('search_tracks_by_vibe', {
+    // PARALLEL fetch — DB returns in ~200ms, YT in 1-4s
+    const essence = getVibeEssence();
+    const dbPromise = isSupabaseConfigured
+      ? supabase!.rpc('search_tracks_by_vibe', {
           p_query: searchQuery,
           p_afro_heat: essence.afro_heat,
           p_chill: essence.chill,
           p_party: essence.party,
           p_workout: essence.workout,
           p_late_night: essence.late_night,
-          p_limit: 20,
-        });
-
-        if (searchIdRef.current !== thisSearchId) return;
-
-        if (data && data.length > 0) {
-          dbResults = data.map((t: any) => ({
+          p_limit: 25,
+        }).then(
+          ({ data }) => (data || []).map((t: any) => ({
             voyoId: t.youtube_id,
             title: t.title,
             artist: t.artist || 'Unknown Artist',
             thumbnail: t.thumbnail_url || `https://i.ytimg.com/vi/${t.youtube_id}/hqdefault.jpg`,
             views: Math.round((t.vibe_match_score || 0) * 100),
-          }));
-          dbResults = dedup(dbResults);
-          setResults(dbResults);
-          setIsSearching(false); // Stop spinner — user sees results
-          saveToHistory(searchQuery);
-        }
-      } catch (err) {
-        devWarn('[Search] DB error:', err);
-      }
-    }
+            source: 'library' as const,
+          } as SearchResult)),
+          (err: unknown) => { devWarn('[Search] DB error:', err); return []; }
+        )
+      : Promise.resolve([] as SearchResult[]);
 
+    const ytPromise = searchMusic(searchQuery, 25).catch((err: unknown) => {
+      devWarn('[Search] YT error:', err);
+      return [] as SearchResult[];
+    });
+
+    // PHASE 1: render library first as soon as it arrives — fast feedback
+    dbPromise.then((data) => {
+      if (searchIdRef.current !== thisSearchId) return;
+      const tagged = dedup(data).map(r => ({ ...r, source: 'library' as const }));
+      if (tagged.length > 0) {
+        setResults(tagged);
+        setIsSearching(false);
+        saveToHistory(searchQuery);
+      }
+    });
+
+    // PHASE 2: append YouTube section once it arrives. Both sections live in
+    // the same flat array; render code splits by `source` field for sectioning.
+    const [db, yt] = await Promise.all([dbPromise, ytPromise]);
     if (searchIdRef.current !== thisSearchId) return;
 
-    // PHASE 2: YouTube search — appends fresh results (non-blocking)
-    try {
-      const ytResults = await searchMusic(searchQuery, 10);
+    const librarySeen = new Set<string>();
+    const library = dedup(db).map(r => { librarySeen.add(r.voyoId); return { ...r, source: 'library' as const }; });
+    // Drop YouTube duplicates that already appear in library — no point showing the same track twice
+    const youtube = dedup(yt).filter(r => !librarySeen.has(r.voyoId)).map(r => ({ ...r, source: 'youtube' as const }));
 
-      if (searchIdRef.current !== thisSearchId) return;
-
-      if (ytResults.length > 0) {
-        const freshYt = dedup(ytResults);
-        if (freshYt.length > 0) {
-          const merged = [...dbResults, ...freshYt].slice(0, 20);
-          setResults(merged);
-        }
-      }
-    } catch (err) {
-      devWarn('[Search] YT error:', err);
+    if (library.length > 0 || youtube.length > 0) {
+      setResults([...library, ...youtube]);
+      saveToHistory(searchQuery);
     }
 
     if (searchIdRef.current !== thisSearchId) return;
@@ -415,8 +436,29 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap }: SearchOverlayP
             className="fixed inset-x-0 top-0 bottom-0 z-50 flex flex-col px-4 pb-0"
             style={{ paddingTop: 'max(16px, env(safe-area-inset-top, 16px))' }}
           >
-            {/* Search Header */}
-            <div className="mb-3">
+            {/* Search Header — slides to bottom (thumb zone) past 45% scroll.
+                Position is absolute so the slide doesn't reflow the results.
+                We compensate the results container with conditional padding. */}
+            <div
+              className="mb-3"
+              style={{
+                position: 'absolute',
+                left: 16, right: 16,
+                top: searchAtBottom ? 'auto' : 'max(16px, env(safe-area-inset-top, 16px))',
+                bottom: searchAtBottom ? 'max(16px, env(safe-area-inset-bottom, 16px))' : 'auto',
+                zIndex: 51,
+                transition: 'top 320ms cubic-bezier(0.4, 0, 0.2, 1), bottom 320ms cubic-bezier(0.4, 0, 0.2, 1), transform 320ms cubic-bezier(0.4, 0, 0.2, 1)',
+                background: searchAtBottom
+                  ? 'linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,0.55) 30%, rgba(0,0,0,0.85) 100%)'
+                  : 'transparent',
+                paddingTop: searchAtBottom ? 24 : 0,
+                paddingBottom: searchAtBottom ? 4 : 0,
+                marginLeft: searchAtBottom ? -16 : 0,
+                marginRight: searchAtBottom ? -16 : 0,
+                paddingLeft: searchAtBottom ? 16 : 0,
+                paddingRight: searchAtBottom ? 16 : 0,
+              }}
+            >
               <div className="flex items-center gap-3">
                 {/* Search Input */}
                 <div
@@ -480,8 +522,12 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap }: SearchOverlayP
                     key={key}
                     className="flex-1 py-2 rounded-xl text-sm font-medium transition-all"
                     style={{
-                      background: activeTab === key ? 'rgba(139,92,246,0.2)' : 'transparent',
-                      color: activeTab === key ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.4)',
+                      // Same faded bronze-gold language as the Disco label.
+                      // Replaces Silicon Valley purple for a music-soul palette.
+                      background: activeTab === key ? 'rgba(212, 175, 110, 0.10)' : 'transparent',
+                      color: activeTab === key ? 'rgba(232, 208, 158, 0.95)' : 'rgba(255,255,255,0.38)',
+                      border: activeTab === key ? '1px solid rgba(212, 175, 110, 0.20)' : '1px solid transparent',
+                      boxShadow: activeTab === key ? '0 0 16px -8px rgba(212,175,110,0.35)' : 'none',
                     }}
                     onClick={() => setActiveTab(key)}
                   >
@@ -492,8 +538,21 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap }: SearchOverlayP
               </div>
             </div>
 
-            {/* Results - Full width scrollable area */}
-            <div className="flex-1 overflow-y-auto space-y-0.5 overscroll-contain" style={{ paddingBottom: 'max(16px, env(safe-area-inset-bottom, 16px))' }}>
+            {/* Results - Full width scrollable area.
+                Top padding reserves space for the absolutely-positioned search
+                header (when at top). Bottom padding swells when the header has
+                slid down so results don't hide behind it. */}
+            <div
+              ref={scrollContainerRef}
+              onScroll={handleResultsScroll}
+              className="flex-1 overflow-y-auto space-y-0.5 overscroll-contain"
+              style={{
+                paddingTop: searchAtBottom ? 8 : 132,
+                paddingBottom: searchAtBottom
+                  ? 'calc(140px + max(16px, env(safe-area-inset-bottom, 16px)))'
+                  : 'max(16px, env(safe-area-inset-bottom, 16px))',
+                transition: 'padding-top 320ms ease, padding-bottom 320ms ease',
+              }}>
               {/* Artist Section */}
               {activeTab === 'artists' && (
                 <div className="space-y-1 px-1">
@@ -623,31 +682,69 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap }: SearchOverlayP
                     </div>
                   )}
 
-                  {/* No results */}
+                  {/* No results — minimal, faded, no icon chrome */}
                   {!isSearching && query.length >= 2 && results.length === 0 && !error && (
-                    <div className="text-center py-12">
-                      <div className="w-14 h-14 mx-auto mb-4 rounded-full bg-white/5 flex items-center justify-center">
-                        <Music2 className="w-7 h-7 text-white/20" />
-                      </div>
-                      <p className="text-white/50 text-sm font-medium">No results for &ldquo;{query}&rdquo;</p>
-                      <p className="text-white/25 text-xs mt-1.5">Try different keywords or check the spelling</p>
+                    <div className="text-center py-8">
+                      <p className="text-white/30 text-[11px] font-medium tracking-wide">No results for &ldquo;{query}&rdquo;</p>
+                      <p className="text-white/15 text-[10px] mt-1">try different keywords</p>
                     </div>
                   )}
 
-                  {/* Results */}
-                  {results.map((result, index) => (
-                    <TrackItem
-                      key={result.voyoId}
-                      result={result}
-                      index={index}
-                      isActive={index === activeIndex}
-                      onSelect={handleSelectTrack}
-                      onAddToQueue={handleAddToQueue}
-                      onAddToDiscovery={handleAddToDiscovery}
-                      formatDuration={formatDuration}
-                      formatViews={formatViews}
-                    />
-                  ))}
+                  {/* Sectioned results — Library on top, YouTube below */}
+                  {(() => {
+                    const library = results.filter(r => r.source === 'library');
+                    const youtube = results.filter(r => r.source === 'youtube');
+                    let runningIndex = -1;
+                    const renderItem = (result: SearchResult) => {
+                      runningIndex += 1;
+                      const idx = runningIndex;
+                      return (
+                        <TrackItem
+                          key={result.voyoId}
+                          result={result}
+                          index={idx}
+                          isActive={idx === activeIndex}
+                          onSelect={handleSelectTrack}
+                          onAddToQueue={handleAddToQueue}
+                          onAddToDiscovery={handleAddToDiscovery}
+                          formatDuration={formatDuration}
+                          formatViews={formatViews}
+                        />
+                      );
+                    };
+                    return (
+                      <>
+                        {library.length > 0 && (
+                          <>
+                            {/* "Disco" — Dash's call (2026-04-14): "your disco" — your dance floor,
+                                your collection. Diaspora music-soul language. Faded bronze-gold,
+                                like an old jazz pressing label. Fades on scroll past 15% so the
+                                user sees results, not chrome. */}
+                            <div className="flex items-center gap-2 px-1 pt-1 pb-2 text-[10.5px] font-semibold tracking-[0.18em] uppercase"
+                                 style={{ color: 'rgba(212, 175, 110, 0.85)', opacity: sectionHeaderOpacity, transition: 'opacity 200ms ease' }}>
+                              <span style={{ textShadow: '0 0 12px rgba(212,175,110,0.18)' }}>Your Disco</span>
+                              <span className="flex-1 h-px"
+                                    style={{ background: 'linear-gradient(to right, rgba(212,175,110,0.35), rgba(212,175,110,0.04))' }} />
+                            </div>
+                            <div style={{ borderRadius: 14, padding: '2px 0',
+                                          background: 'linear-gradient(180deg, rgba(212,175,110,0.045) 0%, rgba(212,175,110,0.0) 70%)' }}>
+                              {library.map(renderItem)}
+                            </div>
+                          </>
+                        )}
+                        {youtube.length > 0 && (
+                          <>
+                            <div className={`flex items-center gap-2 px-1 ${library.length > 0 ? 'pt-6' : 'pt-1'} pb-2 text-[10.5px] font-semibold tracking-[0.18em] uppercase text-white/45`}
+                                 style={{ opacity: sectionHeaderOpacity, transition: 'opacity 200ms ease' }}>
+                              <span>From YouTube</span>
+                              <span className="flex-1 h-px bg-white/10" />
+                            </div>
+                            {youtube.map(renderItem)}
+                          </>
+                        )}
+                      </>
+                    );
+                  })()}
 
                   {/* Loading skeleton */}
                   {isSearching && results.length === 0 && (

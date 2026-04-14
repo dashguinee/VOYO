@@ -72,38 +72,40 @@ function slideVariants(dir: SlideDir, isSurrender: boolean = false) {
 // ============================================
 
 const S = {
-  container: css({ position: 'relative', width: '100%', height: '100%', backgroundColor: '#000', overflow: 'hidden', touchAction: 'none', userSelect: 'none', WebkitUserSelect: 'none' }),
-  // Unified gradient surface from the very top through the compass arc.
-  // Fades smoothly over 30% of the screen so logo + tabs + compass sit on
-  // a single dark wash that blends into the video. Header opacity is
-  // controlled by hasInteracted state so it glides out of the way after
-  // the user engages with the first moment.
+  // Cozy-K base — instead of pure #000, a deep amber-tinted dark.
+  // Color science: human comfort peaks at ~1800-2200K (firelight, sunset).
+  // Pure black + neutral grey reads "screen". Amber-black reads "lit room
+  // at dusk" — lower cortisol, evolution-conditioned safety signal.
+  container: css({ position: 'relative', width: '100%', height: '100%', backgroundColor: '#0B0703', overflow: 'hidden', touchAction: 'none', userSelect: 'none', WebkitUserSelect: 'none' }),
+  // Top: removed the hard 78% black bar. Pure soft fade only — same warm
+  // amber tint as the container, much lower opacity so the video breathes
+  // through without a chrome strip pasted on top.
   topBar: css({
     position: 'absolute', top: 0, left: 0, right: 0, zIndex: 30,
     paddingTop: 'env(safe-area-inset-top, 12px)',
-    background: 'linear-gradient(to bottom, rgba(0,0,0,0.78) 0%, rgba(0,0,0,0.55) 35%, rgba(0,0,0,0.22) 70%, transparent 100%)',
+    background: 'linear-gradient(to bottom, rgba(20,12,6,0.42) 0%, rgba(20,12,6,0.18) 45%, rgba(20,12,6,0.04) 80%, transparent 100%)',
     pointerEvents: 'auto',
     transition: 'opacity 0.6s cubic-bezier(0.16, 1, 0.3, 1), transform 0.6s cubic-bezier(0.16, 1, 0.3, 1)',
   }),
-  // Side shadow shapes — subtle vertical gradients on left and right edges
-  // that frame the video. Soft inset-shadow effect without an actual shadow
-  // (which would re-composite on every video frame). 24px wide, fades from
-  // ~30% black at the very edge to transparent.
+  // Side shadows — much subtler. Was 50% black at the edge (heavy frame),
+  // now 18% amber-tinted (whisper of depth, not a frame).
   sideShadowL: css({
-    position: 'absolute', top: 0, bottom: 0, left: 0, width: 28, zIndex: 25,
-    background: 'linear-gradient(to right, rgba(0,0,0,0.5) 0%, rgba(0,0,0,0.18) 50%, transparent 100%)',
+    position: 'absolute', top: 0, bottom: 0, left: 0, width: 24, zIndex: 25,
+    background: 'linear-gradient(to right, rgba(20,12,6,0.18) 0%, rgba(20,12,6,0.05) 50%, transparent 100%)',
     pointerEvents: 'none',
   }),
   sideShadowR: css({
-    position: 'absolute', top: 0, bottom: 0, right: 0, width: 28, zIndex: 25,
-    background: 'linear-gradient(to left, rgba(0,0,0,0.5) 0%, rgba(0,0,0,0.18) 50%, transparent 100%)',
+    position: 'absolute', top: 0, bottom: 0, right: 0, width: 24, zIndex: 25,
+    background: 'linear-gradient(to left, rgba(20,12,6,0.18) 0%, rgba(20,12,6,0.05) 50%, transparent 100%)',
     pointerEvents: 'none',
   }),
   axisTabs: css({ display: 'flex', justifyContent: 'center', gap: 4, padding: '8px 16px 2px' }),
   compassArc: css({ position: 'relative', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', padding: '4px 0 10px', overflow: 'hidden', minHeight: 44 }),
   card: css({ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }),
   thumb: css({ position: 'absolute', inset: 0, objectFit: 'cover', width: '100%', height: '100%', display: 'block', margin: 0, padding: 0, borderRadius: 0 }),
-  grad: css({ position: 'absolute', bottom: 0, left: 0, right: 0, height: '50%', background: 'linear-gradient(to top, rgba(0,0,0,0.78) 0%, rgba(0,0,0,0.35) 40%, transparent 100%)', zIndex: 2, pointerEvents: 'none' }),
+  // Bottom fade — softened, warm-tinted. Was 78% black/35% black; now 55%/15%
+  // with the cozy amber base. Card text still readable, video breathes.
+  grad: css({ position: 'absolute', bottom: 0, left: 0, right: 0, height: '55%', background: 'linear-gradient(to top, rgba(20,12,6,0.62) 0%, rgba(20,12,6,0.22) 45%, transparent 100%)', zIndex: 2, pointerEvents: 'none' }),
   // CREATOR BLOCK — single container positioned on the LEFT side, vertically
   // aligned with the middle of the right-side action bar. Stacks the orb +
   // name on top, with a compact glass bio card below. Bio is collapsed by

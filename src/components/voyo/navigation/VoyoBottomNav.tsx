@@ -46,6 +46,30 @@ export const VoyoBottomNav = ({ onDahub, onHome, oyoSurface = 'home', playerMode
   const [promptCount, setPromptCount] = useState(0);
   const [unreadDMs, setUnreadDMs] = useState(0);
 
+  // HAND-MOTION TRACKING — Dash's call (2026-04-14):
+  //   "as they hold to scroll, hesitate, the nav bar fades, the voyo central
+  //    button fades less"
+  // While the user has any pointer down anywhere on screen (scrolling /
+  // hesitating / dragging), dim the side nav buttons aggressively but keep
+  // the VOYO central orb mostly visible — it's the player anchor, must
+  // stay accessible mid-gesture.
+  const [isHolding, setIsHolding] = useState(false);
+  useEffect(() => {
+    const onDown = () => setIsHolding(true);
+    const onUp = () => setIsHolding(false);
+    document.addEventListener('pointerdown', onDown, { passive: true });
+    document.addEventListener('pointerup', onUp, { passive: true });
+    document.addEventListener('pointercancel', onUp, { passive: true });
+    return () => {
+      document.removeEventListener('pointerdown', onDown);
+      document.removeEventListener('pointerup', onUp);
+      document.removeEventListener('pointercancel', onUp);
+    };
+  }, []);
+  const sideNavHoldOpacity = isHolding ? 0.28 : 1;
+  const centerOrbHoldOpacity = isHolding ? 0.78 : 1;
+  const holdTransition = 'opacity 280ms cubic-bezier(0.16, 1, 0.3, 1)';
+
   // -- Visibility model.
   //    STANDARD mode (home/feed/dahub): always visible, classic pill look.
   //    PLAYER mode: hidden by default, only revealed when the user has
@@ -243,6 +267,7 @@ export const VoyoBottomNav = ({ onDahub, onHome, oyoSurface = 'home', playerMode
           onPointerUp={handlePointerUp}
           onPointerLeave={handlePointerUp}
           onClick={handleHome}
+          style={{ opacity: sideNavHoldOpacity, transition: holdTransition }}
         >
           <div
             style={{
@@ -284,7 +309,7 @@ export const VoyoBottomNav = ({ onDahub, onHome, oyoSurface = 'home', playerMode
           }}
           onClickCapture={oyoBindings.onClickCapture}
           onClick={handleVoyoToggle}
-          style={{ flex: '0 0 auto' }}
+          style={{ flex: '0 0 auto', opacity: centerOrbHoldOpacity, transition: holdTransition }}
           aria-label="VOYO — tap to play, long-press to summon OYO"
         >
           <div
@@ -385,6 +410,7 @@ export const VoyoBottomNav = ({ onDahub, onHome, oyoSurface = 'home', playerMode
           onPointerUp={handlePointerUp}
           onPointerLeave={handlePointerUp}
           onClick={handleDahub}
+          style={{ opacity: sideNavHoldOpacity, transition: holdTransition }}
         >
           <div
             style={{

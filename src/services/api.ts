@@ -22,6 +22,8 @@ export interface SearchResult {
   duration: number;
   thumbnail: string;
   views: number;
+  /** 'library' = our DB/pool, 'youtube' = fresh from YouTube. UI uses this to section results. */
+  source?: 'library' | 'youtube';
 }
 
 export interface StreamResponse {
@@ -50,13 +52,14 @@ export async function searchMusic(query: string, limit: number = 10): Promise<Se
   const data = await response.json();
 
   // Transform to VOYO format (backend returns VOYO IDs)
-  return (data.results || []).map((item: any) => ({
+  return ((data.items || data.results) || []).map((item: any) => ({
     voyoId: item.id || item.voyoId,
     title: item.title,
     artist: item.artist || 'Unknown Artist',
     duration: item.duration || 0,
     thumbnail: `${API_URL}/cdn/art/${item.id || item.voyoId}`,
     views: item.views || 0,
+    source: 'youtube' as const,
   }));
 }
 
