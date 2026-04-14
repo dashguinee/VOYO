@@ -275,17 +275,23 @@ export const AudioPlayer = () => {
       devLog('[VOYO] Autoplay blocked — waiting for first user gesture to resume');
       return;
     }
-    // Real failure. In foreground, skip immediately for flow.
-    // In background, DON'T skip — the failure might be transient
-    // (AbortError from src swap, network blip). Let the retry loop
-    // or watchdog handle it with proper timeout.
-    if (!document.hidden) {
-      isLoadingTrackRef.current = false;
-      nextTrack();
-    } else {
-      devWarn(`[VOYO] Play failed in background (${e.name}) — NOT skipping, letting retry handle it`);
-      isLoadingTrackRef.current = false;
+    // Real failure handling — distinguish AbortError (benign, src-swap mid-flight)
+    // from actual failures.
+    isLoadingTrackRef.current = false;
+    if (e.name === 'AbortError') {
+      // AbortError = the audio element was interrupted (rapid skip, src swap,
+      // hot-swap mid-flight). Benign — the new load already started and will
+      // call its own play(). Do nothing here.
+      devLog(`[VOYO] play() aborted (${label}) — new load in flight, ignoring`);
+      return;
     }
+    // Real failure. SKIP regardless of BG/FG — user prefers the next track
+    // over indefinite silence. The earlier comment "let the retry loop handle it"
+    // was wrong: retry loop only runs in the R2/VPS miss path, NOT in play()
+    // rejection handling. Without skip, BG plays got stuck silently — which
+    // looked exactly like 'background skip not working' from the user's side.
+    devWarn(`[VOYO] play() failed (${label}, hidden=${document.hidden}, ${e.name}) — advancing`);
+    nextTrack();
   };
 
   // Store state — fine-grained selectors so AudioPlayer only re-renders when
