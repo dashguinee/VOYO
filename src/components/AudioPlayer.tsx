@@ -45,6 +45,7 @@ import { registerTrackPlay as viRegisterPlay } from '../services/videoIntelligen
 import { useMiniPiP } from '../hooks/useMiniPiP';
 import { notifyNextUp } from '../services/oyoNotifications';
 import { logPlaybackEvent } from '../services/telemetry';
+import { isBlocked, markBlocked } from '../services/trackBlocklist';
 import {
   preloadNextTrack,
   getPreloadedTrack,
@@ -1583,6 +1584,23 @@ export const AudioPlayer = () => {
       // Skip if same track
       if (lastTrackIdRef.current === trackId) return;
 
+      // COLLECTIVE FAILURE MEMORY — check if this track has failed ≥3 times
+      // across any user in the last 7 days. If so, skip immediately instead
+      // of wasting 20s on a retry loop that will fail again.
+      if (isBlocked(trackId)) {
+        devWarn(`[VOYO] Track ${trackId} is on collective blocklist — skipping without trying`);
+        logPlaybackEvent({
+          event_type: 'skip_auto',
+          track_id: trackId,
+          track_title: currentTrack.title,
+          track_artist: currentTrack.artist,
+          error_code: 'max_retries',
+          meta: { source: 'blocklist' },
+        });
+        nextTrack();
+        return;
+      }
+
       // FAST-PATH CHECK: if the next track is preloaded, we can do a much
       // tighter transition. Peek at preload BEFORE the mute+wait cycle.
       const preloadPeek = getPreloadedTrack(trackId);
@@ -1991,6 +2009,10 @@ export const AudioPlayer = () => {
             if (resolved || isStale()) return;
             if (attempt >= MAX_RETRIES) {
               devWarn(`[VOYO] All ${MAX_RETRIES} retries failed for ${trackId} — skipping`);
+              // Mark locally so we don't retry this track in the current session.
+              // The telemetry flush will propagate it to other users via Supabase
+              // on the next blocklist refresh (every 30 min or app restart).
+              markBlocked(trackId);
               const failedTrack = usePlayerStore.getState().currentTrack;
               logPlaybackEvent({
                 event_type: 'skip_auto',
