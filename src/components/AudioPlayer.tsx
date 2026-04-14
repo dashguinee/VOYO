@@ -3126,17 +3126,25 @@ export const AudioPlayer = () => {
   const handleStalled = useCallback(() => {
     if (playbackSource !== 'cached' && playbackSource !== 'r2') return;
     if (stallTimerRef.current) return; // already armed
-    devWarn('⚠️ [VOYO] Audio stalled — armed 4s recovery timer');
+    devWarn('⚠️ [VOYO] Audio stalled — armed 10s recovery timer');
     stallTimerRef.current = setTimeout(() => {
       stallTimerRef.current = null;
       const audio = audioRef.current;
       if (!audio || audio.paused) return;
-      // Still stalled after 4s — synthesize an error event and run recovery.
-      // We can't actually fire onError, so call handleAudioError directly
-      // with a fake event-like object whose currentTarget points at the audio.
-      devWarn('🚨 [VOYO] Stalled >4s — forcing recovery');
+      // Check if audio has resumed playing naturally — buffer caught up.
+      // The stalled event fires on every brief network blip; only real
+      // stalls warrant a full reload (which is a bigger gap than the stall).
+      if (!audio.seeking && audio.readyState >= 2 && audio.buffered.length > 0) {
+        const bufferedEnd = audio.buffered.end(audio.buffered.length - 1);
+        if (bufferedEnd > audio.currentTime + 1) {
+          // Has 1s+ ahead — recovered on its own, skip the reload
+          devLog('🎵 [VOYO] Stall self-recovered — no reload needed');
+          return;
+        }
+      }
+      devWarn('🚨 [VOYO] Stalled >10s with no buffer — forcing recovery');
       handleAudioError({ currentTarget: audio } as React.SyntheticEvent<HTMLAudioElement, Event>);
-    }, 4000);
+    }, 10000);
   }, [playbackSource, handleAudioError]);
   const clearStallTimer = useCallback(() => {
     if (stallTimerRef.current) {
