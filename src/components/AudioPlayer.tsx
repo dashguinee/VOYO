@@ -1792,6 +1792,13 @@ export const AudioPlayer = () => {
 
           if (audioRef.current && preloaded.url) {
             audioRef.current.volume = 1.0; // Pinned — all loudness via masterGain
+            // CRITICAL: clear the loop flag the silent-WAV bridge set during
+            // background track switch. HTMLMediaElement.loop is sticky across
+            // src changes per spec — leaving it true causes the new track to
+            // loop forever and `ended` never fires → background auto-advance
+            // dies silently. This is the v171 fix to the BG auto-advance bug
+            // that surfaced after the silent-WAV bridge was added.
+            audioRef.current.loop = false;
             audioRef.current.src = preloaded.url;
             // Skip audio.load() for preloaded blob URLs — the data is in
             // memory and setting .src alone triggers the load algorithm.
@@ -1860,6 +1867,9 @@ export const AudioPlayer = () => {
 
         if (audioRef.current) {
           audioRef.current.volume = 1.0; // Pinned — all loudness via masterGain
+          // CRITICAL: clear loop flag from silent-WAV bridge (sticky across src).
+          // See preload path above for full explanation.
+          audioRef.current.loop = false;
           audioRef.current.src = cachedUrl;
           // Cached URLs are blob: from IndexedDB — data is in memory.
           // Skip load() for blobs (setting src triggers the load algorithm).
@@ -3304,18 +3314,19 @@ export const AudioPlayer = () => {
       // again, repeat). That's gone. The audio element gets to be the
       // truth; the store is the reflection.
       onPlay={() => {
+        // GUARD ORDER FIX (A5): the silent-WAV detection MUST run before
+        // setIsPlaying(true) — otherwise the bridge's auto-play flips the
+        // store back to playing immediately after a user paused, leaving
+        // store and audio element fighting. Bridge plays should be invisible
+        // to the store (the previous src/isPlaying state remains the truth).
+        const src = audioRef.current?.src;
+        if (src && silentKeeperUrlRef.current && src === silentKeeperUrlRef.current) return;
+
         if (playbackSource === 'cached' || playbackSource === 'r2') {
           setBufferHealth(100, 'healthy');
         }
         usePlayerStore.getState().setIsPlaying(true);
-        // Silent WAV keeper fires onPlay during track switches to hold
-        // media session alive. That's not a real track play — don't log
-        // play_success or flip isPlaying from its bridge state.
-        const src = audioRef.current?.src;
-        if (src && silentKeeperUrlRef.current && src === silentKeeperUrlRef.current) return;
-        // Only log play_success when a real source is bound. playbackSource
-        // is null until the preload/retry path resolves — during that window
-        // the onPlay fire is from the silent bridge, not the real track.
+        // Only log play_success when a real source is bound.
         if (playbackSource !== 'cached' && playbackSource !== 'r2') return;
         const track = usePlayerStore.getState().currentTrack;
         if (track?.trackId) {
