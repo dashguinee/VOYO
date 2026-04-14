@@ -1676,6 +1676,13 @@ export const AudioPlayer = () => {
       // read the PREVIOUS track's position and seek to it on the new track.
       usePlayerStore.getState().setCurrentTime(0);
       usePlayerStore.getState().setProgress(0);
+      // Log play_start with track metadata for every loadTrack
+      logPlaybackEvent({
+        event_type: 'play_start',
+        track_id: trackId,
+        track_title: currentTrack?.title,
+        track_artist: currentTrack?.artist,
+      });
       hasTriggered50PercentCacheRef.current = false; // Reset 50% trigger for new track
       hasTriggered85PercentCacheRef.current = false; // Reset 85% trigger for new track
       lastProgressWriteBucketRef.current = -1; // Reset throttle bucket → first frame of new track writes
@@ -3076,6 +3083,10 @@ export const AudioPlayer = () => {
     if (playbackSource !== 'cached' && playbackSource !== 'r2') return;
     if (stallTimerRef.current) return; // already armed
     devWarn('⚠️ [VOYO] Audio stalled — armed 10s recovery timer');
+    const t = usePlayerStore.getState().currentTrack;
+    if (t?.trackId) {
+      logPlaybackEvent({ event_type: 'stall', track_id: t.trackId, source: (playbackSource as any), meta: { position: audioRef.current?.currentTime } });
+    }
     stallTimerRef.current = setTimeout(() => {
       stallTimerRef.current = null;
       const audio = audioRef.current;
@@ -3137,6 +3148,16 @@ export const AudioPlayer = () => {
           setBufferHealth(100, 'healthy');
         }
         usePlayerStore.getState().setIsPlaying(true);
+        const track = usePlayerStore.getState().currentTrack;
+        if (track?.trackId) {
+          logPlaybackEvent({
+            event_type: 'play_success',
+            track_id: track.trackId,
+            track_title: track.title,
+            track_artist: track.artist,
+            source: (playbackSource as any) || 'r2',
+          });
+        }
       }}
       onPlaying={() => {
         clearStallTimer();
