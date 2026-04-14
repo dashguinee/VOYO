@@ -4636,15 +4636,10 @@ export const VoyoPortraitPlayer = ({
     }
   }, [isScrubbing, setPlaybackRate, handlePlayPause]);
 
-  // Safe next track - blocks skip ONLY if SKEEP truly just ended (≤250ms).
-  // The 250ms upper bound is the safety belt: if rAF/setTimeout BOTH failed
-  // to clear the flag (severe background throttling), the timestamp check
-  // still releases the skip after a quarter second. Bug history: the flag
-  // was getting stuck `true` after background SKEEP → all future manual
-  // skips silently no-op'd while background auto-advance still worked.
+  // Safe next track - blocks only if SKEEP truly just ended (≤250ms window).
   const handleNextTrack = useCallback(() => {
     if (wasSkeeping.current && Date.now() - wasSkeepingClearedAt.current < 250) return;
-    wasSkeeping.current = false; // self-heal — defensive clear
+    wasSkeeping.current = false;
     nextTrack();
   }, [nextTrack]);
 

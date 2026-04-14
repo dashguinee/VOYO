@@ -3282,10 +3282,14 @@ export const AudioPlayer = () => {
       playsInline
       onTimeUpdate={handleTimeUpdate}
       onDurationChange={handleDurationChange}
-      // onEnded REMOVED — onEndedDirect (native listener at line ~2945) is the
-      // sole handler. React's synthetic onEnded fires AFTER native bubbling on
-      // attached listeners, so dedup blocked it from running and the telemetry
-      // side effects never fired. All logic merged into onEndedDirect.
+      // RESTORED as background safety belt. The `lastEndedTrackIdRef` dedup
+      // (inside both handleEnded and onEndedDirect) guarantees only ONE of
+      // the two fires per ended event — whichever wins the race sets the ref,
+      // the other early-returns. Native listeners can be flaky in heavily-
+      // throttled background tabs; React's synthetic event scheduling acts
+      // as a fallback when native misses. handleEnded's telemetry side
+      // effects re-fire safely (idempotent operations on the same trackId).
+      onEnded={handleEnded}
       onProgress={handleProgress}
       onError={handleAudioError}
       // ── SOURCE OF TRUTH SYNC ────────────────────────────────────────
