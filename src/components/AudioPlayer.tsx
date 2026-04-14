@@ -190,7 +190,6 @@ export const AudioPlayer = () => {
   const hasTriggered75PercentKeptRef = useRef<boolean>(false); // 75% permanent cache trigger
   const hasTriggered30sListenRef = useRef<boolean>(false); // 30s artist discovery listen tracking
   const hasTriggeredContextNotifRef = useRef<boolean>(false); // OYO track context notification (10s)
-  const hasTriggeredIframeRetryRef = useRef<boolean>(false); // 15% iframe→audio retry for background playback
   // BACKGROUND GUARD: On some mobile browsers, the `pause` event fires BEFORE
   // `visibilitychange`. If onPause sets isPlaying=false during this window,
   // the return-from-background re-kick sees isPlaying=false and doesn't play.
@@ -415,74 +414,6 @@ export const AudioPlayer = () => {
         markTrackAsKept(normalizedId);
         devLog('🎵 [VOYO] 75% reached - track marked as KEPT (permanent)');
       });
-    }
-
-    // 15% IFRAME RETRY — If still on iframe (VPS + edge both failed on
-    // initial load), retry the hot-swap. By now VPS has likely processed
-    // the track. Critical for background playback: iframe freezes when
-    // phone locks, but audio element keeps playing.
-    if (
-      !hasTriggeredIframeRetryRef.current &&
-      playbackSource === 'iframe' &&
-      progress >= 15
-    ) {
-      hasTriggeredIframeRetryRef.current = true;
-      const retryTrackId = track.trackId;
-      devLog('🔄 [VOYO] 15% iframe retry — attempting VPS/edge hot-swap for background play');
-
-      // Race VPS + edge again (same pattern as loadTrack)
-      const trySwap = async (url: string, isBlob: boolean) => {
-        if (usePlayerStore.getState().playbackSource !== 'iframe') return;
-        if (usePlayerStore.getState().currentTrack?.trackId !== retryTrackId) return;
-        if (!audioRef.current) return;
-
-        const { boostProfile: profile } = usePlayerStore.getState();
-        setupAudioEnhancement(profile);
-
-        isLoadingTrackRef.current = true;
-        if (cachedUrlRef.current) URL.revokeObjectURL(cachedUrlRef.current);
-        cachedUrlRef.current = isBlob ? url : null;
-        audioRef.current.loop = false;
-        audioRef.current.volume = 1.0;
-        audioRef.current.src = url;
-        if (!isBlob) audioRef.current.load();
-
-        audioRef.current.oncanplay = () => {
-          if (!audioRef.current) return;
-          audioRef.current.oncanplay = null;
-          if (usePlayerStore.getState().currentTrack?.trackId !== retryTrackId) return;
-
-          const pos = usePlayerStore.getState().currentTime;
-          if (pos > 1) audioRef.current.currentTime = pos;
-
-          const { isPlaying: shouldPlay } = usePlayerStore.getState();
-          if (!shouldPlay) return;
-
-          isEdgeStreamRef.current = !isBlob;
-          setPlaybackSource('cached');
-          audioContextRef.current?.state === 'suspended' && audioContextRef.current.resume().catch(() => {});
-          fadeInMasterGain(80);
-          audioRef.current.play().then(() => {
-            devLog('🔄 [VOYO] Iframe retry hot-swap complete — background play enabled');
-          }).catch(() => {});
-        };
-      };
-
-      // VPS (slower but cached to R2)
-      fetch(`${VPS_AUDIO_URL}/voyo/audio/${retryTrackId}?quality=high`, { signal: AbortSignal.timeout(20000) })
-        .then(async (res) => {
-          if (!res.ok || usePlayerStore.getState().playbackSource !== 'iframe') return;
-          const blob = await res.blob();
-          if (blob.size > 1000) trySwap(URL.createObjectURL(blob), true);
-        }).catch(() => {});
-
-      // Edge (faster, raw URL)
-      fetch(`${EDGE_WORKER_URL}/stream?v=${retryTrackId}`, { signal: AbortSignal.timeout(5000) })
-        .then(async (res) => {
-          if (usePlayerStore.getState().playbackSource !== 'iframe') return;
-          const data = await res.json();
-          if (data.url) trySwap(data.url, false);
-        }).catch(() => {});
     }
 
     // 30s LISTEN — flag iframe-sourced tracks for R2 batch download.
@@ -1741,7 +1672,6 @@ export const AudioPlayer = () => {
       hasTriggered75PercentKeptRef.current = false; // Reset 75% kept trigger for new track
       hasTriggered30sListenRef.current = false; // Reset 30s listen flag for new track
       hasTriggeredContextNotifRef.current = false; // Reset OYO context notification for new track
-      hasTriggeredIframeRetryRef.current = false; // Reset iframe retry for new track
       // crossfade refs removed — clean gapless transitions only
 
       // ── FLOW WATCHDOG ─────────────────────────────────────────────────
@@ -1838,7 +1768,7 @@ export const AudioPlayer = () => {
               if ((shouldPlay || shouldAutoResume) && (audioRef.current.paused || document.hidden)) {
                 audioContextRef.current?.state === 'suspended' && audioContextRef.current.resume().catch(() => {});
                 if (shouldAutoResume) {
-                  fadeInVolume(1200);
+                  fadeInMasterGain(200); // Was 1200ms fade — too laggy on autoplay
                 } else {
                   fadeInMasterGain(80);
                 }
@@ -1981,7 +1911,7 @@ export const AudioPlayer = () => {
               if ((shouldPlay || shouldAutoResume) && (audioRef.current.paused || document.hidden)) {
                 audioContextRef.current?.state === 'suspended' && audioContextRef.current.resume().catch(() => {});
                 if (shouldAutoResume) {
-                  fadeInVolume(1200);
+                  fadeInMasterGain(200); // Was 1200ms fade — too laggy on autoplay
                 } else {
                   // 400ms premium settle-in for every fresh R2 track start.
                   fadeInMasterGain(80);
@@ -2088,7 +2018,7 @@ export const AudioPlayer = () => {
                 if ((shouldPlay || shouldAutoResume) && (audioRef.current.paused || document.hidden)) {
                   audioContextRef.current?.state === 'suspended' && audioContextRef.current.resume().catch(() => {});
                   if (shouldAutoResume) {
-                    fadeInVolume(1200);
+                    fadeInMasterGain(200); // Was 1200ms fade — too laggy on autoplay
                   } else {
                     fadeInMasterGain(80);
                   }
