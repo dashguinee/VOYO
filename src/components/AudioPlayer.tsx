@@ -165,6 +165,7 @@ export const AudioPlayer = () => {
   const wakeLockRef = useRef<WakeLockSentinel | null>(null);
   const lastTrackIdRef = useRef<string | null>(null);
   const blocklistCascadeRef = useRef(0); // how many consecutive blocked tracks we've skipped — circuit breaker
+  const lastPlaySuccessIdRef = useRef<string | null>(null); // dedup play_success telemetry per trackId
   // Monotonic counter — incremented on every loadTrack invocation. Used as a
   // cancellation token: each in-flight loadTrack captures `myAttempt` at the
   // top and bails out at every await boundary if a newer load has started.
@@ -584,6 +585,12 @@ export const AudioPlayer = () => {
       isTransitioningToBackgroundRef.current = false;
 
       const { isPlaying: sp } = usePlayerStore.getState();
+      // GUARD: don't re-kick if loadTrack is mid-flight — its own canplay
+      // handler will call play() once the new src is ready. Without this
+      // guard, the visibility re-kick races with the canplay play() and
+      // the audio element gets TWO play() calls on the same source,
+      // logging duplicate play_success and causing audible stutter.
+      if (isLoadingTrackRef.current) return;
       if (sp && audioRef.current?.paused && audioRef.current.src) {
         audioContextRef.current?.resume().catch(() => {});
         audioRef.current.play().catch(() => {});
@@ -1594,6 +1601,9 @@ export const AudioPlayer = () => {
       // auto-advance. Previously the ref was set-once and never reset, so
       // replaying the same track to completion silently failed to advance.
       lastEndedTrackIdRef.current = null;
+      // Reset play_success dedup — fresh load means we expect a play_success
+      // for this trackId. Without reset, replaying same track wouldn't log.
+      lastPlaySuccessIdRef.current = null;
 
       // COLLECTIVE FAILURE MEMORY — check if this track has failed ≥3 times
       // across any user in the last 7 days. If so, skip immediately instead
@@ -3343,6 +3353,12 @@ export const AudioPlayer = () => {
         usePlayerStore.getState().setIsPlaying(true);
         // Only log play_success when a real source is bound.
         if (playbackSource !== 'cached' && playbackSource !== 'r2') return;
+        // Dedup play_success per trackId — even if play() fires twice on
+        // the same load (rare race between visibility re-kick + canplay),
+        // telemetry stays clean. Reset is in loadTrack.
+        const cTrack = usePlayerStore.getState().currentTrack;
+        if (cTrack?.trackId && lastPlaySuccessIdRef.current === cTrack.trackId) return;
+        if (cTrack?.trackId) lastPlaySuccessIdRef.current = cTrack.trackId;
         const track = usePlayerStore.getState().currentTrack;
         if (track?.trackId) {
           logPlaybackEvent({
