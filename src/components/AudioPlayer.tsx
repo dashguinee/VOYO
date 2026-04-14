@@ -2061,10 +2061,40 @@ export const AudioPlayer = () => {
               audioRef.current.src = url;
               if (!isBlob) audioRef.current.load();
 
+              // SESSION KEEPER: if canplay doesn't fire within 3s (slow server
+              // buffering after src swap), revert to silent WAV to keep media
+              // session alive. Without this, Android drops the notification
+              // during the buffer gap. We'll retry the real URL after 1s.
+              let keeperTimer: ReturnType<typeof setTimeout> | null = null;
+              if (document.hidden && silentKeeperUrlRef.current) {
+                keeperTimer = setTimeout(() => {
+                  keeperTimer = null;
+                  if (!audioRef.current || isStale()) return;
+                  // canplay didn't fire — swap back to silent WAV to keep session
+                  if (audioRef.current.readyState < 2) {
+                    try {
+                      devWarn('[VOYO] Buffer gap >3s — reverting to silent WAV keeper');
+                      audioRef.current.loop = true;
+                      audioRef.current.src = silentKeeperUrlRef.current!;
+                      audioRef.current.play().catch(() => {});
+                      // Try real URL again after silent WAV stabilizes
+                      setTimeout(() => {
+                        if (audioRef.current && !isStale()) {
+                          audioRef.current.loop = false;
+                          audioRef.current.src = url;
+                          if (!isBlob) audioRef.current.load();
+                        }
+                      }, 800);
+                    } catch {}
+                  }
+                }, 3000);
+              }
+
               const handler = () => {
                 if (!audioRef.current) return;
                 audioRef.current.removeEventListener('canplay', handler);
                 audioRef.current.oncanplaythrough = null;
+                if (keeperTimer) { clearTimeout(keeperTimer); keeperTimer = null; }
                 if (isStale()) return;
 
                 if (isInitialLoadRef.current && savedCurrentTime > 5) {
@@ -2670,10 +2700,14 @@ export const AudioPlayer = () => {
     navigator.mediaSession.setActionHandler('pause', () => usePlayerStore.getState().isPlaying && togglePlay());
     navigator.mediaSession.setActionHandler('nexttrack', () => {
       nextTrack();
-      // Immediately signal OS we're still active — update metadata for
-      // the new track + reassert playing state. Prevents Android from
-      // killing the media session during the source swap gap.
+      // Immediately signal OS: playing state + fresh metadata + ZERO position.
+      // The position reset is critical — otherwise the OS sees the old track's
+      // final position hanging there and may interpret it as "track stuck/ended"
+      // and drop the session notification during extraction delay.
       navigator.mediaSession.playbackState = 'playing';
+      try {
+        navigator.mediaSession.setPositionState({ duration: 0, position: 0, playbackRate: 1 });
+      } catch {}
       const next = usePlayerStore.getState().currentTrack;
       if (next) {
         navigator.mediaSession.metadata = new MediaMetadata({
@@ -2919,7 +2953,24 @@ export const AudioPlayer = () => {
       devLog('🔄 [VOYO] Track ended — advancing to next');
       haptics.light();
       nextTrack();
+      // Reset media session to "fresh loading" state so OS doesn't drop
+      // the session while we load/extract the next track in background.
       navigator.mediaSession.playbackState = 'playing';
+      try {
+        navigator.mediaSession.setPositionState({ duration: 0, position: 0, playbackRate: 1 });
+      } catch {}
+      const next = usePlayerStore.getState().currentTrack;
+      if (next) {
+        navigator.mediaSession.metadata = new MediaMetadata({
+          title: next.title,
+          artist: next.artist,
+          album: 'VOYO Music',
+          artwork: [
+            { src: `https://voyo-edge.dash-webtv.workers.dev/cdn/art/${next.trackId}?quality=high`, sizes: '512x512', type: 'image/jpeg' },
+            { src: `https://i.ytimg.com/vi/${next.trackId}/hqdefault.jpg`, sizes: '480x360', type: 'image/jpeg' },
+          ],
+        });
+      }
     };
 
     el.addEventListener('ended', onEndedDirect);
