@@ -50,6 +50,35 @@ function getVibeColor(vibe: VibeDefinition): string {
   return CATEGORY_COLORS[vibe.category] || CATEGORY_COLORS.mood;
 }
 
+// African-vibe detection — matches name/description/category against the
+// continent's music vocabulary. Used to apply the signature "diaspora gold +
+// VOYO platform purple" overlay on those cards specifically.
+const AFRICAN_PATTERN = /\b(afric|afro|afri|naija|amapiano|afrobeat|bongo|coup[eé]|kwaito|kompa|soukous|highlife|gqom|kuduro|gengeton|ndombolo|makossa|zouglou|raï|rai|mbalax|mande|sahel|maghreb|sw[aé]ngu|alt[eé])/i;
+function isAfricanVibe(vibe: VibeDefinition): boolean {
+  const text = `${vibe.name || ''} ${vibe.description || ''} ${vibe.category || ''}`;
+  return AFRICAN_PATTERN.test(text);
+}
+
+// Layered overlay for African vibes — golden-bronze leading (warmer, slightly
+// more gold than bronze per Dash's call), platform purple as the second wash
+// (so the card still reads as "VOYO surface, not generic"), base category
+// color as the closing hint. The diaspora-meets-platform handshake.
+function getAfricanCardStyle(vibe: VibeDefinition) {
+  const base = getVibeColor(vibe);
+  return {
+    background: [
+      'linear-gradient(135deg,',
+      'rgba(212, 175, 110, 0.22) 0%,',     // gold-bronze opening (warm, dominant)
+      'rgba(232, 208, 158, 0.13) 32%,',    // pale-gold midtone — keeps it luminous
+      'rgba(139, 92, 246, 0.10) 68%,',     // platform purple wash (subtle)
+      `${base}12 100%`,                     // base color closing hint
+      ')',
+    ].join(' '),
+    border: '1px solid rgba(212, 175, 110, 0.32)',
+    boxShadow: 'inset 0 0 28px rgba(212, 175, 110, 0.07), inset 0 0 40px rgba(139, 92, 246, 0.05)',
+  };
+}
+
 // Format energy level
 function getEnergyBars(level: number): string {
   return '▪'.repeat(level) + '▫'.repeat(5 - level);
@@ -396,17 +425,33 @@ export const VibesSection = ({ query, isVisible }: VibesSectionProps) => {
               >
                 <div
                   className="flex items-center gap-3 p-3 rounded-xl transition-all hover:scale-[1.01]"
-                  style={{
-                    background: `linear-gradient(135deg, ${getVibeColor(vibe)}22 0%, ${getVibeColor(vibe)}08 100%)`,
-                    border: `1px solid ${getVibeColor(vibe)}33`,
-                    }}
+                  style={
+                    isAfricanVibe(vibe)
+                      ? getAfricanCardStyle(vibe)
+                      : {
+                          background: `linear-gradient(135deg, ${getVibeColor(vibe)}22 0%, ${getVibeColor(vibe)}08 100%)`,
+                          border: `1px solid ${getVibeColor(vibe)}33`,
+                        }
+                  }
                 >
-                  {/* Vibe Icon */}
+                  {/* Vibe Icon — African vibes get the bronze-gold treatment too,
+                      with a faint platform-purple glow ring so it ties back to VOYO. */}
                   <div
                     className="w-12 h-12 rounded-lg flex items-center justify-center flex-shrink-0"
-                    style={{ background: `${getVibeColor(vibe)}33` }}
+                    style={
+                      isAfricanVibe(vibe)
+                        ? {
+                            background: 'linear-gradient(135deg, rgba(212,175,110,0.30) 0%, rgba(232,208,158,0.18) 60%, rgba(139,92,246,0.18) 100%)',
+                            border: '1px solid rgba(212,175,110,0.30)',
+                            boxShadow: '0 0 14px rgba(212,175,110,0.18), inset 0 0 8px rgba(139,92,246,0.10)',
+                          }
+                        : { background: `${getVibeColor(vibe)}33` }
+                    }
                   >
-                    <Music2 className="w-6 h-6" style={{ color: getVibeColor(vibe) }} />
+                    <Music2
+                      className="w-6 h-6"
+                      style={{ color: isAfricanVibe(vibe) ? '#E8D09E' : getVibeColor(vibe) }}
+                    />
                   </div>
 
                   {/* Vibe Info — Space Grotesk display, weight bumped from
