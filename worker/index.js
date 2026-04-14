@@ -28,9 +28,74 @@
  * ───────────────────────────────────────────────────────────────
  */
 
-// Current InnerTube signatureTimestamp (as of 2026-Q1).
-// If extraction starts returning ciphered-only URLs, bump this.
-const SIGNATURE_TIMESTAMP = 20350;
+// Fallback InnerTube signatureTimestamp. YouTube rotates this every 1-2 weeks.
+// We now fetch it DYNAMICALLY at runtime (see getSignatureTimestamp below) so
+// the worker never goes stale. This constant is only used if the fetch fails.
+// Last known good: 20551 (2026-04-14).
+const FALLBACK_SIGNATURE_TIMESTAMP = 20551;
+
+// In-memory cache for STS + visitorData. The worker instance stays warm
+// for minutes to hours. Refresh every 6 hours.
+let _cachedSTS = null;
+let _cachedVisitor = null;
+let _cachedAt = 0;
+const CACHE_MS = 6 * 60 * 60 * 1000; // 6h
+
+// Fetch BOTH STS and real visitorData in one call. YouTube bot detection is
+// much harder to pass with a fake random visitor ID — using a real one from
+// a fresh homepage session dramatically improves success rate.
+async function refreshYouTubeSession() {
+  try {
+    const res = await fetch('https://www.youtube.com/watch?v=dQw4w9WgXcQ', {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      },
+    });
+    if (!res.ok) throw new Error(`session probe HTTP ${res.status}`);
+    const html = await res.text();
+
+    // Extract STS
+    const stsMatch = html.match(/(?:"signatureTimestamp":|"STS":)(\d+)/);
+    if (stsMatch) {
+      const sts = parseInt(stsMatch[1], 10);
+      if (sts >= 20000 && sts <= 30000) _cachedSTS = sts;
+    }
+
+    // Extract visitorData — YouTube embeds it in ytcfg / ytInitialData.
+    // Formats: "visitorData":"CgtV...==" or "VISITOR_DATA":"CgtV..."
+    const vdMatch = html.match(/"(?:visitorData|VISITOR_DATA)"\s*:\s*"([^"]+)"/);
+    if (vdMatch && vdMatch[1].length > 10) {
+      _cachedVisitor = vdMatch[1];
+    }
+
+    _cachedAt = Date.now();
+    console.log(`[Session] STS=${_cachedSTS} visitorData=${_cachedVisitor?.slice(0, 16)}...`);
+  } catch (err) {
+    console.log(`[Session] Refresh failed: ${err.message}`);
+  }
+}
+
+async function getSignatureTimestamp() {
+  if (!_cachedSTS || (Date.now() - _cachedAt) > CACHE_MS) {
+    await refreshYouTubeSession();
+  }
+  return _cachedSTS || FALLBACK_SIGNATURE_TIMESTAMP;
+}
+
+async function getVisitorData() {
+  if (!_cachedVisitor || (Date.now() - _cachedAt) > CACHE_MS) {
+    await refreshYouTubeSession();
+  }
+  // Fallback: generate a plausible-looking token if fetch failed
+  if (!_cachedVisitor) {
+    const rand = Array.from(crypto.getRandomValues(new Uint8Array(18)))
+      .map(b => b.toString(16).padStart(2, '0')).join('');
+    return 'CgtV' + rand;
+  }
+  return _cachedVisitor;
+}
 
 // InnerTube public API key (shared by all YouTube clients — not a secret,
 // embedded in ytcfg on youtube.com). Used only as the ?key= query param.
@@ -111,18 +176,11 @@ const CLIENTS = [
   },
 ];
 
-async function tryClient(videoId, clientConfig) {
-  // Generate a fresh visitorData token. YouTube requires this to identify
-  // "real" clients vs bots. Format is a base64-encoded protobuf containing
-  // a random visitor ID. Without this, YouTube returns "Sign in to confirm
-  // you're not a bot" for most videos from datacenter IPs.
-  // Generate a valid-looking visitorData token. YouTube uses protobuf-encoded
-  // visitor IDs. A real token is ~28 base64 chars. We generate a random one
-  // that matches the expected length/format. Not a true protobuf but YouTube's
-  // parser accepts it for basic bot detection bypass.
-  const randBytes = Array.from(crypto.getRandomValues(new Uint8Array(18)))
-    .map(b => b.toString(16).padStart(2, '0')).join('');
-  const visitorId = 'CgtV' + randBytes;
+async function tryClient(videoId, clientConfig, signatureTimestamp) {
+  // Use REAL visitorData fetched from an actual YouTube homepage session.
+  // A fake random ID triggers "Sign in to confirm you're not a bot" on
+  // datacenter IPs. A real one (cached 6h) dramatically improves success.
+  const visitorId = await getVisitorData();
 
   const response = await fetch(`https://www.youtube.com/youtubei/v1/player?key=${INNERTUBE_API_KEY}&prettyPrint=false`, {
     method: 'POST',
@@ -148,7 +206,7 @@ async function tryClient(videoId, clientConfig) {
       },
       playbackContext: {
         contentPlaybackContext: {
-          signatureTimestamp: SIGNATURE_TIMESTAMP,
+          signatureTimestamp: signatureTimestamp,
           html5Preference: 'HTML5_PREF_WANTS'
         }
       },
@@ -248,7 +306,7 @@ export default {
         edge: true,
         clients: CLIENTS.length,
         clientNames: CLIENTS.map(c => c.name),
-        signatureTimestamp: SIGNATURE_TIMESTAMP,
+        signatureTimestamp: await getSignatureTimestamp(),
         r2: !!env.VOYO_AUDIO,
         version: 'v7'
       }), {
@@ -451,11 +509,12 @@ export default {
       }
 
       const attempts = [];
+      const sts = await getSignatureTimestamp();
 
       // Try each client until one works
       for (const client of CLIENTS) {
         try {
-          const data = await tryClient(videoId, client);
+          const data = await tryClient(videoId, client, sts);
           const result = extractBestAudio(data);
 
           if (result.url) {
@@ -507,10 +566,11 @@ export default {
       let audioUrl = null;
       let mimeType = 'audio/mp4';
       const extractAttempts = [];
+      const sts = await getSignatureTimestamp();
 
       for (const client of CLIENTS) {
         try {
-          const data = await tryClient(videoId, client);
+          const data = await tryClient(videoId, client, sts);
           const result = extractBestAudio(data);
 
           if (result.url) {
@@ -664,10 +724,11 @@ export default {
       }
 
       const results = [];
+      const stsDiag = await getSignatureTimestamp();
       for (const client of targets) {
         const started = Date.now();
         try {
-          const data = await tryClient(videoId, client);
+          const data = await tryClient(videoId, client, stsDiag);
           const extracted = extractBestAudio(data);
 
           results.push({
@@ -711,7 +772,7 @@ export default {
 
       return new Response(JSON.stringify({
         videoId,
-        signatureTimestamp: SIGNATURE_TIMESTAMP,
+        signatureTimestamp: stsDiag,
         totalClients: targets.length,
         winners,
         anyWorked: winners.length > 0,
