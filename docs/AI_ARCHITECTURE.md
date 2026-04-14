@@ -93,7 +93,7 @@ The face. Speaks in Dash's character voice (Soussou phrases, Malaysia context, e
 
 The top-of-screen ambient indicator. Not yet built as a unified component. It's the "eye" that shows OYO's state without being intrusive.
 
-**State → color mapping (proposed):**
+**State → color mapping:**
 
 | State | Color | Motion |
 |-------|-------|--------|
@@ -102,15 +102,25 @@ The top-of-screen ambient indicator. Not yet built as a unified component. It's 
 | Thinking | silver-white intensifying | slow swirl |
 | Answering | VOYO purple (#8b5cf6) | flowing wave |
 | Chatting / typing | VOYO purple | typing ripple |
-| Next-up notification | amber flash | brief shimmer |
+| OYO unread message | small red dot badge | static, subtle |
 | Error / stall | dim red | static fade |
 
-**Emergent behavior:**
-- Morphs into Dynamic Island when a notification arrives (swipe-to-dismiss, tap-to-expand)
-- Expands to show now-playing when OYO surfaces a "vibe shift" insight
-- Shrinks to dot when idle — ambient, unobtrusive
+**Privacy boundary — this matters:**
+- The Visuoir is ONLY for OYO's own state (listening, thinking, answering, its own unread messages)
+- It does NOT read or surface OS-level notifications (SMS, email, push, etc.)
+- It does NOT morph into Dynamic Island — that's the OS's territory and touching it violates user privacy expectations
+- Visual coexistence only: Visuoir sits where it doesn't collide with the OS notification bar. They live in parallel.
 
-This is the seam where the OS feel lives. Don't build it as a chat widget — it's more like a cursor: always present, changes shape for context.
+**Red-dot pattern for OYO unread:**
+- OYO has an insight to share (vibe shift, "this is a special track", etc.)
+- Instead of pushing a system notification, a small red dot appears on the Visuoir
+- User taps screen → UI reveals normally → Visuoir's red dot is visible → user taps it → OYO's message expands
+- No interruption, no permission needed, no OS surface — OYO's messaging stays inside VOYO's own shell
+
+**Ambient, not intrusive:**
+- Always present at the top, but tiny when idle (a dot)
+- Grows/glows when active, shrinks when done
+- The user's eye learns: "when it glows, OYO is present. otherwise, it's my music"
 
 ---
 
@@ -155,8 +165,10 @@ The Visuoir is the OS chrome. The content below is just the current app the OS i
 ## Next moves (when Dash is ready)
 
 1. **Wire voice → OYO brain** — one bridge in App.tsx connects transcript to `oyoThoughts.process()`
-2. **Unify Visuoir** — one component, one state machine (idle/listening/thinking/answering/notifying)
-3. **Dynamic Island morph** — the emergent behavior when notifications arrive
-4. **Color psychology pass** — apply silver-white vs purple consistently
+2. **Unify Visuoir** — one component, one state machine (idle/listening/thinking/answering/unread)
+3. **Red-dot pattern** — OYO unread messages show as a small badge on the Visuoir (no system notification)
+4. **Color psychology pass** — apply silver-white vs purple consistently across OyoIsland / OyoInvocation / OyoTrigger
+
+**Explicitly NOT a next move:** Dynamic Island morph / system notification integration. That's OS territory, violates privacy expectations, and the red-dot pattern achieves the same goal without any OS permission or surface.
 
 No changes yet — just the map.
