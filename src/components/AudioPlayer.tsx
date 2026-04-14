@@ -1324,17 +1324,12 @@ export const AudioPlayer = () => {
       if (audioRef.current) audioRef.current.volume = 1.0;
       devLog(`🎵 [VOYO] Fade-in: 0 → ${targetGain.toFixed(2)} over ${durationMs}ms`);
     } else if (audioRef.current) {
-      // Fallback: no Web Audio chain - fade HTML element volume
-      audioRef.current.volume = 0;
-      const targetVol = usePlayerStore.getState().volume / 100;
-      const startTime = performance.now();
-      const step = () => {
-        const elapsed = performance.now() - startTime;
-        const t = Math.min(elapsed / durationMs, 1);
-        if (audioRef.current) audioRef.current.volume = t * targetVol;
-        if (t < 1) requestAnimationFrame(step);
-      };
-      requestAnimationFrame(step);
+      // Fallback: no Web Audio chain. Was a requestAnimationFrame-driven
+      // ramp — but rAF is starved in background, leaving volume stuck at 0
+      // until FG return ('audio plays silent then kicks in' bug). Now we
+      // just snap to target volume immediately. No ramp = tiny audible
+      // click on cold start, but that beats indefinite silence in BG.
+      audioRef.current.volume = usePlayerStore.getState().volume / 100;
     }
   }, []);
 
@@ -1939,11 +1934,12 @@ export const AudioPlayer = () => {
 
             if ((shouldPlay || shouldAutoResume) && (audioRef.current.paused || document.hidden)) {
               audioContextRef.current?.state === 'suspended' && audioContextRef.current.resume().catch(() => {});
-              if (shouldAutoResume) {
-                fadeInVolume(1200);
-              } else {
-                fadeInMasterGain(80);
-              }
+              // Always use fadeInMasterGain — fadeInVolume's HTML-element
+              // fallback uses requestAnimationFrame, which is starved in
+              // background. That left the volume stuck at 0 → audio
+              // advanced silently for 30+ seconds, only audible on FG return.
+              // This matched Dash's '47s in but silent' bug exactly.
+              fadeInMasterGain(shouldAutoResume ? 200 : 80);
               trace('play_call', trackId, { path: 'cached', hidden: document.hidden });
               audioRef.current.play().then(() => {
                 clearLoadWatchdog();
