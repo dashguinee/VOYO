@@ -292,6 +292,7 @@ export const AudioPlayer = () => {
     // rejection handling. Without skip, BG plays got stuck silently — which
     // looked exactly like 'background skip not working' from the user's side.
     devWarn(`[VOYO] play() failed (${label}, hidden=${document.hidden}, ${e.name}) — advancing`);
+    trace('next_call', usePlayerStore.getState().currentTrack?.trackId, { from: 'handlePlayFailure', label, err: e.name, hidden: document.hidden });
     nextTrack();
   };
 
@@ -1639,6 +1640,7 @@ export const AudioPlayer = () => {
           error_code: 'max_retries',
           meta: { source: 'blocklist', cascade: blocklistCascadeRef.current },
         });
+        trace('next_call', trackId, { from: 'blocklist', cascade: blocklistCascadeRef.current, hidden: document.hidden });
         nextTrack();
         return;
       }
@@ -1650,6 +1652,7 @@ export const AudioPlayer = () => {
       const preloadPeek = getPreloadedTrack(trackId);
       const hasInstantSource = preloadPeek?.audioElement && preloadPeek?.url &&
         (preloadPeek.source === 'cached' || preloadPeek.source === 'r2');
+      trace('preload_check', trackId, { hit: !!hasInstantSource, src: preloadPeek?.source || 'none' });
 
       // STOP old audio immediately before loading new track.
       // NOTE: Do NOT set src = '' — this can break MediaElementAudioSourceNode in some browsers.
@@ -1773,9 +1776,11 @@ export const AudioPlayer = () => {
         if (isStale()) return;
         const store = usePlayerStore.getState();
         if (!store.isPlaying) return;
+        trace('watchdog_fire', trackId, { timer: 'fg-8s', hidden: document.hidden });
         devWarn(`[VOYO] Load watchdog fired for ${trackId} — 8s without playback, skipping`);
         { const t = usePlayerStore.getState().currentTrack; logPlaybackEvent({ event_type: 'skip_auto', track_id: trackId, track_title: t?.title, track_artist: t?.artist, error_code: 'load_watchdog', meta: { timer: 'fg-8s' } }); }
         isLoadingTrackRef.current = false;
+        trace('next_call', trackId, { from: 'watchdog_fg' });
         nextTrack();
       }, 8000);
       // BACKGROUND: setTimeout is throttled to 1/min. MessageChannel backup
@@ -1790,9 +1795,11 @@ export const AudioPlayer = () => {
           if (isStale() || !loadWatchdogRef.current) return; // already resolved
           const store = usePlayerStore.getState();
           if (!store.isPlaying) return;
+          trace('watchdog_fire', trackId, { timer: 'bg-5s', hidden: document.hidden });
           devWarn(`[VOYO] Load watchdog (bg) fired for ${trackId} — skipping`);
           clearLoadWatchdog();
           isLoadingTrackRef.current = false;
+          trace('next_call', trackId, { from: 'watchdog_bg' });
           nextTrack();
         };
         mc.port2.postMessage(null);
@@ -1840,7 +1847,9 @@ export const AudioPlayer = () => {
             // data is already local (preloaded blob). No need to wait for
             // the browser's full-buffer estimation which adds 50-200ms on
             // mobile for no benefit when the source is in-memory.
+            trace('canplay_await', trackId, { path: 'preload', hidden: document.hidden });
             const playHandler = () => {
+              trace('canplay_fire', trackId, { path: 'preload', hidden: document.hidden, readyState: audioRef.current?.readyState });
               if (!audioRef.current) return;
               audioRef.current.removeEventListener('canplay', playHandler);
               audioRef.current.oncanplaythrough = null;
@@ -1908,12 +1917,9 @@ export const AudioPlayer = () => {
           // For non-blob URLs (edge case), keep load().
           if (!cachedUrl.startsWith('blob:')) audioRef.current.load();
 
-          // canplay (readyState >= 3) fires faster than canplaythrough for
-          // local blob sources. The data is already in memory — no need to
-          // wait for the browser's full playthrough estimate (~50-200ms extra
-          // on mobile). For remote URLs we'd want canplaythrough, but cached
-          // tracks are always local blobs.
+          trace('canplay_await', trackId, { path: 'cached', hidden: document.hidden });
           const cachedPlayHandler = () => {
+            trace('canplay_fire', trackId, { path: 'cached', hidden: document.hidden, readyState: audioRef.current?.readyState });
             if (!audioRef.current) return;
             audioRef.current.removeEventListener('canplay', cachedPlayHandler);
             audioRef.current.oncanplaythrough = null;
@@ -2089,10 +2095,12 @@ export const AudioPlayer = () => {
               });
               isLoadingTrackRef.current = false;
               if (blocklistCascadeRef.current >= 5) {
+                trace('cascade_brake', trackId, { source: 'max_retries' });
                 devWarn(`[VOYO] Extraction-failure cascade ≥5, force-pausing — extraction is structurally down`);
                 usePlayerStore.getState().setIsPlaying(false);
                 return;
               }
+              trace('next_call', trackId, { from: 'max_retries', cascade: blocklistCascadeRef.current, hidden: document.hidden });
               nextTrack();
               navigator.mediaSession.playbackState = 'playing';
               return;
@@ -2155,7 +2163,9 @@ export const AudioPlayer = () => {
                 }, 3000);
               }
 
+              trace('canplay_await', trackId, { path: `retry_${source}`, attempt: attempt + 1, hidden: document.hidden });
               const handler = () => {
+                trace('canplay_fire', trackId, { path: `retry_${source}`, attempt: attempt + 1, hidden: document.hidden, readyState: audioRef.current?.readyState });
                 if (!audioRef.current) return;
                 audioRef.current.removeEventListener('canplay', handler);
                 audioRef.current.oncanplaythrough = null;
@@ -2996,6 +3006,7 @@ export const AudioPlayer = () => {
 
     devLog('🔄 [VOYO] Track ended — advancing to next');
     haptics.light();
+    trace('next_call', trackId, { from: 'ended_advance', hidden: document.hidden });
     nextTrack();
 
     // Keep OS notification alive through the load gap with a position reset
@@ -3069,6 +3080,7 @@ export const AudioPlayer = () => {
   // IMPROVED: Immediate cache check first (should be ready with 3s auto-cache),
   // seamless position-preserving swap, max 500ms silence target
   const handleAudioError = useCallback(async (e: React.SyntheticEvent<HTMLAudioElement, Event>) => {
+    trace('audio_error', usePlayerStore.getState().currentTrack?.trackId, { hidden: document.hidden, errCode: (e.target as HTMLAudioElement)?.error?.code, src: ((e.target as HTMLAudioElement)?.src || '').slice(0, 60) });
     // During iframe phase, the main audio element is playing the silent
     // WAV as a background-play keeper. If that errors (rare — blob URL
     // is stable in-memory), we don't need full recovery since the iframe
