@@ -21,7 +21,7 @@
  * Built 2026-04-14 — Dash's call: "build me the effect ... be creative".
  */
 
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 
 const PARTICLE_COUNT = 28;
 
@@ -69,6 +69,41 @@ function buildParticles(seed: number): Particle[] {
 
 export const AtmosphereLayer = () => {
   const particles = useMemo(() => buildParticles(Math.floor(Date.now() / 86400000)), []);
+
+  // Scrollbar fade-down — Dash's call (2026-04-14):
+  //   "keep it like that only first 50% of screen the rest we make it
+  //    disappear or perhaps fade or black will do"
+  // Drives --voyo-scroll-vis CSS var from 1 (top) → 0 (≥50% scrolled) so
+  // the bronze-gold scrollbar gracefully fades to nothing in the lower
+  // half. We watch every scrollable element via capture-phase listener
+  // because inner scroll containers are more common than window scroll.
+  useEffect(() => {
+    let raf = 0;
+    const update = (target: EventTarget | null) => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        const el = target as (HTMLElement | Document | null);
+        let pct = 0;
+        if (el && 'scrollTop' in (el as HTMLElement)) {
+          const e = el as HTMLElement;
+          const max = Math.max(1, e.scrollHeight - e.clientHeight);
+          pct = Math.min(1, Math.max(0, e.scrollTop / max));
+        } else {
+          const max = Math.max(1, document.documentElement.scrollHeight - window.innerHeight);
+          pct = Math.min(1, Math.max(0, window.scrollY / max));
+        }
+        // Full visible 0–50%, linear fade 50–100% → 0
+        const vis = pct < 0.5 ? 1 : Math.max(0, 1 - (pct - 0.5) * 2);
+        document.documentElement.style.setProperty('--voyo-scroll-vis', vis.toFixed(3));
+      });
+    };
+    const onScroll = (e: Event) => update(e.target);
+    window.addEventListener('scroll', onScroll, { capture: true, passive: true });
+    return () => {
+      window.removeEventListener('scroll', onScroll, { capture: true } as EventListenerOptions);
+      cancelAnimationFrame(raf);
+    };
+  }, []);
 
   return (
     <>

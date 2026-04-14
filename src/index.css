@@ -94,19 +94,33 @@ body {
   user-select: none;
 }
 
-/* Scrollbar Styling */
+/* Scrollbar Styling — bronze-gold (matches Disco palette), vertical fade so
+   the thumb feels lighter the further down it sits. JS in App.tsx drives
+   --voyo-scroll-vis from 1 (top) → 0 (bottom 50%+) so the entire scrollbar
+   gracefully disappears as you go deep — content owns the lower half. */
+:root {
+  --voyo-scroll-vis: 1;
+}
 ::-webkit-scrollbar {
   width: 4px;
   height: 4px;
 }
-
 ::-webkit-scrollbar-track {
   background: transparent;
 }
-
 ::-webkit-scrollbar-thumb {
-  background: var(--voyo-purple);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, rgba(212, 175, 110, 0.78) calc(var(--voyo-scroll-vis, 1) * 100%), transparent) 0%,
+    color-mix(in srgb, rgba(212, 175, 110, 0.18) calc(var(--voyo-scroll-vis, 1) * 100%), transparent) 100%
+  );
   border-radius: 2px;
+  transition: background 240ms ease;
+}
+/* Firefox */
+* {
+  scrollbar-color: color-mix(in srgb, rgba(212, 175, 110, 0.55) calc(var(--voyo-scroll-vis, 1) * 100%), transparent) transparent;
+  scrollbar-width: thin;
 }
 
 /* Glow Effects */
