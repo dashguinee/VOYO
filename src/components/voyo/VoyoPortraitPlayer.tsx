@@ -4479,6 +4479,7 @@ export const VoyoPortraitPlayer = ({
   const skeepSeekInterval = useRef<ReturnType<typeof setInterval> | null>(null);
   const skeepEscalateTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const wasSkeeping = useRef(false); // Track if we just finished skeeping (to prevent skip on release)
+  const wasSkeepingClearedAt = useRef(0); // Timestamp when SKEEP ended — safety belt against rAF starvation in background
   const skeepLevelRef = useRef(1);
   const skeepTargetTime = useRef(0); // Track target position ourselves (store updates too slowly)
   const wasPlayingBeforeSkeep = useRef(false); // Remember if we need to resume after SKEEP
@@ -4621,17 +4622,29 @@ export const VoyoPortraitPlayer = ({
       }
       wasPlayingBeforeSkeep.current = false;
 
-      // Clear the flag after a short delay (after onClick would have fired)
-      // OPTIMIZED: 50ms instead of 100ms for faster skip response
-      // Clear on next microtask — blocks the current event's bubbled click
-      // but doesn't create a 50ms dead zone for intentional taps.
-      requestAnimationFrame(() => { wasSkeeping.current = false; });
+      // Clear the flag after the bubbled click would have fired.
+      // Originally rAF only — but rAF is starved in background tabs, so the
+      // flag could get stuck `true` forever once the user backgrounded mid-
+      // SKEEP, silently blocking every future manual skip. Belt-and-braces:
+      // both rAF (fast for foreground) and setTimeout (always fires).
+      // Plus we stamp the moment SKEEP ended so handleNextTrack can apply a
+      // hard 250ms upper bound regardless of which clearer fired.
+      wasSkeepingClearedAt.current = Date.now();
+      const clear = () => { wasSkeeping.current = false; };
+      requestAnimationFrame(clear);
+      setTimeout(clear, 80);
     }
   }, [isScrubbing, setPlaybackRate, handlePlayPause]);
 
-  // Safe next track - doesn't skip if we were just skeeping
+  // Safe next track - blocks skip ONLY if SKEEP truly just ended (≤250ms).
+  // The 250ms upper bound is the safety belt: if rAF/setTimeout BOTH failed
+  // to clear the flag (severe background throttling), the timestamp check
+  // still releases the skip after a quarter second. Bug history: the flag
+  // was getting stuck `true` after background SKEEP → all future manual
+  // skips silently no-op'd while background auto-advance still worked.
   const handleNextTrack = useCallback(() => {
-    if (wasSkeeping.current) return; // Block skip after SKEEP
+    if (wasSkeeping.current && Date.now() - wasSkeepingClearedAt.current < 250) return;
+    wasSkeeping.current = false; // self-heal — defensive clear
     nextTrack();
   }, [nextTrack]);
 
