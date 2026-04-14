@@ -44,6 +44,7 @@ import { onTrackPlay as oyoOnTrackPlay, onTrackComplete as oyoOnTrackComplete } 
 import { registerTrackPlay as viRegisterPlay } from '../services/videoIntelligence';
 import { useMiniPiP } from '../hooks/useMiniPiP';
 import { notifyNextUp } from '../services/oyoNotifications';
+import { logPlaybackEvent } from '../services/telemetry';
 import {
   preloadNextTrack,
   getPreloadedTrack,
@@ -230,6 +231,17 @@ export const AudioPlayer = () => {
   const handlePlayFailure = (e: Error | DOMException, label: string) => {
     devWarn(`[Playback] ${label} play failed:`, e.name);
     clearLoadWatchdog();
+    const track = usePlayerStore.getState().currentTrack;
+    if (track?.trackId) {
+      logPlaybackEvent({
+        event_type: 'play_fail',
+        track_id: track.trackId,
+        track_title: track.title,
+        track_artist: track.artist,
+        error_code: e.name === 'NotAllowedError' ? 'not_allowed' : e.name === 'AbortError' ? 'aborted' : 'unknown',
+        meta: { label, errorMessage: e.message },
+      });
+    }
     if (e.name === 'NotAllowedError') {
       // Autoplay blocked by browser (no user gesture). Set pending flag
       // so the FIRST user tap anywhere on the app resumes playback.
@@ -1697,6 +1709,7 @@ export const AudioPlayer = () => {
         const store = usePlayerStore.getState();
         if (!store.isPlaying) return;
         devWarn(`[VOYO] Load watchdog fired for ${trackId} — 8s without playback, skipping`);
+        logPlaybackEvent({ event_type: 'skip_auto', track_id: trackId, error_code: 'load_watchdog', meta: { timer: 'fg-8s' } });
         isLoadingTrackRef.current = false;
         nextTrack();
       }, 8000);
@@ -1970,10 +1983,8 @@ export const AudioPlayer = () => {
           const tryAudioSource = async (attempt: number) => {
             if (resolved || isStale()) return;
             if (attempt >= MAX_RETRIES) {
-              // Track genuinely unplayable after 5 attempts — skip ALWAYS,
-              // including background. Previous guard waited for foreground
-              // but this left the player stuck forever on broken tracks.
               devWarn(`[VOYO] All ${MAX_RETRIES} retries failed for ${trackId} — skipping`);
+              logPlaybackEvent({ event_type: 'skip_auto', track_id: trackId, error_code: 'max_retries' });
               isLoadingTrackRef.current = false;
               nextTrack();
               navigator.mediaSession.playbackState = 'playing';
@@ -1983,9 +1994,17 @@ export const AudioPlayer = () => {
             devLog(`🔄 [VOYO] Audio source retry ${attempt + 1}/${MAX_RETRIES}`);
 
             // Race VPS + edge in parallel
+            const retryStart = performance.now();
             const playFromUrl = (url: string, source: string, isBlob: boolean) => {
               if (resolved || isStale() || !audioRef.current) return;
               resolved = true;
+              logPlaybackEvent({
+                event_type: 'source_resolved',
+                track_id: trackId,
+                source: source as any,
+                latency_ms: Math.round(performance.now() - retryStart),
+                meta: { attempt: attempt + 1 },
+              });
 
               const { boostProfile: profile } = usePlayerStore.getState();
               setupAudioEnhancement(profile);
