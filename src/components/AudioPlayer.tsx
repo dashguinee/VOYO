@@ -1589,6 +1589,10 @@ export const AudioPlayer = () => {
       // Setting the ref now makes the guard atomic with the lock.
       if (lastTrackIdRef.current === trackId) return;
       lastTrackIdRef.current = trackId;
+      // Reset the ENDED dedup so this new track's natural end will fire
+      // auto-advance. Previously the ref was set-once and never reset, so
+      // replaying the same track to completion silently failed to advance.
+      lastEndedTrackIdRef.current = null;
 
       // COLLECTIVE FAILURE MEMORY — check if this track has failed ≥3 times
       // across any user in the last 7 days. If so, skip immediately instead
@@ -2943,13 +2947,21 @@ export const AudioPlayer = () => {
     if (!el) return;
 
     const onEndedDirect = () => {
-      const trackId = usePlayerStore.getState().currentTrack?.trackId;
+      const state = usePlayerStore.getState();
+      const trackId = state.currentTrack?.trackId;
       if (!trackId || lastEndedTrackIdRef.current === trackId) return;
       lastEndedTrackIdRef.current = trackId;
 
-      const { playbackSource: ps, isPlaying: playing } = usePlayerStore.getState();
+      const { playbackSource: ps, isPlaying: playing, currentTrack: track } = state;
       if (ps !== 'cached' && ps !== 'r2') return;
       if (!playing) return;
+
+      // Capture telemetry-relevant state BEFORE nextTrack() advances the store
+      const currentTime = audioRef.current?.currentTime || 0;
+      const completionRate = trackProgressRef.current;
+      const wasEdgeStream = isEdgeStreamRef.current;
+      const cacheNotYetTriggered = !hasTriggered85PercentCacheRef.current;
+
       devLog('🔄 [VOYO] Track ended — advancing to next');
       haptics.light();
       nextTrack();
@@ -2970,6 +2982,36 @@ export const AudioPlayer = () => {
             { src: `https://i.ytimg.com/vi/${next.trackId}/hqdefault.jpg`, sizes: '480x360', type: 'image/jpeg' },
           ],
         });
+        notifyNextUp(next.title, next.artist);
+      }
+
+      // Telemetry / pool / OYO learning side effects — deferred so they don't
+      // block the audio thread during the track transition. Previously these
+      // lived in a separate handleEnded React handler that got dedup'd out by
+      // this native listener, so they NEVER ran. Now wired correctly.
+      if (track) {
+        setTimeout(() => {
+          try {
+            endListenSession(currentTime, 0);
+            recordPoolEngagement(track.trackId, 'complete', { completionRate });
+            useTrackPoolStore.getState().recordCompletion(track.trackId, completionRate);
+            oyoOnTrackComplete(track, currentTime);
+            // FALLBACK: if this was an edge-stream track AND the 85% cache
+            // effect didn't fire, cache it now (audio is done, no contention).
+            if (wasEdgeStream && cacheNotYetTriggered && track.trackId) {
+              devLog('🎵 [VOYO] onEndedDirect fallback cache (85% effect missed)');
+              cacheTrack(
+                track.trackId,
+                track.title,
+                track.artist,
+                track.duration || 0,
+                `https://voyo-edge.dash-webtv.workers.dev/cdn/art/${track.trackId}?quality=high`
+              );
+            }
+          } catch (e) {
+            devWarn('[VOYO] onEndedDirect telemetry failed:', e);
+          }
+        }, 0);
       }
     };
 
@@ -3215,7 +3257,10 @@ export const AudioPlayer = () => {
       playsInline
       onTimeUpdate={handleTimeUpdate}
       onDurationChange={handleDurationChange}
-      onEnded={handleEnded}
+      // onEnded REMOVED — onEndedDirect (native listener at line ~2945) is the
+      // sole handler. React's synthetic onEnded fires AFTER native bubbling on
+      // attached listeners, so dedup blocked it from running and the telemetry
+      // side effects never fired. All logic merged into onEndedDirect.
       onProgress={handleProgress}
       onError={handleAudioError}
       // ── SOURCE OF TRUTH SYNC ────────────────────────────────────────
