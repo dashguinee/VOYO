@@ -10,7 +10,7 @@
  */
 
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { Search, Heart, Music, Clock, MoreVertical, Play, ListPlus, Plus, Shuffle, Sparkles } from 'lucide-react';
+import { Search, Heart, Clock, MoreVertical, Play, ListPlus, Plus, Shuffle } from 'lucide-react';
 import { VoyoIcon } from '../ui/VoyoIcon';
 import { usePlayerStore } from '../../store/playerStore';
 import { useDownloadStore } from '../../store/downloadStore';

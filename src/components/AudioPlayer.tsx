@@ -2962,30 +2962,54 @@ export const AudioPlayer = () => {
     setDuration(audioRef.current.duration);
   }, [playbackSource, setDuration]);
 
-  const handleEnded = useCallback(() => {
-    if (playbackSource !== 'cached' && playbackSource !== 'r2') return;
-    // Dedup with direct listener — prevent double nextTrack()
-    const cid = currentTrack?.trackId;
-    if (!cid || lastEndedTrackIdRef.current === cid) return;
-    lastEndedTrackIdRef.current = cid;
+  // Shared ended-event body used by BOTH the React onEnded JSX handler and
+  // the native addEventListener('ended') below. Whichever fires first sets
+  // the dedup ref and runs the work; the other sees the match and early-
+  // returns. Having both registered keeps background Android Chrome
+  // reliable (native listener can stutter under heavy throttle, React's
+  // synthetic events have their own scheduling).
+  //
+  // Was split into handleEnded + a duplicate body inside onEndedDirect —
+  // ~50 lines of near-identical logic. Consolidated here.
+  const runEndedAdvance = useCallback(() => {
+    const state = usePlayerStore.getState();
+    const trackId = state.currentTrack?.trackId;
+    if (!trackId || lastEndedTrackIdRef.current === trackId) return;
+    lastEndedTrackIdRef.current = trackId;
 
-    const track = currentTrack;
+    const { playbackSource: ps, isPlaying: playing, currentTrack: track } = state;
+    if (ps !== 'cached' && ps !== 'r2') return;
+    if (!playing) return;
+
+    // Capture state BEFORE nextTrack advances the store
     const currentTime = audioRef.current?.currentTime || 0;
     const completionRate = trackProgressRef.current;
     const wasEdgeStream = isEdgeStreamRef.current;
     const cacheNotYetTriggered = !hasTriggered85PercentCacheRef.current;
 
-    // Advance to next track. Clean gapless transition.
+    devLog('🔄 [VOYO] Track ended — advancing to next');
     haptics.light();
     nextTrack();
-    // OYO: pre-announce the next track (ambient notification)
-    const nextState = usePlayerStore.getState();
-    if (nextState.currentTrack) {
-      notifyNextUp(nextState.currentTrack.title, nextState.currentTrack.artist);
+
+    // Keep OS notification alive through the load gap with a position reset
+    // + fresh metadata (critical in background).
+    navigator.mediaSession.playbackState = 'playing';
+    try { navigator.mediaSession.setPositionState({ duration: 0, position: 0, playbackRate: 1 }); } catch {}
+    const next = usePlayerStore.getState().currentTrack;
+    if (next) {
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: next.title,
+        artist: next.artist,
+        album: 'VOYO Music',
+        artwork: [
+          { src: `https://voyo-edge.dash-webtv.workers.dev/cdn/art/${next.trackId}?quality=high`, sizes: '512x512', type: 'image/jpeg' },
+          { src: `https://i.ytimg.com/vi/${next.trackId}/hqdefault.jpg`, sizes: '480x360', type: 'image/jpeg' },
+        ],
+      });
+      notifyNextUp(next.title, next.artist);
     }
-    // Defer the telemetry/learning chain + cache fallback to next macrotask.
-    // Same pattern as recordPlayEvent: avoid blocking the audio thread right
-    // when the next track is starting.
+
+    // Telemetry / pool / OYO learning for the PREVIOUS track — deferred.
     if (track) {
       setTimeout(() => {
         try {
@@ -2993,26 +3017,21 @@ export const AudioPlayer = () => {
           recordPoolEngagement(track.trackId, 'complete', { completionRate });
           useTrackPoolStore.getState().recordCompletion(track.trackId, completionRate);
           oyoOnTrackComplete(track, currentTime);
-          // FALLBACK: if this was an edge-stream track AND the 85% cache
-          // effect didn't fire (rare — progress polling skipped over the
-          // threshold), cache it now. The audio is done playing, no
-          // competition, ideal moment to grab + upload to R2.
           if (wasEdgeStream && cacheNotYetTriggered && track.trackId) {
-            devLog('🎵 [VOYO] handleEnded fallback cache (85% effect missed)');
+            devLog('🎵 [VOYO] fallback cache (85% effect missed)');
             cacheTrack(
-              track.trackId,
-              track.title,
-              track.artist,
-              track.duration || 0,
+              track.trackId, track.title, track.artist, track.duration || 0,
               `https://voyo-edge.dash-webtv.workers.dev/cdn/art/${track.trackId}?quality=high`
             );
           }
         } catch (e) {
-          devWarn('[VOYO] handleEnded telemetry failed:', e);
+          devWarn('[VOYO] ended-advance telemetry failed:', e);
         }
       }, 0);
     }
-  }, [playbackSource, currentTrack, nextTrack, endListenSession, cacheTrack]);
+  }, [nextTrack, endListenSession, cacheTrack]);
+
+  const handleEnded = runEndedAdvance; // React onEnded safety-belt handler
 
   // BACKGROUND AUTO-NEXT: Direct ended listener on the audio element.
   // React's onEnded JSX prop may not fire reliably in background on Android.
@@ -3026,78 +3045,12 @@ export const AudioPlayer = () => {
     const el = audioRef.current;
     if (!el) return;
 
-    const onEndedDirect = () => {
-      const state = usePlayerStore.getState();
-      const trackId = state.currentTrack?.trackId;
-      if (!trackId || lastEndedTrackIdRef.current === trackId) return;
-      lastEndedTrackIdRef.current = trackId;
-
-      const { playbackSource: ps, isPlaying: playing, currentTrack: track } = state;
-      if (ps !== 'cached' && ps !== 'r2') return;
-      if (!playing) return;
-
-      // Capture telemetry-relevant state BEFORE nextTrack() advances the store
-      const currentTime = audioRef.current?.currentTime || 0;
-      const completionRate = trackProgressRef.current;
-      const wasEdgeStream = isEdgeStreamRef.current;
-      const cacheNotYetTriggered = !hasTriggered85PercentCacheRef.current;
-
-      devLog('🔄 [VOYO] Track ended — advancing to next');
-      haptics.light();
-      nextTrack();
-      // Reset media session to "fresh loading" state so OS doesn't drop
-      // the session while we load/extract the next track in background.
-      navigator.mediaSession.playbackState = 'playing';
-      try {
-        navigator.mediaSession.setPositionState({ duration: 0, position: 0, playbackRate: 1 });
-      } catch {}
-      const next = usePlayerStore.getState().currentTrack;
-      if (next) {
-        navigator.mediaSession.metadata = new MediaMetadata({
-          title: next.title,
-          artist: next.artist,
-          album: 'VOYO Music',
-          artwork: [
-            { src: `https://voyo-edge.dash-webtv.workers.dev/cdn/art/${next.trackId}?quality=high`, sizes: '512x512', type: 'image/jpeg' },
-            { src: `https://i.ytimg.com/vi/${next.trackId}/hqdefault.jpg`, sizes: '480x360', type: 'image/jpeg' },
-          ],
-        });
-        notifyNextUp(next.title, next.artist);
-      }
-
-      // Telemetry / pool / OYO learning side effects — deferred so they don't
-      // block the audio thread during the track transition. Previously these
-      // lived in a separate handleEnded React handler that got dedup'd out by
-      // this native listener, so they NEVER ran. Now wired correctly.
-      if (track) {
-        setTimeout(() => {
-          try {
-            endListenSession(currentTime, 0);
-            recordPoolEngagement(track.trackId, 'complete', { completionRate });
-            useTrackPoolStore.getState().recordCompletion(track.trackId, completionRate);
-            oyoOnTrackComplete(track, currentTime);
-            // FALLBACK: if this was an edge-stream track AND the 85% cache
-            // effect didn't fire, cache it now (audio is done, no contention).
-            if (wasEdgeStream && cacheNotYetTriggered && track.trackId) {
-              devLog('🎵 [VOYO] onEndedDirect fallback cache (85% effect missed)');
-              cacheTrack(
-                track.trackId,
-                track.title,
-                track.artist,
-                track.duration || 0,
-                `https://voyo-edge.dash-webtv.workers.dev/cdn/art/${track.trackId}?quality=high`
-              );
-            }
-          } catch (e) {
-            devWarn('[VOYO] onEndedDirect telemetry failed:', e);
-          }
-        }, 0);
-      }
-    };
-
-    el.addEventListener('ended', onEndedDirect);
-    return () => el.removeEventListener('ended', onEndedDirect);
-  }, [nextTrack]);
+    // Native ended listener — whichever of (React onEnded) or (this) fires
+    // first wins via the lastEndedTrackIdRef dedup. Shared body lives in
+    // runEndedAdvance so there's no drift.
+    el.addEventListener('ended', runEndedAdvance);
+    return () => el.removeEventListener('ended', runEndedAdvance);
+  }, [runEndedAdvance]);
 
   const handleProgress = useCallback(() => {
     if ((playbackSource !== 'cached' && playbackSource !== 'r2') || !audioRef.current?.buffered.length) return;
