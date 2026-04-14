@@ -1716,7 +1716,7 @@ export const AudioPlayer = () => {
         const store = usePlayerStore.getState();
         if (!store.isPlaying) return;
         devWarn(`[VOYO] Load watchdog fired for ${trackId} — 8s without playback, skipping`);
-        logPlaybackEvent({ event_type: 'skip_auto', track_id: trackId, error_code: 'load_watchdog', meta: { timer: 'fg-8s' } });
+        { const t = usePlayerStore.getState().currentTrack; logPlaybackEvent({ event_type: 'skip_auto', track_id: trackId, track_title: t?.title, track_artist: t?.artist, error_code: 'load_watchdog', meta: { timer: 'fg-8s' } }); }
         isLoadingTrackRef.current = false;
         nextTrack();
       }, 8000);
@@ -1991,7 +1991,14 @@ export const AudioPlayer = () => {
             if (resolved || isStale()) return;
             if (attempt >= MAX_RETRIES) {
               devWarn(`[VOYO] All ${MAX_RETRIES} retries failed for ${trackId} — skipping`);
-              logPlaybackEvent({ event_type: 'skip_auto', track_id: trackId, error_code: 'max_retries' });
+              const failedTrack = usePlayerStore.getState().currentTrack;
+              logPlaybackEvent({
+                event_type: 'skip_auto',
+                track_id: trackId,
+                track_title: failedTrack?.title,
+                track_artist: failedTrack?.artist,
+                error_code: 'max_retries',
+              });
               isLoadingTrackRef.current = false;
               nextTrack();
               navigator.mediaSession.playbackState = 'playing';
