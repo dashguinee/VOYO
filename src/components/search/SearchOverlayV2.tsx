@@ -34,6 +34,7 @@ interface TrackItemProps {
   result: SearchResult;
   index: number;
   isActive: boolean;
+  isCached: boolean;
   onSelect: (result: SearchResult) => void;
   onAddToQueue: (result: SearchResult) => void;
   onAddToDiscovery: (result: SearchResult) => void;
@@ -45,6 +46,7 @@ const TrackItem = memo(({
   result,
   index,
   isActive,
+  isCached,
   onSelect,
   onAddToQueue,
   onAddToDiscovery,
@@ -89,7 +91,25 @@ const TrackItem = memo(({
 
       {/* Track Info */}
       <div className="flex-1 min-w-0">
-        <h4 className="text-white/90 font-medium truncate text-sm">{result.title}</h4>
+        <div className="flex items-center gap-1.5">
+          <h4 className="text-white/90 font-medium truncate text-sm">{result.title}</h4>
+          {/* R2-cached marker — track plays instantly + survives BG lockscreen.
+              Bronze-gold dot, tooltip explains. Letterspaced so it doesn't crowd. */}
+          {isCached && (
+            <span
+              className="flex-shrink-0 text-[9px] font-bold tracking-[0.12em] uppercase px-1.5 py-[1px] rounded-md"
+              style={{
+                color: 'rgba(232,208,158,0.95)',
+                background: 'rgba(212,175,110,0.14)',
+                border: '1px solid rgba(212,175,110,0.30)',
+                boxShadow: '0 0 8px -2px rgba(212,175,110,0.35)',
+              }}
+              title="In Disco — plays instantly, survives lockscreen"
+            >
+              ✦ DISCO
+            </span>
+          )}
+        </div>
         <p className="text-white/40 text-xs truncate">{result.artist}</p>
         <div className="flex items-center gap-2 text-[10px] text-white/25 mt-0.5">
           <span>{formatDuration(result.duration)}</span>
@@ -173,6 +193,32 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap }: SearchOverlayP
   }, []);
   const sectionHeaderOpacity = Math.max(0, 1 - Math.max(0, (scrollPct - 0.15)) / 0.10);
   const searchAtBottom = scrollPct >= 0.45;
+
+  // R2 cache awareness — for each result, async batch-check the edge
+  // worker /exists/ endpoint. Tracks already in R2 get a "✦ DISCO" badge
+  // so the user spots which will play instantly + survive the lockscreen.
+  const [cachedSet, setCachedSet] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    if (results.length === 0) { setCachedSet(new Set()); return; }
+    let cancelled = false;
+    const ids = results.map(r => r.voyoId).filter(id => /^[A-Za-z0-9_-]{11}$/.test(id));
+    // Concurrent /exists/ checks, capped at 25 in-flight
+    const checkOne = async (id: string): Promise<[string, boolean]> => {
+      try {
+        const res = await fetch(`https://voyo-edge.dash-webtv.workers.dev/exists/${id}`, { signal: AbortSignal.timeout(4000) });
+        if (!res.ok) return [id, false];
+        const data = await res.json();
+        return [id, !!(data?.exists && (data?.high || data?.low))];
+      } catch { return [id, false]; }
+    };
+    Promise.all(ids.map(checkOne)).then(pairs => {
+      if (cancelled) return;
+      const next = new Set<string>();
+      for (const [id, ok] of pairs) if (ok) next.add(id);
+      setCachedSet(next);
+    });
+    return () => { cancelled = true; };
+  }, [results]);
 
   // Load search history
   useEffect(() => {
@@ -704,6 +750,7 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap }: SearchOverlayP
                           result={result}
                           index={idx}
                           isActive={idx === activeIndex}
+                          isCached={cachedSet.has(result.voyoId)}
                           onSelect={handleSelectTrack}
                           onAddToQueue={handleAddToQueue}
                           onAddToDiscovery={handleAddToDiscovery}
