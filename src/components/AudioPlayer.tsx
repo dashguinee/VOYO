@@ -2070,6 +2070,14 @@ export const AudioPlayer = () => {
               // The telemetry flush will propagate it to other users via Supabase
               // on the next blocklist refresh (every 30 min or app restart).
               markBlocked(trackId);
+              // CASCADE GUARD (extension): count max_retries failures alongside
+              // blocklist-skips. Without this, when extraction is broken (cookies
+              // dead, IP banned), the user experiences ~6s silence per track for
+              // every track in the queue — feels like 'skip is broken' even
+              // though it's working. After 5 consecutive extraction failures
+              // (any kind), force-pause so the user can intervene rather than
+              // sit through endless silence.
+              blocklistCascadeRef.current++;
               const failedTrack = usePlayerStore.getState().currentTrack;
               logPlaybackEvent({
                 event_type: 'skip_auto',
@@ -2077,8 +2085,14 @@ export const AudioPlayer = () => {
                 track_title: failedTrack?.title,
                 track_artist: failedTrack?.artist,
                 error_code: 'max_retries',
+                meta: { cascade: blocklistCascadeRef.current },
               });
               isLoadingTrackRef.current = false;
+              if (blocklistCascadeRef.current >= 5) {
+                devWarn(`[VOYO] Extraction-failure cascade ≥5, force-pausing — extraction is structurally down`);
+                usePlayerStore.getState().setIsPlaying(false);
+                return;
+              }
               nextTrack();
               navigator.mediaSession.playbackState = 'playing';
               return;
