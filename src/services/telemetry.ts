@@ -1,24 +1,34 @@
 /**
  * VOYO Playback Telemetry
  *
- * Captures every playback event (success, failure, source, latency) and
- * batches them to Supabase. This is what a streaming platform needs to
- * know WHY tracks fail, which backends are slow, and what to fix.
+ * Observability layer for streaming playback. Batched Supabase inserts for
+ * every playback event — success, failure, source, latency, stall.
+ * Fire-and-forget. Never blocks audio. Never throws. sendBeacon on pagehide.
  *
- * Events are batched (every 10s or 20 events) to minimize network overhead.
- * Fire-and-forget — never blocks the audio thread.
+ * Design goals:
+ * - Zero impact on audio thread (no sync work, no awaits in call path)
+ * - Survives network failures (batching + retry)
+ * - Survives page unload (sendBeacon)
+ * - Easy to apply to sibling apps (Tivi, Hub) — copy this file, change APP_ID
+ *
+ * Table: voyo_playback_events
+ * See: voyo-music/supabase/migrations/telemetry.sql
  */
 
 import { supabase } from '../lib/supabase';
 import { devLog, devWarn } from '../utils/logger';
 
+// App identity — swap for Tivi: 'dashtivi' / table: 'dashtivi_playback_events'
+const APP_ID = 'voyo';
+const TABLE = 'voyo_playback_events';
+
 export type PlaybackEventType =
   | 'play_start'       // loadTrack fired
-  | 'play_success'     // audio.play() resolved → playing
-  | 'play_fail'        // audio.play() rejected, not NotAllowedError
+  | 'play_success'     // audio element's onPlay event — actually playing
+  | 'play_fail'        // audio.play() rejected (not autoplay-block)
   | 'source_resolved'  // a source (cache/r2/vps/edge) delivered the track
   | 'stall'            // playback stalled during streaming
-  | 'skip_auto';       // track auto-skipped by watchdog/max-retry
+  | 'skip_auto';       // track auto-skipped (watchdog / max-retry / recovery)
 
 export type PlaybackSource =
   | 'preload'
@@ -54,27 +64,49 @@ interface PlaybackEvent {
   meta?: Record<string, unknown>;
 }
 
-// Session ID persists for the lifetime of the tab
-const sessionId = `sess_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+// Session persists for the lifetime of the tab. Correlates events
+// from a single listening session.
+const sessionId = `${APP_ID}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+
+// Batching: flush on 10s interval OR when buffer hits 20 events
+const FLUSH_INTERVAL_MS = 10_000;
+const FLUSH_SIZE = 20;
+const MAX_BUFFER = 100; // Hard cap — drop oldest on overflow (prevents memory leak)
 
 let buffer: PlaybackEvent[] = [];
 let flushTimer: ReturnType<typeof setTimeout> | null = null;
-const FLUSH_INTERVAL_MS = 10000;
-const FLUSH_SIZE = 20;
+let consecutiveFailures = 0;
 
 async function flush(): Promise<void> {
   if (buffer.length === 0) return;
   const batch = buffer.splice(0, buffer.length);
   try {
-    if (!supabase) return;
-    const { error } = await supabase.from('voyo_playback_events').insert(batch);
+    if (!supabase) {
+      // Supabase not configured — drop silently
+      return;
+    }
+    const { error } = await supabase.from(TABLE).insert(batch);
     if (error) {
-      devWarn('[Telemetry] Insert failed:', error.message);
+      consecutiveFailures++;
+      if (consecutiveFailures <= 3) {
+        devWarn(`[Telemetry] Insert failed (${consecutiveFailures}):`, error.message);
+      }
+      // After 3 consecutive failures, stop retrying for this session
+      // (schema issue or auth issue — no point spamming)
+      if (consecutiveFailures > 10) {
+        devWarn('[Telemetry] Too many failures, disabling for this session');
+        buffer = []; // drop everything
+        if (flushTimer) { clearTimeout(flushTimer); flushTimer = null; }
+      }
     } else {
+      consecutiveFailures = 0;
       devLog(`[Telemetry] Flushed ${batch.length} events`);
     }
   } catch (e) {
-    devWarn('[Telemetry] Flush exception:', e);
+    consecutiveFailures++;
+    if (consecutiveFailures <= 3) {
+      devWarn('[Telemetry] Flush exception:', e);
+    }
   }
 }
 
@@ -89,9 +121,16 @@ function scheduleFlush(): void {
 /**
  * Log a playback event. Fire-and-forget — never throws, never blocks.
  * Batched and flushed every 10s or when buffer hits 20 events.
+ * If the buffer overflows (network is down), oldest events are dropped.
  */
-export function logPlaybackEvent(event: Omit<PlaybackEvent, 'is_background' | 'user_agent' | 'session_id'>): void {
+export function logPlaybackEvent(
+  event: Omit<PlaybackEvent, 'is_background' | 'user_agent' | 'session_id'>
+): void {
   try {
+    // Hard cap — drop oldest if we overflow (network outage scenario)
+    if (buffer.length >= MAX_BUFFER) {
+      buffer.shift();
+    }
     buffer.push({
       ...event,
       is_background: typeof document !== 'undefined' && document.hidden,
@@ -108,18 +147,51 @@ export function logPlaybackEvent(event: Omit<PlaybackEvent, 'is_background' | 'u
   }
 }
 
-// Flush pending events on page unload (best effort)
+/**
+ * Flush on page hide — use sendBeacon for reliable delivery during unload.
+ * sendBeacon is NOT throttled by background timer rules.
+ */
 if (typeof window !== 'undefined') {
-  window.addEventListener('pagehide', () => {
+  const unloadFlush = () => {
     if (buffer.length === 0) return;
-    // Use sendBeacon for reliable delivery during unload
     try {
-      const url = `${import.meta.env.VITE_SUPABASE_URL}/rest/v1/voyo_playback_events`;
-      const blob = new Blob([JSON.stringify(buffer)], { type: 'application/json' });
-      navigator.sendBeacon?.(url, blob);
+      const url = `${import.meta.env.VITE_SUPABASE_URL}/rest/v1/${TABLE}`;
+      const body = JSON.stringify(buffer);
+      const key = import.meta.env.VITE_SUPABASE_ANON_KEY;
+      // Use fetch with keepalive (beacon doesn't set headers reliably)
+      if (navigator.sendBeacon) {
+        const blob = new Blob([body], { type: 'application/json' });
+        navigator.sendBeacon(url, blob);
+      } else {
+        fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'apikey': key, 'Authorization': `Bearer ${key}` },
+          body,
+          keepalive: true,
+        }).catch(() => {});
+      }
       buffer = [];
     } catch {
-      // Ignore — best effort only
+      // best-effort
+    }
+  };
+  window.addEventListener('pagehide', unloadFlush);
+  // Also flush on visibilitychange → hidden (user backgrounded the tab)
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden' && buffer.length > 0) {
+      flush();
     }
   });
+}
+
+/**
+ * DEBUG: expose telemetry to window for manual testing.
+ * `voyoTelemetry.flush()` — force immediate flush
+ * `voyoTelemetry.stats()` — see buffer state
+ */
+if (typeof window !== 'undefined' && import.meta.env.DEV) {
+  (window as any).voyoTelemetry = {
+    flush,
+    stats: () => ({ bufferSize: buffer.length, sessionId, consecutiveFailures }),
+  };
 }
