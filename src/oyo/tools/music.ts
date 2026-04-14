@@ -294,6 +294,118 @@ const getCurrentContextTool: ToolDefinition = {
 };
 
 // ---------------------------------------------------------------------------
+// PLAYBACK CONTROL — The OS-layer tools.
+// Without these, OYO can pick music but can't CONTROL playback.
+// With these, voice/chat can drive every playback action:
+//   "pause" / "resume" / "skip" / "back" / "volume up" / "mute" / "jump ahead 30s"
+// ---------------------------------------------------------------------------
+
+const togglePlayTool: ToolDefinition = {
+  name: 'togglePlay',
+  description: 'Toggle play/pause. Use for "pause", "resume", "play" (when a track is loaded).',
+  parameters: [],
+  execute: async () => {
+    try {
+      const player = usePlayerStore.getState();
+      const wasPlaying = player.isPlaying;
+      player.togglePlay();
+      return ok('togglePlay', wasPlaying ? 'Paused' : 'Playing');
+    } catch (err) {
+      return fail('togglePlay', `Failed: ${String(err)}`);
+    }
+  },
+};
+
+const nextTrackTool: ToolDefinition = {
+  name: 'nextTrack',
+  description: 'Skip to the next track. Use for "next", "skip", "forward".',
+  parameters: [],
+  execute: async () => {
+    try {
+      const player = usePlayerStore.getState();
+      const before = player.currentTrack?.title;
+      player.nextTrack();
+      const after = usePlayerStore.getState().currentTrack?.title;
+      return ok('nextTrack', after && after !== before ? `Skipped to: ${after}` : 'Advanced to next track');
+    } catch (err) {
+      return fail('nextTrack', `Failed: ${String(err)}`);
+    }
+  },
+};
+
+const prevTrackTool: ToolDefinition = {
+  name: 'prevTrack',
+  description: 'Go to the previous track. Use for "back", "previous", "last one".',
+  parameters: [],
+  execute: async () => {
+    try {
+      const player = usePlayerStore.getState();
+      player.prevTrack();
+      const after = usePlayerStore.getState().currentTrack?.title;
+      return ok('prevTrack', after ? `Back to: ${after}` : 'Went back');
+    } catch (err) {
+      return fail('prevTrack', `Failed: ${String(err)}`);
+    }
+  },
+};
+
+const seekToTool: ToolDefinition = {
+  name: 'seekTo',
+  description: 'Jump to a specific time in the current track. Use for "skip to 2 minutes", "jump ahead 30 seconds", "restart".',
+  parameters: [
+    { name: 'seconds', type: 'number', description: 'Target time in seconds (absolute position)', required: true },
+  ],
+  execute: async (params) => {
+    try {
+      const seconds = Number(params.seconds);
+      if (!Number.isFinite(seconds) || seconds < 0) {
+        return fail('seekTo', `Invalid seconds: ${params.seconds}`);
+      }
+      const player = usePlayerStore.getState();
+      player.seekTo(seconds);
+      return ok('seekTo', `Jumped to ${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, '0')}`);
+    } catch (err) {
+      return fail('seekTo', `Failed: ${String(err)}`);
+    }
+  },
+};
+
+const setVolumeTool: ToolDefinition = {
+  name: 'setVolume',
+  description: 'Set playback volume (0-100). Use for "louder", "quieter", "mute", "full volume".',
+  parameters: [
+    { name: 'level', type: 'number', description: 'Volume 0-100. Use 0 for mute.', required: true },
+  ],
+  execute: async (params) => {
+    try {
+      const level = Math.max(0, Math.min(100, Math.round(Number(params.level))));
+      if (!Number.isFinite(level)) return fail('setVolume', `Invalid level: ${params.level}`);
+      const player = usePlayerStore.getState();
+      player.setVolume(level);
+      return ok('setVolume', level === 0 ? 'Muted' : `Volume: ${level}`);
+    } catch (err) {
+      return fail('setVolume', `Failed: ${String(err)}`);
+    }
+  },
+};
+
+const repeatTool: ToolDefinition = {
+  name: 'cycleRepeat',
+  description: 'Cycle repeat mode: off → all → one → off. Use for "repeat", "loop this", "stop repeating".',
+  parameters: [],
+  execute: async () => {
+    try {
+      const player = usePlayerStore.getState();
+      player.cycleRepeat();
+      const mode = usePlayerStore.getState().repeatMode;
+      return ok('cycleRepeat', `Repeat: ${mode}`);
+    } catch (err) {
+      return fail('cycleRepeat', `Failed: ${String(err)}`);
+    }
+  },
+};
+
+// ---------------------------------------------------------------------------
 // Export all tools
 // ---------------------------------------------------------------------------
 
@@ -305,4 +417,11 @@ export const MUSIC_TOOLS: ToolDefinition[] = [
   recallMemoryTool,
   saveMemoryTool,
   getCurrentContextTool,
+  // Playback control (OS layer)
+  togglePlayTool,
+  nextTrackTool,
+  prevTrackTool,
+  seekToTool,
+  setVolumeTool,
+  repeatTool,
 ];
