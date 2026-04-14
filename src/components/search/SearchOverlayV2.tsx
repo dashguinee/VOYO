@@ -722,7 +722,7 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap }: SearchOverlayP
                                 user sees results, not chrome. */}
                             <div className="flex items-center gap-2 px-1 pt-1 pb-2 text-[10.5px] font-semibold tracking-[0.18em] uppercase"
                                  style={{ color: 'rgba(212, 175, 110, 0.85)', opacity: sectionHeaderOpacity, transition: 'opacity 200ms ease' }}>
-                              <span style={{ textShadow: '0 0 12px rgba(212,175,110,0.18)' }}>Your Disco</span>
+                              <span style={{ textShadow: '0 0 12px rgba(212,175,110,0.18)' }}>My Disco</span>
                               <span className="flex-1 h-px"
                                     style={{ background: 'linear-gradient(to right, rgba(212,175,110,0.35), rgba(212,175,110,0.04))' }} />
                             </div>

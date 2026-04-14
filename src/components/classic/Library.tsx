@@ -338,19 +338,16 @@ export const Library = ({ onTrackClick }: LibraryProps) => {
 
   return (
     <div className="flex flex-col h-full">
-      {/* Header — "Your Disco" with the VOYO compass-disco icon glowing
-          beside it. Bronze-gold display type, music-soul tagline. */}
-      <header className="px-4 pt-5 pb-2 flex items-center gap-3">
-        <VoyoIcon name="compass-disco" size={44} glow />
-        <div className="flex-1 min-w-0">
-          <h1
-            className="text-3xl font-display font-bold tracking-tight leading-none"
-            style={{ color: 'rgba(232, 208, 158, 0.96)', textShadow: '0 0 18px rgba(212,175,110,0.20)', letterSpacing: '-0.01em' }}
-          >
-            Your Disco
-          </h1>
-          <p className="text-white/35 text-[12px] mt-1 tracking-wide">your sound, your selection</p>
-        </div>
+      {/* Header — "My Disco" in faded bronze-gold. Icon removed (Dash's call:
+          stripped chrome, let the type carry it). */}
+      <header className="px-4 pt-5 pb-2">
+        <h1
+          className="text-3xl font-display font-bold tracking-tight"
+          style={{ color: 'rgba(232, 208, 158, 0.96)', textShadow: '0 0 18px rgba(212,175,110,0.20)', letterSpacing: '-0.01em' }}
+        >
+          My Disco
+        </h1>
+        <p className="text-white/35 text-[12px] mt-1 tracking-wide">your sound, your selection</p>
       </header>
 
       {/* Search Bar — bronze focus ring (was purple) */}
