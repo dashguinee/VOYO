@@ -922,24 +922,39 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       ? state.hotTracks
       : TRACKS;
 
-    // DEDUPLICATION: Remove recently played tracks (check both id and trackId)
-    let availableTracks = allAvailable.filter(t =>
-      !recentHistoryIds.has(t.id) && !recentHistoryIds.has(t.trackId)
-    );
+    // DEDUPLICATION: Remove recently played + collective-blocklist tracks.
+    // CRITICAL (2026-04-14): Until now the discover/hot fallback DID NOT
+    // apply the blocklist filter — only the queue path did. Result: when
+    // the queue emptied and we fell into discover-fallback, we'd land on a
+    // blocked track, loadTrack's isBlocked() check would immediately fire
+    // nextTrack() again, which would land on ANOTHER blocked track, and we
+    // got a 50+ track-per-second cascade visible in telemetry. Fix: filter
+    // both layers identically so the fallback never re-surfaces dead IDs.
+    let availableTracks = allAvailable.filter(t => {
+      if (recentHistoryIds.has(t.id) || recentHistoryIds.has(t.trackId)) return false;
+      if (t.trackId && (isKnownUnplayable(t.trackId) || isBlocklisted(t.trackId))) return false;
+      return true;
+    });
 
-    // Fallback: If all filtered out, use originals BUT still exclude current track
+    // Fallback: If all filtered out, drop history exclusion BUT still avoid
+    // blocked + current. Shuffle for variety.
     if (availableTracks.length === 0) {
       availableTracks = allAvailable.filter(t => {
         const tid = t.id || t.trackId;
-        return tid !== currentTrackId;
+        if (tid === currentTrackId) return false;
+        if (t.trackId && (isKnownUnplayable(t.trackId) || isBlocklisted(t.trackId))) return false;
+        return true;
       });
-      // Shuffle for variety
       availableTracks = availableTracks.sort(() => Math.random() - 0.5);
     }
 
-    // LAST RESORT: If somehow still empty, use all but shuffle
+    // LAST RESORT: If still empty, use anything except current — even blocked
+    // tracks get a shot here (better than nothing). Shuffled.
     if (availableTracks.length === 0) {
-      availableTracks = [...allAvailable].sort(() => Math.random() - 0.5);
+      availableTracks = [...allAvailable].filter(t => {
+        const tid = t.id || t.trackId;
+        return tid !== currentTrackId;
+      }).sort(() => Math.random() - 0.5);
     }
 
     if (availableTracks.length > 0) {

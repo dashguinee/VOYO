@@ -164,6 +164,7 @@ export const AudioPlayer = () => {
 
   const wakeLockRef = useRef<WakeLockSentinel | null>(null);
   const lastTrackIdRef = useRef<string | null>(null);
+  const blocklistCascadeRef = useRef(0); // how many consecutive blocked tracks we've skipped — circuit breaker
   // Monotonic counter — incremented on every loadTrack invocation. Used as a
   // cancellation token: each in-flight loadTrack captures `myAttempt` at the
   // top and bails out at every await boundary if a newer load has started.
@@ -1597,19 +1598,33 @@ export const AudioPlayer = () => {
       // COLLECTIVE FAILURE MEMORY — check if this track has failed ≥3 times
       // across any user in the last 7 days. If so, skip immediately instead
       // of wasting 20s on a retry loop that will fail again.
+      //
+      // CASCADE GUARD (2026-04-14): if many blocked tracks land in a row
+      // (rare but observed when blocklist refresh is stale and discover
+      // pool is dense with dead IDs), break the chain after 5 consecutive
+      // skips. Telemetry confirmed dozens of play_starts/sec when this ran
+      // unbounded. Counter resets ONLY when a non-blocked track arrives.
       if (isBlocked(trackId)) {
-        devWarn(`[VOYO] Track ${trackId} is on collective blocklist — skipping without trying`);
+        if (blocklistCascadeRef.current >= 5) {
+          devWarn(`[VOYO] Blocklist cascade depth >= 5, stopping skip chain on ${trackId}`);
+          usePlayerStore.getState().setIsPlaying(false);
+          return;
+        }
+        blocklistCascadeRef.current++;
+        devWarn(`[VOYO] Track ${trackId} on blocklist — skip (cascade ${blocklistCascadeRef.current}/5)`);
         logPlaybackEvent({
           event_type: 'skip_auto',
           track_id: trackId,
           track_title: currentTrack.title,
           track_artist: currentTrack.artist,
           error_code: 'max_retries',
-          meta: { source: 'blocklist' },
+          meta: { source: 'blocklist', cascade: blocklistCascadeRef.current },
         });
         nextTrack();
         return;
       }
+      // Reached a non-blocked track — reset cascade counter.
+      blocklistCascadeRef.current = 0;
 
       // FAST-PATH CHECK: if the next track is preloaded, we can do a much
       // tighter transition. Peek at preload BEFORE the mute+wait cycle.
