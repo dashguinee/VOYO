@@ -2983,7 +2983,19 @@ export const AudioPlayer = () => {
   const runEndedAdvance = useCallback(() => {
     const state = usePlayerStore.getState();
     const trackId = state.currentTrack?.trackId;
-    trace('ended_fire', trackId || '-', { hidden: document.hidden, prevEndedRef: lastEndedTrackIdRef.current });
+    const audioEnded = audioRef.current?.ended === true;
+    trace('ended_fire', trackId || '-', { hidden: document.hidden, prevEndedRef: lastEndedTrackIdRef.current, audioEnded });
+    // STALE-EVENT GUARD: if the audio element is NOT currently in ended
+    // state, this event is stale — fired for a previous source that we've
+    // already advanced past. Was burning the queue: native onEndedDirect
+    // fires → advances → loadTrack resets the dedup ref → React's late
+    // synthetic onEnded fires → finds null ref → advances AGAIN, skipping
+    // every other track. Visible in trace as ended_fire/next_call pairs
+    // for back-to-back trackIds with no play_resolved between.
+    if (!audioEnded) {
+      trace('ended_dedup', trackId || '-', { why: 'audio_not_ended_stale' });
+      return;
+    }
     if (!trackId || lastEndedTrackIdRef.current === trackId) {
       trace('ended_dedup', trackId || '-', { why: 'ref_already_set' });
       return;
