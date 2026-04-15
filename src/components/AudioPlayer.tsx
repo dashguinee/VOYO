@@ -3271,6 +3271,37 @@ export const AudioPlayer = () => {
         } catch (e) {}
       }
     }
+
+    // v197 PROACTIVE TRANSITION (The Answer):
+    // At duration - 0.5s, transition NOW instead of waiting for `ended`.
+    // The `ended` event is unreliable in BG (Chrome drops it), and waiting
+    // for it creates a paused window where the OS revokes audio focus.
+    // Proactively advancing keeps the element continuously playing:
+    //   real track (last 0.5s) → silent WAV bridge → next track's blob
+    // With v196 preload working, the next track is already a blob in
+    // IndexedDB — src swap is instant, local, network-free, BG-safe.
+    const state = usePlayerStore.getState();
+    const trackId = state.currentTrack?.trackId;
+    if (
+      trackId &&
+      proactivelyAdvancedForTrackIdRef.current !== trackId &&
+      state.isPlaying &&
+      el.duration - el.currentTime <= 0.5 &&
+      el.duration > 1.0 && // avoid firing on <1s silent WAV during load
+      el.src !== silentKeeperUrlRef.current // don't proactively advance during bridge
+    ) {
+      proactivelyAdvancedForTrackIdRef.current = trackId;
+      trace('proactive_advance', trackId, {
+        currentTime: el.currentTime,
+        duration: el.duration,
+        remaining: el.duration - el.currentTime,
+        hidden: document.hidden,
+      });
+      // Reuse synthetic-bypass so runEndedAdvance accepts the call despite
+      // audio.ended === false. Same pattern as v189 synthetic-ended.
+      syntheticEndedBypassRef.current = true;
+      runEndedAdvanceRef.current();
+    }
   }, [playbackSource, setCurrentTime, setProgress, checkProgressMilestones]);
 
   const handleDurationChange = useCallback(() => {
@@ -3448,6 +3479,16 @@ export const AudioPlayer = () => {
   // runEndedAdvance() call bypasses its `audio.ended===true` guard.
   // Flag is consumed (reset to false) inside runEndedAdvance.
   const syntheticEndedBypassRef = useRef(false);
+  // v197 THE ANSWER — proactive transition. The audio element must never
+  // become idle. If we wait for the `ended` event, we get a window where
+  // the element is paused while we advance — that's when the OS revokes
+  // audio focus / suspends the context in BG, and why every BG bug has
+  // existed. Instead, at duration - 0.5s we ALREADY transition: engage
+  // silent WAV bridge + call nextTrack. The element goes real → silent
+  // WAV → real, never stopping. 0.5s is below perceptual threshold for
+  // most tracks (which have tail silence anyway).
+  // Per-trackId ref so we only proactively advance once per track.
+  const proactivelyAdvancedForTrackIdRef = useRef<string | null>(null);
   useEffect(() => {
     const el = audioRef.current;
     if (!el) return;
