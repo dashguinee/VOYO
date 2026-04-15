@@ -1979,6 +1979,14 @@ export const AudioPlayer = () => {
 
           if (audioRef.current) {
             audioRef.current.volume = 1.0; // Pinned — loudness via masterGain
+            // CRITICAL: clear loop=true left by silent-WAV bridge (v185
+            // pre-advance OR v172 in-loadTrack BG bridge). Without this,
+            // the new R2 track plays on a looped audio element → ended
+            // never fires → no auto-advance → silent dead BG transition.
+            // Same fix as v171 applied to preload + cached fast-paths,
+            // missed on this R2-direct path because v185's pre-advance
+            // bridge made it newly reachable in BG.
+            audioRef.current.loop = false;
             audioRef.current.src = r2Result.url;
             audioRef.current.load();
 
@@ -3470,6 +3478,12 @@ export const AudioPlayer = () => {
         const cTrack = usePlayerStore.getState().currentTrack;
         if (cTrack?.trackId && lastPlaySuccessIdRef.current === cTrack.trackId) return;
         if (cTrack?.trackId) lastPlaySuccessIdRef.current = cTrack.trackId;
+        // Reset cascade counter on ANY successful play — if user resumed
+        // after a force-pause, the cascade is healed; if next-track succeeded,
+        // we shouldn't carry the counter into a healthy run. Without this,
+        // a stale 5-cascade from earlier could force-pause the next failing
+        // track immediately even though playback recovered (A4 finding).
+        blocklistCascadeRef.current = 0;
         const track = usePlayerStore.getState().currentTrack;
         if (track?.trackId) {
           logPlaybackEvent({
