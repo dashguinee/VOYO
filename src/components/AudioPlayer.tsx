@@ -45,6 +45,7 @@ import { registerTrackPlay as viRegisterPlay } from '../services/videoIntelligen
 import { useMiniPiP } from '../hooks/useMiniPiP';
 import { notifyNextUp } from '../services/oyoNotifications';
 import { logPlaybackEvent, trace } from '../services/telemetry';
+import { getBatteryState } from '../services/battery';
 import { isBlocked, markBlocked } from '../services/trackBlocklist';
 import {
   preloadNextTrack,
@@ -2966,7 +2967,14 @@ export const AudioPlayer = () => {
         try {
           audioContextRef.current?.state === 'suspended' && audioContextRef.current.resume().catch(() => {});
           el.play().catch(() => {});
-          trace('heartbeat_kick', usePlayerStore.getState().currentTrack?.trackId, { why: 'element_silently_paused', hidden: document.hidden });
+          const bat = getBatteryState();
+          trace('heartbeat_kick', usePlayerStore.getState().currentTrack?.trackId, {
+            why: 'element_silently_paused',
+            hidden: document.hidden,
+            batLvl: Math.round(bat.level * 100),
+            batCharging: bat.charging,
+            batLow: bat.lowBattery,
+          });
         } catch {}
       }
 

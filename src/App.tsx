@@ -18,6 +18,8 @@ import { setupMobileAudioUnlock } from './utils/mobileAudioUnlock';
 import { AnimatedBackground, BackgroundPicker, BackgroundType, ReactionCanvas } from './components/backgrounds/AnimatedBackgrounds';
 import { AudioPlayer } from './components/AudioPlayer';
 import { AtmosphereLayer } from './components/atmosphere/AtmosphereLayer';
+import { LowBatteryEffect } from './components/atmosphere/LowBatteryEffect';
+import { initBatteryMonitor } from './services/battery';
 import { YouTubeIframe } from './components/YouTubeIframe';
 import { InstallButton } from './components/ui/InstallButton';
 import { OfflineIndicator } from './components/ui/OfflineIndicator';
@@ -1090,6 +1092,11 @@ function App() {
   // MOBILE FIX: Setup audio unlock on app mount
   useEffect(() => {
     setupMobileAudioUnlock();
+    // Battery monitor — correlates BG audio failures with power state.
+    // Chrome Android throttles BG tabs much harder under Power Save mode;
+    // if our heartbeats still aren't enough, this tells us it's the OS
+    // not our code. Also powers the future LowBatteryEffect visual.
+    initBatteryMonitor().catch(() => {});
   }, []);
 
   // DASH AUTH: Handle callback from Command Center (simple, synchronous)
@@ -1631,6 +1638,10 @@ function App() {
           subtle vignette). Mounted high in the tree so every screen sits
           inside the firelight wash, not just specific surfaces. */}
       <AtmosphereLayer />
+      {/* Low-battery visual — currently a no-op placeholder. Will render
+          a subtle candle-flicker / warm-dim state when battery < 20% and
+          not charging. Hook is live, visual pending. */}
+      <LowBatteryEffect />
 
       {/* Audio Player - Boost (cached audio) handles playback */}
       <AudioPlayer />
