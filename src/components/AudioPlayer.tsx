@@ -189,6 +189,13 @@ export const AudioPlayer = () => {
   const hasTriggered50PercentCacheRef = useRef<boolean>(false); // 50% auto-boost trigger
   const hasTriggered85PercentCacheRef = useRef<boolean>(false); // 85% edge-stream cache trigger
   const hasTriggeredPreloadRef = useRef<boolean>(false); // 70% next-track preload trigger
+  // v196 fix: the boolean above is reset INSIDE the async loadTrack body
+  // (line ~1779), but React runs the preload effect BEFORE loadTrack body.
+  // Result: on every track change, preload effect sees the flag still true
+  // from the previous track and bails — preload never fired for any track
+  // after the first. Using a per-trackId dedup ref instead removes the
+  // timing dependency entirely.
+  const preloadedForTrackIdRef = useRef<string | null>(null);
   const shouldAutoResumeRef = useRef<boolean>(false); // Resume playback on refresh if position was saved
   const pendingAutoResumeRef = useRef<boolean>(false); // True when autoplay was blocked by browser — first user tap resumes
   const isEdgeStreamRef = useRef<boolean>(false); // True when playing from Edge Worker stream URL (not IndexedDB)
@@ -490,10 +497,16 @@ export const AudioPlayer = () => {
     if (!currentTrack?.trackId) {
       return;
     }
-    if (hasTriggeredPreloadRef.current) {
-      // Already triggered for this track, skip
+    // v196: dedup by trackId instead of a reset-able boolean. The old flag
+    // approach had a React-effect-order race that made preload fire only
+    // for the first track of a session. trackId-based dedup has no timing
+    // dependency — this effect runs once per actual track change, period.
+    if (preloadedForTrackIdRef.current === currentTrack.trackId) {
       return;
     }
+    preloadedForTrackIdRef.current = currentTrack.trackId;
+    // Keep the old flag in sync so other paths that read it still work.
+    hasTriggeredPreloadRef.current = false;
 
     // Gather next 2-3 tracks from queue + prediction
     const getUpcomingTracks = (): Track[] => {
