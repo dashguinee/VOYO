@@ -22,6 +22,7 @@
 
 import { checkR2Cache } from './api';
 import { devLog, devWarn } from '../utils/logger';
+import { trace } from './telemetry';
 
 // Edge Worker for extraction (FREE - replaces Fly.io)
 const EDGE_WORKER_URL = 'https://voyo-edge.dash-webtv.workers.dev';
@@ -88,12 +89,14 @@ export async function preloadNextTrack(
   // Already preloaded this track in multi-track cache
   const existingPreload = state.preloadedTracks.get(normalizedId);
   if (existingPreload?.isReady) {
+    trace('preload_skip', normalizedId, { why: 'already_ready', source: existingPreload.source });
     devLog('🔮 [Preload] Already preloaded in cache:', normalizedId);
     return existingPreload;
   }
 
   // Already preloading this specific track
   if (trackAbortControllers.has(normalizedId)) {
+    trace('preload_skip', normalizedId, { why: 'already_in_flight' });
     devLog('🔮 [Preload] Already preloading:', normalizedId);
     return state.preloadedTracks.get(normalizedId) || state.preloaded;
   }
@@ -107,6 +110,7 @@ export async function preloadNextTrack(
   state.isPreloading = true;
   state.lastPreloadedId = normalizedId;
 
+  trace('preload_start', normalizedId, { hidden: typeof document !== 'undefined' && document.hidden });
   devLog('🔮 [Preload] Starting preload for:', normalizedId);
 
   try {
@@ -143,12 +147,14 @@ export async function preloadNextTrack(
         audioEl.pause();
         state.preloadedTracks.delete(normalizedId);
         trackAbortControllers.delete(normalizedId);
+        trace('preload_abort', normalizedId, { source: 'cached', stage: 'after_wait' });
         return null;
       }
 
       preloadEntry.isReady = true;
       state.isPreloading = false;
       trackAbortControllers.delete(normalizedId);
+      trace('preload_complete', normalizedId, { source: 'cached' });
       devLog('🔮 [Preload] ✅ Local cache preload complete');
       return preloadEntry;
     }
@@ -186,12 +192,14 @@ export async function preloadNextTrack(
         audioEl.pause();
         state.preloadedTracks.delete(normalizedId);
         trackAbortControllers.delete(normalizedId);
+        trace('preload_abort', normalizedId, { source: 'r2', stage: 'after_wait' });
         return null;
       }
 
       preloadEntry.isReady = true;
       state.isPreloading = false;
       trackAbortControllers.delete(normalizedId);
+      trace('preload_complete', normalizedId, { source: 'r2' });
       devLog('🔮 [Preload] ✅ R2 preload complete');
       return preloadEntry;
     }
@@ -262,18 +270,21 @@ export async function preloadNextTrack(
         audioEl.pause();
         state.preloadedTracks.delete(normalizedId);
         trackAbortControllers.delete(normalizedId);
+        trace('preload_abort', normalizedId, { source: 'edge', stage: 'after_wait' });
         return null;
       }
 
       preloadEntry.isReady = true;
       state.isPreloading = false;
       trackAbortControllers.delete(normalizedId);
+      trace('preload_complete', normalizedId, { source: 'edge' });
       devLog('🔮 [Preload] ✅ YouTube direct stream preload complete');
       return preloadEntry;
     } catch (extractError) {
       devWarn('🔮 [Preload] Stream preload error:', extractError);
       state.isPreloading = false;
       trackAbortControllers.delete(normalizedId);
+      trace('preload_fail', normalizedId, { source: 'edge', err: (extractError as Error)?.name, msg: ((extractError as Error)?.message || '').slice(0, 80) });
       return null;
     }
 
@@ -281,6 +292,7 @@ export async function preloadNextTrack(
     devWarn('🔮 [Preload] Error:', error);
     state.isPreloading = false;
     trackAbortControllers.delete(normalizedId);
+    trace('preload_fail', normalizedId, { source: 'top', err: (error as Error)?.name, msg: ((error as Error)?.message || '').slice(0, 80) });
     return null;
   }
 }
@@ -435,6 +447,15 @@ export function cleanupPreloaded(): void {
  * entries in the map with dead audio elements, slowly leaking memory.
  */
 export function cancelPreload(): void {
+  const inFlight = trackAbortControllers.size;
+  const nonReadyCount = (() => {
+    let n = 0;
+    for (const [, entry] of state.preloadedTracks) if (!entry.isReady) n++;
+    return n;
+  })();
+  if (inFlight > 0 || nonReadyCount > 0) {
+    trace('preload_cancel', null, { inFlight, nonReadyCount });
+  }
   if (preloadAbortController) {
     preloadAbortController.abort();
     preloadAbortController = null;

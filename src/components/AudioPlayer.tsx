@@ -3270,7 +3270,19 @@ export const AudioPlayer = () => {
     const audioEnded = audioRef.current?.ended === true;
     const synthetic = syntheticEndedBypassRef.current;
     syntheticEndedBypassRef.current = false; // consume flag
-    trace('ended_fire', trackId || '-', { hidden: document.hidden, prevEndedRef: lastEndedTrackIdRef.current, audioEnded, synthetic });
+    const currentSrc = audioRef.current?.currentSrc || '';
+    trace('ended_fire', trackId || '-', { hidden: document.hidden, prevEndedRef: lastEndedTrackIdRef.current, audioEnded, synthetic, srcTail: currentSrc.slice(-40) });
+
+    // CASCADE GUARD (v193): if the audio element's src hasn't changed since
+    // the last ended event we processed, this is a duplicate — the native
+    // 'ended' and React synthetic onEnded both firing for the same end-of-
+    // stream. Without this, each pair advances twice, skipping every other
+    // track. Synthetic bypass path skips this (it's explicitly a new attempt
+    // to advance the same track we couldn't end normally).
+    if (!synthetic && currentSrc && lastEndedSrcRef.current === currentSrc) {
+      trace('ended_dedup', trackId || '-', { why: 'same_src_cascade', srcTail: currentSrc.slice(-40) });
+      return;
+    }
     // STALE-EVENT GUARD: if the audio element is NOT currently in ended
     // state, this event is stale — fired for a previous source that we've
     // already advanced past. Was burning the queue: native onEndedDirect
@@ -3293,6 +3305,11 @@ export const AudioPlayer = () => {
       return;
     }
     lastEndedTrackIdRef.current = trackId;
+    // Latch the src we're advancing FROM — next ended event on the same
+    // src is a duplicate. Cleared naturally when audio.currentSrc changes
+    // (loadTrack assigns a new src → currentSrc differs → next ended
+    // passes the guard).
+    if (currentSrc) lastEndedSrcRef.current = currentSrc;
 
     const { playbackSource: ps, isPlaying: playing, currentTrack: track } = state;
     if (ps !== 'cached' && ps !== 'r2') { trace('ended_bail', trackId, { why: `src_${ps}` }); return; }
@@ -3388,6 +3405,20 @@ export const AudioPlayer = () => {
   // so checking "did we already handle ended for THIS track?" is reliable
   // in both foreground and background. No rAF/microtask/setTimeout issues.
   const lastEndedTrackIdRef = useRef<string | null>(null);
+  // SRC-BASED CASCADE DEDUP: trackId-based dedup was breaking because
+  // loadTrack resets lastEndedTrackIdRef at its start, BEFORE audio.src
+  // is actually swapped. That opens a window where a second ended event
+  // (React synthetic arriving after the native 'ended' already advanced)
+  // sees trackId=newTrack (store already rotated) and ref=null (just
+  // reset) → passes dedup → advances again → cascade. Seen in v192
+  // telemetry: 3 tracks skipped in 50ms at +42.15s and +287.87s.
+  //
+  // Fix: dedup by audio.currentSrc. currentSrc only changes when loadTrack
+  // actually assigns a new src attribute — which happens AFTER the cascade
+  // window. So two rapid ended events see the SAME currentSrc and the
+  // second one bails. Unlike trackId, currentSrc doesn't need resetting;
+  // it naturally differs once a new track is loaded.
+  const lastEndedSrcRef = useRef<string | null>(null);
   // Synthetic ended bypass — Android Chrome sometimes refuses to fire the
   // 'ended' event in deep BG. Heartbeat detects this (currentTime near
   // duration + element paused + hidden) and sets this flag so the next
