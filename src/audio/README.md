@@ -169,6 +169,18 @@ but the rest of the app (library, search, UI) survives.
 
 ---
 
+## Tests
+
+```
+npm test           # run once
+npm run test:watch # watch mode
+```
+
+13 tests across `sourceResolver.test.ts` + `boostPresets.test.ts`. The
+other modules (bgEngine, errorRecovery, etc.) are tightly coupled to
+browser APIs (MediaSession, AudioContext, visibilitychange) so they're
+tested end-to-end in the app rather than unit-tested here.
+
 ## Data Flow
 
 ```
