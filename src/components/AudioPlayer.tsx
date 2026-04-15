@@ -1854,10 +1854,9 @@ export const AudioPlayer = () => {
         }
       }
 
-      // Normal loading flow: Check cache first
-      const API_BASE = 'https://voyo-edge.dash-webtv.workers.dev';
-      const { url: bestUrl, cached: fromCache } = audioEngine.getBestAudioUrl(trackId, API_BASE);
-      const cachedUrl = fromCache ? bestUrl : await checkCache(trackId);
+      // Check local IndexedDB cache — the only real audio cache. (mediaCache
+      // + audioEngine.preloadCache never held audio; they were dead paths.)
+      const cachedUrl = await checkCache(trackId);
       if (isStale()) { trace('load_abandoned', trackId, { at: 'after_checkCache' }); devLog(`[AudioPlayer] cancelled stale load for ${trackId} after checkCache`); return; }
 
       if (cachedUrl) {
