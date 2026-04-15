@@ -46,6 +46,7 @@ import { getBatteryState } from '../services/battery';
 import { isBlocked } from '../services/trackBlocklist';
 import { cleanupPreloaded } from '../services/preloadManager';
 import { useBgEngine } from '../audio/bg/bgEngine';
+import { useWakeLock } from '../audio/bg/useWakeLock';
 import { resolveSource } from '../audio/sources/sourceResolver';
 import { usePreloadTrigger } from '../audio/sources/usePreloadTrigger';
 import { useFrequencyPump } from '../audio/graph/freqPump';
@@ -148,7 +149,6 @@ export const AudioPlayer = () => {
   const subHarmonicGainRef = useRef<GainNode | null>(null);
   const spatialInputRef = useRef<GainNode | null>(null);
 
-  const wakeLockRef = useRef<WakeLockSentinel | null>(null);
   const lastTrackIdRef = useRef<string | null>(null);
   const blocklistCascadeRef = useRef(0); // how many consecutive blocked tracks we've skipped — circuit breaker
   const lastPlaySuccessIdRef = useRef<string | null>(null); // dedup play_success telemetry per trackId
@@ -461,25 +461,7 @@ export const AudioPlayer = () => {
   // Preload trigger + cleanup live in one module.
   usePreloadTrigger({ currentTrack, queue, checkCache, predictNextTrack, hasTriggeredPreloadRef });
 
-  // Wake lock
-  useEffect(() => {
-    const manageWakeLock = async () => {
-      if (!isPlaying && wakeLockRef.current) {
-        await wakeLockRef.current.release().catch(e => devWarn('🔒 [WakeLock] Release failed:', e.name));
-        wakeLockRef.current = null;
-        return;
-      }
-      if (isPlaying && 'wakeLock' in navigator && !wakeLockRef.current) {
-        try {
-          wakeLockRef.current = await navigator.wakeLock.request('screen');
-        } catch (e) {
-          devWarn('🔒 [WakeLock] Request failed:', (e as Error).name);
-        }
-      }
-    };
-    manageWakeLock();
-    return () => { wakeLockRef.current?.release().catch(e => devWarn('🔒 [WakeLock] Cleanup release failed:', e.name)); };
-  }, [isPlaying]);
+  useWakeLock(isPlaying);
 
   // Silent WAV blob generation lives in bgEngine (src/audio/bg/bgEngine.ts).
 
