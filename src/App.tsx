@@ -17,6 +17,7 @@ import { getYouTubeThumbnail } from './data/tracks';
 import { setupMobileAudioUnlock } from './utils/mobileAudioUnlock';
 import { AnimatedBackground, BackgroundPicker, BackgroundType, ReactionCanvas } from './components/backgrounds/AnimatedBackgrounds';
 import { AudioPlayer } from './components/AudioPlayer';
+import { AudioErrorBoundary } from './audio/AudioErrorBoundary';
 import { AtmosphereLayer } from './components/atmosphere/AtmosphereLayer';
 import { LowBatteryEffect } from './components/atmosphere/LowBatteryEffect';
 import { initBatteryMonitor } from './services/battery';
@@ -1643,8 +1644,12 @@ function App() {
           not charging. Hook is live, visual pending. */}
       <LowBatteryEffect />
 
-      {/* Audio Player - Boost (cached audio) handles playback */}
-      <AudioPlayer />
+      {/* Audio Player — wrapped in error boundary so a throw inside the
+          Web Audio chain or any of the 15+ effects doesn't kill the whole
+          app. The boundary auto-remounts after 1s for transient failures. */}
+      <AudioErrorBoundary>
+        <AudioPlayer />
+      </AudioErrorBoundary>
 
       {/* OYO Ambient AI Overlay — Phase 2. Mounted once at root, reads
           isInvoked from oyoStore. Long-press the VOYO orb to summon. */}
