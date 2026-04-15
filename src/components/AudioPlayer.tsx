@@ -222,10 +222,19 @@ export const AudioPlayer = () => {
   // always experiences flow. Stale guard ensures a late fire doesn't skip
   // the CURRENT playing track after recovery.
   const loadWatchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // BG watchdog uses MessageChannel (setTimeout is throttled 1/min in BG).
+  // Hold the active port so we can cancel on clearLoadWatchdog or on a
+  // new loadTrack — without this, the MC tick loop is uncancellable and
+  // each fresh loadTrack arms yet another one, causing cascades.
+  const bgWatchdogPortRef = useRef<MessagePort | null>(null);
   const clearLoadWatchdog = () => {
     if (loadWatchdogRef.current) {
       clearTimeout(loadWatchdogRef.current);
       loadWatchdogRef.current = null;
+    }
+    if (bgWatchdogPortRef.current) {
+      try { bgWatchdogPortRef.current.close(); } catch {}
+      bgWatchdogPortRef.current = null;
     }
   };
   // Handles the .catch side of a loadTrack play() promise. Distinguishes
@@ -1779,20 +1788,43 @@ export const AudioPlayer = () => {
         trace('next_call', trackId, { from: 'watchdog_fg' });
         nextTrack();
       }, 8000);
-      // BACKGROUND: setTimeout is throttled to 1/min. MessageChannel backup
-      // fires in ~5s (not throttled) to skip stuck tracks faster.
+      // BACKGROUND: setTimeout is throttled to 1/min. MessageChannel is NOT
+      // throttled, so we use it as a polling pump — but we MUST gate on a
+      // wall-clock elapsed time. The old `ticks < 500` was iteration-only
+      // and in an idle BG tab burned through all 500 iterations in
+      // microseconds → watchdog fired at t=0 → next_call from=watchdog_bg →
+      // new loadTrack armed a fresh MC → cascade. Telemetry showed 196
+      // watchdog_fires in 50s, median load→fire delta = 0ms.
+      // Fix: check Date.now() elapsed >= 5000ms before firing, and store
+      // the port in bgWatchdogPortRef so clearLoadWatchdog / new loadTrack
+      // can cancel it.
       if (document.hidden) {
-        let ticks = 0;
+        // Cancel any previous BG watchdog (paranoia — clearLoadWatchdog
+        // also runs above, but re-entry is possible).
+        if (bgWatchdogPortRef.current) {
+          try { bgWatchdogPortRef.current.close(); } catch {}
+          bgWatchdogPortRef.current = null;
+        }
+        const startMs = Date.now();
         const mc = new MessageChannel();
+        bgWatchdogPortRef.current = mc.port1;
         mc.port1.onmessage = () => {
-          ticks++;
-          if (ticks < 500) { mc.port2.postMessage(null); return; } // ~5s
-          mc.port1.close();
-          if (isStale() || !loadWatchdogRef.current) return; // already resolved
+          // If a newer load took over (or clearLoadWatchdog ran), our port
+          // ref no longer points to this MC — abort quietly.
+          if (bgWatchdogPortRef.current !== mc.port1) {
+            try { mc.port1.close(); } catch {}
+            return;
+          }
+          const elapsed = Date.now() - startMs;
+          if (elapsed < 5000) { mc.port2.postMessage(null); return; }
+          // Time elapsed — close, re-check guards, fire.
+          try { mc.port1.close(); } catch {}
+          bgWatchdogPortRef.current = null;
+          if (isStale() || !loadWatchdogRef.current) return;
           const store = usePlayerStore.getState();
           if (!store.isPlaying) return;
-          trace('watchdog_fire', trackId, { timer: 'bg-5s', hidden: document.hidden });
-          devWarn(`[VOYO] Load watchdog (bg) fired for ${trackId} — skipping`);
+          trace('watchdog_fire', trackId, { timer: 'bg-5s', hidden: document.hidden, elapsedMs: elapsed });
+          devWarn(`[VOYO] Load watchdog (bg) fired for ${trackId} — ${elapsed}ms, skipping`);
           clearLoadWatchdog();
           isLoadingTrackRef.current = false;
           trace('next_call', trackId, { from: 'watchdog_bg' });
