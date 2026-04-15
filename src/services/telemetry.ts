@@ -140,33 +140,27 @@ export function logPlaybackEvent(
       session_id: sessionId,
     };
 
-    // BG REAL-TIME FLUSH: the normal batch pipeline uses setTimeout to
-    // delay flushes by 10s — setTimeout is throttled to 1/min in BG tabs,
-    // so in practice BG events don't land until visibility returns. We
-    // lose debuggability exactly where we need it most.
+    // BG REAL-TIME FLUSH: setTimeout is throttled 1/min in BG. We tried
+    // fetch(keepalive:true) in v190 — it also got deferred by Android
+    // Chrome in deep BG, events piling up until visibility returned.
     //
-    // Fix: in BG, skip the batch entirely and fire a fetch() with
-    // `keepalive: true` per event. fetch is NOT throttled (only timers
-    // are), keepalive lets the request survive the tab being killed, and
-    // the supabase REST endpoint accepts direct POSTs. Cost: one small
-    // network request per trace event while BG. Benefit: real-time
-    // visibility of what's happening on a locked phone.
-    if (hidden && typeof fetch !== 'undefined') {
+    // sendBeacon is the ONE API specifically designed to bypass BG
+    // throttling AND survive page unload. The catch: it can't set custom
+    // headers — but Supabase PostgREST accepts `apikey` via URL query
+    // string, which is good enough for anon-role inserts (RLS-gated).
+    //
+    // Cost: one beacon per trace event in BG. Benefit: real-time BG
+    // observability, which is literally the only way to debug playback
+    // on a locked Android phone.
+    if (hidden && typeof navigator !== 'undefined' && navigator.sendBeacon) {
       try {
-        const url = `${import.meta.env.VITE_SUPABASE_URL}/rest/v1/${TABLE}`;
         const key = import.meta.env.VITE_SUPABASE_ANON_KEY;
-        fetch(url, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'apikey': key,
-            'Authorization': `Bearer ${key}`,
-            'Prefer': 'return=minimal',
-          },
-          body: JSON.stringify([full]),
-          keepalive: true,
-        }).catch(() => {}); // never break playback for telemetry
-        return; // don't also queue — the fetch is the flush
+        const base = import.meta.env.VITE_SUPABASE_URL;
+        const url = `${base}/rest/v1/${TABLE}?apikey=${encodeURIComponent(key)}`;
+        const blob = new Blob([JSON.stringify([full])], { type: 'application/json' });
+        const ok = navigator.sendBeacon(url, blob);
+        if (ok) return; // queued for delivery — don't also buffer
+        // Beacon rejected (queue full) → fall through to buffer
       } catch {
         // fall through to buffer
       }
