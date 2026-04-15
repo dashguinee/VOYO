@@ -112,8 +112,10 @@ export function useAudioChain(params: UseAudioChainParams): AudioChainApi {
   const spatialEnhancedRef = useRef<boolean>(false);
   const currentProfileRef = useRef<BoostPreset>('boosted');
 
-  // Gain watchdog
+  // Gain watchdog — setTimeout for FG, MC for BG. Both must be cancelable
+  // (orphaned MCs accumulate across track loads otherwise).
   const watchdogTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const watchdogMcRef = useRef<MessageChannel | null>(null);
 
   // Harmonic-curve cache — 44100-sample waveshaper curves are expensive to
   // regenerate. Cache by amount (rounded to 0.01) so preset switches reuse.
@@ -192,18 +194,26 @@ export function useAudioChain(params: UseAudioChainParams): AudioChainApi {
 
   const armGainWatchdog = useCallback((label: string, timeoutMs: number = 6000) => {
     if (watchdogTimerRef.current) clearTimeout(watchdogTimerRef.current);
+    if (watchdogMcRef.current) {
+      try { watchdogMcRef.current.port1.close(); } catch {}
+      watchdogMcRef.current = null;
+    }
     watchdogTimerRef.current = setTimeout(() => {
       watchdogTimerRef.current = null;
       rescueGain(label);
     }, timeoutMs);
-    // BG: setTimeout throttled 1/min. Add MC-based backup at 3s.
+    // BG: setTimeout throttled 1/min. MC-based backup at 3s (wall-clock
+    // via Date.now() — iteration-count was the v188 cascade bug).
     if (document.hidden) {
-      let checks = 0;
+      const startMs = Date.now();
       const mc = new MessageChannel();
+      watchdogMcRef.current = mc;
       mc.port1.onmessage = () => {
-        checks++;
-        if (checks < 300) { mc.port2.postMessage(null); }
-        else { rescueGain(`${label}-bg`); mc.port1.close(); }
+        if (watchdogMcRef.current !== mc) { try { mc.port1.close(); } catch {} return; }
+        if (Date.now() - startMs < 3000) { mc.port2.postMessage(null); return; }
+        try { mc.port1.close(); } catch {}
+        watchdogMcRef.current = null;
+        rescueGain(`${label}-bg`);
       };
       mc.port2.postMessage(null);
     }
@@ -213,6 +223,10 @@ export function useAudioChain(params: UseAudioChainParams): AudioChainApi {
     if (watchdogTimerRef.current) {
       clearTimeout(watchdogTimerRef.current);
       watchdogTimerRef.current = null;
+    }
+    if (watchdogMcRef.current) {
+      try { watchdogMcRef.current.port1.close(); } catch {}
+      watchdogMcRef.current = null;
     }
   }, []);
 
@@ -698,8 +712,17 @@ export function useAudioChain(params: UseAudioChainParams): AudioChainApi {
   // ── PLAY/PAUSE CLICK-FREE FADE ───────────────────────────────────────
   // User-initiated play/pause only (tap the button). loadTrack's canplay
   // handler owns its own fade-in — we defer to it via isLoadingTrackRef.
+  // Rapid toggle needs RAF cancellation (otherwise two ramps compete and
+  // volume glitches).
+  const playPauseRafRef = useRef<number | null>(null);
   useEffect(() => {
     if ((playbackSource !== 'cached' && playbackSource !== 'r2') || !audioRef.current) return;
+
+    // Cancel any in-flight HTML-volume ramp from a previous toggle.
+    if (playPauseRafRef.current != null) {
+      cancelAnimationFrame(playPauseRafRef.current);
+      playPauseRafRef.current = null;
+    }
 
     const audio = audioRef.current;
     if (isPlaying && audio.paused && audio.src && audio.readyState >= 2) {
@@ -734,9 +757,10 @@ export function useAudioChain(params: UseAudioChainParams): AudioChainApi {
           const step = () => {
             const t = Math.min((performance.now() - start) / 60, 1);
             if (audioRef.current) audioRef.current.volume = t * target;
-            if (t < 1) requestAnimationFrame(step);
+            if (t < 1) playPauseRafRef.current = requestAnimationFrame(step);
+            else playPauseRafRef.current = null;
           };
-          requestAnimationFrame(step);
+          playPauseRafRef.current = requestAnimationFrame(step);
         }).catch(e => {
           devWarn('[AudioChain] resume failed:', e.name);
           usePlayerStore.getState().setIsPlaying(false);
@@ -760,10 +784,14 @@ export function useAudioChain(params: UseAudioChainParams): AudioChainApi {
         const step = () => {
           const t = Math.min((performance.now() - start) / 40, 1);
           if (audioRef.current) audioRef.current.volume = startVol * (1 - t);
-          if (t < 1) requestAnimationFrame(step);
-          else if (audioRef.current) audioRef.current.pause();
+          if (t < 1) {
+            playPauseRafRef.current = requestAnimationFrame(step);
+          } else {
+            playPauseRafRef.current = null;
+            if (audioRef.current) audioRef.current.pause();
+          }
         };
-        requestAnimationFrame(step);
+        playPauseRafRef.current = requestAnimationFrame(step);
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

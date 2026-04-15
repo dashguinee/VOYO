@@ -417,7 +417,7 @@ export const AudioPlayer = () => {
   // WAV generation, synthetic-ended + stuck-playback detectors, gain
   // rescue. Reads audio chain refs; returns silent WAV blob + transition
   // guard for other modules to reference.
-  const { silentKeeperUrlRef, isTransitioningToBackgroundRef } = useBgEngine({
+  const { silentKeeperUrlRef, isTransitioningToBackgroundRef, engageSilentWav } = useBgEngine({
     audioRef,
     audioContextRef,
     gainNodeRef,
@@ -473,6 +473,7 @@ export const AudioPlayer = () => {
       }
       lastTrackIdRef.current = trackId;
       lastEndedTrackIdRef.current = null;
+      lastEndedSrcRef.current = null; // defensive: previous track's src won't dedup-false-trigger new track's ended
       lastPlaySuccessIdRef.current = null;
 
       // COLLECTIVE FAILURE MEMORY — check if this track has failed ≥3 times
@@ -557,16 +558,8 @@ export const AudioPlayer = () => {
         if (isStale()) { trace('load_abandoned', trackId, { at: 'after_fade_timeout' }); devLog(`[AudioPlayer] cancelled stale load for ${trackId} after fade timeout`); return; }
         if (audioRef.current === audioToFade) {
           if (document.hidden && silentKeeperUrlRef.current) {
-            // BACKGROUND BRIDGE: silent WAV holds audio focus during src swap.
-            trace('silent_wav_engage', trackId, { why: 'bg_load_bridge' });
-            try {
-              audioRef.current.loop = true;
-              audioRef.current.src = silentKeeperUrlRef.current;
-              audioRef.current.play().catch(() => {});
-            } catch {
-              // Silent WAV failed — fall back to no-pause approach
-              devWarn('[VOYO] Silent bridge failed, continuing without');
-            }
+            // BG bridge via the consolidated helper — one lifecycle owner.
+            engageSilentWav('bg_load_bridge', trackId);
           } else {
             audioRef.current.pause();
             audioRef.current.currentTime = 0;
@@ -762,18 +755,17 @@ export const AudioPlayer = () => {
           keeperTimer = null;
           if (!audioRef.current || isStale()) return;
           if (audioRef.current.readyState < 2) {
-            try {
-              audioRef.current.loop = true;
-              audioRef.current.src = silentKeeperUrlRef.current!;
-              audioRef.current.play().catch(() => {});
-              setTimeout(() => {
-                if (audioRef.current && !isStale()) {
-                  audioRef.current.loop = false;
-                  audioRef.current.src = resolved.url;
-                  if (!resolved.isBlob) audioRef.current.load();
-                }
-              }, 800);
-            } catch {}
+            // Buffer gap >3s: engage silent WAV to hold focus, then re-try
+            // the real URL after 800ms. Uses engageSilentWav for consistent
+            // loop + trace + state lifecycle.
+            engageSilentWav('buffer_gap_keeper', trackId);
+            setTimeout(() => {
+              if (audioRef.current && !isStale()) {
+                audioRef.current.loop = false;
+                audioRef.current.src = resolved.url;
+                if (!resolved.isBlob) audioRef.current.load();
+              }
+            }, 800);
           }
         }, 3000);
       }
@@ -827,10 +819,11 @@ export const AudioPlayer = () => {
       // Disarm any pending watchdog from the previous load so it doesn't
       // fire against the new track's in-flight load.
       disarmGainWatchdog();
-      // Same for the load watchdog — if the effect re-runs because the
-      // track changed, the new loadTrack will arm its own. Don't let the
-      // old one fire and skip the new track.
       clearLoadWatchdog();
+      // Stall timer from previous track — might still be armed if we
+      // transitioned during a stall. Clear it so recoverNow doesn't fire
+      // a late recovery on the new track.
+      clearStallTimer();
       // Clear loading guard so a stalled/failed load doesn't leave the
       // onPause handler permanently muted. The next loadTrack will set it
       // again at the start of its own pause cycle.
@@ -985,13 +978,13 @@ export const AudioPlayer = () => {
   // MediaSession (OS lock screen + hardware buttons) lives in its own module.
   useMediaSession({
     audioRef,
-    silentKeeperUrlRef,
     currentTrack,
     isPlaying,
     togglePlay,
     nextTrack,
     muteMasterGainInstantly,
     fadeInMasterGain,
+    engageSilentWav,
   });
 
   // Heartbeat (MC-based 4s loop with all BG detectors) lives in bgEngine.
@@ -1179,14 +1172,7 @@ export const AudioPlayer = () => {
     // the entire transition. When loadTrack eventually runs for the new
     // track, it swaps the silent WAV for the real source on an audio
     // element that never lost focus.
-    if (document.hidden && silentKeeperUrlRef.current && audioRef.current) {
-      try {
-        audioRef.current.loop = true;
-        audioRef.current.src = silentKeeperUrlRef.current;
-        audioRef.current.play().catch(() => {});
-        trace('silent_wav_engage', trackId, { why: 'pre_advance_bridge' });
-      } catch {}
-    }
+    if (document.hidden) engageSilentWav('pre_advance_bridge', trackId);
 
     trace('next_call', trackId, { from: 'ended_advance', hidden: document.hidden });
     playbackState.transition('advancing', trackId, synthetic ? 'synthetic_ended' : 'natural_ended');

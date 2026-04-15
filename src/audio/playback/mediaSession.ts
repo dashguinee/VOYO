@@ -48,25 +48,27 @@ function writeMetadata(track: Track) {
 
 interface UseMediaSessionParams {
   audioRef: RefObject<HTMLAudioElement | null>;
-  silentKeeperUrlRef: RefObject<string | null>;
   currentTrack: Track | null;
   isPlaying: boolean;
   togglePlay: () => void;
   nextTrack: () => void;
   muteMasterGainInstantly: () => void;
   fadeInMasterGain: (durationMs?: number) => void;
+  /** Consolidated silent-WAV bridge engagement from bgEngine. Sets
+   * loop=true, src=silentWAV, play() + traces. Single source of truth. */
+  engageSilentWav: (reason: string, trackId?: string | null) => void;
 }
 
 export function useMediaSession(params: UseMediaSessionParams) {
   const {
     audioRef,
-    silentKeeperUrlRef,
     currentTrack,
     isPlaying,
     togglePlay,
     nextTrack,
     muteMasterGainInstantly,
     fadeInMasterGain,
+    engageSilentWav,
   } = params;
 
   useEffect(() => {
@@ -93,16 +95,9 @@ export function useMediaSession(params: UseMediaSessionParams) {
       const nowId = usePlayerStore.getState().currentTrack?.trackId;
       trace('mediasession_next', nowId, { hidden: document.hidden });
       // Pre-advance bridge: engage silent WAV before nextTrack() so the
-      // React reconciliation window doesn't become an idle gap. Same
-      // pattern as runEndedAdvance's BG path.
-      if (document.hidden && silentKeeperUrlRef.current && audioRef.current) {
-        try {
-          audioRef.current.loop = true;
-          audioRef.current.src = silentKeeperUrlRef.current;
-          audioRef.current.play().catch(() => {});
-          trace('silent_wav_engage', nowId, { why: 'mediasession_next_bridge' });
-        } catch {}
-      }
+      // React reconciliation window doesn't become an idle gap. Uses the
+      // bgEngine helper so loop lifecycle + trace are consistent.
+      if (document.hidden) engageSilentWav('mediasession_next_bridge', nowId);
       nextTrack();
       // Signal OS immediately: playing + zero position. Otherwise the OS
       // may see the old track's final position hanging and drop the
@@ -156,5 +151,5 @@ export function useMediaSession(params: UseMediaSessionParams) {
     } catch {}
 
     navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
-  }, [currentTrack, isPlaying, togglePlay, nextTrack, audioRef, silentKeeperUrlRef, muteMasterGainInstantly, fadeInMasterGain]);
+  }, [currentTrack, isPlaying, togglePlay, nextTrack, audioRef, muteMasterGainInstantly, fadeInMasterGain, engageSilentWav]);
 }
