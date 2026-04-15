@@ -32,11 +32,8 @@ import { haptics } from '../utils/haptics';
 import { checkR2Cache } from '../services/api';
 import { downloadTrack, getCachedTrackUrl } from '../services/downloadManager';
 
-// Edge Worker for extraction (FREE - replaces Fly.io)
+// Edge Worker for extraction + upgrade-to-R2 lookups (hot-swap path).
 const EDGE_WORKER_URL = 'https://voyo-edge.dash-webtv.workers.dev';
-// VPS audio server — pre-processed audio with loudness normalization.
-// Falls back to edge worker extraction if VPS is down or overloaded.
-const VPS_AUDIO_URL = 'https://stream.zionsynapse.online:8443';
 import { recordPoolEngagement } from '../services/personalization';
 import { recordTrackInSession } from '../services/poolCurator';
 import { recordPlay as djRecordPlay } from '../services/intelligentDJ';
@@ -46,15 +43,14 @@ import { useMiniPiP } from '../hooks/useMiniPiP';
 import { notifyNextUp } from '../services/oyoNotifications';
 import { logPlaybackEvent, trace } from '../services/telemetry';
 import { getBatteryState } from '../services/battery';
-import { isBlocked, markBlocked } from '../services/trackBlocklist';
+import { isBlocked } from '../services/trackBlocklist';
 import {
   preloadNextTrack,
-  getPreloadedTrack,
-  consumePreloadedAudio,
   cleanupPreloaded,
   cancelPreload,
 } from '../services/preloadManager';
 import { useBgEngine } from '../audio/bg/bgEngine';
+import { resolveSource } from '../audio/sources/sourceResolver';
 
 export type BoostPreset = 'off' | 'boosted' | 'calm' | 'voyex';
 
@@ -1589,13 +1585,6 @@ export const AudioPlayer = () => {
       // Reached a non-blocked track — reset cascade counter.
       blocklistCascadeRef.current = 0;
 
-      // FAST-PATH CHECK: if the next track is preloaded, we can do a much
-      // tighter transition. Peek at preload BEFORE the mute+wait cycle.
-      const preloadPeek = getPreloadedTrack(trackId);
-      const hasInstantSource = preloadPeek?.audioElement && preloadPeek?.url &&
-        (preloadPeek.source === 'cached' || preloadPeek.source === 'r2');
-      trace('preload_check', trackId, { hit: !!hasInstantSource, src: preloadPeek?.source || 'none' });
-
       // STOP old audio immediately before loading new track.
       // NOTE: Do NOT set src = '' — this can break MediaElementAudioSourceNode in some browsers.
       // The source node stays wired through src changes automatically (Web Audio API design).
@@ -1774,439 +1763,137 @@ export const AudioPlayer = () => {
       endListenSession(audioRef.current?.currentTime || 0, 0);
       startListenSession(currentTrack.id, currentTrack.duration || 0);
 
-      // PRELOAD CHECK: Use preloaded audio if available (instant playback!)
-      const preloaded = getPreloadedTrack(trackId);
-      if (preloaded && preloaded.audioElement && (preloaded.source === 'cached' || preloaded.source === 'r2')) {
-        devLog(`🔮 [VOYO] Using PRELOADED audio (source: ${preloaded.source})`);
+      // Resolve the track to a playable URL. sourceResolver tries preload
+      // → IDB → R2 → VPS+edge race with 3 retries. Returns null if every
+      // path exhausted — we then run the cascade brake.
+      const resolved = await resolveSource({
+        trackId,
+        isStale,
+        checkLocalCache: checkCache,
+        trackTitle: currentTrack.title,
+        trackArtist: currentTrack.artist,
+      });
 
-        // Consume the preloaded audio element
-        const preloadedAudio = consumePreloadedAudio(trackId);
-        if (preloadedAudio) {
-          setPlaybackSource(preloaded.source);
+      if (isStale()) return;
 
-          const { boostProfile: profile } = usePlayerStore.getState();
-          setupAudioEnhancement(profile);
-
-          // Replace our audio ref with preloaded one? No - we need to use our own ref
-          // Instead, copy the src from preloaded element
-          if (cachedUrlRef.current) URL.revokeObjectURL(cachedUrlRef.current);
-          cachedUrlRef.current = preloaded.url;
-
-          if (audioRef.current && preloaded.url) {
-            // v194 A4: swapSrcSafely handles loop=false + volume pin + conditional load().
-            swapSrcSafely(preloaded.url);
-
-            // Use canplay (readyState >= 3) not canplaythrough — the audio
-            // data is already local (preloaded blob). No need to wait for
-            // the browser's full-buffer estimation which adds 50-200ms on
-            // mobile for no benefit when the source is in-memory.
-            trace('canplay_await', trackId, { path: 'preload', hidden: document.hidden });
-            const playHandler = () => {
-              trace('canplay_fire', trackId, { path: 'preload', hidden: document.hidden, readyState: audioRef.current?.readyState });
-              if (!audioRef.current) return;
-              audioRef.current.removeEventListener('canplay', playHandler);
-              audioRef.current.oncanplaythrough = null;
-              if (isStale()) return;
-
-              const { isPlaying: shouldPlay } = usePlayerStore.getState();
-              const shouldAutoResume = shouldAutoResumeRef.current;
-              if (shouldAutoResume) shouldAutoResumeRef.current = false;
-
-              if ((shouldPlay || shouldAutoResume) && (audioRef.current.paused || document.hidden)) {
-                audioContextRef.current?.state === 'suspended' && audioContextRef.current.resume().catch(() => {});
-                if (shouldAutoResume) {
-                  fadeInMasterGain(200); // Was 1200ms fade — too laggy on autoplay
-                } else {
-                  fadeInMasterGain(80);
-                }
-                trace('play_call', trackId, { path: 'preload', hidden: document.hidden });
-                audioRef.current.play().then(() => {
-                  clearLoadWatchdog();
-                  recordPlayEvent();
-                  if (shouldAutoResume && !shouldPlay) {
-                    usePlayerStore.getState().setIsPlaying(true);
-                  }
-                  trace('play_resolved', trackId, { path: 'preload' });
-                  trace('load_complete', trackId, { path: 'preload' });
-                  devLog('🔮 [VOYO] Preloaded playback started!');
-                }).catch(e => { trace('play_rejected', trackId, { path: 'preload', err: e.name, msg: e.message?.slice(0,80) }); handlePlayFailure(e, 'Preloaded'); });
-              }
-            };
-            audioRef.current.addEventListener('canplay', playHandler, { once: true });
-          }
-
-          // Cleanup the preloaded element
-          preloadedAudio.pause();
-          preloadedAudio.src = '';
-          return; // Skip normal loading flow
+      if (!resolved) {
+        // Every path exhausted. markBlocked already set by sourceResolver.
+        // Run the cascade brake: after 5 consecutive extraction failures,
+        // force-pause so the user can intervene rather than sit in silence.
+        blocklistCascadeRef.current++;
+        const failedTrack = usePlayerStore.getState().currentTrack;
+        logPlaybackEvent({
+          event_type: 'skip_auto',
+          track_id: trackId,
+          track_title: failedTrack?.title,
+          track_artist: failedTrack?.artist,
+          error_code: 'max_retries',
+          meta: { cascade: blocklistCascadeRef.current },
+        });
+        isLoadingTrackRef.current = false;
+        if (blocklistCascadeRef.current >= 5) {
+          trace('cascade_brake', trackId, { source: 'max_retries' });
+          devWarn(`[VOYO] Extraction cascade ≥5 — force pause`);
+          usePlayerStore.getState().setIsPlaying(false);
+          return;
         }
+        trace('next_call', trackId, { from: 'max_retries', cascade: blocklistCascadeRef.current, hidden: document.hidden });
+        nextTrack();
+        navigator.mediaSession.playbackState = 'playing';
+        return;
       }
 
-      // Check local IndexedDB cache — the only real audio cache. (mediaCache
-      // + audioEngine.preloadCache never held audio; they were dead paths.)
-      const cachedUrl = await checkCache(trackId);
-      if (isStale()) { trace('load_abandoned', trackId, { at: 'after_checkCache' }); devLog(`[AudioPlayer] cancelled stale load for ${trackId} after checkCache`); return; }
-
-      if (cachedUrl) {
-        // ⚡ BOOSTED - Play from cache instantly
-        devLog('🎵 [VOYO] Playing BOOSTED');
-        isEdgeStreamRef.current = false;
-        setPlaybackSource('cached');
-
+      // Apply per-source state before the src swap.
+      if (resolved.source === 'preload' && resolved.preloadedAudio) {
+        resolved.preloadedAudio.pause();
+        resolved.preloadedAudio.src = '';
+      }
+      isEdgeStreamRef.current = resolved.source === 'edge';
+      setPlaybackSource(
+        (resolved.source === 'preload' || resolved.source === 'cached') ? 'cached' : 'r2'
+      );
+      if (resolved.isBlob) {
         if (cachedUrlRef.current) URL.revokeObjectURL(cachedUrlRef.current);
-        cachedUrlRef.current = cachedUrl;
-
-        const { boostProfile: profile } = usePlayerStore.getState();
-        setupAudioEnhancement(profile);
-
-        if (audioRef.current) {
-          // v194 A4: swapSrcSafely handles loop=false + volume pin + conditional load().
-          swapSrcSafely(cachedUrl);
-
-          trace('canplay_await', trackId, { path: 'cached', hidden: document.hidden });
-          const cachedPlayHandler = () => {
-            trace('canplay_fire', trackId, { path: 'cached', hidden: document.hidden, readyState: audioRef.current?.readyState });
-            if (!audioRef.current) return;
-            audioRef.current.removeEventListener('canplay', cachedPlayHandler);
-            audioRef.current.oncanplaythrough = null;
-            if (isStale()) return;
-
-            // Restore position on initial load
-            if (isInitialLoadRef.current && savedCurrentTime > 5) {
-              audioRef.current.currentTime = savedCurrentTime;
-              isInitialLoadRef.current = false;
-            }
-
-            const { isPlaying: shouldPlay } = usePlayerStore.getState();
-            const shouldAutoResume = shouldAutoResumeRef.current;
-            if (shouldAutoResume) {
-              shouldAutoResumeRef.current = false;
-            }
-
-            if ((shouldPlay || shouldAutoResume) && (audioRef.current.paused || document.hidden)) {
-              audioContextRef.current?.state === 'suspended' && audioContextRef.current.resume().catch(() => {});
-              // Always use fadeInMasterGain — fadeInVolume's HTML-element
-              // fallback uses requestAnimationFrame, which is starved in
-              // background. That left the volume stuck at 0 → audio
-              // advanced silently for 30+ seconds, only audible on FG return.
-              // This matched Dash's '47s in but silent' bug exactly.
-              fadeInMasterGain(shouldAutoResume ? 200 : 80);
-              trace('play_call', trackId, { path: 'cached', hidden: document.hidden });
-              audioRef.current.play().then(() => {
-                clearLoadWatchdog();
-                recordPlayEvent();
-                if (shouldAutoResume && !shouldPlay) {
-                  usePlayerStore.getState().setIsPlaying(true);
-                }
-                trace('play_resolved', trackId, { path: 'cached' });
-                trace('load_complete', trackId, { path: 'cached' });
-                devLog('🎵 [VOYO] Playback started (cached)');
-              }).catch(e => { trace('play_rejected', trackId, { path: 'cached', err: e.name, msg: e.message?.slice(0,80) }); handlePlayFailure(e, 'Cached'); });
-            }
-          };
-          audioRef.current.addEventListener('canplay', cachedPlayHandler, { once: true });
-        }
+        cachedUrlRef.current = resolved.url;
       } else {
-        // Not in local cache — check R2 collective, then VPS+edge retry.
-        devLog('🎵 [VOYO] Not in local cache, checking R2 collective...');
-
-        const r2Result = await checkR2Cache(trackId);
-        if (isStale()) { trace('load_abandoned', trackId, { at: 'after_R2_check' }); devLog(`[AudioPlayer] cancelled stale load for ${trackId} after R2 check`); return; }
-
-        if (r2Result.exists && r2Result.url) {
-          // 🚀 R2 HIT - Play from collective cache with EQ
-          const qualityInfo = r2Result.hasHigh ? 'HIGH' : 'LOW';
-          devLog(`🎵 [VOYO] R2 HIT! Playing from collective cache (${qualityInfo} quality)`);
-          setPlaybackSource('r2');
-
-          // PHASE 5: Track if low quality - will upgrade at 50%
-          if (!r2Result.hasHigh && r2Result.hasLow) {
-            devLog('🎵 [VOYO] Low quality R2 - will upgrade at 50% interest');
-            hasTriggered50PercentCacheRef.current = false; // Allow upgrade trigger
-          }
-
-          const { boostProfile: profile } = usePlayerStore.getState();
-          setupAudioEnhancement(profile);
-
-          if (audioRef.current) {
-            // v194 A4: swapSrcSafely handles loop=false + volume pin + conditional load().
-            swapSrcSafely(r2Result.url);
-
-            audioRef.current.oncanplaythrough = () => {
-              if (!audioRef.current) return;
-              if (isStale()) return; // STALE GUARD — see cached path above
-
-              // Restore position on initial load
-              if (isInitialLoadRef.current && savedCurrentTime > 5) {
-                audioRef.current.currentTime = savedCurrentTime;
-                isInitialLoadRef.current = false;
-              }
-
-              const { isPlaying: shouldPlay } = usePlayerStore.getState();
-
-              // RESUME FIX: Also auto-play if we detected a session resume (even if isPlaying is false)
-              const shouldAutoResume = shouldAutoResumeRef.current;
-              if (shouldAutoResume) {
-                shouldAutoResumeRef.current = false; // Only auto-resume once
-              }
-
-              if ((shouldPlay || shouldAutoResume) && (audioRef.current.paused || document.hidden)) {
-                audioContextRef.current?.state === 'suspended' && audioContextRef.current.resume().catch(() => {});
-                if (shouldAutoResume) {
-                  fadeInMasterGain(200); // Was 1200ms fade — too laggy on autoplay
-                } else {
-                  // 400ms premium settle-in for every fresh R2 track start.
-                  fadeInMasterGain(80);
-                }
-                audioRef.current.play().then(() => {
-                  clearLoadWatchdog();
-                  recordPlayEvent();
-                  if (shouldAutoResume && !shouldPlay) {
-                    usePlayerStore.getState().togglePlay();
-                  }
-                  devLog('🎵 [VOYO] Playback started (R2)');
-                }).catch(e => handlePlayFailure(e, 'R2'));
-              }
-            };
-          }
-        } else {
-          // R2 miss — VPS + edge parallel race, retry up to 3 times.
-          // VPS returns normalized audio; edge returns a raw stream URL.
-          // First success wins. Silent WAV bridge keeps focus alive in BG.
-          devLog('🎵 [VOYO] R2 miss — VPS+edge retry race');
-
-          // Disarm FG watchdog — retry loop has its own skip mechanism
-          // (3 attempts then markBlocked + nextTrack).
-          clearLoadWatchdog();
-
-          let resolved = false;
-          let firstFailLogged = false;
-          // Tightened from 5×4s=20s to 3×2s=6s. Most extractions succeed on
-          // attempt 1 if they're going to succeed at all. A 20s wait when the
-          // track is structurally dead (cookies stale, video gone) just makes
-          // users sit through silence before the auto-skip. 6s is the band of
-          // patience users actually have before manually skipping.
-          const MAX_RETRIES = 3;
-
-          const tryAudioSource = async (attempt: number) => {
-            if (resolved || isStale()) return;
-            if (attempt >= MAX_RETRIES) {
-              devWarn(`[VOYO] All ${MAX_RETRIES} retries failed for ${trackId} — skipping`);
-              // Mark locally so we don't retry this track in the current session.
-              // The telemetry flush will propagate it to other users via Supabase
-              // on the next blocklist refresh (every 30 min or app restart).
-              markBlocked(trackId);
-              // CASCADE GUARD (extension): count max_retries failures alongside
-              // blocklist-skips. Without this, when extraction is broken (cookies
-              // dead, IP banned), the user experiences ~6s silence per track for
-              // every track in the queue — feels like 'skip is broken' even
-              // though it's working. After 5 consecutive extraction failures
-              // (any kind), force-pause so the user can intervene rather than
-              // sit through endless silence.
-              blocklistCascadeRef.current++;
-              const failedTrack = usePlayerStore.getState().currentTrack;
-              logPlaybackEvent({
-                event_type: 'skip_auto',
-                track_id: trackId,
-                track_title: failedTrack?.title,
-                track_artist: failedTrack?.artist,
-                error_code: 'max_retries',
-                meta: { cascade: blocklistCascadeRef.current },
-              });
-              isLoadingTrackRef.current = false;
-              if (blocklistCascadeRef.current >= 5) {
-                trace('cascade_brake', trackId, { source: 'max_retries' });
-                devWarn(`[VOYO] Extraction-failure cascade ≥5, force-pausing — extraction is structurally down`);
-                usePlayerStore.getState().setIsPlaying(false);
-                return;
-              }
-              trace('next_call', trackId, { from: 'max_retries', cascade: blocklistCascadeRef.current, hidden: document.hidden });
-              nextTrack();
-              navigator.mediaSession.playbackState = 'playing';
-              return;
-            }
-
-            devLog(`🔄 [VOYO] Audio source retry ${attempt + 1}/${MAX_RETRIES}`);
-
-            // Race VPS + edge in parallel
-            const retryStart = performance.now();
-            const playFromUrl = (url: string, source: string, isBlob: boolean) => {
-              if (resolved || isStale() || !audioRef.current) return;
-              resolved = true;
-              logPlaybackEvent({
-                event_type: 'source_resolved',
-                track_id: trackId,
-                source: source as any,
-                latency_ms: Math.round(performance.now() - retryStart),
-                meta: { attempt: attempt + 1 },
-              });
-
-              const { boostProfile: profile } = usePlayerStore.getState();
-              setupAudioEnhancement(profile);
-
-              isEdgeStreamRef.current = source === 'edge';
-              setPlaybackSource(isBlob ? 'cached' : 'r2');
-
-              if (cachedUrlRef.current) URL.revokeObjectURL(cachedUrlRef.current);
-              cachedUrlRef.current = isBlob ? url : null;
-              // v194 A4: swapSrcSafely handles loop=false + volume pin + conditional load().
-              swapSrcSafely(url);
-
-              // SESSION KEEPER: if canplay doesn't fire within 3s (slow server
-              // buffering after src swap), revert to silent WAV to keep media
-              // session alive. Without this, Android drops the notification
-              // during the buffer gap. We'll retry the real URL after 1s.
-              let keeperTimer: ReturnType<typeof setTimeout> | null = null;
-              if (document.hidden && silentKeeperUrlRef.current) {
-                keeperTimer = setTimeout(() => {
-                  keeperTimer = null;
-                  if (!audioRef.current || isStale()) return;
-                  // canplay didn't fire — swap back to silent WAV to keep session
-                  if (audioRef.current.readyState < 2) {
-                    try {
-                      devWarn('[VOYO] Buffer gap >3s — reverting to silent WAV keeper');
-                      audioRef.current.loop = true;
-                      audioRef.current.src = silentKeeperUrlRef.current!;
-                      audioRef.current.play().catch(() => {});
-                      // Try real URL again after silent WAV stabilizes
-                      setTimeout(() => {
-                        if (audioRef.current && !isStale()) {
-                          audioRef.current.loop = false;
-                          audioRef.current.src = url;
-                          if (!isBlob) audioRef.current.load();
-                        }
-                      }, 800);
-                    } catch {}
-                  }
-                }, 3000);
-              }
-
-              trace('canplay_await', trackId, { path: `retry_${source}`, attempt: attempt + 1, hidden: document.hidden });
-              const handler = () => {
-                trace('canplay_fire', trackId, { path: `retry_${source}`, attempt: attempt + 1, hidden: document.hidden, readyState: audioRef.current?.readyState });
-                if (!audioRef.current) return;
-                audioRef.current.removeEventListener('canplay', handler);
-                audioRef.current.oncanplaythrough = null;
-                if (keeperTimer) { clearTimeout(keeperTimer); keeperTimer = null; }
-                if (isStale()) return;
-
-                if (isInitialLoadRef.current && savedCurrentTime > 5) {
-                  audioRef.current.currentTime = savedCurrentTime;
-                  isInitialLoadRef.current = false;
-                }
-
-                const { isPlaying: shouldPlay } = usePlayerStore.getState();
-                const shouldAutoResume = shouldAutoResumeRef.current;
-                if (shouldAutoResume) shouldAutoResumeRef.current = false;
-
-                if ((shouldPlay || shouldAutoResume) && (audioRef.current.paused || document.hidden)) {
-                  audioContextRef.current?.state === 'suspended' && audioContextRef.current.resume().catch(() => {});
-                  if (shouldAutoResume) {
-                    fadeInMasterGain(200); // Was 1200ms fade — too laggy on autoplay
-                  } else {
-                    fadeInMasterGain(80);
-                  }
-                  trace('play_call', trackId, { path: `retry_${source}`, attempt: attempt + 1, hidden: document.hidden });
-                  audioRef.current.play().then(() => {
-                    clearLoadWatchdog();
-                    recordPlayEvent();
-                    if (shouldAutoResume && !shouldPlay) {
-                      usePlayerStore.getState().setIsPlaying(true);
-                    }
-                    trace('play_resolved', trackId, { path: `retry_${source}`, attempt: attempt + 1 });
-                    trace('load_complete', trackId, { path: `retry_${source}`, attempt: attempt + 1 });
-                    devLog(`🎵 [VOYO] Playback started (${source} retry ${attempt + 1})`);
-                  }).catch(e => { trace('play_rejected', trackId, { path: `retry_${source}`, attempt: attempt + 1, err: e.name }); handlePlayFailure(e, `${source}-retry`); });
-                }
-              };
-              audioRef.current.addEventListener('canplay', handler, { once: true });
-            };
-
-            try {
-              // VPS — stream directly from URL (no blob download).
-              // Browser handles progressive decode, plays in 2-3s.
-              // 5s HEAD-like check: if VPS responds at all, stream from it.
-              const vpsP = fetch(`${VPS_AUDIO_URL}/voyo/audio/${trackId}?quality=high`, { signal: AbortSignal.timeout(5000) })
-                .then(async (res) => {
-                  if (resolved || isStale()) return;
-                  if (res.ok || res.redirected) {
-                    res.body?.cancel().catch(() => {});
-                    // Use the final URL (follows redirects to R2)
-                    playFromUrl(`${VPS_AUDIO_URL}/voyo/audio/${trackId}?quality=high`, 'VPS', false);
-                  }
-                }).catch(() => {});
-
-              // Edge (5s timeout)
-              const edgeP = fetch(`${EDGE_WORKER_URL}/stream?v=${trackId}`, { signal: AbortSignal.timeout(5000) })
-                .then(async (res) => {
-                  if (resolved || isStale()) return;
-                  const data = await res.json();
-                  if (resolved || isStale()) return;
-                  if (data.url) playFromUrl(data.url, 'edge', false);
-                }).catch(() => {});
-
-              // Wait for both to settle
-              await Promise.allSettled([vpsP, edgeP]);
-
-              // FAILURE FLYWHEEL — log play_fail on the FIRST failed attempt
-              // (don't wait for max_retries exhaustion). Users skip within 5-10s,
-              // so if we only log on exhaustion the blocklist never accumulates
-              // and dead tracks haunt every user. One play_fail per attempt-1
-              // failure means 3 users hitting the same dead track = blocklisted
-              // for everyone. The flywheel matches the success-side R2 flywheel.
-              if (!resolved && !isStale() && !firstFailLogged) {
-                firstFailLogged = true;
-                const failedTrack = usePlayerStore.getState().currentTrack;
-                logPlaybackEvent({
-                  event_type: 'play_fail',
-                  track_id: trackId,
-                  track_title: failedTrack?.title,
-                  track_artist: failedTrack?.artist,
-                  error_code: 'vps_timeout',
-                  meta: { attempt: attempt + 1, source: 'vps+edge' },
-                });
-              }
-
-              // If neither resolved, wait 2s and retry (was 4s — see MAX_RETRIES comment)
-              if (!resolved && !isStale()) {
-                await new Promise<void>(resolve => {
-                  // Use MessageChannel for background (not throttled)
-                  if (document.hidden) {
-                    let ticks = 0;
-                    const mc = new MessageChannel();
-                    mc.port1.onmessage = () => {
-                      ticks++;
-                      if (ticks < 200) mc.port2.postMessage(null); // ~2s
-                      else { mc.port1.close(); resolve(); }
-                    };
-                    mc.port2.postMessage(null);
-                  } else {
-                    setTimeout(resolve, 2000);
-                  }
-                });
-                tryAudioSource(attempt + 1);
-              }
-            } catch {
-              if (!resolved && !isStale()) {
-                // Use MessageChannel in background (setTimeout throttled to 1/min)
-                await new Promise<void>(resolve => {
-                  if (document.hidden) {
-                    let t = 0;
-                    const mc = new MessageChannel();
-                    mc.port1.onmessage = () => { t++; if (t < 200) mc.port2.postMessage(null); else { mc.port1.close(); resolve(); } };
-                    mc.port2.postMessage(null);
-                  } else {
-                    setTimeout(resolve, 2000);
-                  }
-                });
-                tryAudioSource(attempt + 1);
-              }
-            }
-          };
-
-          tryAudioSource(0);
-        }
+        cachedUrlRef.current = null;
       }
+      if (resolved.r2LowQuality) {
+        hasTriggered50PercentCacheRef.current = false; // Allow 50% upgrade trigger
+      }
+
+      const { boostProfile: profile } = usePlayerStore.getState();
+      setupAudioEnhancement(profile);
+
+      if (!audioRef.current) return;
+      swapSrcSafely(resolved.url);
+
+      // Session-keeper: network sources (vps/edge/r2-stream) can have
+      // multi-second buffer gaps. If canplay doesn't fire within 3s, revert
+      // to silent WAV to hold audio focus, then re-try the real URL.
+      // Blob sources (preload/cached) are instant — keeper never fires.
+      let keeperTimer: ReturnType<typeof setTimeout> | null = null;
+      if (!resolved.isBlob && document.hidden && silentKeeperUrlRef.current) {
+        keeperTimer = setTimeout(() => {
+          keeperTimer = null;
+          if (!audioRef.current || isStale()) return;
+          if (audioRef.current.readyState < 2) {
+            try {
+              audioRef.current.loop = true;
+              audioRef.current.src = silentKeeperUrlRef.current!;
+              audioRef.current.play().catch(() => {});
+              setTimeout(() => {
+                if (audioRef.current && !isStale()) {
+                  audioRef.current.loop = false;
+                  audioRef.current.src = resolved.url;
+                  if (!resolved.isBlob) audioRef.current.load();
+                }
+              }, 800);
+            } catch {}
+          }
+        }, 3000);
+      }
+
+      // Unified canplay → fade → play() flow. Every source type goes here.
+      const path = resolved.source;
+      trace('canplay_await', trackId, { path, hidden: document.hidden });
+      const canplayHandler = () => {
+        trace('canplay_fire', trackId, { path, hidden: document.hidden, readyState: audioRef.current?.readyState });
+        if (!audioRef.current) return;
+        audioRef.current.removeEventListener('canplay', canplayHandler);
+        audioRef.current.oncanplaythrough = null;
+        if (keeperTimer) { clearTimeout(keeperTimer); keeperTimer = null; }
+        if (isStale()) return;
+
+        // Restore position on initial (reload) load.
+        if (isInitialLoadRef.current && savedCurrentTime > 5) {
+          audioRef.current.currentTime = savedCurrentTime;
+          isInitialLoadRef.current = false;
+        }
+
+        const { isPlaying: shouldPlay } = usePlayerStore.getState();
+        const shouldAutoResume = shouldAutoResumeRef.current;
+        if (shouldAutoResume) shouldAutoResumeRef.current = false;
+
+        if ((shouldPlay || shouldAutoResume) && (audioRef.current.paused || document.hidden)) {
+          audioContextRef.current?.state === 'suspended' && audioContextRef.current.resume().catch(() => {});
+          fadeInMasterGain(shouldAutoResume ? 200 : 80);
+          trace('play_call', trackId, { path, hidden: document.hidden });
+          audioRef.current.play().then(() => {
+            clearLoadWatchdog();
+            recordPlayEvent();
+            if (shouldAutoResume && !shouldPlay) {
+              usePlayerStore.getState().setIsPlaying(true);
+            }
+            trace('play_resolved', trackId, { path });
+            trace('load_complete', trackId, { path });
+          }).catch(e => {
+            trace('play_rejected', trackId, { path, err: e.name, msg: e.message?.slice(0, 80) });
+            handlePlayFailure(e, path);
+          });
+        }
+      };
+      audioRef.current.addEventListener('canplay', canplayHandler, { once: true });
     };
 
     loadTrack();
