@@ -54,6 +54,7 @@ import {
   cleanupPreloaded,
   cancelPreload,
 } from '../services/preloadManager';
+import { useBgEngine } from '../audio/bg/bgEngine';
 
 export type BoostPreset = 'off' | 'boosted' | 'calm' | 'voyex';
 
@@ -93,26 +94,13 @@ const BOOST_PRESETS = {
 export const AudioPlayer = () => {
   const audioRef = useRef<HTMLAudioElement>(null);
   const cachedUrlRef = useRef<string | null>(null);
-  // SILENT WAV URL for iframe background play.
-  //
-  // Problem: during the iframe phase (before hot-swap completes), if the
-  // user locks the phone, iOS/Android suspends the YouTube iframe. Audio
-  // cuts out. The hot-swap to audio element can't complete because JS is
-  // throttled in background.
-  //
-  // Solution: reuse the MAIN audio element as a silent keeper during the
-  // iframe phase. Point audioRef.current.src at a silent WAV and call
-  // play() — the main element is already unlocked from any prior track
-  // play (iOS audio unlock is per-element), so no separate priming needed.
-  // The silent audio routes through the Web Audio chain, masterGain is
-  // muted (0) so nothing is audible from the main element — the iframe
-  // provides the audible sound.
-  //
-  // iOS sees an HTMLMediaElement playing → treats the PWA as having audio
-  // focus → keeps the page alive in background → iframe continues. When
-  // /stream arrives, we swap the main element's src from silent WAV to
-  // the real URL and hot-swap proceeds normally.
-  const silentKeeperUrlRef = useRef<string | null>(null);
+  // Refs bgEngine reads/writes — hoisted so useBgEngine(...) gets them early.
+  // runEndedAdvanceRef starts as a noop and gets its real value populated by
+  // a useEffect below once runEndedAdvance is defined.
+  const lastEndedTrackIdRef = useRef<string | null>(null);
+  const syntheticEndedBypassRef = useRef(false);
+  const proactivelyAdvancedForTrackIdRef = useRef<string | null>(null);
+  const runEndedAdvanceRef = useRef<() => void>(() => {});
 
   // Web Audio API refs
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -207,7 +195,8 @@ export const AudioPlayer = () => {
   // the return-from-background re-kick sees isPlaying=false and doesn't play.
   // This ref is set TRUE synchronously in a capturing visibilitychange listener
   // (fires before pagehide/freeze), so onPause can check it.
-  const isTransitioningToBackgroundRef = useRef<boolean>(false);
+  // isTransitioningToBackgroundRef was hoisted to bgEngine. Local alias
+  // is populated after useBgEngine() call below.
   // Throttle guards for handleTimeUpdate → setCurrentTime/setProgress writes.
   // Browser fires ontimeupdate at 4Hz (Chrome) up to 66Hz (Safari). Each
   // store write re-renders 9 subscribing components (OyoIsland, NowPlaying,
@@ -586,60 +575,7 @@ export const AudioPlayer = () => {
     };
   }, [currentTrack?.trackId]);
 
-  // Background playback + AudioContext battery optimization.
-  //
-  // SLIMMED DOWN: was calling audio.play() directly on visibility change,
-  // which competed with the audioEngine.ts visibility handler AND useMiniPiP
-  // visibility handler — three handlers firing simultaneously caused the
-  // "audio muffles when quitting/returning to app" symptom. Now this only
-  // does the ONE thing AudioPlayer is responsible for: suspend the context
-  // when hidden+paused (battery). Resume on show is handled by audioEngine.
-  // Background playback continues automatically because we never pause it.
-  useEffect(() => {
-    const handleVisibility = () => {
-      trace('visibility', usePlayerStore.getState().currentTrack?.trackId, {
-        state: document.visibilityState,
-        isPlaying: usePlayerStore.getState().isPlaying,
-        ctxState: audioContextRef.current?.state,
-        gain: gainNodeRef.current?.gain.value,
-        elPaused: audioRef.current?.paused,
-        elCurrentTime: audioRef.current?.currentTime,
-      });
-      if (document.visibilityState === 'hidden') {
-        // Set the background flag FIRST — before the browser pauses audio.
-        // This prevents onPause from setting isPlaying=false during transition.
-        isTransitioningToBackgroundRef.current = true;
-
-        const { isPlaying: shouldPlay } = usePlayerStore.getState();
-        // BATTERY: suspend context ONLY when paused + hidden.
-        // Never suspend when playing — audio must continue in background.
-        if (!shouldPlay && audioContextRef.current?.state === 'running') {
-          audioContextRef.current.suspend().catch(() => {});
-          devLog('🔋 [Battery] AudioContext suspended (paused + hidden)');
-        }
-        return;
-      }
-
-      // RETURNING FROM BACKGROUND — clear the flag and re-kick audio.
-      isTransitioningToBackgroundRef.current = false;
-
-      const { isPlaying: sp } = usePlayerStore.getState();
-      // GUARD: don't re-kick if loadTrack is mid-flight — its own canplay
-      // handler will call play() once the new src is ready. Without this
-      // guard, the visibility re-kick races with the canplay play() and
-      // the audio element gets TWO play() calls on the same source,
-      // logging duplicate play_success and causing audible stutter.
-      if (isLoadingTrackRef.current) return;
-      if (sp && audioRef.current?.paused && audioRef.current.src) {
-        audioContextRef.current?.resume().catch(() => {});
-        audioRef.current.play().catch(() => {});
-        devLog('🔄 [VOYO] Re-kicked audio element on foreground return');
-      }
-    };
-    // Use CAPTURE phase so this fires before any other visibilitychange handlers
-    document.addEventListener('visibilitychange', handleVisibility, true);
-    return () => document.removeEventListener('visibilitychange', handleVisibility, true);
-  }, [playbackSource]);
+  // Visibility handler lives in bgEngine now (src/audio/bg/bgEngine.ts).
 
   // Wake lock
   useEffect(() => {
@@ -661,49 +597,7 @@ export const AudioPlayer = () => {
     return () => { wakeLockRef.current?.release().catch(e => devWarn('🔒 [WakeLock] Cleanup release failed:', e.name)); };
   }, [isPlaying]);
 
-  // SILENT WAV GENERATION — once on mount.
-  //
-  // Creates a 2-second silent WAV blob and holds the URL in a ref. The
-  // main audio element uses this as its src during iframe phase, so iOS
-  // sees a continuously-playing media element and keeps the page alive
-  // through screen-off. See the iframe-miss branch of loadTrack.
-  useEffect(() => {
-    // Build a minimal silent WAV (8kHz, 8-bit, mono, 2 seconds ≈ 16KB).
-    const sampleRate = 8000;
-    const durationSec = 2;
-    const numSamples = sampleRate * durationSec;
-    const bufSize = 44 + numSamples;
-    const ab = new ArrayBuffer(bufSize);
-    const dv = new DataView(ab);
-    const writeStr = (off: number, s: string) => {
-      for (let i = 0; i < s.length; i++) dv.setUint8(off + i, s.charCodeAt(i));
-    };
-    writeStr(0, 'RIFF');
-    dv.setUint32(4, bufSize - 8, true);
-    writeStr(8, 'WAVE');
-    writeStr(12, 'fmt ');
-    dv.setUint32(16, 16, true);       // fmt chunk size
-    dv.setUint16(20, 1, true);        // PCM
-    dv.setUint16(22, 1, true);        // mono
-    dv.setUint32(24, sampleRate, true);
-    dv.setUint32(28, sampleRate, true); // byte rate (8-bit mono = sampleRate)
-    dv.setUint16(32, 1, true);        // block align
-    dv.setUint16(34, 8, true);        // bits per sample
-    writeStr(36, 'data');
-    dv.setUint32(40, numSamples, true);
-    // 8-bit unsigned PCM uses 128 as silent midpoint — fill with 128.
-    for (let i = 0; i < numSamples; i++) dv.setUint8(44 + i, 128);
-
-    const blob = new Blob([ab], { type: 'audio/wav' });
-    silentKeeperUrlRef.current = URL.createObjectURL(blob);
-
-    return () => {
-      if (silentKeeperUrlRef.current) {
-        URL.revokeObjectURL(silentKeeperUrlRef.current);
-        silentKeeperUrlRef.current = null;
-      }
-    };
-  }, []);
+  // Silent WAV blob generation lives in bgEngine (src/audio/bg/bgEngine.ts).
 
   // ── FREQUENCY PUMP ─────────────────────────────────────────────────
   // Reads the AnalyserNode at ~20fps and writes CSS custom properties
@@ -1179,6 +1073,24 @@ export const AudioPlayer = () => {
     }
     return baseGain * comp * vol;
   };
+
+  // ── BG ENGINE ────────────────────────────────────────────────────────
+  // Heartbeat, visibility handler, silent WAV generation, context resume,
+  // gain rescue, synthetic-ended / stuck-playback detectors — all one
+  // module owned by src/audio/bg/bgEngine.ts. Returns the silent WAV blob
+  // ref and the BG-transition guard ref (used by onPause).
+  const { silentKeeperUrlRef, isTransitioningToBackgroundRef } = useBgEngine({
+    audioRef,
+    audioContextRef,
+    gainNodeRef,
+    isLoadingTrackRef,
+    isPlaying,
+    playbackSource,
+    computeMasterTarget,
+    runEndedAdvanceRef,
+    syntheticEndedBypassRef,
+    lastEndedTrackIdRef,
+  });
 
   // Apply master gain: preset × spatial compensation × volume.
   // Single source of truth — called from updateBoostPreset, updateVoyexSpatial,
@@ -2649,34 +2561,7 @@ export const AudioPlayer = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isPlaying]);
 
-  // Suspend AudioContext when paused + hidden (delayed to allow quick resume)
-  const suspendTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => {
-    // Clear any pending suspend timer
-    if (suspendTimerRef.current) {
-      clearTimeout(suspendTimerRef.current);
-      suspendTimerRef.current = null;
-    }
-
-    // Only set suspend timer when not playing
-    if (!isPlaying && (playbackSource === 'cached' || playbackSource === 'r2')) {
-      suspendTimerRef.current = setTimeout(() => {
-        if (!usePlayerStore.getState().isPlaying && document.visibilityState === 'hidden') {
-          // .suspend() returns a promise that can reject on iOS in some states.
-          audioContextRef.current?.suspend().catch(() => {});
-          devLog('🔋 [Battery] AudioContext suspended (paused + hidden)');
-        }
-        suspendTimerRef.current = null;
-      }, 5000);
-    }
-
-    return () => {
-      if (suspendTimerRef.current) {
-        clearTimeout(suspendTimerRef.current);
-        suspendTimerRef.current = null;
-      }
-    };
-  }, [isPlaying, playbackSource]);
+  // Battery-suspend timer lives in bgEngine.
 
   // Handle volume (only when using audio element: cached or r2)
   // playbackSource omitted from deps for the same reason as the play/pause
@@ -2803,18 +2688,8 @@ export const AudioPlayer = () => {
     return cleanup;
   }, [isPlaying, playbackSource, currentTrack?.trackId, checkCache, setBufferHealth, setPlaybackSource, cacheTrack]);
 
-  // Media Session — registers for ANY playbackSource (cached/r2/iframe).
-  //
-  // CRITICAL: the iframe path needs this too. Without it, the lock screen
-  // shows stale metadata (from the previous cached/r2 track) and the
-  // action handlers are still wired to the old track context. Worse, if
-  // the first track of the session goes iframe-miss, the lock screen is
-  // blank and no hardware buttons work.
-  //
-  // We register whenever there's a currentTrack, regardless of source.
-  // The seek handlers route based on source: for iframe, they seek the
-  // YouTube player via getCurrentTime/seekTo; for cached/r2, they seek
-  // the main audio element directly.
+  // Media Session — registers metadata + action handlers for OS lock screen
+  // and hardware controls. Re-runs on every track change to update metadata.
   useEffect(() => {
     if (!('mediaSession' in navigator) || !currentTrack) return;
 
@@ -2894,32 +2769,13 @@ export const AudioPlayer = () => {
       }
     });
 
-    // SEEK FORWARD / BACKWARD — used by headset hardware buttons, car
-    // head units, and the lock-screen 10s skip arrows. Default offset
-    // of 10s matches every major music app.
-    //
-    // ROUTING: during iframe phase, the main audio element is playing a
-    // SILENT WAV — seeking it does nothing audible. We route iframe-phase
-    // seeks through the store's currentTime, which YouTubeIframe watches
-    // and translates into player.seekTo(). For cached/r2, we seek the
-    // audio element directly via the click-free mute → seek → fade pattern.
+    // Seek handlers — headset buttons + lock-screen 10s skip arrows.
     const seekOffset = (dir: 1 | -1, offset: number) => {
-      const ps = usePlayerStore.getState().playbackSource;
-      if (ps === 'iframe') {
-        // Route through store — YouTubeIframe's seek effect picks this up.
-        const curr = usePlayerStore.getState().currentTime;
-        const dur = usePlayerStore.getState().duration;
-        const newTime = Math.max(0, Math.min(dur || 0, curr + dir * offset));
-        usePlayerStore.getState().seekTo(newTime);
-        return;
-      }
       if (!audioRef.current) return;
       const newTime = Math.max(0, Math.min(
         audioRef.current.duration || 0,
         audioRef.current.currentTime + dir * offset,
       ));
-      // In background, skip the mute→wait→fade cycle — setTimeout is
-      // throttled to 1/min. Just seek directly; user can't hear the click.
       if (document.hidden) {
         audioRef.current.currentTime = newTime;
       } else {
@@ -2935,13 +2791,7 @@ export const AudioPlayer = () => {
       seekOffset(-1, d.seekOffset || 10);
     });
     navigator.mediaSession.setActionHandler('seekto', (d) => {
-      if (d.seekTime === undefined) return;
-      const ps = usePlayerStore.getState().playbackSource;
-      if (ps === 'iframe') {
-        usePlayerStore.getState().seekTo(d.seekTime);
-        return;
-      }
-      if (!audioRef.current) return;
+      if (d.seekTime === undefined || !audioRef.current) return;
       if (document.hidden) {
         audioRef.current.currentTime = d.seekTime;
       } else {
@@ -2965,249 +2815,7 @@ export const AudioPlayer = () => {
     navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
   }, [currentTrack, isPlaying, playbackSource, togglePlay, nextTrack]);
 
-  // MEDIA SESSION HEARTBEAT — the missing piece for BG longevity.
-  //
-  // Without continuous setPositionState pings, Android Chrome considers the
-  // media session stale after ~20-30s of no activity → drops audio focus →
-  // silently freezes the <audio> element mid-track. Symptom user saw: 'track
-  // just disappeared in BG, came back an hour later to silence'.
-  //
-  // The regular setPositionState in onTimeUpdate only fires while `timeupdate`
-  // keeps firing — which Chrome throttles heavily in BG. Under power save
-  // it can drop to <1/30s. Not enough to keep the session alive.
-  //
-  // Solution: MessageChannel-driven heartbeat. Port-to-port messages are NOT
-  // throttled by BG tab freezing (unlike setInterval/setTimeout). We fire
-  // every ~4s while isPlaying, hitting setPositionState + re-asserting
-  // playbackState='playing'. As long as we're the audio authority, session
-  // stays registered, audio focus holds, playback continues.
-  //
-  // Also re-kicks audio.play() if we detect the element got paused silently
-  // by the OS (no pause event → no handler fired → isPlaying stays true →
-  // divergence → heartbeat spots it and resumes).
-  useEffect(() => {
-    if (!isPlaying || !('mediaSession' in navigator)) return;
-    const mc = new MessageChannel();
-    let active = true;
-    let lastTick = performance.now();
-    // T11 (v194): emit a baseline heartbeat_tick every 2nd fire (~8s) with
-    // minimal state. Anomaly traces only tell us when something's wrong;
-    // the pulse tells us the heartbeat is alive at all. If pulses stop,
-    // the heartbeat's useEffect tore down (isPlaying flipped false) or
-    // the MC stopped ticking. Every-other-tick keeps the cost low.
-    let pulseCounter = 0;
-    // Stuck-playback detector: track last-observed currentTime + trackId.
-    // If currentTime hasn't moved for 2 consecutive heartbeat ticks (~8s)
-    // while the store still says playing, the element is wedged. Either
-    // silently suspended by Chrome (most common in BG) or stalled without
-    // recovery. We escalate by synthesizing the ended advance — better to
-    // skip forward than sit in silence.
-    let lastObservedTime = -1;
-    let lastObservedTrackId: string | null = null;
-    let stuckTicks = 0;
-
-    mc.port1.onmessage = () => {
-      if (!active) return;
-      const now = performance.now();
-      // Cadence: fire heartbeat every ~4s regardless of tick rate.
-      if (now - lastTick < 4000) { mc.port2.postMessage(null); return; }
-      lastTick = now;
-      pulseCounter++;
-      if (pulseCounter % 2 === 0) {
-        const hbEl = audioRef.current;
-        const hbCtx = audioContextRef.current;
-        trace('heartbeat_tick', usePlayerStore.getState().currentTrack?.trackId, {
-          hidden: document.hidden,
-          ctxState: hbCtx?.state,
-          gain: gainNodeRef.current?.gain.value,
-          paused: hbEl?.paused,
-          currentTime: hbEl?.currentTime,
-          duration: hbEl?.duration,
-          readyState: hbEl?.readyState,
-        });
-      }
-
-      try {
-        const el = audioRef.current;
-        if (el && el.duration && isFinite(el.duration)) {
-          navigator.mediaSession.setPositionState({
-            duration: el.duration,
-            position: Math.min(el.currentTime, el.duration),
-            playbackRate: el.playbackRate || 1,
-          });
-        }
-        navigator.mediaSession.playbackState = 'playing';
-      } catch {}
-
-      // AUDIOCONTEXT LIFE-SUPPORT (v191 fix): Chrome Android silently
-      // suspends the AudioContext in BG under power save, even while the
-      // HTMLAudioElement continues advancing its own currentTime clock.
-      // Symptom: "position advances but no sound until unlock" — element
-      // plays, its output routes through a frozen Web Audio graph, nothing
-      // reaches destination. We actively resume every heartbeat.
-      //
-      // Also: rescue masterGain if it's stuck at near-zero while playing
-      // (a failed ramp from a suspended-context fadeInMasterGain). In BG
-      // the ramp end-time can go stale against a frozen clock, or the
-      // context can flap suspend→running and the gain param's scheduled
-      // value tree is lost.
-      const ctx = audioContextRef.current;
-      if (ctx) {
-        const prevState = ctx.state;
-        if (prevState === 'suspended' || (prevState as any) === 'interrupted') {
-          ctx.resume()
-            .then(() => trace('ctx_resume_ok', usePlayerStore.getState().currentTrack?.trackId, { prevState, hidden: document.hidden }))
-            .catch(e => trace('ctx_resume_rejected', usePlayerStore.getState().currentTrack?.trackId, { prevState, err: e?.name, msg: (e?.message || '').slice(0, 80), hidden: document.hidden }));
-        }
-        // Gain-stuck rescue: if gain is below audible floor but element
-        // is playing and store says playing, force gain up. Use setValueAtTime
-        // for immediate jump — the "smooth ramp" is pointless if we've been
-        // silent for seconds already; user just wants audio back.
-        const gain = gainNodeRef.current;
-        if (
-          gain && audioRef.current && !audioRef.current.paused &&
-          !isLoadingTrackRef.current &&
-          audioRef.current.src !== silentKeeperUrlRef.current &&
-          gain.gain.value < 0.01 &&
-          usePlayerStore.getState().isPlaying
-        ) {
-          try {
-            const target = computeMasterTarget();
-            gain.gain.cancelScheduledValues(ctx.currentTime);
-            gain.gain.setValueAtTime(target, ctx.currentTime);
-            trace('gain_rescue', usePlayerStore.getState().currentTrack?.trackId, {
-              prevValue: gain.gain.value,
-              target,
-              ctxState: ctx.state,
-              hidden: document.hidden,
-            });
-          } catch {}
-        }
-      }
-
-      const el = audioRef.current;
-
-      // SYNTHETIC ENDED DETECTION (deep-BG fallback): Android Chrome does
-      // not always fire the 'ended' event when a track completes in a
-      // backgrounded tab — timeupdate goes quiet, then ended never arrives.
-      // Telemetry confirmed: tracks rotated in the store only after user
-      // unlocked, with 0× ended_fire and 0× next_call during the BG window.
-      // If we see the element is paused, has a real src (not silent WAV),
-      // is near/past duration, and the store says we should be playing,
-      // synthesize the advance ourselves. Heartbeat cadence is ~4s so
-      // worst-case extra delay past natural end is ~4s — acceptable.
-      if (
-        el && el.paused && el.src && document.hidden &&
-        !isLoadingTrackRef.current &&
-        el.src !== silentKeeperUrlRef.current &&
-        el.duration && isFinite(el.duration) && el.duration > 0 &&
-        el.currentTime >= el.duration - 0.5 &&
-        usePlayerStore.getState().isPlaying
-      ) {
-        const trackId = usePlayerStore.getState().currentTrack?.trackId;
-        // Only synthesize once per track — dedup refs in runEndedAdvance
-        // will catch duplicates, but this is extra safety.
-        if (trackId && lastEndedTrackIdRef.current !== trackId) {
-          trace('synthetic_ended', trackId, {
-            currentTime: el.currentTime,
-            duration: el.duration,
-            paused: el.paused,
-            hidden: document.hidden,
-          });
-          syntheticEndedBypassRef.current = true;
-          runEndedAdvanceRef.current();
-          mc.port2.postMessage(null);
-          return;
-        }
-      }
-
-      // Silent-paused recovery: if store says playing but element is paused
-      // (OS silent-suspended the audio), kick it back into play. Log the
-      // rejection reason — previously silent-swallowed, so we never knew
-      // whether Chrome accepted the kick or rejected it for BG policy.
-      if (el && el.paused && el.src && !isLoadingTrackRef.current && usePlayerStore.getState().isPlaying) {
-        try {
-          audioContextRef.current?.state === 'suspended' && audioContextRef.current.resume().catch(() => {});
-          const bat = getBatteryState();
-          const kickTrackId = usePlayerStore.getState().currentTrack?.trackId;
-          trace('heartbeat_kick', kickTrackId, {
-            why: 'element_silently_paused',
-            hidden: document.hidden,
-            batLvl: Math.round(bat.level * 100),
-            batCharging: bat.charging,
-            batLow: bat.lowBattery,
-          });
-          el.play()
-            .then(() => { trace('heartbeat_kick_ok', kickTrackId, { hidden: document.hidden }); })
-            .catch(e => {
-              trace('heartbeat_kick_rejected', kickTrackId, {
-                err: e?.name || 'unknown',
-                msg: (e?.message || '').slice(0, 80),
-                hidden: document.hidden,
-              });
-            });
-        } catch {}
-      }
-
-      // STUCK-PLAYBACK DETECTOR: track hasn't ended, isn't near end, but
-      // currentTime isn't advancing. Chrome silently suspended the element
-      // mid-playback and heartbeat_kick isn't reviving it (common in deep
-      // BG). After 2 ticks (~8s) of no progress, escalate to synthetic
-      // advance — better to skip the track than sit in silence indefinitely.
-      // Only runs when hidden + store says playing + element has a real src.
-      if (
-        el && el.src && document.hidden &&
-        !isLoadingTrackRef.current &&
-        el.src !== silentKeeperUrlRef.current &&
-        usePlayerStore.getState().isPlaying
-      ) {
-        const tid = usePlayerStore.getState().currentTrack?.trackId || null;
-        const curTime = el.currentTime;
-        if (tid && tid === lastObservedTrackId && Math.abs(curTime - lastObservedTime) < 0.1) {
-          stuckTicks++;
-          trace('stuck_tick', tid, {
-            stuckTicks,
-            currentTime: curTime,
-            duration: el.duration,
-            paused: el.paused,
-            readyState: el.readyState,
-            hidden: document.hidden,
-          });
-          if (stuckTicks >= 2 && tid && lastEndedTrackIdRef.current !== tid) {
-            trace('stuck_escalate', tid, {
-              stuckTicks,
-              currentTime: curTime,
-              duration: el.duration,
-              hidden: document.hidden,
-            });
-            syntheticEndedBypassRef.current = true;
-            stuckTicks = 0;
-            runEndedAdvanceRef.current();
-            mc.port2.postMessage(null);
-            return;
-          }
-        } else {
-          stuckTicks = 0;
-          lastObservedTime = curTime;
-          lastObservedTrackId = tid;
-        }
-      } else {
-        // Reset when conditions don't apply (FG, loading, silent WAV, paused store)
-        stuckTicks = 0;
-        lastObservedTime = -1;
-        lastObservedTrackId = null;
-      }
-
-      mc.port2.postMessage(null);
-    };
-    mc.port2.postMessage(null);
-
-    return () => {
-      active = false;
-      mc.port1.close();
-      mc.port2.close();
-    };
-  }, [isPlaying]);
+  // Heartbeat (MC-based 4s loop with all BG detectors) lives in bgEngine.
 
   // Audio element handlers (only active when using audio element: cached or r2)
   //
@@ -3444,51 +3052,16 @@ export const AudioPlayer = () => {
     }
   }, [nextTrack, endListenSession, cacheTrack]);
 
-  // Stable ref to runEndedAdvance — heartbeat (deps: [isPlaying]) needs to
-  // call it without tearing down/re-arming the MessageChannel every track.
-  const runEndedAdvanceRef = useRef(runEndedAdvance);
+  // Populate the hoisted runEndedAdvanceRef once runEndedAdvance is defined.
   useEffect(() => { runEndedAdvanceRef.current = runEndedAdvance; }, [runEndedAdvance]);
 
   const handleEnded = runEndedAdvance; // React onEnded safety-belt handler
 
-  // BACKGROUND AUTO-NEXT: Direct ended listener on the audio element.
-  // React's onEnded JSX prop may not fire reliably in background on Android.
-  // This native listener reads fresh state from the store, not closures.
-  // REPLACES the React onEnded — only ONE handler to prevent double-skip.
-  // Track-ID-based dedup — no timer needed. Each track has a unique ID,
-  // so checking "did we already handle ended for THIS track?" is reliable
-  // in both foreground and background. No rAF/microtask/setTimeout issues.
-  const lastEndedTrackIdRef = useRef<string | null>(null);
-  // SRC-BASED CASCADE DEDUP: trackId-based dedup was breaking because
-  // loadTrack resets lastEndedTrackIdRef at its start, BEFORE audio.src
-  // is actually swapped. That opens a window where a second ended event
-  // (React synthetic arriving after the native 'ended' already advanced)
-  // sees trackId=newTrack (store already rotated) and ref=null (just
-  // reset) → passes dedup → advances again → cascade. Seen in v192
-  // telemetry: 3 tracks skipped in 50ms at +42.15s and +287.87s.
-  //
-  // Fix: dedup by audio.currentSrc. currentSrc only changes when loadTrack
-  // actually assigns a new src attribute — which happens AFTER the cascade
-  // window. So two rapid ended events see the SAME currentSrc and the
-  // second one bails. Unlike trackId, currentSrc doesn't need resetting;
-  // it naturally differs once a new track is loaded.
+  // Src-based cascade dedup (v193). Unlike trackId, audio.currentSrc only
+  // changes when loadTrack actually swaps the src — which happens AFTER
+  // the React synthetic ended + native ended race window. Two rapid ended
+  // events see the same currentSrc; the second bails.
   const lastEndedSrcRef = useRef<string | null>(null);
-  // Synthetic ended bypass — Android Chrome sometimes refuses to fire the
-  // 'ended' event in deep BG. Heartbeat detects this (currentTime near
-  // duration + element paused + hidden) and sets this flag so the next
-  // runEndedAdvance() call bypasses its `audio.ended===true` guard.
-  // Flag is consumed (reset to false) inside runEndedAdvance.
-  const syntheticEndedBypassRef = useRef(false);
-  // v197 THE ANSWER — proactive transition. The audio element must never
-  // become idle. If we wait for the `ended` event, we get a window where
-  // the element is paused while we advance — that's when the OS revokes
-  // audio focus / suspends the context in BG, and why every BG bug has
-  // existed. Instead, at duration - 0.5s we ALREADY transition: engage
-  // silent WAV bridge + call nextTrack. The element goes real → silent
-  // WAV → real, never stopping. 0.5s is below perceptual threshold for
-  // most tracks (which have tail silence anyway).
-  // Per-trackId ref so we only proactively advance once per track.
-  const proactivelyAdvancedForTrackIdRef = useRef<string | null>(null);
   useEffect(() => {
     const el = audioRef.current;
     if (!el) return;
@@ -3511,25 +3084,6 @@ export const AudioPlayer = () => {
   // seamless position-preserving swap, max 500ms silence target
   const handleAudioError = useCallback(async (e: React.SyntheticEvent<HTMLAudioElement, Event>) => {
     trace('audio_error', usePlayerStore.getState().currentTrack?.trackId, { hidden: document.hidden, errCode: (e.target as HTMLAudioElement)?.error?.code, src: ((e.target as HTMLAudioElement)?.src || '').slice(0, 60) });
-    // During iframe phase, the main audio element is playing the silent
-    // WAV as a background-play keeper. If that errors (rare — blob URL
-    // is stable in-memory), we don't need full recovery since the iframe
-    // is providing audible sound. Just re-arm the silent keeper and let
-    // the hot-swap path (or next track) take over naturally.
-    if (playbackSource === 'iframe') {
-      devWarn('[VOYO] Silent WAV keeper errored during iframe phase — re-arming');
-      if (audioRef.current && silentKeeperUrlRef.current) {
-        try {
-          audioRef.current.loop = true;
-          audioRef.current.src = silentKeeperUrlRef.current;
-          audioRef.current.load();
-          // play() is not forced here — the onPause guard handles the
-          // transient state, and if the user is actively on iframe the
-          // element will re-attach when ready.
-        } catch {}
-      }
-      return;
-    }
     if (playbackSource !== 'cached' && playbackSource !== 'r2') return;
 
     const audio = e.currentTarget;
