@@ -2980,6 +2980,15 @@ export const AudioPlayer = () => {
     const mc = new MessageChannel();
     let active = true;
     let lastTick = performance.now();
+    // Stuck-playback detector: track last-observed currentTime + trackId.
+    // If currentTime hasn't moved for 2 consecutive heartbeat ticks (~8s)
+    // while the store still says playing, the element is wedged. Either
+    // silently suspended by Chrome (most common in BG) or stalled without
+    // recovery. We escalate by synthesizing the ended advance — better to
+    // skip forward than sit in silence.
+    let lastObservedTime = -1;
+    let lastObservedTrackId: string | null = null;
+    let stuckTicks = 0;
 
     mc.port1.onmessage = () => {
       if (!active) return;
@@ -3037,20 +3046,80 @@ export const AudioPlayer = () => {
       }
 
       // Silent-paused recovery: if store says playing but element is paused
-      // (OS silent-suspended the audio), kick it back into play.
+      // (OS silent-suspended the audio), kick it back into play. Log the
+      // rejection reason — previously silent-swallowed, so we never knew
+      // whether Chrome accepted the kick or rejected it for BG policy.
       if (el && el.paused && el.src && !isLoadingTrackRef.current && usePlayerStore.getState().isPlaying) {
         try {
           audioContextRef.current?.state === 'suspended' && audioContextRef.current.resume().catch(() => {});
-          el.play().catch(() => {});
           const bat = getBatteryState();
-          trace('heartbeat_kick', usePlayerStore.getState().currentTrack?.trackId, {
+          const kickTrackId = usePlayerStore.getState().currentTrack?.trackId;
+          trace('heartbeat_kick', kickTrackId, {
             why: 'element_silently_paused',
             hidden: document.hidden,
             batLvl: Math.round(bat.level * 100),
             batCharging: bat.charging,
             batLow: bat.lowBattery,
           });
+          el.play()
+            .then(() => { trace('heartbeat_kick_ok', kickTrackId, { hidden: document.hidden }); })
+            .catch(e => {
+              trace('heartbeat_kick_rejected', kickTrackId, {
+                err: e?.name || 'unknown',
+                msg: (e?.message || '').slice(0, 80),
+                hidden: document.hidden,
+              });
+            });
         } catch {}
+      }
+
+      // STUCK-PLAYBACK DETECTOR: track hasn't ended, isn't near end, but
+      // currentTime isn't advancing. Chrome silently suspended the element
+      // mid-playback and heartbeat_kick isn't reviving it (common in deep
+      // BG). After 2 ticks (~8s) of no progress, escalate to synthetic
+      // advance — better to skip the track than sit in silence indefinitely.
+      // Only runs when hidden + store says playing + element has a real src.
+      if (
+        el && el.src && document.hidden &&
+        !isLoadingTrackRef.current &&
+        el.src !== silentKeeperUrlRef.current &&
+        usePlayerStore.getState().isPlaying
+      ) {
+        const tid = usePlayerStore.getState().currentTrack?.trackId || null;
+        const curTime = el.currentTime;
+        if (tid && tid === lastObservedTrackId && Math.abs(curTime - lastObservedTime) < 0.1) {
+          stuckTicks++;
+          trace('stuck_tick', tid, {
+            stuckTicks,
+            currentTime: curTime,
+            duration: el.duration,
+            paused: el.paused,
+            readyState: el.readyState,
+            hidden: document.hidden,
+          });
+          if (stuckTicks >= 2 && tid && lastEndedTrackIdRef.current !== tid) {
+            trace('stuck_escalate', tid, {
+              stuckTicks,
+              currentTime: curTime,
+              duration: el.duration,
+              hidden: document.hidden,
+            });
+            syntheticEndedBypassRef.current = true;
+            stuckTicks = 0;
+            runEndedAdvanceRef.current();
+            mc.port2.postMessage(null);
+            return;
+          }
+        } else {
+          stuckTicks = 0;
+          lastObservedTime = curTime;
+          lastObservedTrackId = tid;
+        }
+      } else {
+        // Reset when conditions don't apply (FG, loading, silent WAV, paused store)
+        stuckTicks = 0;
+        lastObservedTime = -1;
+        lastObservedTrackId = null;
       }
 
       mc.port2.postMessage(null);
@@ -3471,39 +3540,86 @@ export const AudioPlayer = () => {
   // Solution: track stall state with a 4s timer. If still stalled after 4s,
   // force the same recovery flow as onError. Per-stall-event timer so a
   // brief network blip doesn't trigger recovery.
-  const stallTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Stall-timer handle is either a setTimeout ID (FG) or a cleanup fn for
+  // the BG MessageChannel. A union keeps clearStallTimer simple.
+  const stallTimerRef = useRef<ReturnType<typeof setTimeout> | { close: () => void } | null>(null);
   const handleStalled = useCallback(() => {
     if (playbackSource !== 'cached' && playbackSource !== 'r2') return;
     if (stallTimerRef.current) return; // already armed
-    devWarn('⚠️ [VOYO] Audio stalled — armed 10s recovery timer');
+    devWarn('⚠️ [VOYO] Audio stalled — armed recovery timer');
     const t = usePlayerStore.getState().currentTrack;
+    const audio = audioRef.current;
+    // Rich stall context — buffered ranges + readyState + currentTime so
+    // we can diagnose BG stalls from telemetry without guessing. readyState
+    // 0=NOTHING, 1=METADATA, 2=CURRENT_DATA, 3=FUTURE_DATA, 4=ENOUGH_DATA.
+    // A readyState<3 stall is a real buffer underrun; >=3 with no buffer
+    // ahead is a CDN/network flap.
+    const bufEnd = audio?.buffered.length ? audio.buffered.end(audio.buffered.length - 1) : null;
+    const ahead = bufEnd != null && audio ? (bufEnd - audio.currentTime) : null;
     if (t?.trackId) {
-      logPlaybackEvent({ event_type: 'stall', track_id: t.trackId, source: (playbackSource as any), meta: { position: audioRef.current?.currentTime } });
+      logPlaybackEvent({
+        event_type: 'stall',
+        track_id: t.trackId,
+        source: (playbackSource as any),
+        meta: {
+          position: audio?.currentTime,
+          readyState: audio?.readyState,
+          bufferedAhead: ahead,
+          hidden: document.hidden,
+        },
+      });
     }
-    stallTimerRef.current = setTimeout(() => {
+    // RECOVERY TIMING: 10s in FG (patience for brief network flaps), but in
+    // BG the track is already silent to the user AND setTimeout is throttled
+    // to 1/min — a 10s timer becomes 60s. Drop to 4s in BG and use MC so
+    // the timer actually fires on wall-clock.
+    const recoverNow = () => {
       stallTimerRef.current = null;
-      const audio = audioRef.current;
-      if (!audio || audio.paused) return;
-      // Check if audio has resumed playing naturally — buffer caught up.
-      // The stalled event fires on every brief network blip; only real
-      // stalls warrant a full reload (which is a bigger gap than the stall).
-      if (!audio.seeking && audio.readyState >= 2 && audio.buffered.length > 0) {
-        const bufferedEnd = audio.buffered.end(audio.buffered.length - 1);
-        if (bufferedEnd > audio.currentTime + 1) {
-          // Has 1s+ ahead — recovered on its own, skip the reload
+      const el = audioRef.current;
+      if (!el || el.paused) return;
+      if (!el.seeking && el.readyState >= 2 && el.buffered.length > 0) {
+        const bufferedEnd = el.buffered.end(el.buffered.length - 1);
+        if (bufferedEnd > el.currentTime + 1) {
+          trace('stall_recovered', t?.trackId || null, { bufferedAhead: bufferedEnd - el.currentTime });
           devLog('🎵 [VOYO] Stall self-recovered — no reload needed');
           return;
         }
       }
-      devWarn('🚨 [VOYO] Stalled >10s with no buffer — forcing recovery');
-      handleAudioError({ currentTarget: audio } as React.SyntheticEvent<HTMLAudioElement, Event>);
-    }, 10000);
+      trace('stall_force_recover', t?.trackId || null, {
+        readyState: el.readyState,
+        position: el.currentTime,
+        hidden: document.hidden,
+      });
+      devWarn('🚨 [VOYO] Stall timeout — forcing recovery');
+      handleAudioError({ currentTarget: el } as React.SyntheticEvent<HTMLAudioElement, Event>);
+    };
+    if (document.hidden) {
+      // MC-based BG timer (setTimeout throttled 1/min). 4s wall-clock.
+      const startMs = Date.now();
+      const mc = new MessageChannel();
+      stallTimerRef.current = { close: () => { try { mc.port1.close(); } catch {} } };
+      const handle = stallTimerRef.current;
+      mc.port1.onmessage = () => {
+        // If a newer arming (or clear) superseded us, bail.
+        if (stallTimerRef.current !== handle) { try { mc.port1.close(); } catch {} return; }
+        if (Date.now() - startMs < 4000) { mc.port2.postMessage(null); return; }
+        try { mc.port1.close(); } catch {}
+        recoverNow();
+      };
+      mc.port2.postMessage(null);
+    } else {
+      stallTimerRef.current = setTimeout(recoverNow, 10000);
+    }
   }, [playbackSource, handleAudioError]);
   const clearStallTimer = useCallback(() => {
-    if (stallTimerRef.current) {
-      clearTimeout(stallTimerRef.current);
-      stallTimerRef.current = null;
+    const h = stallTimerRef.current;
+    if (!h) return;
+    if (typeof h === 'object' && 'close' in h) {
+      h.close();
+    } else {
+      clearTimeout(h);
     }
+    stallTimerRef.current = null;
   }, []);
 
   return (
@@ -3590,6 +3706,18 @@ export const AudioPlayer = () => {
         // buffer dip). It's noisy. We only update buffer health here —
         // recovery is reserved for the more definitive 'stalled' event.
         (playbackSource === 'cached' || playbackSource === 'r2') && setBufferHealth(50, 'warning');
+        // Trace only in BG — FG noise is not useful. In BG the 'waiting'
+        // event is a critical signal (Chrome may drop focus during a long
+        // wait) so we want visibility even though it's chatty.
+        if (document.hidden) {
+          const el = audioRef.current;
+          const bufEnd = el?.buffered.length ? el.buffered.end(el.buffered.length - 1) : null;
+          trace('waiting', usePlayerStore.getState().currentTrack?.trackId, {
+            position: el?.currentTime,
+            readyState: el?.readyState,
+            bufferedAhead: bufEnd != null && el ? (bufEnd - el.currentTime) : null,
+          });
+        }
       }}
       onStalled={handleStalled}
       onSuspend={() => clearStallTimer()}

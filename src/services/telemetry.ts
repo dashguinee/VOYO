@@ -132,16 +132,51 @@ export function logPlaybackEvent(
   event: Omit<PlaybackEvent, 'is_background' | 'user_agent' | 'session_id'>
 ): void {
   try {
+    const hidden = typeof document !== 'undefined' && document.hidden;
+    const full: PlaybackEvent = {
+      ...event,
+      is_background: hidden,
+      user_agent: typeof navigator !== 'undefined' ? navigator.userAgent.slice(0, 200) : '',
+      session_id: sessionId,
+    };
+
+    // BG REAL-TIME FLUSH: the normal batch pipeline uses setTimeout to
+    // delay flushes by 10s — setTimeout is throttled to 1/min in BG tabs,
+    // so in practice BG events don't land until visibility returns. We
+    // lose debuggability exactly where we need it most.
+    //
+    // Fix: in BG, skip the batch entirely and fire a fetch() with
+    // `keepalive: true` per event. fetch is NOT throttled (only timers
+    // are), keepalive lets the request survive the tab being killed, and
+    // the supabase REST endpoint accepts direct POSTs. Cost: one small
+    // network request per trace event while BG. Benefit: real-time
+    // visibility of what's happening on a locked phone.
+    if (hidden && typeof fetch !== 'undefined') {
+      try {
+        const url = `${import.meta.env.VITE_SUPABASE_URL}/rest/v1/${TABLE}`;
+        const key = import.meta.env.VITE_SUPABASE_ANON_KEY;
+        fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': key,
+            'Authorization': `Bearer ${key}`,
+            'Prefer': 'return=minimal',
+          },
+          body: JSON.stringify([full]),
+          keepalive: true,
+        }).catch(() => {}); // never break playback for telemetry
+        return; // don't also queue — the fetch is the flush
+      } catch {
+        // fall through to buffer
+      }
+    }
+
     // Hard cap — drop oldest if we overflow (network outage scenario)
     if (buffer.length >= MAX_BUFFER) {
       buffer.shift();
     }
-    buffer.push({
-      ...event,
-      is_background: typeof document !== 'undefined' && document.hidden,
-      user_agent: typeof navigator !== 'undefined' ? navigator.userAgent.slice(0, 200) : '',
-      session_id: sessionId,
-    });
+    buffer.push(full);
     if (buffer.length >= FLUSH_SIZE) {
       flush();
     } else {
