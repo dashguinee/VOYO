@@ -1126,15 +1126,26 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       ? state.hotTracks
       : TRACKS;
 
-    // Filter out recently played
-    let availableTracks = allAvailable.filter(t =>
-      !recentHistoryIds.has(t.id) && !recentHistoryIds.has(t.trackId)
-    );
+    // v194.1 CONSISTENCY FIX: filter must MATCH nextTrack's filter exactly,
+    // otherwise predictNextTrack[0] and nextTrack[0] diverge and preload
+    // caches the wrong track. Previously we were missing the blocklist +
+    // unplayable checks — v193 telemetry showed the divergence: preload
+    // completed for EhyzYPSHRQU, but nextTrack landed on ewt2-_OuFR8
+    // because EhyzYPSHRQU was blocklisted and filtered out at play-time.
+    let availableTracks = allAvailable.filter(t => {
+      if (recentHistoryIds.has(t.id) || recentHistoryIds.has(t.trackId)) return false;
+      if (t.trackId && (isKnownUnplayable(t.trackId) || isBlocklisted(t.trackId))) return false;
+      return true;
+    });
 
+    // Fallback: same pattern as nextTrack — drop history but keep blocklist
+    // + unplayable exclusions.
     if (availableTracks.length === 0) {
       availableTracks = allAvailable.filter(t => {
         const tid = t.id || t.trackId;
-        return tid !== currentTrackId;
+        if (tid === currentTrackId) return false;
+        if (t.trackId && (isKnownUnplayable(t.trackId) || isBlocklisted(t.trackId))) return false;
+        return true;
       });
     }
 
@@ -1142,9 +1153,8 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       return null;
     }
 
-    // Return first available (predictable for preloading)
-    // Note: actual nextTrack uses random, but for preloading we pick first
-    // to ensure consistency between predict and actual
+    // Pick [0] — matches nextTrack's non-shuffle pick. Now preload caches
+    // the SAME track nextTrack will actually select.
     return availableTracks[0];
   },
 
