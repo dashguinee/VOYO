@@ -2902,6 +2902,73 @@ export const AudioPlayer = () => {
     navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
   }, [currentTrack, isPlaying, playbackSource, togglePlay, nextTrack]);
 
+  // MEDIA SESSION HEARTBEAT — the missing piece for BG longevity.
+  //
+  // Without continuous setPositionState pings, Android Chrome considers the
+  // media session stale after ~20-30s of no activity → drops audio focus →
+  // silently freezes the <audio> element mid-track. Symptom user saw: 'track
+  // just disappeared in BG, came back an hour later to silence'.
+  //
+  // The regular setPositionState in onTimeUpdate only fires while `timeupdate`
+  // keeps firing — which Chrome throttles heavily in BG. Under power save
+  // it can drop to <1/30s. Not enough to keep the session alive.
+  //
+  // Solution: MessageChannel-driven heartbeat. Port-to-port messages are NOT
+  // throttled by BG tab freezing (unlike setInterval/setTimeout). We fire
+  // every ~4s while isPlaying, hitting setPositionState + re-asserting
+  // playbackState='playing'. As long as we're the audio authority, session
+  // stays registered, audio focus holds, playback continues.
+  //
+  // Also re-kicks audio.play() if we detect the element got paused silently
+  // by the OS (no pause event → no handler fired → isPlaying stays true →
+  // divergence → heartbeat spots it and resumes).
+  useEffect(() => {
+    if (!isPlaying || !('mediaSession' in navigator)) return;
+    const mc = new MessageChannel();
+    let active = true;
+    let lastTick = performance.now();
+
+    mc.port1.onmessage = () => {
+      if (!active) return;
+      const now = performance.now();
+      // Cadence: fire heartbeat every ~4s regardless of tick rate.
+      if (now - lastTick < 4000) { mc.port2.postMessage(null); return; }
+      lastTick = now;
+
+      try {
+        const el = audioRef.current;
+        if (el && el.duration && isFinite(el.duration)) {
+          navigator.mediaSession.setPositionState({
+            duration: el.duration,
+            position: Math.min(el.currentTime, el.duration),
+            playbackRate: el.playbackRate || 1,
+          });
+        }
+        navigator.mediaSession.playbackState = 'playing';
+      } catch {}
+
+      // Silent-paused recovery: if store says playing but element is paused
+      // (OS silent-suspended the audio), kick it back into play.
+      const el = audioRef.current;
+      if (el && el.paused && el.src && !isLoadingTrackRef.current && usePlayerStore.getState().isPlaying) {
+        try {
+          audioContextRef.current?.state === 'suspended' && audioContextRef.current.resume().catch(() => {});
+          el.play().catch(() => {});
+          trace('heartbeat_kick', usePlayerStore.getState().currentTrack?.trackId, { why: 'element_silently_paused', hidden: document.hidden });
+        } catch {}
+      }
+
+      mc.port2.postMessage(null);
+    };
+    mc.port2.postMessage(null);
+
+    return () => {
+      active = false;
+      mc.port1.close();
+      mc.port2.close();
+    };
+  }, [isPlaying]);
+
   // Audio element handlers (only active when using audio element: cached or r2)
   //
   // THROTTLED STORE WRITES: ontimeupdate fires 4-66Hz (Safari is worst).
