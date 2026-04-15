@@ -43,6 +43,7 @@ import { isKnownUnplayable } from '../services/trackVerifier';
 import { isBlocked as isBlocklisted } from '../services/trackBlocklist';
 import { getInsights as getOyoInsights, onTrackSkip as oyoOnTrackSkip } from '../services/oyoDJ';
 import { devLog, devWarn } from '../utils/logger';
+import { trace } from '../services/telemetry';
 
 // Network quality types
 type NetworkQuality = 'slow' | 'medium' | 'fast' | 'unknown';
@@ -728,6 +729,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
 
     // Handle repeat one mode - replay the same track
     if (state.repeatMode === 'one' && state.currentTrack) {
+      trace('nt_repeat_one', state.currentTrack.trackId || state.currentTrack.id, {});
       set({
         isPlaying: true,
         progress: 0,
@@ -778,9 +780,14 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
 
       // If no playable track found in queue, fall through to other sources
       if (!nextPlayable) {
+        trace('nt_queue_all_blocked', state.currentTrack?.trackId || null, { queueLen: state.queue.length });
         devLog('[PlayerStore] No playable tracks in queue, trying other sources...');
         set({ queue: [] }); // Clear the dead queue
       } else {
+        trace('nt_queue_pick', nextPlayable.track.trackId || nextPlayable.track.id, {
+          pickedTitle: nextPlayable.track.title?.slice(0, 40),
+          queueRemaining: rest.length,
+        });
         if (state.currentTrack && state.currentTime > 0) {
           get().addToHistory(state.currentTrack, state.currentTime);
         }
@@ -882,6 +889,8 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
           source: 'auto' as const,
         }));
 
+        trace('nt_repeat_all_rebuild', firstTrack.trackId || firstTrack.id, { historySize: uniqueTracks.length });
+
         set({
           currentTrack: firstTrack,
           queue: newQueue,
@@ -957,6 +966,13 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       }).sort(() => Math.random() - 0.5);
     }
 
+    trace('nt_discover_enter', currentTrackId || null, {
+      poolSize: allAvailable.length,
+      availableAfterFilter: availableTracks.length,
+      source: state.discoverTracks.length > 0 ? 'discover' : (state.hotTracks.length > 0 ? 'hot' : 'tracks_fallback'),
+      shuffle: state.shuffleMode,
+    });
+
     if (availableTracks.length > 0) {
       let nextTrack;
 
@@ -965,16 +981,23 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
         const randomIndex = Math.floor(Math.random() * availableTracks.length);
         nextTrack = availableTracks[randomIndex];
       } else {
-        // Regular mode: Pick random from available (add variety)
-        nextTrack = availableTracks[Math.floor(Math.random() * availableTracks.length)];
+        // PRELOAD CONSISTENCY (v194 B1): picks availableTracks[0], matching
+        // predictNextTrack. Before: random pick → preload_check hit=False on
+        // every transition because preload cached what predict returned (first)
+        // but nextTrack picked random. Seen in v193 session: preload_complete
+        // fired for Fbd6L9zkuyc but nextTrack landed on sTUg9gjhiI4 instead.
+        // Filtering already excludes recent + blocked, so [0] rotates through
+        // discover pool as tracks get added to history — no stuck-on-one-track
+        // risk.
+        nextTrack = availableTracks[0];
       }
 
       // SAFETY CHECK: Ensure we're not playing the same track
       if ((nextTrack.id === currentTrackId || nextTrack.trackId === currentTrackId) && availableTracks.length > 1) {
-        // Pick a different one
+        // Pick a different one (deterministically — same reason as above)
         const filtered = availableTracks.filter(t => t.id !== currentTrackId && t.trackId !== currentTrackId);
         if (filtered.length > 0) {
-          nextTrack = filtered[Math.floor(Math.random() * filtered.length)];
+          nextTrack = filtered[0];
         }
       }
 
@@ -983,6 +1006,10 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       }
       // POOL ENGAGEMENT: Record play for next track
       recordPoolEngagement(nextTrack.id || nextTrack.trackId, 'play');
+      trace('nt_discover_pick', nextTrack.trackId || nextTrack.id, {
+        title: nextTrack.title?.slice(0, 40),
+        shuffle: state.shuffleMode,
+      });
       set({
         currentTrack: nextTrack,
         isPlaying: true,
@@ -1002,6 +1029,12 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
         currentTrackArtist: nextTrack.artist,
         currentTrackCoverUrl: nextTrack.coverUrl || getThumb(nextTrack.trackId || nextTrack.id),
         currentTime: 0,
+      });
+    } else {
+      trace('nt_no_tracks', currentTrackId || null, {
+        poolSize: allAvailable.length,
+        discoverLen: state.discoverTracks.length,
+        hotLen: state.hotTracks.length,
       });
     }
   },

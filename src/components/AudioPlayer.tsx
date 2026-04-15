@@ -1318,6 +1318,23 @@ export const AudioPlayer = () => {
     param.linearRampToValueAtTime(target, now + 0.003);
   };
 
+  // A4 (v194): swap src on the shared audio element SAFELY — reset loop
+  // (silent-WAV bridge leaves it true; HTMLMediaElement.loop is sticky
+  // across src changes, so without reset the new track loops forever and
+  // 'ended' never fires). Pin volume. Conditionally load() — blob: URLs
+  // skip the full decoder reset (data is already in memory), remote URLs
+  // need it. Hoisted to a helper so all fast-paths (preload / cached / R2
+  // / retry / hot-swap) reset loop consistently — every missed path has
+  // caused a BG auto-advance regression (v171, v187).
+  const swapSrcSafely = (url: string) => {
+    const el = audioRef.current;
+    if (!el) return;
+    el.volume = 1.0;
+    el.loop = false;
+    el.src = url;
+    if (!url.startsWith('blob:')) el.load();
+  };
+
   // Smooth volume fade-in for auto-resume (1.2s from silence to target)
   const fadeInVolume = useCallback((durationMs: number = 1200) => {
     if (audioContextRef.current && gainNodeRef.current) {
@@ -1711,7 +1728,7 @@ export const AudioPlayer = () => {
         if (!document.hidden) {
           await new Promise<void>(resolve => setTimeout(resolve, 10));
         }
-        if (isStale()) { devLog(`[AudioPlayer] cancelled stale load for ${trackId} after fade timeout`); return; }
+        if (isStale()) { trace('load_abandoned', trackId, { at: 'after_fade_timeout' }); devLog(`[AudioPlayer] cancelled stale load for ${trackId} after fade timeout`); return; }
         if (audioRef.current === audioToFade) {
           if (document.hidden && silentKeeperUrlRef.current) {
             // BACKGROUND BRIDGE: silent WAV holds audio focus during src swap.
@@ -1863,20 +1880,8 @@ export const AudioPlayer = () => {
           cachedUrlRef.current = preloaded.url;
 
           if (audioRef.current && preloaded.url) {
-            audioRef.current.volume = 1.0; // Pinned — all loudness via masterGain
-            // CRITICAL: clear the loop flag the silent-WAV bridge set during
-            // background track switch. HTMLMediaElement.loop is sticky across
-            // src changes per spec — leaving it true causes the new track to
-            // loop forever and `ended` never fires → background auto-advance
-            // dies silently. This is the v171 fix to the BG auto-advance bug
-            // that surfaced after the silent-WAV bridge was added.
-            audioRef.current.loop = false;
-            audioRef.current.src = preloaded.url;
-            // Skip audio.load() for preloaded blob URLs — the data is in
-            // memory and setting .src alone triggers the load algorithm.
-            // Calling load() would force a full reset of the decode pipeline,
-            // adding 30-80ms of latency. For non-blob URLs, load() is needed.
-            if (!preloaded.url.startsWith('blob:')) audioRef.current.load();
+            // v194 A4: swapSrcSafely handles loop=false + volume pin + conditional load().
+            swapSrcSafely(preloaded.url);
 
             // Use canplay (readyState >= 3) not canplaythrough — the audio
             // data is already local (preloaded blob). No need to wait for
@@ -1909,6 +1914,7 @@ export const AudioPlayer = () => {
                     usePlayerStore.getState().setIsPlaying(true);
                   }
                   trace('play_resolved', trackId, { path: 'preload' });
+                  trace('load_complete', trackId, { path: 'preload' });
                   devLog('🔮 [VOYO] Preloaded playback started!');
                 }).catch(e => { trace('play_rejected', trackId, { path: 'preload', err: e.name, msg: e.message?.slice(0,80) }); handlePlayFailure(e, 'Preloaded'); });
               }
@@ -1927,7 +1933,7 @@ export const AudioPlayer = () => {
       const API_BASE = 'https://voyo-edge.dash-webtv.workers.dev';
       const { url: bestUrl, cached: fromCache } = audioEngine.getBestAudioUrl(trackId, API_BASE);
       const cachedUrl = fromCache ? bestUrl : await checkCache(trackId);
-      if (isStale()) { devLog(`[AudioPlayer] cancelled stale load for ${trackId} after checkCache`); return; }
+      if (isStale()) { trace('load_abandoned', trackId, { at: 'after_checkCache' }); devLog(`[AudioPlayer] cancelled stale load for ${trackId} after checkCache`); return; }
 
       if (cachedUrl) {
         // ⚡ BOOSTED - Play from cache instantly
@@ -1942,15 +1948,8 @@ export const AudioPlayer = () => {
         setupAudioEnhancement(profile);
 
         if (audioRef.current) {
-          audioRef.current.volume = 1.0; // Pinned — all loudness via masterGain
-          // CRITICAL: clear loop flag from silent-WAV bridge (sticky across src).
-          // See preload path above for full explanation.
-          audioRef.current.loop = false;
-          audioRef.current.src = cachedUrl;
-          // Cached URLs are blob: from IndexedDB — data is in memory.
-          // Skip load() for blobs (setting src triggers the load algorithm).
-          // For non-blob URLs (edge case), keep load().
-          if (!cachedUrl.startsWith('blob:')) audioRef.current.load();
+          // v194 A4: swapSrcSafely handles loop=false + volume pin + conditional load().
+          swapSrcSafely(cachedUrl);
 
           trace('canplay_await', trackId, { path: 'cached', hidden: document.hidden });
           const cachedPlayHandler = () => {
@@ -1988,6 +1987,7 @@ export const AudioPlayer = () => {
                   usePlayerStore.getState().setIsPlaying(true);
                 }
                 trace('play_resolved', trackId, { path: 'cached' });
+                trace('load_complete', trackId, { path: 'cached' });
                 devLog('🎵 [VOYO] Playback started (cached)');
               }).catch(e => { trace('play_rejected', trackId, { path: 'cached', err: e.name, msg: e.message?.slice(0,80) }); handlePlayFailure(e, 'Cached'); });
             }
@@ -1999,7 +1999,7 @@ export const AudioPlayer = () => {
         devLog('🎵 [VOYO] Not in local cache, checking R2 collective...');
 
         const r2Result = await checkR2Cache(trackId);
-        if (isStale()) { devLog(`[AudioPlayer] cancelled stale load for ${trackId} after R2 check`); return; }
+        if (isStale()) { trace('load_abandoned', trackId, { at: 'after_R2_check' }); devLog(`[AudioPlayer] cancelled stale load for ${trackId} after R2 check`); return; }
 
         if (r2Result.exists && r2Result.url) {
           // 🚀 R2 HIT - Play from collective cache with EQ
@@ -2017,17 +2017,8 @@ export const AudioPlayer = () => {
           setupAudioEnhancement(profile);
 
           if (audioRef.current) {
-            audioRef.current.volume = 1.0; // Pinned — loudness via masterGain
-            // CRITICAL: clear loop=true left by silent-WAV bridge (v185
-            // pre-advance OR v172 in-loadTrack BG bridge). Without this,
-            // the new R2 track plays on a looped audio element → ended
-            // never fires → no auto-advance → silent dead BG transition.
-            // Same fix as v171 applied to preload + cached fast-paths,
-            // missed on this R2-direct path because v185's pre-advance
-            // bridge made it newly reachable in BG.
-            audioRef.current.loop = false;
-            audioRef.current.src = r2Result.url;
-            audioRef.current.load();
+            // v194 A4: swapSrcSafely handles loop=false + volume pin + conditional load().
+            swapSrcSafely(r2Result.url);
 
             audioRef.current.oncanplaythrough = () => {
               if (!audioRef.current) return;
@@ -2173,10 +2164,8 @@ export const AudioPlayer = () => {
 
               if (cachedUrlRef.current) URL.revokeObjectURL(cachedUrlRef.current);
               cachedUrlRef.current = isBlob ? url : null;
-              audioRef.current.loop = false;
-              audioRef.current.volume = 1.0;
-              audioRef.current.src = url;
-              if (!isBlob) audioRef.current.load();
+              // v194 A4: swapSrcSafely handles loop=false + volume pin + conditional load().
+              swapSrcSafely(url);
 
               // SESSION KEEPER: if canplay doesn't fire within 3s (slow server
               // buffering after src swap), revert to silent WAV to keep media
@@ -2240,6 +2229,7 @@ export const AudioPlayer = () => {
                       usePlayerStore.getState().setIsPlaying(true);
                     }
                     trace('play_resolved', trackId, { path: `retry_${source}`, attempt: attempt + 1 });
+                    trace('load_complete', trackId, { path: `retry_${source}`, attempt: attempt + 1 });
                     devLog(`🎵 [VOYO] Playback started (${source} retry ${attempt + 1})`);
                   }).catch(e => { trace('play_rejected', trackId, { path: `retry_${source}`, attempt: attempt + 1, err: e.name }); handlePlayFailure(e, `${source}-retry`); });
                 }
@@ -2987,6 +2977,12 @@ export const AudioPlayer = () => {
     const mc = new MessageChannel();
     let active = true;
     let lastTick = performance.now();
+    // T11 (v194): emit a baseline heartbeat_tick every 2nd fire (~8s) with
+    // minimal state. Anomaly traces only tell us when something's wrong;
+    // the pulse tells us the heartbeat is alive at all. If pulses stop,
+    // the heartbeat's useEffect tore down (isPlaying flipped false) or
+    // the MC stopped ticking. Every-other-tick keeps the cost low.
+    let pulseCounter = 0;
     // Stuck-playback detector: track last-observed currentTime + trackId.
     // If currentTime hasn't moved for 2 consecutive heartbeat ticks (~8s)
     // while the store still says playing, the element is wedged. Either
@@ -3003,6 +2999,20 @@ export const AudioPlayer = () => {
       // Cadence: fire heartbeat every ~4s regardless of tick rate.
       if (now - lastTick < 4000) { mc.port2.postMessage(null); return; }
       lastTick = now;
+      pulseCounter++;
+      if (pulseCounter % 2 === 0) {
+        const hbEl = audioRef.current;
+        const hbCtx = audioContextRef.current;
+        trace('heartbeat_tick', usePlayerStore.getState().currentTrack?.trackId, {
+          hidden: document.hidden,
+          ctxState: hbCtx?.state,
+          gain: gainNodeRef.current?.gain.value,
+          paused: hbEl?.paused,
+          currentTime: hbEl?.currentTime,
+          duration: hbEl?.duration,
+          readyState: hbEl?.readyState,
+        });
+      }
 
       try {
         const el = audioRef.current;

@@ -20,6 +20,7 @@
 
 import { mediaCache } from './mediaCache';
 import { devLog, devWarn } from '../utils/logger';
+import { trace } from './telemetry';
 
 export type BitrateLevel = 'low' | 'medium' | 'high';
 export type BufferStatus = 'healthy' | 'warning' | 'emergency';
@@ -51,9 +52,13 @@ export interface AudioChainResult {
 // single source of truth for context resume. Wrapped in rAF so it batches
 // with React updates from other components reacting to visibility.
 if (typeof document !== 'undefined') {
-  const resumeCtx = () => {
+  const resumeCtx = (origin: string) => {
     if (_audioCtx && (_audioCtx.state === 'suspended' || (_audioCtx as any).state === 'interrupted')) {
-      _audioCtx.resume().catch(() => {});
+      const prevState = _audioCtx.state;
+      trace('ae_resume_attempt', null, { origin, prevState, hidden: typeof document !== 'undefined' && document.hidden });
+      _audioCtx.resume()
+        .then(() => trace('ae_resume_ok', null, { origin, prevState, newState: _audioCtx?.state }))
+        .catch(e => trace('ae_resume_rejected', null, { origin, prevState, err: e?.name, msg: (e?.message || '').slice(0, 80) }));
     }
   };
   // IMMEDIATE resume on visibility change — no rAF delay.
@@ -65,10 +70,10 @@ if (typeof document !== 'undefined') {
   // double-calling is harmless.
   const onVisibilityChange = () => {
     if (document.hidden) return;
-    resumeCtx(); // Immediate — no rAF delay
+    resumeCtx('visibilitychange'); // Immediate — no rAF delay
   };
   document.addEventListener('visibilitychange', onVisibilityChange);
-  window.addEventListener('focus', resumeCtx); // Also immediate
+  window.addEventListener('focus', () => resumeCtx('focus')); // Also immediate
   // iOS/Android: After phone lock/unlock, AudioContext goes to 'interrupted' state.
   // A user gesture (touch/click) is required to resume it.
   // CRITICAL: only attach the gesture listeners while context is actually
@@ -83,8 +88,9 @@ if (typeof document !== 'undefined') {
   const installGestureListener = () => {
     if (gestureListenerActive || totalGestureAttempts >= 30) return;
     gestureListenerActive = true;
+    trace('ae_gesture_install', null, { totalAttempts: totalGestureAttempts, ctxState: _audioCtx?.state });
     const resumeOnce = () => {
-      resumeCtx();
+      resumeCtx('gesture');
       totalGestureAttempts++;
       setTimeout(() => {
         if (_audioCtx && _audioCtx.state === 'running') {
@@ -92,6 +98,7 @@ if (typeof document !== 'undefined') {
           document.removeEventListener('touchstart', resumeOnce);
           document.removeEventListener('click', resumeOnce);
           gestureListenerActive = false;
+          trace('ae_gesture_ok', null, { attempts: totalGestureAttempts });
           totalGestureAttempts = 0; // Reset on success so future suspensions work
           currentResumeOnce = null;
         } else if (totalGestureAttempts >= 30) {
@@ -99,6 +106,7 @@ if (typeof document !== 'undefined') {
           document.removeEventListener('touchstart', resumeOnce);
           document.removeEventListener('click', resumeOnce);
           gestureListenerActive = false;
+          trace('ae_gesture_giveup', null, { ctxState: _audioCtx?.state });
           currentResumeOnce = null;
         }
       }, 50);
