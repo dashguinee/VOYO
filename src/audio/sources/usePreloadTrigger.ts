@@ -41,7 +41,7 @@ export function usePreloadTrigger(params: UsePreloadTriggerParams) {
     if (!currentTrack?.trackId) return;
     if (preloadedForTrackIdRef.current === currentTrack.trackId) return;
     preloadedForTrackIdRef.current = currentTrack.trackId;
-    (hasTriggeredPreloadRef as any).current = false;
+    hasTriggeredPreloadRef.current = false;
 
     // Gather upcoming: queue first, then prediction to fill.
     const upcoming: Track[] = [];
@@ -75,7 +75,7 @@ export function usePreloadTrigger(params: UsePreloadTriggerParams) {
         // Double-check: the user hasn't skipped away from the track that
         // triggered this preload batch.
         if (usePlayerStore.getState().currentTrack?.trackId !== currentTrack.trackId) return;
-        if (index === 0) (hasTriggeredPreloadRef as any).current = true;
+        if (index === 0) hasTriggeredPreloadRef.current = true;
         preloadNextTrack(track.trackId, checkCache)
           .then(r => { if (r) devLog(`🔮 [preload] ready: ${track.title} (${r.source})`); })
           .catch(err => { devWarn(`🔮 [preload] failed:`, err); });

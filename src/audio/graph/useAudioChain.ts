@@ -236,7 +236,7 @@ export function useAudioChain(params: UseAudioChainParams): AudioChainApi {
   // the end time in the past (ramp "completes" instantly = gain jump).
   const fadeInMasterGain = useCallback((_durationMs: number = 80) => {
     disarmGainWatchdog();
-    (isLoadingTrackRef as any).current = false;
+    isLoadingTrackRef.current = false;
     if (!gainNodeRef.current || !audioContextRef.current) return;
     const ctx = audioContextRef.current;
     if (ctx.state === 'suspended' || (ctx as any).state === 'interrupted') {

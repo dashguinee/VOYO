@@ -328,7 +328,7 @@ export function useBgEngine(params: UseBgEngineParams): BgEngineApi {
             hidden: document.hidden,
           });
           if (syntheticEndedBypassRef.current !== null) {
-            (syntheticEndedBypassRef as any).current = true;
+            syntheticEndedBypassRef.current = true;
           }
           runEndedAdvanceRef.current?.();
           mc.port2.postMessage(null);
@@ -391,7 +391,7 @@ export function useBgEngine(params: UseBgEngineParams): BgEngineApi {
               hidden: document.hidden,
             });
             if (syntheticEndedBypassRef.current !== null) {
-              (syntheticEndedBypassRef as any).current = true;
+              syntheticEndedBypassRef.current = true;
             }
             stuckTicks = 0;
             runEndedAdvanceRef.current?.();

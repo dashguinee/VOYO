@@ -88,7 +88,7 @@ export function useHotSwap(params: UseHotSwapParams) {
       const currentPos = usePlayerStore.getState().currentTime;
 
       if (cachedUrlRef.current) URL.revokeObjectURL(cachedUrlRef.current);
-      (cachedUrlRef as any).current = cachedUrl;
+      cachedUrlRef.current = cachedUrl;
 
       const { boostProfile: profile } = usePlayerStore.getState();
       setupAudioEnhancement(profile);
@@ -114,7 +114,7 @@ export function useHotSwap(params: UseHotSwapParams) {
           audioContextRef.current?.state === 'suspended' && audioContextRef.current.resume().catch(() => {});
           fadeInMasterGain(80);
           audioRef.current.play().then(() => {
-            (isEdgeStreamRef as any).current = false;
+            isEdgeStreamRef.current = false;
             setPlaybackSource('cached');
             devLog('🔄 [hotSwap] complete — now playing boosted cached audio');
           }).catch((err) => {

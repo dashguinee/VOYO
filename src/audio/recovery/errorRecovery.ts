@@ -107,7 +107,7 @@ export function useErrorRecovery(params: UseErrorRecoveryParams): ErrorRecoveryA
       if (cachedUrl && audioRef.current) {
         devLog('🔄 [recover] 1/3 local cache hit');
         if (cachedUrlRef.current) URL.revokeObjectURL(cachedUrlRef.current);
-        (cachedUrlRef as any).current = cachedUrl;
+        cachedUrlRef.current = cachedUrl;
         audioRef.current.src = cachedUrl;
         audioRef.current.load();
         audioRef.current.oncanplay = () => {
@@ -115,7 +115,7 @@ export function useErrorRecovery(params: UseErrorRecoveryParams): ErrorRecoveryA
           audioRef.current.oncanplay = null;
           if (recoveryIsStale()) return;
           if (savedPos > 2) audioRef.current.currentTime = savedPos;
-          (isEdgeStreamRef as any).current = false;
+          isEdgeStreamRef.current = false;
           setPlaybackSource('cached');
           fadeInMasterGain(80);
           audioRef.current.play().then(() => {
@@ -139,7 +139,7 @@ export function useErrorRecovery(params: UseErrorRecoveryParams): ErrorRecoveryA
           audioRef.current.oncanplay = null;
           if (recoveryIsStale()) return;
           if (savedPos > 2) audioRef.current.currentTime = savedPos;
-          (isEdgeStreamRef as any).current = false;
+          isEdgeStreamRef.current = false;
           setPlaybackSource('r2');
           fadeInMasterGain(80);
           audioRef.current.play().then(() => {
@@ -167,7 +167,7 @@ export function useErrorRecovery(params: UseErrorRecoveryParams): ErrorRecoveryA
           audioRef.current.oncanplay = null;
           if (recoveryIsStale()) return;
           if (savedPos > 2) audioRef.current.currentTime = savedPos;
-          (isEdgeStreamRef as any).current = true;
+          isEdgeStreamRef.current = true;
           fadeInMasterGain(80);
           audioRef.current.play().then(() => {
             devLog(`🔄 [recover] 3/3 done in ${(performance.now() - recoveryStart).toFixed(0)}ms`);
@@ -190,7 +190,7 @@ export function useErrorRecovery(params: UseErrorRecoveryParams): ErrorRecoveryA
     audio.pause();
     if (cachedUrlRef.current) {
       URL.revokeObjectURL(cachedUrlRef.current);
-      (cachedUrlRef as any).current = null;
+      cachedUrlRef.current = null;
     }
     nextTrack();
   }, [playbackSource, currentTrack?.trackId, checkCache, nextTrack, setPlaybackSource, audioRef, cachedUrlRef, isEdgeStreamRef, loadAttemptRef, clearLoadWatchdog, muteMasterGainInstantly, fadeInMasterGain]);
