@@ -51,6 +51,9 @@ import {
 } from '../services/preloadManager';
 import { useBgEngine } from '../audio/bg/bgEngine';
 import { resolveSource } from '../audio/sources/sourceResolver';
+import { useMediaSession } from '../audio/playback/mediaSession';
+import { useHotSwap } from '../audio/playback/hotSwap';
+import { useErrorRecovery } from '../audio/recovery/errorRecovery';
 
 export type BoostPreset = 'off' | 'boosted' | 'calm' | 'voyex';
 
@@ -169,7 +172,6 @@ export const AudioPlayer = () => {
   const trackProgressRef = useRef<number>(0);
   const isInitialLoadRef = useRef<boolean>(true);
   const backgroundBoostingRef = useRef<string | null>(null);
-  const hotSwapAbortRef = useRef<AbortController | null>(null);
   const hasTriggered50PercentCacheRef = useRef<boolean>(false); // 50% auto-boost trigger
   const hasTriggered85PercentCacheRef = useRef<boolean>(false); // 85% edge-stream cache trigger
   const hasTriggeredPreloadRef = useRef<boolean>(false); // 70% next-track preload trigger
@@ -1957,151 +1959,21 @@ export const AudioPlayer = () => {
     }
   }, [currentTrack]);
 
-  // === HOT-SWAP: When boost completes mid-stream (R2 → cached upgrade) ===
-  // CRITICAL: Uses AbortController to prevent race conditions when track changes mid-swap
-  //
-  // SKIP MID-TRACK SWAP IF FAR INTO THE TRACK. The hot-swap is intentionally
-  // a hard cut: pause → swap src → load → seek → play. Even with masterGain
-  // muting, the audio element jump introduces a 100-300ms gap that the user
-  // hears as a crack/interruption mid-song. The cache is now ready for the
-  // NEXT play of this track regardless — so if we're past 35% of the song,
-  // skip the swap entirely. The user gets the high-quality version starting
-  // from the next play, and the current playback is uninterrupted.
-  useEffect(() => {
-    if (!lastBoostCompletion || !currentTrack?.trackId) return;
-
-    const completedId = lastBoostCompletion.trackId;
-    const currentId = currentTrack.trackId.replace('VOYO_', '');
-    const isCurrentTrackMatch = completedId === currentId || completedId === currentTrack.trackId;
-
-    // Hot-swap if currently streaming via R2 or Edge Worker stream AND boost is for current track
-    // This upgrades from R2 (potentially low quality) or expiring stream URL to local cached (high quality)
-    if (!isCurrentTrackMatch) return;
-    if (playbackSource !== 'r2' && !(playbackSource === 'cached' && isEdgeStreamRef.current)) return;
-
-    // GUARD: skip the swap if we're past 35% — not worth the audible interruption
-    const currentProgress = usePlayerStore.getState().progress;
-    if (currentProgress > 35) {
-      devLog(`[VOYO] Hot-swap skipped — already at ${currentProgress.toFixed(0)}% (cache will be used on next play)`);
-      return;
-    }
-
-    // Cancel any previous hot-swap operation to prevent race condition
-    if (hotSwapAbortRef.current) {
-      hotSwapAbortRef.current.abort();
-      devLog('[VOYO] Cancelled previous hot-swap operation');
-    }
-    hotSwapAbortRef.current = new AbortController();
-    const signal = hotSwapAbortRef.current.signal;
-    const swapTrackId = currentTrack.trackId; // Capture at start
-
-    devLog('🔄 [VOYO] Hot-swap: Boost complete, upgrading R2 to cached audio...');
-
-    const performHotSwap = async () => {
-      // Check if aborted before starting
-      if (signal.aborted) {
-        devLog('[VOYO] Hot-swap aborted before start');
-        return;
-      }
-
-      const cachedUrl = await checkCache(currentTrack.trackId);
-
-      // Check AGAIN after async operation - track may have changed
-      if (signal.aborted) {
-        devLog('[VOYO] Hot-swap aborted after cache check');
-        return;
-      }
-
-      // Double-verify we're still on the same track (belt and suspenders)
-      const storeTrackId = usePlayerStore.getState().currentTrack?.trackId;
-      if (storeTrackId !== swapTrackId) {
-        devLog('[VOYO] Track changed during hot-swap, aborting. Expected:', swapTrackId, 'Got:', storeTrackId);
-        return;
-      }
-
-      if (!cachedUrl || !audioRef.current) return;
-
-      // Resume at current position on the upgraded (boosted) source.
-      const currentPos = usePlayerStore.getState().currentTime;
-
-      if (cachedUrlRef.current) URL.revokeObjectURL(cachedUrlRef.current);
-      cachedUrlRef.current = cachedUrl;
-
-      const { boostProfile: profile } = usePlayerStore.getState();
-      setupAudioEnhancement(profile);
-
-      // FIX: Clear dangling handlers before hot-swap to prevent old callbacks interfering.
-      // Also clear onplay — the edge-stream loadTrack path sets it, and if we don't
-      // clear it here, it keeps firing against the new src (triggering bogus cache downloads).
-      audioRef.current.oncanplaythrough = null;
-      audioRef.current.oncanplay = null;
-      audioRef.current.onplay = null;
-      // FADE: ramp masterGain to silence BEFORE swapping src, instead of setting
-      // audio.volume = 0. audio.volume at the HTML element level is a digital jump
-      // that leaks into the MediaElementAudioSourceNode as a click. The gain ramp
-      // is applied inside the Web Audio chain where it's click-free by design.
-      // audio.volume stays pinned at 1.0 throughout (no HTML-level jumps).
-      muteMasterGainInstantly();
-      audioRef.current.src = cachedUrl;
-      audioRef.current.load();
-
-      audioRef.current.oncanplaythrough = () => {
-        // Final check before applying - ensure we haven't been aborted
-        if (signal.aborted) {
-          devLog('[VOYO] Hot-swap aborted during canplaythrough');
-          return;
-        }
-        if (!audioRef.current) return;
-
-        // Resume from same position
-        if (currentPos > 2) {
-          audioRef.current.currentTime = currentPos;
-        }
-
-        // FIX: Get fresh state to avoid stale closure bug
-        // The isPlaying from the outer closure could be outdated when this callback fires
-        const { isPlaying: shouldPlayNow } = usePlayerStore.getState();
-
-        // Switch playbackSource only AFTER audio is ready.
-        if (shouldPlayNow && (audioRef.current.paused || document.hidden)) {
-          audioContextRef.current?.state === 'suspended' && audioContextRef.current.resume().catch(() => {});
-          // Schedule fade-in BEFORE .play() so the ramp is queued when the
-          // first sample lands — click-free upgrade from stream to cached.
-          fadeInMasterGain(80);
-          audioRef.current.play().then(() => {
-            // NOW switch to cached mode - audio is playing from local cache
-            isEdgeStreamRef.current = false; // No longer streaming from edge
-            setPlaybackSource('cached');
-            devLog('🔄 [VOYO] Hot-swap complete! Now playing boosted audio');
-          }).catch((err) => {
-            // Play failed — keep previous source; current play continues.
-            devLog('[VOYO] Hot-swap play failed:', err);
-          });
-        } else if (!shouldPlayNow) {
-          // Paused state - switch source but don't play.
-          // masterGain is muted; play/pause effect will ramp it up on next play.
-          setPlaybackSource('cached');
-          devLog('🔄 [VOYO] Hot-swap ready (paused state)');
-        }
-      };
-    };
-
-    performHotSwap();
-
-    // Cleanup: abort on unmount or when dependencies change
-    return () => {
-      if (hotSwapAbortRef.current) {
-        hotSwapAbortRef.current.abort();
-      }
-    };
-    // CRITICAL: isPlaying and playbackSource removed from deps. Including
-    // them caused the hot-swap effect to re-fire on every play/pause toggle
-    // and every cdn↔r2↔cached transition — each re-fire abort+restarted any
-    // pending swap, occasionally leaving the audio element in a half-loaded
-    // state with masterGain muted. The actual decision logic reads these
-    // via closure capture / usePlayerStore.getState() which still works.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lastBoostCompletion, currentTrack?.trackId, checkCache, setPlaybackSource, setupAudioEnhancement]);
+  // Hot-swap (mid-track R2 → cached upgrade when boost completes).
+  useHotSwap({
+    audioRef,
+    audioContextRef,
+    cachedUrlRef,
+    isEdgeStreamRef,
+    lastBoostCompletion,
+    currentTrack,
+    playbackSource,
+    checkCache,
+    setPlaybackSource,
+    setupAudioEnhancement,
+    muteMasterGainInstantly,
+    fadeInMasterGain,
+  });
 
   // Handle play/pause (only when using audio element: cached or r2)
   // Also suspend AudioContext when paused to save battery
@@ -2331,132 +2203,17 @@ export const AudioPlayer = () => {
     return cleanup;
   }, [isPlaying, playbackSource, currentTrack?.trackId, checkCache, setBufferHealth, setPlaybackSource, cacheTrack]);
 
-  // Media Session — registers metadata + action handlers for OS lock screen
-  // and hardware controls. Re-runs on every track change to update metadata.
-  useEffect(() => {
-    if (!('mediaSession' in navigator) || !currentTrack) return;
-
-    // Multiple artwork sizes — the OS picks the right one for the lock
-    // screen / notification shade / media widget depending on display
-    // density. Falling back to YouTube's hqdefault if the Edge Worker
-    // art endpoint is empty (both URLs work; OS tries in order).
-    const edgeArt = `https://voyo-edge.dash-webtv.workers.dev/cdn/art/${currentTrack.trackId}?quality=high`;
-    const ytArt = `https://i.ytimg.com/vi/${currentTrack.trackId}/hqdefault.jpg`;
-    navigator.mediaSession.metadata = new MediaMetadata({
-      title: currentTrack.title,
-      artist: currentTrack.artist,
-      album: 'VOYO Music',
-      artwork: [
-        // Edge worker (preferred — custom processed art)
-        { src: edgeArt, sizes: '96x96',   type: 'image/jpeg' },
-        { src: edgeArt, sizes: '192x192', type: 'image/jpeg' },
-        { src: edgeArt, sizes: '384x384', type: 'image/jpeg' },
-        { src: edgeArt, sizes: '512x512', type: 'image/jpeg' },
-        // YouTube fallback — if edge worker 404s, the OS walks to this
-        { src: ytArt,   sizes: '480x360', type: 'image/jpeg' },
-      ],
-    });
-
-    navigator.mediaSession.setActionHandler('play', () => { trace('mediasession_play', usePlayerStore.getState().currentTrack?.trackId, { hidden: document.hidden, storeIsPlaying: usePlayerStore.getState().isPlaying }); !usePlayerStore.getState().isPlaying && togglePlay(); });
-    navigator.mediaSession.setActionHandler('pause', () => { trace('mediasession_pause', usePlayerStore.getState().currentTrack?.trackId, { hidden: document.hidden, storeIsPlaying: usePlayerStore.getState().isPlaying }); usePlayerStore.getState().isPlaying && togglePlay(); });
-    navigator.mediaSession.setActionHandler('nexttrack', () => {
-      const nowId = usePlayerStore.getState().currentTrack?.trackId;
-      trace('mediasession_next', nowId, { hidden: document.hidden });
-      // Same pre-advance bridge as runEndedAdvance: close the gap between
-      // nextTrack() and loadTrack running for the new track. In BG this
-      // prevents focus loss during the React reconciliation window.
-      if (document.hidden && silentKeeperUrlRef.current && audioRef.current) {
-        try {
-          audioRef.current.loop = true;
-          audioRef.current.src = silentKeeperUrlRef.current;
-          audioRef.current.play().catch(() => {});
-          trace('silent_wav_engage', nowId, { why: 'mediasession_next_bridge' });
-        } catch {}
-      }
-      nextTrack();
-      // Immediately signal OS: playing state + fresh metadata + ZERO position.
-      // The position reset is critical — otherwise the OS sees the old track's
-      // final position hanging there and may interpret it as "track stuck/ended"
-      // and drop the session notification during extraction delay.
-      navigator.mediaSession.playbackState = 'playing';
-      try {
-        navigator.mediaSession.setPositionState({ duration: 0, position: 0, playbackRate: 1 });
-      } catch {}
-      const next = usePlayerStore.getState().currentTrack;
-      if (next) {
-        navigator.mediaSession.metadata = new MediaMetadata({
-          title: next.title,
-          artist: next.artist,
-          album: 'VOYO Music',
-          artwork: [
-            { src: `https://voyo-edge.dash-webtv.workers.dev/cdn/art/${next.trackId}?quality=high`, sizes: '512x512', type: 'image/jpeg' },
-            { src: `https://i.ytimg.com/vi/${next.trackId}/hqdefault.jpg`, sizes: '480x360', type: 'image/jpeg' },
-          ],
-        });
-      }
-    });
-    navigator.mediaSession.setActionHandler('previoustrack', () => {
-      usePlayerStore.getState().prevTrack();
-      navigator.mediaSession.playbackState = 'playing';
-      const prev = usePlayerStore.getState().currentTrack;
-      if (prev) {
-        navigator.mediaSession.metadata = new MediaMetadata({
-          title: prev.title,
-          artist: prev.artist,
-          album: 'VOYO Music',
-          artwork: [
-            { src: `https://voyo-edge.dash-webtv.workers.dev/cdn/art/${prev.trackId}?quality=high`, sizes: '512x512', type: 'image/jpeg' },
-            { src: `https://i.ytimg.com/vi/${prev.trackId}/hqdefault.jpg`, sizes: '480x360', type: 'image/jpeg' },
-          ],
-        });
-      }
-    });
-
-    // Seek handlers — headset buttons + lock-screen 10s skip arrows.
-    const seekOffset = (dir: 1 | -1, offset: number) => {
-      if (!audioRef.current) return;
-      const newTime = Math.max(0, Math.min(
-        audioRef.current.duration || 0,
-        audioRef.current.currentTime + dir * offset,
-      ));
-      if (document.hidden) {
-        audioRef.current.currentTime = newTime;
-      } else {
-        muteMasterGainInstantly();
-        audioRef.current.currentTime = newTime;
-        setTimeout(() => fadeInMasterGain(80), 30);
-      }
-    };
-    navigator.mediaSession.setActionHandler('seekforward', (d) => {
-      seekOffset(1, d.seekOffset || 10);
-    });
-    navigator.mediaSession.setActionHandler('seekbackward', (d) => {
-      seekOffset(-1, d.seekOffset || 10);
-    });
-    navigator.mediaSession.setActionHandler('seekto', (d) => {
-      if (d.seekTime === undefined || !audioRef.current) return;
-      if (document.hidden) {
-        audioRef.current.currentTime = d.seekTime;
-      } else {
-        muteMasterGainInstantly();
-        audioRef.current.currentTime = d.seekTime;
-        setTimeout(() => fadeInMasterGain(80), 30);
-      }
-    });
-
-    // STOP — some OS widgets and Bluetooth controls fire this instead of
-    // pause. Treat it as pause for us (we don't want to destroy the
-    // audio element or clear the queue).
-    try {
-      navigator.mediaSession.setActionHandler('stop', () => {
-        if (usePlayerStore.getState().isPlaying) togglePlay();
-      });
-    } catch {
-      // Some browsers throw on unsupported actions — harmless.
-    }
-
-    navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
-  }, [currentTrack, isPlaying, playbackSource, togglePlay, nextTrack]);
+  // MediaSession (OS lock screen + hardware buttons) lives in its own module.
+  useMediaSession({
+    audioRef,
+    silentKeeperUrlRef,
+    currentTrack,
+    isPlaying,
+    togglePlay,
+    nextTrack,
+    muteMasterGainInstantly,
+    fadeInMasterGain,
+  });
 
   // Heartbeat (MC-based 4s loop with all BG detectors) lives in bgEngine.
 
@@ -2725,247 +2482,21 @@ export const AudioPlayer = () => {
   // ERROR HANDLER: Handle audio element errors with recovery (music never stops)
   // IMPROVED: Immediate cache check first (should be ready with 3s auto-cache),
   // seamless position-preserving swap, max 500ms silence target
-  const handleAudioError = useCallback(async (e: React.SyntheticEvent<HTMLAudioElement, Event>) => {
-    trace('audio_error', usePlayerStore.getState().currentTrack?.trackId, { hidden: document.hidden, errCode: (e.target as HTMLAudioElement)?.error?.code, src: ((e.target as HTMLAudioElement)?.src || '').slice(0, 60) });
-    if (playbackSource !== 'cached' && playbackSource !== 'r2') return;
-
-    const audio = e.currentTarget;
-    const error = audio.error;
-    const errorCodes: Record<number, string> = {
-      1: 'MEDIA_ERR_ABORTED',
-      2: 'MEDIA_ERR_NETWORK',
-      3: 'MEDIA_ERR_DECODE',
-      4: 'MEDIA_ERR_SRC_NOT_SUPPORTED',
-    };
-
-    const errorName = error ? (errorCodes[error.code] || `Unknown(${error.code})`) : 'Unknown';
-    const recoveryStart = performance.now();
-    devWarn(`🚨 [VOYO] Audio error: ${errorName}`, error?.message);
-
-    // Clear the load watchdog — we're now in recovery mode. If recovery
-    // succeeds, we don't want the original 8s timer to fire and skip the
-    // newly-recovered track. If recovery fails, the final nextTrack() call
-    // will arm a fresh watchdog on the next track's loadTrack.
-    clearLoadWatchdog();
-
-    if (!currentTrack?.trackId || !error) return;
-
-    const savedPos = usePlayerStore.getState().currentTime;
-
-    // FIX: Clear ALL dangling handlers before recovery (including onplay which
-    // the edge-stream loadTrack path sets). Also mute masterGain so the Web
-    // Audio chain doesn't pop when the src is swapped out from under it.
-    // audio.volume stays pinned at 1.0 — all loudness is controlled by
-    // masterGain inside the chain.
-    if (audioRef.current) {
-      audioRef.current.oncanplaythrough = null;
-      audioRef.current.oncanplay = null;
-      audioRef.current.onplay = null;
-      muteMasterGainInstantly();
-    }
-
-    // STALE GUARD: Capture this recovery's load attempt so a rapid skip
-    // during async recovery work doesn't fire stale oncanplay callbacks
-    // over a freshly-started loadTrack. If loadAttemptRef advances, we
-    // bail before touching audio.src.
-    const recoveryAttempt = loadAttemptRef.current;
-    const recoveryIsStale = () => loadAttemptRef.current !== recoveryAttempt;
-
-    // RECOVERY 1 (FASTEST): Check local cache IMMEDIATELY
-    // With 3s auto-cache delay, cache should be ready for most tracks
-    try {
-      const cachedUrl = await checkCache(currentTrack.trackId);
-      if (recoveryIsStale()) return;
-      if (cachedUrl && audioRef.current) {
-        const swapStart = performance.now();
-        devLog('🔄 [VOYO] FAST RECOVERY - switching to local cache');
-        if (cachedUrlRef.current) URL.revokeObjectURL(cachedUrlRef.current);
-        cachedUrlRef.current = cachedUrl;
-        audioRef.current.src = cachedUrl;
-        audioRef.current.load();
-
-        // Use oncanplay (not oncanplaythrough) for fastest possible resume
-        audioRef.current.oncanplay = () => {
-          if (!audioRef.current) return;
-          audioRef.current.oncanplay = null; // Clear to prevent re-trigger
-          if (recoveryIsStale()) return; // late fire, newer load owns the element
-          if (savedPos > 2) audioRef.current.currentTime = savedPos;
-          isEdgeStreamRef.current = false;
-          setPlaybackSource('cached');
-          // Fade-in via masterGain — click-free. audio.volume stays at 1.0.
-          fadeInMasterGain(80);
-          audioRef.current.play().then(() => {
-            const elapsed = performance.now() - recoveryStart;
-            devLog(`🔄 [VOYO] Cache recovery complete in ${elapsed.toFixed(0)}ms (swap: ${(performance.now() - swapStart).toFixed(0)}ms)`);
-          }).catch(() => {});
-        };
-        return;
-      }
-    } catch {}
-
-    // RECOVERY 2: Check R2 collective cache (faster than re-extracting)
-    try {
-      devLog('🔄 [VOYO] Recovery 2 - checking R2 collective cache');
-      const r2Result = await checkR2Cache(currentTrack.trackId);
-      if (recoveryIsStale()) return;
-      if (r2Result.exists && r2Result.url && audioRef.current) {
-        audioRef.current.src = r2Result.url;
-        audioRef.current.load();
-        audioRef.current.oncanplay = () => {
-          if (!audioRef.current) return;
-          audioRef.current.oncanplay = null;
-          if (recoveryIsStale()) return;
-          if (savedPos > 2) audioRef.current.currentTime = savedPos;
-          isEdgeStreamRef.current = false;
-          setPlaybackSource('r2');
-          fadeInMasterGain(80);
-          audioRef.current.play().then(() => {
-            const elapsed = performance.now() - recoveryStart;
-            devLog(`🔄 [VOYO] R2 recovery complete in ${elapsed.toFixed(0)}ms`);
-          }).catch(() => {});
-        };
-        return;
-      }
-    } catch {}
-
-    // RECOVERY 3: Re-extract stream URL from Edge Worker (last resort before skip)
-    try {
-      devLog('🔄 [VOYO] Recovery 3 - re-extracting stream URL');
-      // Use AbortSignal.timeout for cleanliness — same baseline as api.ts.
-      const streamResponse = await fetch(`${EDGE_WORKER_URL}/stream?v=${currentTrack.trackId}`, {
-        signal: AbortSignal.timeout(5000),
-      });
-      if (recoveryIsStale()) return;
-      const streamData = await streamResponse.json();
-      if (recoveryIsStale()) return;
-      if (streamData.url && audioRef.current) {
-        audioRef.current.src = streamData.url;
-        audioRef.current.load();
-        audioRef.current.oncanplay = () => {
-          if (!audioRef.current) return;
-          audioRef.current.oncanplay = null;
-          if (recoveryIsStale()) return;
-          if (savedPos > 2) audioRef.current.currentTime = savedPos;
-          isEdgeStreamRef.current = true;
-          fadeInMasterGain(80);
-          audioRef.current.play().then(() => {
-            const elapsed = performance.now() - recoveryStart;
-            devLog(`🔄 [VOYO] Stream re-extract recovery complete in ${elapsed.toFixed(0)}ms`);
-          }).catch(() => {});
-        };
-        return;
-      }
-    } catch {}
-
-    // RECOVERY 4: Skip to next track (music never stops)
-    if (recoveryIsStale()) return; // a newer loadTrack is already in motion
-    const elapsed = performance.now() - recoveryStart;
-
-    // In background, don't skip — the failure might be transient (network
-    // blip, AudioContext suspension). The user can't see the error state
-    // and the next foreground return will re-kick the audio.
-    if (document.hidden) {
-      devWarn(`🚨 [VOYO] Recovery failed in background (${elapsed.toFixed(0)}ms) — NOT skipping`);
-      return;
-    }
-
-    devLog(`🚨 [VOYO] Cannot recover after ${elapsed.toFixed(0)}ms - skipping to next track`);
-    audio.pause();
-    if (cachedUrlRef.current) {
-      URL.revokeObjectURL(cachedUrlRef.current);
-      cachedUrlRef.current = null;
-    }
-    nextTrack();
-  }, [playbackSource, currentTrack?.trackId, checkCache, nextTrack, setPlaybackSource]);
-
-  // ── STALLED RECOVERY ────────────────────────────────────────────────
-  // The audio element fires `stalled` and `waiting` when it can't get more
-  // data — but neither triggers `onError`, so the existing recovery never
-  // runs. The element just sits frozen until the user manually skips.
-  // Solution: track stall state with a 4s timer. If still stalled after 4s,
-  // force the same recovery flow as onError. Per-stall-event timer so a
-  // brief network blip doesn't trigger recovery.
-  // Stall-timer handle is either a setTimeout ID (FG) or a cleanup fn for
-  // the BG MessageChannel. A union keeps clearStallTimer simple.
-  const stallTimerRef = useRef<ReturnType<typeof setTimeout> | { close: () => void } | null>(null);
-  const handleStalled = useCallback(() => {
-    if (playbackSource !== 'cached' && playbackSource !== 'r2') return;
-    if (stallTimerRef.current) return; // already armed
-    devWarn('⚠️ [VOYO] Audio stalled — armed recovery timer');
-    const t = usePlayerStore.getState().currentTrack;
-    const audio = audioRef.current;
-    // Rich stall context — buffered ranges + readyState + currentTime so
-    // we can diagnose BG stalls from telemetry without guessing. readyState
-    // 0=NOTHING, 1=METADATA, 2=CURRENT_DATA, 3=FUTURE_DATA, 4=ENOUGH_DATA.
-    // A readyState<3 stall is a real buffer underrun; >=3 with no buffer
-    // ahead is a CDN/network flap.
-    const bufEnd = audio?.buffered.length ? audio.buffered.end(audio.buffered.length - 1) : null;
-    const ahead = bufEnd != null && audio ? (bufEnd - audio.currentTime) : null;
-    if (t?.trackId) {
-      logPlaybackEvent({
-        event_type: 'stall',
-        track_id: t.trackId,
-        source: (playbackSource as any),
-        meta: {
-          position: audio?.currentTime,
-          readyState: audio?.readyState,
-          bufferedAhead: ahead,
-          hidden: document.hidden,
-        },
-      });
-    }
-    // RECOVERY TIMING: 10s in FG (patience for brief network flaps), but in
-    // BG the track is already silent to the user AND setTimeout is throttled
-    // to 1/min — a 10s timer becomes 60s. Drop to 4s in BG and use MC so
-    // the timer actually fires on wall-clock.
-    const recoverNow = () => {
-      stallTimerRef.current = null;
-      const el = audioRef.current;
-      if (!el || el.paused) return;
-      if (!el.seeking && el.readyState >= 2 && el.buffered.length > 0) {
-        const bufferedEnd = el.buffered.end(el.buffered.length - 1);
-        if (bufferedEnd > el.currentTime + 1) {
-          trace('stall_recovered', t?.trackId || null, { bufferedAhead: bufferedEnd - el.currentTime });
-          devLog('🎵 [VOYO] Stall self-recovered — no reload needed');
-          return;
-        }
-      }
-      trace('stall_force_recover', t?.trackId || null, {
-        readyState: el.readyState,
-        position: el.currentTime,
-        hidden: document.hidden,
-      });
-      devWarn('🚨 [VOYO] Stall timeout — forcing recovery');
-      handleAudioError({ currentTarget: el } as React.SyntheticEvent<HTMLAudioElement, Event>);
-    };
-    if (document.hidden) {
-      // MC-based BG timer (setTimeout throttled 1/min). 4s wall-clock.
-      const startMs = Date.now();
-      const mc = new MessageChannel();
-      stallTimerRef.current = { close: () => { try { mc.port1.close(); } catch {} } };
-      const handle = stallTimerRef.current;
-      mc.port1.onmessage = () => {
-        // If a newer arming (or clear) superseded us, bail.
-        if (stallTimerRef.current !== handle) { try { mc.port1.close(); } catch {} return; }
-        if (Date.now() - startMs < 4000) { mc.port2.postMessage(null); return; }
-        try { mc.port1.close(); } catch {}
-        recoverNow();
-      };
-      mc.port2.postMessage(null);
-    } else {
-      stallTimerRef.current = setTimeout(recoverNow, 10000);
-    }
-  }, [playbackSource, handleAudioError]);
-  const clearStallTimer = useCallback(() => {
-    const h = stallTimerRef.current;
-    if (!h) return;
-    if (typeof h === 'object' && 'close' in h) {
-      h.close();
-    } else {
-      clearTimeout(h);
-    }
-    stallTimerRef.current = null;
-  }, []);
+  // Error recovery (audio_error + stall) lives in its own module.
+  const { handleAudioError, handleStalled, clearStallTimer } = useErrorRecovery({
+    audioRef,
+    cachedUrlRef,
+    isEdgeStreamRef,
+    loadAttemptRef,
+    playbackSource,
+    currentTrack,
+    checkCache,
+    clearLoadWatchdog,
+    nextTrack,
+    setPlaybackSource,
+    muteMasterGainInstantly,
+    fadeInMasterGain,
+  });
 
   return (
     <audio
