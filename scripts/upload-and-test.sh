@@ -1,14 +1,25 @@
 #!/bin/bash
 # Step 2: after fix-cookie-destruction.sh, re-upload fresh cookies and test
 
-echo "=== Lift immutable, replace cookies, re-set immutable ==="
-sudo chattr -i /opt/voyo/cookies.txt 2>/dev/null || true
-sudo cp /tmp/cookies-fresh.txt /opt/voyo/cookies.txt
-sudo chown root:root /opt/voyo/cookies.txt
-sudo chmod 600 /opt/voyo/cookies.txt
+echo "=== Replace ALL cookies files (fallback + per-account rotation) ==="
+# yt-dlp-safe reads /opt/voyo/cookies-[0-9][0-9][0-9].txt first and ONLY
+# falls back to cookies.txt if those glob empty. Shipping fresh cookies
+# to cookies.txt alone left stale cookies-001/002/003.txt in rotation,
+# which meant yt-dlp kept hitting "Sign in to confirm you're not a bot."
+# Update all of them atomically on every ship so the wrapper always
+# sees fresh auth.
+for f in /opt/voyo/cookies.txt /opt/voyo/cookies-001.txt /opt/voyo/cookies-002.txt /opt/voyo/cookies-003.txt; do
+  sudo chattr -i "$f" 2>/dev/null || true
+  sudo cp /tmp/cookies-fresh.txt "$f"
+  sudo chown root:root "$f"
+  sudo chmod 600 "$f"
+done
 sudo chattr +i /opt/voyo/cookies.txt 2>/dev/null || true
-ls -la /opt/voyo/cookies.txt
+sudo ls -la /opt/voyo/cookies*.txt
 sudo wc -l /opt/voyo/cookies.txt
+
+echo "=== Clear negative cache so freshly-blocked tracks retry immediately ==="
+sudo find /tmp/voyo-yt-neg -maxdepth 1 -name "*.dead" -delete 2>/dev/null || true
 
 echo ""
 echo "=== Test wrapper manually AS ROOT ==="
