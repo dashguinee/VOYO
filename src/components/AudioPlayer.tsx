@@ -20,17 +20,15 @@
  * - User bandwidth contributes to collective R2 cache
  */
 
-import { useEffect, useRef, useCallback, useState } from 'react';
+import { useEffect, useRef, useCallback } from 'react';
 import { Track } from '../types';
 import { usePlayerStore } from '../store/playerStore';
 import { devLog, devWarn } from '../utils/logger';
 import { usePreferenceStore } from '../store/preferenceStore';
 import { useDownloadStore } from '../store/downloadStore';
 import { useTrackPoolStore } from '../store/trackPoolStore';
-import { audioEngine, connectAudioChain, getAnalyser } from '../services/audioEngine';
+import { audioEngine } from '../services/audioEngine';
 import { haptics } from '../utils/haptics';
-import { checkR2Cache } from '../services/api';
-import { downloadTrack, getCachedTrackUrl } from '../services/downloadManager';
 
 // Edge Worker for extraction + upgrade-to-R2 lookups (hot-swap path).
 const EDGE_WORKER_URL = 'https://voyo-edge.dash-webtv.workers.dev';
@@ -42,9 +40,7 @@ import { registerTrackPlay as viRegisterPlay } from '../services/videoIntelligen
 import { useMiniPiP } from '../hooks/useMiniPiP';
 import { notifyNextUp } from '../services/oyoNotifications';
 import { logPlaybackEvent, trace } from '../services/telemetry';
-import { getBatteryState } from '../services/battery';
 import { isBlocked } from '../services/trackBlocklist';
-import { cleanupPreloaded } from '../services/preloadManager';
 import { useBgEngine } from '../audio/bg/bgEngine';
 import { useWakeLock } from '../audio/bg/useWakeLock';
 import { resolveSource } from '../audio/sources/sourceResolver';
