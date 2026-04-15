@@ -584,7 +584,14 @@ export const AudioPlayer = () => {
   // Background playback continues automatically because we never pause it.
   useEffect(() => {
     const handleVisibility = () => {
-      trace('visibility', usePlayerStore.getState().currentTrack?.trackId, { state: document.visibilityState, isPlaying: usePlayerStore.getState().isPlaying });
+      trace('visibility', usePlayerStore.getState().currentTrack?.trackId, {
+        state: document.visibilityState,
+        isPlaying: usePlayerStore.getState().isPlaying,
+        ctxState: audioContextRef.current?.state,
+        gain: gainNodeRef.current?.gain.value,
+        elPaused: audioRef.current?.paused,
+        elCurrentTime: audioRef.current?.currentTime,
+      });
       if (document.visibilityState === 'hidden') {
         // Set the background flag FIRST — before the browser pauses audio.
         // This prevents onPause from setting isPlaying=false during transition.
@@ -3008,6 +3015,52 @@ export const AudioPlayer = () => {
         }
         navigator.mediaSession.playbackState = 'playing';
       } catch {}
+
+      // AUDIOCONTEXT LIFE-SUPPORT (v191 fix): Chrome Android silently
+      // suspends the AudioContext in BG under power save, even while the
+      // HTMLAudioElement continues advancing its own currentTime clock.
+      // Symptom: "position advances but no sound until unlock" — element
+      // plays, its output routes through a frozen Web Audio graph, nothing
+      // reaches destination. We actively resume every heartbeat.
+      //
+      // Also: rescue masterGain if it's stuck at near-zero while playing
+      // (a failed ramp from a suspended-context fadeInMasterGain). In BG
+      // the ramp end-time can go stale against a frozen clock, or the
+      // context can flap suspend→running and the gain param's scheduled
+      // value tree is lost.
+      const ctx = audioContextRef.current;
+      if (ctx) {
+        const prevState = ctx.state;
+        if (prevState === 'suspended' || (prevState as any) === 'interrupted') {
+          ctx.resume()
+            .then(() => trace('ctx_resume_ok', usePlayerStore.getState().currentTrack?.trackId, { prevState, hidden: document.hidden }))
+            .catch(e => trace('ctx_resume_rejected', usePlayerStore.getState().currentTrack?.trackId, { prevState, err: e?.name, msg: (e?.message || '').slice(0, 80), hidden: document.hidden }));
+        }
+        // Gain-stuck rescue: if gain is below audible floor but element
+        // is playing and store says playing, force gain up. Use setValueAtTime
+        // for immediate jump — the "smooth ramp" is pointless if we've been
+        // silent for seconds already; user just wants audio back.
+        const gain = gainNodeRef.current;
+        if (
+          gain && audioRef.current && !audioRef.current.paused &&
+          !isLoadingTrackRef.current &&
+          audioRef.current.src !== silentKeeperUrlRef.current &&
+          gain.gain.value < 0.01 &&
+          usePlayerStore.getState().isPlaying
+        ) {
+          try {
+            const target = computeMasterTarget();
+            gain.gain.cancelScheduledValues(ctx.currentTime);
+            gain.gain.setValueAtTime(target, ctx.currentTime);
+            trace('gain_rescue', usePlayerStore.getState().currentTrack?.trackId, {
+              prevValue: gain.gain.value,
+              target,
+              ctxState: ctx.state,
+              hidden: document.hidden,
+            });
+          } catch {}
+        }
+      }
 
       const el = audioRef.current;
 
