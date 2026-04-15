@@ -54,40 +54,8 @@ import { useMediaSession } from '../audio/playback/mediaSession';
 import { useHotSwap } from '../audio/playback/hotSwap';
 import { useErrorRecovery } from '../audio/recovery/errorRecovery';
 
-export type BoostPreset = 'off' | 'boosted' | 'calm' | 'voyex';
-
-// Audio boost presets
-const BOOST_PRESETS = {
-  boosted: {
-    gain: 1.15, highPassFreq: 0, bassFreq: 80, bassGain: 5, presenceFreq: 3000, presenceGain: 2,
-    subBassFreq: 40, subBassGain: 2, warmthFreq: 250, warmthGain: 1,
-    airFreq: 10000, airGain: 1, harmonicAmount: 0, stereoWidth: 0,
-    compressor: { threshold: -12, knee: 10, ratio: 4, attack: 0.003, release: 0.25 }
-  },
-  calm: {
-    gain: 1.05, highPassFreq: 0, bassFreq: 80, bassGain: 3, presenceFreq: 3000, presenceGain: 1,
-    subBassFreq: 50, subBassGain: 1, warmthFreq: 250, warmthGain: 2,
-    airFreq: 8000, airGain: 2, harmonicAmount: 0, stereoWidth: 0,
-    compressor: { threshold: -15, knee: 15, ratio: 3, attack: 0.005, release: 0.3 }
-  },
-  voyex: {
-    // PROFESSIONAL MASTERING: Multiband compression + stereo widening
-    multiband: true, // Enable multiband processing
-    gain: 1.4, highPassFreq: 25, stereoWidth: 0.015,
-    // Band crossover frequencies
-    lowCrossover: 180, // Below 180Hz = bass band
-    highCrossover: 4500, // Above 4.5kHz = treble band
-    // Per-band settings: gain, then compressor
-    low: { gain: 1.3, threshold: -18, ratio: 5, attack: 0.01, release: 0.15 }, // Heavy bass control
-    mid: { gain: 1.1, threshold: -12, ratio: 2, attack: 0.02, release: 0.25 }, // Gentle, dynamic mids
-    high: { gain: 1.25, threshold: -15, ratio: 3, attack: 0.005, release: 0.1 }, // Crisp highs
-    // Legacy (for fallback)
-    bassFreq: 80, bassGain: 0, presenceFreq: 3000, presenceGain: 0,
-    subBassFreq: 50, subBassGain: 0, warmthFreq: 280, warmthGain: 0,
-    airFreq: 12000, airGain: 0, harmonicAmount: 8,
-    compressor: { threshold: -6, knee: 10, ratio: 2, attack: 0.01, release: 0.2 }
-  },
-};
+import { BOOST_PRESETS, type BoostPreset } from '../audio/graph/boostPresets';
+export type { BoostPreset };
 
 export const AudioPlayer = () => {
   const audioRef = useRef<HTMLAudioElement>(null);
