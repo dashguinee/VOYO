@@ -2791,7 +2791,19 @@ export const AudioPlayer = () => {
     navigator.mediaSession.setActionHandler('play', () => { trace('mediasession_play', usePlayerStore.getState().currentTrack?.trackId, { hidden: document.hidden, storeIsPlaying: usePlayerStore.getState().isPlaying }); !usePlayerStore.getState().isPlaying && togglePlay(); });
     navigator.mediaSession.setActionHandler('pause', () => { trace('mediasession_pause', usePlayerStore.getState().currentTrack?.trackId, { hidden: document.hidden, storeIsPlaying: usePlayerStore.getState().isPlaying }); usePlayerStore.getState().isPlaying && togglePlay(); });
     navigator.mediaSession.setActionHandler('nexttrack', () => {
-      trace('mediasession_next', usePlayerStore.getState().currentTrack?.trackId, { hidden: document.hidden });
+      const nowId = usePlayerStore.getState().currentTrack?.trackId;
+      trace('mediasession_next', nowId, { hidden: document.hidden });
+      // Same pre-advance bridge as runEndedAdvance: close the gap between
+      // nextTrack() and loadTrack running for the new track. In BG this
+      // prevents focus loss during the React reconciliation window.
+      if (document.hidden && silentKeeperUrlRef.current && audioRef.current) {
+        try {
+          audioRef.current.loop = true;
+          audioRef.current.src = silentKeeperUrlRef.current;
+          audioRef.current.play().catch(() => {});
+          trace('silent_wav_engage', nowId, { why: 'mediasession_next_bridge' });
+        } catch {}
+      }
       nextTrack();
       // Immediately signal OS: playing state + fresh metadata + ZERO position.
       // The position reset is critical — otherwise the OS sees the old track's
@@ -3081,6 +3093,30 @@ export const AudioPlayer = () => {
 
     devLog('🔄 [VOYO] Track ended — advancing to next');
     haptics.light();
+
+    // CRITICAL BG GAP CLOSURE: engage the silent WAV RIGHT NOW, BEFORE
+    // nextTrack() schedules a React re-render + useEffect + loadTrack.
+    // In BG, that chain can take 100-500ms. During that gap, audio.ended
+    // is true → element has no active source → Android releases audio
+    // focus → fresh play() on the new src fails because there's no
+    // session to receive it → user perceives 'BG next just silently
+    // doesn't play.'
+    //
+    // By setting src=silentWAV synchronously here, the audio element goes
+    // right back into an active playing state (audio.ended becomes false
+    // the moment src is set). Focus is maintained continuously across
+    // the entire transition. When loadTrack eventually runs for the new
+    // track, it swaps the silent WAV for the real source on an audio
+    // element that never lost focus.
+    if (document.hidden && silentKeeperUrlRef.current && audioRef.current) {
+      try {
+        audioRef.current.loop = true;
+        audioRef.current.src = silentKeeperUrlRef.current;
+        audioRef.current.play().catch(() => {});
+        trace('silent_wav_engage', trackId, { why: 'pre_advance_bridge' });
+      } catch {}
+    }
+
     trace('next_call', trackId, { from: 'ended_advance', hidden: document.hidden });
     nextTrack();
 
