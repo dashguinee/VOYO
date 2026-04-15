@@ -35,7 +35,7 @@ import { downloadTrack, getCachedTrackUrl } from '../services/downloadManager';
 // Edge Worker for extraction (FREE - replaces Fly.io)
 const EDGE_WORKER_URL = 'https://voyo-edge.dash-webtv.workers.dev';
 // VPS audio server — pre-processed audio with loudness normalization.
-// Falls back to edge worker + iframe if VPS is down or overloaded.
+// Falls back to edge worker extraction if VPS is down or overloaded.
 const VPS_AUDIO_URL = 'https://stream.zionsynapse.online:8443';
 import { recordPoolEngagement } from '../services/personalization';
 import { recordTrackInSession } from '../services/poolCurator';
@@ -445,20 +445,8 @@ export const AudioPlayer = () => {
       });
     }
 
-    // 30s LISTEN — flag iframe-sourced tracks for R2 batch download.
-    if (
-      !hasTriggered30sListenRef.current &&
-      playbackSource === 'iframe'
-    ) {
-      const elapsed = (track.duration || 300) * (progress / 100);
-      if (elapsed >= 30) {
-        hasTriggered30sListenRef.current = true;
-        devLog('🎵 [VOYO] 30s listen reached — flagging for R2 download');
-        import('../lib/supabase').then(({ videoIntelligenceAPI }) => {
-          videoIntelligenceAPI.flagForDownload(track.trackId);
-        });
-      }
-    }
+    // (30s-listen flag-for-R2 block was iframe-only; playbackSource === 'iframe'
+    // never fires since VOYO went 100% audio-element. Block deleted.)
     // OYO CONTEXT: ~10s into a track from a favorite artist → ambient notification.
     // "This is a special one" — conversational, non-intrusive.
     if (!hasTriggeredContextNotifRef.current) {
@@ -1919,7 +1907,7 @@ export const AudioPlayer = () => {
           audioRef.current.addEventListener('canplay', cachedPlayHandler, { once: true });
         }
       } else {
-        // 📡 NOT IN LOCAL CACHE - Check R2 collective cache before iframe
+        // Not in local cache — check R2 collective, then VPS+edge retry.
         devLog('🎵 [VOYO] Not in local cache, checking R2 collective...');
 
         const r2Result = await checkR2Cache(trackId);
@@ -1982,41 +1970,14 @@ export const AudioPlayer = () => {
             };
           }
         } else {
-          // 📡 R2 MISS — TRY VPS SERVER FIRST, FALL BACK TO IFRAME
-          //
-          // The VPS (stream.zionsynapse.online) runs yt-dlp + FFmpeg to
-          // extract, normalize (EBU R128), and encode audio on the server.
-          // The client gets a finished stream — zero client-side extraction,
-          // better battery, instant background play. If the VPS is down or
-          // overloaded, we fall back to the iframe + hot-swap pipeline
-          // (the battle-tested client-side path).
-          //
-          // VPS audio endpoint: /voyo/audio/:trackId?quality=high|medium|low
-          // Returns: audio/ogg (Opus) stream, chunked transfer encoding
-          // On cache hit: 302 redirect to R2 CDN (zero VPS bandwidth)
-          // On miss: stream while processing (3-8s FFmpeg startup)
-          // PARALLEL RACE: VPS + edge simultaneously. No sequential
-          // first-try-then-retry. Edge returns a stream URL in 3-5s.
-          // VPS processes and caches to R2 (slower but builds the
-          // collective cache). First success wins → instant playback.
-          // The silent WAV bridge keeps audio focus alive during the race.
-          devLog('🎵 [VOYO] R2 miss — parallel VPS + edge race');
+          // R2 miss — VPS + edge parallel race, retry up to 3 times.
+          // VPS returns normalized audio; edge returns a raw stream URL.
+          // First success wins. Silent WAV bridge keeps focus alive in BG.
+          devLog('🎵 [VOYO] R2 miss — VPS+edge retry race');
 
-          // Disarm load watchdog — the retry loop below has its own skip
-          // mechanism (5 retries then nextTrack). Without this, the 5s
-          // MessageChannel watchdog fires mid-retry and skips the track.
+          // Disarm FG watchdog — retry loop has its own skip mechanism
+          // (3 attempts then markBlocked + nextTrack).
           clearLoadWatchdog();
-
-          // 📡 AUDIO-ONLY RETRY — NO IFRAME AUDIO.
-          //
-          // Iframe audio freezes when phone locks → broken background play.
-          // Instead of falling back to iframe, retry VPS + edge every 4s
-          // until one delivers an audio-element source. The user sees a
-          // loading state for a few seconds, but gets 100% background play.
-          //
-          // VPS processes new tracks in 3-8s. Edge returns raw stream URL
-          // in ~3-5s. Most tracks resolve on the first retry.
-          devLog('🎵 [VOYO] R2 + VPS miss — retrying VPS/edge (no iframe audio)');
 
           let resolved = false;
           let firstFailLogged = false;
@@ -2373,11 +2334,8 @@ export const AudioPlayer = () => {
 
       if (!cachedUrl || !audioRef.current) return;
 
-      // Get current position from store (iframe was tracking it)
+      // Resume at current position on the upgraded (boosted) source.
       const currentPos = usePlayerStore.getState().currentTime;
-
-      // IMPORTANT: Don't switch playbackSource yet - iframe keeps playing until audio is ready
-      // This prevents the "stop" bug when boost completes fast
 
       if (cachedUrlRef.current) URL.revokeObjectURL(cachedUrlRef.current);
       cachedUrlRef.current = cachedUrl;
@@ -2417,8 +2375,7 @@ export const AudioPlayer = () => {
         // The isPlaying from the outer closure could be outdated when this callback fires
         const { isPlaying: shouldPlayNow } = usePlayerStore.getState();
 
-        // FIXED: Only switch playbackSource AFTER audio element is ready
-        // This ensures iframe keeps playing until cached audio can take over seamlessly
+        // Switch playbackSource only AFTER audio is ready.
         if (shouldPlayNow && (audioRef.current.paused || document.hidden)) {
           audioContextRef.current?.state === 'suspended' && audioContextRef.current.resume().catch(() => {});
           // Schedule fade-in BEFORE .play() so the ramp is queued when the
@@ -2430,8 +2387,8 @@ export const AudioPlayer = () => {
             setPlaybackSource('cached');
             devLog('🔄 [VOYO] Hot-swap complete! Now playing boosted audio');
           }).catch((err) => {
-            // Play failed - don't switch source, keep iframe playing
-            devLog('[VOYO] Hot-swap play failed, keeping iframe:', err);
+            // Play failed — keep previous source; current play continues.
+            devLog('[VOYO] Hot-swap play failed:', err);
           });
         } else if (!shouldPlayNow) {
           // Paused state - switch source but don't play.
