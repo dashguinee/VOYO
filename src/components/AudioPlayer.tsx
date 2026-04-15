@@ -3000,9 +3000,44 @@ export const AudioPlayer = () => {
         navigator.mediaSession.playbackState = 'playing';
       } catch {}
 
+      const el = audioRef.current;
+
+      // SYNTHETIC ENDED DETECTION (deep-BG fallback): Android Chrome does
+      // not always fire the 'ended' event when a track completes in a
+      // backgrounded tab — timeupdate goes quiet, then ended never arrives.
+      // Telemetry confirmed: tracks rotated in the store only after user
+      // unlocked, with 0× ended_fire and 0× next_call during the BG window.
+      // If we see the element is paused, has a real src (not silent WAV),
+      // is near/past duration, and the store says we should be playing,
+      // synthesize the advance ourselves. Heartbeat cadence is ~4s so
+      // worst-case extra delay past natural end is ~4s — acceptable.
+      if (
+        el && el.paused && el.src && document.hidden &&
+        !isLoadingTrackRef.current &&
+        el.src !== silentKeeperUrlRef.current &&
+        el.duration && isFinite(el.duration) && el.duration > 0 &&
+        el.currentTime >= el.duration - 0.5 &&
+        usePlayerStore.getState().isPlaying
+      ) {
+        const trackId = usePlayerStore.getState().currentTrack?.trackId;
+        // Only synthesize once per track — dedup refs in runEndedAdvance
+        // will catch duplicates, but this is extra safety.
+        if (trackId && lastEndedTrackIdRef.current !== trackId) {
+          trace('synthetic_ended', trackId, {
+            currentTime: el.currentTime,
+            duration: el.duration,
+            paused: el.paused,
+            hidden: document.hidden,
+          });
+          syntheticEndedBypassRef.current = true;
+          runEndedAdvanceRef.current();
+          mc.port2.postMessage(null);
+          return;
+        }
+      }
+
       // Silent-paused recovery: if store says playing but element is paused
       // (OS silent-suspended the audio), kick it back into play.
-      const el = audioRef.current;
       if (el && el.paused && el.src && !isLoadingTrackRef.current && usePlayerStore.getState().isPlaying) {
         try {
           audioContextRef.current?.state === 'suspended' && audioContextRef.current.resume().catch(() => {});
@@ -3111,7 +3146,9 @@ export const AudioPlayer = () => {
     const state = usePlayerStore.getState();
     const trackId = state.currentTrack?.trackId;
     const audioEnded = audioRef.current?.ended === true;
-    trace('ended_fire', trackId || '-', { hidden: document.hidden, prevEndedRef: lastEndedTrackIdRef.current, audioEnded });
+    const synthetic = syntheticEndedBypassRef.current;
+    syntheticEndedBypassRef.current = false; // consume flag
+    trace('ended_fire', trackId || '-', { hidden: document.hidden, prevEndedRef: lastEndedTrackIdRef.current, audioEnded, synthetic });
     // STALE-EVENT GUARD: if the audio element is NOT currently in ended
     // state, this event is stale — fired for a previous source that we've
     // already advanced past. Was burning the queue: native onEndedDirect
@@ -3119,7 +3156,13 @@ export const AudioPlayer = () => {
     // synthetic onEnded fires → finds null ref → advances AGAIN, skipping
     // every other track. Visible in trace as ended_fire/next_call pairs
     // for back-to-back trackIds with no play_resolved between.
-    if (!audioEnded) {
+    //
+    // SYNTHETIC BYPASS: in deep BG, Android Chrome sometimes doesn't set
+    // audio.ended=true even when currentTime passes duration — the element
+    // just sits silently paused. Heartbeat detects that pattern and sets
+    // syntheticEndedBypassRef so we advance anyway. Without this bypass,
+    // every track that "ends" in deep BG gets stuck.
+    if (!audioEnded && !synthetic) {
       trace('ended_dedup', trackId || '-', { why: 'audio_not_ended_stale' });
       return;
     }
@@ -3208,6 +3251,11 @@ export const AudioPlayer = () => {
     }
   }, [nextTrack, endListenSession, cacheTrack]);
 
+  // Stable ref to runEndedAdvance — heartbeat (deps: [isPlaying]) needs to
+  // call it without tearing down/re-arming the MessageChannel every track.
+  const runEndedAdvanceRef = useRef(runEndedAdvance);
+  useEffect(() => { runEndedAdvanceRef.current = runEndedAdvance; }, [runEndedAdvance]);
+
   const handleEnded = runEndedAdvance; // React onEnded safety-belt handler
 
   // BACKGROUND AUTO-NEXT: Direct ended listener on the audio element.
@@ -3218,6 +3266,12 @@ export const AudioPlayer = () => {
   // so checking "did we already handle ended for THIS track?" is reliable
   // in both foreground and background. No rAF/microtask/setTimeout issues.
   const lastEndedTrackIdRef = useRef<string | null>(null);
+  // Synthetic ended bypass — Android Chrome sometimes refuses to fire the
+  // 'ended' event in deep BG. Heartbeat detects this (currentTime near
+  // duration + element paused + hidden) and sets this flag so the next
+  // runEndedAdvance() call bypasses its `audio.ended===true` guard.
+  // Flag is consumed (reset to false) inside runEndedAdvance.
+  const syntheticEndedBypassRef = useRef(false);
   useEffect(() => {
     const el = audioRef.current;
     if (!el) return;
