@@ -44,13 +44,11 @@ import { notifyNextUp } from '../services/oyoNotifications';
 import { logPlaybackEvent, trace } from '../services/telemetry';
 import { getBatteryState } from '../services/battery';
 import { isBlocked } from '../services/trackBlocklist';
-import {
-  preloadNextTrack,
-  cleanupPreloaded,
-  cancelPreload,
-} from '../services/preloadManager';
+import { cleanupPreloaded } from '../services/preloadManager';
 import { useBgEngine } from '../audio/bg/bgEngine';
 import { resolveSource } from '../audio/sources/sourceResolver';
+import { usePreloadTrigger } from '../audio/sources/usePreloadTrigger';
+import { useFrequencyPump } from '../audio/graph/freqPump';
 import { useMediaSession } from '../audio/playback/mediaSession';
 import { useHotSwap } from '../audio/playback/hotSwap';
 import { useErrorRecovery } from '../audio/recovery/errorRecovery';
@@ -174,14 +172,7 @@ export const AudioPlayer = () => {
   const backgroundBoostingRef = useRef<string | null>(null);
   const hasTriggered50PercentCacheRef = useRef<boolean>(false); // 50% auto-boost trigger
   const hasTriggered85PercentCacheRef = useRef<boolean>(false); // 85% edge-stream cache trigger
-  const hasTriggeredPreloadRef = useRef<boolean>(false); // 70% next-track preload trigger
-  // v196 fix: the boolean above is reset INSIDE the async loadTrack body
-  // (line ~1779), but React runs the preload effect BEFORE loadTrack body.
-  // Result: on every track change, preload effect sees the flag still true
-  // from the previous track and bails — preload never fired for any track
-  // after the first. Using a per-trackId dedup ref instead removes the
-  // timing dependency entirely.
-  const preloadedForTrackIdRef = useRef<string | null>(null);
+  const hasTriggeredPreloadRef = useRef<boolean>(false);
   const shouldAutoResumeRef = useRef<boolean>(false); // Resume playback on refresh if position was saved
   const pendingAutoResumeRef = useRef<boolean>(false); // True when autoplay was blocked by browser — first user tap resumes
   const isEdgeStreamRef = useRef<boolean>(false); // True when playing from Edge Worker stream URL (not IndexedDB)
@@ -467,101 +458,8 @@ export const AudioPlayer = () => {
 
   // PRELOAD: Start preloading next 2-3 tracks IMMEDIATELY when track starts (like Spotify)
   // Major platforms don't wait - they start buffering upcoming tracks right away
-  // Staggered: next track immediately, track+2 after 5s, track+3 after 10s
-  useEffect(() => {
-    if (!currentTrack?.trackId) {
-      return;
-    }
-    // v196: dedup by trackId instead of a reset-able boolean. The old flag
-    // approach had a React-effect-order race that made preload fire only
-    // for the first track of a session. trackId-based dedup has no timing
-    // dependency — this effect runs once per actual track change, period.
-    if (preloadedForTrackIdRef.current === currentTrack.trackId) {
-      return;
-    }
-    preloadedForTrackIdRef.current = currentTrack.trackId;
-    // Keep the old flag in sync so other paths that read it still work.
-    hasTriggeredPreloadRef.current = false;
-
-    // Gather next 2-3 tracks from queue + prediction
-    const getUpcomingTracks = (): Track[] => {
-      const upcoming: Track[] = [];
-      const seenIds = new Set<string>();
-
-      // First: take from queue
-      for (const qi of queue) {
-        if (qi.track?.trackId && !seenIds.has(qi.track.trackId)) {
-          upcoming.push(qi.track);
-          seenIds.add(qi.track.trackId);
-          if (upcoming.length >= 3) break;
-        }
-      }
-
-      // Fill remaining with predictions
-      if (upcoming.length < 3) {
-        const predicted = predictNextTrack();
-        if (predicted?.trackId && !seenIds.has(predicted.trackId)) {
-          upcoming.push(predicted);
-          seenIds.add(predicted.trackId);
-        }
-      }
-
-      return upcoming;
-    };
-
-    const tracksToPreload = getUpcomingTracks();
-    if (tracksToPreload.length === 0) {
-      devLog(`🔮 [Preload] No upcoming tracks available (queue empty, prediction empty)`);
-      return;
-    }
-
-    const timeoutIds: ReturnType<typeof setTimeout>[] = [];
-
-    // Stagger preloads: 1.5s, 6s, 12s — first preload fires after the
-    // current track's decoder stabilizes. In BACKGROUND, fire first
-    // preload immediately — setTimeout is throttled to 1/min, so a
-    // 1.5s delay becomes 60s. The next track needs to be ready BEFORE
-    // the current one ends.
-    const staggerDelays = document.hidden ? [0, 2000, 5000] : [1500, 6000, 12000];
-
-    tracksToPreload.forEach((track, index) => {
-      const delay = staggerDelays[index] || staggerDelays[staggerDelays.length - 1];
-
-      const tid = setTimeout(() => {
-        // Double-check we haven't changed tracks
-        const currentState = usePlayerStore.getState();
-        if (currentState.currentTrack?.trackId !== currentTrack.trackId) return;
-
-        // Only set the flag on the first preload (prevents re-triggering the whole batch)
-        if (index === 0) {
-          hasTriggeredPreloadRef.current = true;
-        }
-
-        devLog(`🔮 [VOYO] Preloading track ${index + 1}/${tracksToPreload.length}: ${track.title}`);
-
-        preloadNextTrack(track.trackId, checkCache).then((result) => {
-          if (result) {
-            devLog(`🔮 [VOYO] ✅ Preload ${index + 1} ready: ${track.title} (source: ${result.source})`);
-          }
-        }).catch((err) => {
-          devWarn(`🔮 [VOYO] Preload ${index + 1} failed:`, err);
-        });
-      }, delay);
-
-      timeoutIds.push(tid);
-    });
-
-    return () => timeoutIds.forEach(id => clearTimeout(id));
-  }, [currentTrack?.trackId, queue, checkCache, predictNextTrack]);
-
-  // PRELOAD CLEANUP: Cancel preload when track changes (user skipped to different track)
-  useEffect(() => {
-    return () => {
-      cancelPreload();
-    };
-  }, [currentTrack?.trackId]);
-
-  // Visibility handler lives in bgEngine now (src/audio/bg/bgEngine.ts).
+  // Preload trigger + cleanup live in one module.
+  usePreloadTrigger({ currentTrack, queue, checkCache, predictNextTrack, hasTriggeredPreloadRef });
 
   // Wake lock
   useEffect(() => {
@@ -585,102 +483,8 @@ export const AudioPlayer = () => {
 
   // Silent WAV blob generation lives in bgEngine (src/audio/bg/bgEngine.ts).
 
-  // ── FREQUENCY PUMP ─────────────────────────────────────────────────
-  // Reads the AnalyserNode at ~20fps and writes CSS custom properties
-  // to document.documentElement. All visual components read these via
-  // var(--voyo-bass), var(--voyo-energy), var(--voyo-treble) in their
-  // CSS — ZERO React re-renders, pure GPU-composited visual response.
-  //
-  // Architecture choices for PWA smoothness:
-  //   • 20fps (every 3rd rAF) — not 60fps. Saves main thread budget
-  //     for touch events + scroll compositing. Audio visualization
-  //     looks smooth at 20fps; 60 is overkill and competes with the
-  //     audio thread on weak devices.
-  //   • Pre-allocated Uint8Array buffer — no GC per frame.
-  //   • Visibility-gated — stops pumping when document is hidden.
-  //   • Only runs when isPlaying — no work when paused.
-  //
-  // Values written:
-  //   --voyo-bass    : 0-1 (avg of bins 0-15, ~60-250Hz)
-  //   --voyo-mid     : 0-1 (avg of bins 16-80, ~250-5kHz)
-  //   --voyo-treble  : 0-1 (avg of bins 81-127, ~5-20kHz)
-  //   --voyo-energy  : 0-1 (RMS of all bins — overall loudness)
-  const freqBufferRef = useRef<Uint8Array<ArrayBuffer> | null>(null);
-  useEffect(() => {
-    if (!isPlaying) {
-      // Reset to 0 when paused so visuals settle to rest state.
-      const root = document.documentElement;
-      root.style.setProperty('--voyo-bass', '0');
-      root.style.setProperty('--voyo-mid', '0');
-      root.style.setProperty('--voyo-treble', '0');
-      root.style.setProperty('--voyo-energy', '0');
-      return;
-    }
-
-    let frameCount = 0;
-    let rafId = 0;
-    let wasHidden = false;
-
-    const pump = () => {
-      rafId = requestAnimationFrame(pump);
-
-      // Reset frame counter on visibility return so the 6-frame cadence
-      // starts fresh. Without this, the counter was out of sync after
-      // background → foreground transitions, causing stale/delayed
-      // frequency reads on the first few frames back.
-      if (document.hidden) { wasHidden = true; return; }
-      if (wasHidden) { frameCount = 0; wasHidden = false; }
-
-      // Skip 5 out of 6 frames → ~10fps on a 60fps display.
-      if (++frameCount % 6 !== 0) return;
-
-      const analyser = getAnalyser();
-      if (!analyser) return;
-
-      // Lazy-init the buffer on first pump (128 bins from fftSize=256).
-      if (!freqBufferRef.current) {
-        freqBufferRef.current = new Uint8Array(analyser.frequencyBinCount) as Uint8Array<ArrayBuffer>;
-      }
-      const buf = freqBufferRef.current;
-      analyser.getByteFrequencyData(buf);
-
-      // Compute band averages (0-255 scale → 0-1 normalized).
-      let bass = 0, mid = 0, treble = 0, total = 0;
-      const len = buf.length; // 128
-      for (let i = 0; i < len; i++) {
-        const v = buf[i];
-        total += v;
-        if (i < 16) bass += v;
-        else if (i < 80) mid += v;
-        else treble += v;
-      }
-      bass = (bass / 16) / 255;
-      mid = (mid / 64) / 255;
-      treble = (treble / 48) / 255;
-      const energy = (total / len) / 255;
-
-      // DELTA-GATED CSS WRITES: only touch the DOM when the value has
-      // changed by >5% (0.05 on the 0-1 scale). Most frames during
-      // steady playback, treble/mid barely move — skipping those writes
-      // saves 2-3 style recalcs per frame that were triggering GPU
-      // recomposition for zero visual change.
-      const root = document.documentElement;
-      const DELTA = 0.05;
-      const prev = {
-        bass: parseFloat(root.style.getPropertyValue('--voyo-bass') || '0'),
-        mid: parseFloat(root.style.getPropertyValue('--voyo-mid') || '0'),
-        treble: parseFloat(root.style.getPropertyValue('--voyo-treble') || '0'),
-        energy: parseFloat(root.style.getPropertyValue('--voyo-energy') || '0'),
-      };
-      if (Math.abs(bass - prev.bass) > DELTA) root.style.setProperty('--voyo-bass', bass.toFixed(3));
-      if (Math.abs(mid - prev.mid) > DELTA) root.style.setProperty('--voyo-mid', mid.toFixed(3));
-      if (Math.abs(treble - prev.treble) > DELTA) root.style.setProperty('--voyo-treble', treble.toFixed(3));
-      if (Math.abs(energy - prev.energy) > DELTA) root.style.setProperty('--voyo-energy', energy.toFixed(3));
-    };
-
-    rafId = requestAnimationFrame(pump);
-    return () => cancelAnimationFrame(rafId);
-  }, [isPlaying]);
+  // Frequency pump (CSS custom property writer for visualizations).
+  useFrequencyPump(isPlaying);
 
   // Harmonic exciter curve — MEMOIZED.
   //
