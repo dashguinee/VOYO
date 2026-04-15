@@ -51,6 +51,7 @@ import { usePlayerStore } from '../../store/playerStore';
 import { trace } from '../../services/telemetry';
 import { getBatteryState } from '../../services/battery';
 import { devLog, devWarn } from '../../utils/logger';
+import { playbackState } from '../playback/playbackState';
 
 interface UseBgEngineParams {
   audioRef: RefObject<HTMLAudioElement | null>;
@@ -145,6 +146,7 @@ export function useBgEngine(params: UseBgEngineParams): BgEngineApi {
       el.src = url;
       el.play().catch(() => {});
       trace('silent_wav_engage', trackId || null, { why: reason });
+      playbackState.transition('bridge', trackId ?? null, `silent_wav_${reason}`);
     } catch {}
   };
 

@@ -22,6 +22,7 @@ import { checkR2Cache } from '../../services/api';
 import { trace, logPlaybackEvent } from '../../services/telemetry';
 import { devLog, devWarn } from '../../utils/logger';
 import type { Track } from '../../types';
+import { playbackState } from '../playback/playbackState';
 
 const EDGE_WORKER_URL = 'https://voyo-edge.dash-webtv.workers.dev';
 
@@ -69,6 +70,7 @@ export function useErrorRecovery(params: UseErrorRecoveryParams): ErrorRecoveryA
       src: ((e.target as HTMLAudioElement)?.src || '').slice(0, 60),
     });
     if (playbackSource !== 'cached' && playbackSource !== 'r2') return;
+    playbackState.transition('error', usePlayerStore.getState().currentTrack?.trackId ?? null, 'audio_error');
 
     const audio = e.currentTarget;
     const error = audio.error;

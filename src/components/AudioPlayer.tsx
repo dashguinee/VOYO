@@ -49,6 +49,7 @@ import { useFrequencyPump } from '../audio/graph/freqPump';
 import { useMediaSession } from '../audio/playback/mediaSession';
 import { useHotSwap } from '../audio/playback/hotSwap';
 import { useErrorRecovery } from '../audio/recovery/errorRecovery';
+import { playbackState } from '../audio/playback/playbackState';
 
 import { type BoostPreset } from '../audio/graph/boostPresets';
 import { useAudioChain } from '../audio/graph/useAudioChain';
@@ -465,6 +466,7 @@ export const AudioPlayer = () => {
       // 3-5x duplicate play_start events per track and audio fight-for-control.
       // Setting the ref now makes the guard atomic with the lock.
       trace('load_enter', trackId, { hidden: document.hidden, isPlaying: usePlayerStore.getState().isPlaying, prevId: lastTrackIdRef.current });
+      playbackState.transition('loading', trackId, 'load_enter');
       if (lastTrackIdRef.current === trackId) {
         trace('load_guard', trackId, { why: 'same_track_id', bailed: true });
         return;
@@ -809,6 +811,7 @@ export const AudioPlayer = () => {
             }
             trace('play_resolved', trackId, { path });
             trace('load_complete', trackId, { path });
+            playbackState.transition('playing', trackId, `load_complete_${path}`);
           }).catch(e => {
             trace('play_rejected', trackId, { path, err: e.name, msg: e.message?.slice(0, 80) });
             handlePlayFailure(e, path);
@@ -1186,6 +1189,7 @@ export const AudioPlayer = () => {
     }
 
     trace('next_call', trackId, { from: 'ended_advance', hidden: document.hidden });
+    playbackState.transition('advancing', trackId, synthetic ? 'synthetic_ended' : 'natural_ended');
     nextTrack();
 
     // Keep OS notification alive through the load gap with a position reset
@@ -1380,6 +1384,7 @@ export const AudioPlayer = () => {
         if (document.hidden || isTransitioningToBackgroundRef.current) { trace('pause_guard', tid, { why: 'bg_transition', hidden: document.hidden }); return; }
         trace('pause_accept', tid, { storeSet: false });
         usePlayerStore.getState().setIsPlaying(false);
+        playbackState.transition('paused', tid ?? null, 'user_pause');
       }}
       style={{ display: 'none' }}
     />
