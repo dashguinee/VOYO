@@ -65,6 +65,29 @@ describe('playbackState', () => {
     expect(playbackState.get().state).toBe('loading');
   });
 
+  it('allows user-pause from any active state (v213)', () => {
+    // loading → paused (user taps pause mid-load)
+    playbackState.transition('loading', 'abc');
+    playbackState.transition('paused', 'abc', 'user_pause');
+    expect(playbackState.get().state).toBe('paused');
+
+    // bridge → paused (user taps pause during bridge)
+    playbackState._reset();
+    playbackState.transition('loading', 'abc');
+    playbackState.transition('playing', 'abc');
+    playbackState.transition('bridge', 'abc', 'silent_wav_bg');
+    playbackState.transition('paused', 'abc', 'user_pause');
+    expect(playbackState.get().state).toBe('paused');
+
+    // advancing → paused (user taps pause right at track end)
+    playbackState._reset();
+    playbackState.transition('loading', 'abc');
+    playbackState.transition('playing', 'abc');
+    playbackState.transition('advancing', 'abc', 'natural_ended');
+    playbackState.transition('paused', 'abc', 'user_pause');
+    expect(playbackState.get().state).toBe('paused');
+  });
+
   it('error state can recover to loading', () => {
     playbackState.transition('loading', 'abc');
     playbackState.transition('playing', 'abc');

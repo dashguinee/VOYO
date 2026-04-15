@@ -53,13 +53,18 @@ export interface StateSnapshot {
 // (useful for re-arming loading on retry etc). Illegal transitions are
 // logged as `state_illegal` and silently rejected — surface the bug
 // without breaking playback.
+// Pause is a user-intent terminal — reachable from any active state.
+// Previously we excluded loading/bridge/advancing → paused, which silently
+// dropped user pauses mid-load (observed in telemetry as state_illegal
+// loading→paused: the audio element paused but the state machine stayed
+// 'loading' and the next nt/load flow treated it as an in-flight load).
 const ALLOWED: Record<PlaybackState, PlaybackState[]> = {
   idle:      ['loading', 'error'],
-  loading:   ['bridge', 'playing', 'error', 'idle', 'advancing'],
-  bridge:    ['loading', 'playing', 'error', 'advancing'],
+  loading:   ['bridge', 'playing', 'paused', 'error', 'idle', 'advancing'],
+  bridge:    ['loading', 'playing', 'paused', 'error', 'advancing'],
   playing:   ['paused', 'advancing', 'loading', 'bridge', 'error'],
   paused:    ['playing', 'loading', 'idle', 'error'],
-  advancing: ['loading', 'bridge', 'idle', 'error'],
+  advancing: ['loading', 'bridge', 'paused', 'idle', 'error'],
   error:     ['loading', 'playing', 'idle', 'paused'],
 };
 

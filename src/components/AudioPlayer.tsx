@@ -490,6 +490,7 @@ export const AudioPlayer = () => {
           trace('cascade_brake', trackId, { why: 'cascade_ge_5', source: 'blocklist' });
           devWarn(`[VOYO] Blocklist cascade depth >= 5, stopping skip chain on ${trackId}`);
           usePlayerStore.getState().setIsPlaying(false);
+          playbackState.transition('paused', trackId, 'cascade_brake_blocklist');
           return;
         }
         blocklistCascadeRef.current++;
@@ -712,6 +713,7 @@ export const AudioPlayer = () => {
           trace('cascade_brake', trackId, { source: 'max_retries' });
           devWarn(`[VOYO] Extraction cascade ≥5 — force pause`);
           usePlayerStore.getState().setIsPlaying(false);
+          playbackState.transition('paused', trackId, 'cascade_brake_max_retries');
           return;
         }
         trace('next_call', trackId, { from: 'max_retries', cascade: blocklistCascadeRef.current, hidden: document.hidden });
@@ -801,6 +803,11 @@ export const AudioPlayer = () => {
             if (shouldAutoResume && !shouldPlay) {
               usePlayerStore.getState().setIsPlaying(true);
             }
+            // Clear the load guard once audio is actually playing. Without
+            // this, every user pause during the rest of the track was
+            // silently dropped by onPause (`why: 'loading'`) — the ref was
+            // only cleared by the NEXT loadTrack's cleanup, far too late.
+            isLoadingTrackRef.current = false;
             trace('play_resolved', trackId, { path });
             trace('load_complete', trackId, { path });
             playbackState.transition('playing', trackId, `load_complete_${path}`);
@@ -1314,6 +1321,19 @@ export const AudioPlayer = () => {
           setBufferHealth(100, 'healthy');
         }
         usePlayerStore.getState().setIsPlaying(true);
+        // Keep the state machine in sync with the audio element. Without
+        // this, a paused→play resume (user tap on an already-loaded track)
+        // leaves the state machine in 'paused' while audio plays — which
+        // desyncs subsequent transition guards. load_complete_* covers the
+        // loading→playing case; this covers paused→playing + any other
+        // legitimate resume path.
+        {
+          const tid = usePlayerStore.getState().currentTrack?.trackId;
+          const cur = playbackState.get().state;
+          if (cur !== 'playing' && cur !== 'loading' && cur !== 'bridge') {
+            playbackState.transition('playing', tid ?? null, 'onPlay_resume');
+          }
+        }
         // Only log play_success when a real source is bound.
         if (playbackSource !== 'cached' && playbackSource !== 'r2') return;
         // Dedup play_success per trackId — even if play() fires twice on
@@ -1368,9 +1388,9 @@ export const AudioPlayer = () => {
         if (isLoadingTrackRef.current) { trace('pause_guard', tid, { why: 'loading' }); return; }
         if (audioRef.current?.ended) { trace('pause_guard', tid, { why: 'ended' }); return; }
         if (document.hidden || isTransitioningToBackgroundRef.current) { trace('pause_guard', tid, { why: 'bg_transition', hidden: document.hidden }); return; }
-        trace('pause_accept', tid, { storeSet: false });
         usePlayerStore.getState().setIsPlaying(false);
         playbackState.transition('paused', tid ?? null, 'user_pause');
+        trace('pause_accept', tid, { storeSet: true, prevState: playbackState.get().prev });
       }}
       style={{ display: 'none' }}
     />
