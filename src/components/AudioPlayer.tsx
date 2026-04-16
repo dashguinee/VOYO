@@ -45,6 +45,7 @@ import { useBgEngine } from '../audio/bg/bgEngine';
 import { useWakeLock } from '../audio/bg/useWakeLock';
 import { resolveSource } from '../audio/sources/sourceResolver';
 import { usePreloadTrigger } from '../audio/sources/usePreloadTrigger';
+import { getPreloadedTrack } from '../services/preloadManager';
 import { useFrequencyPump } from '../audio/graph/freqPump';
 import { useMediaSession } from '../audio/playback/mediaSession';
 import { useHotSwap } from '../audio/playback/hotSwap';
@@ -529,6 +530,10 @@ export const AudioPlayer = () => {
       // Reached a non-blocked track — reset cascade counter.
       blocklistCascadeRef.current = 0;
 
+      // Peek preload cache now (synchronous) so the fade-duration decision
+      // is available both inside the audio block and after resolveSource.
+      const isWarm = !document.hidden && !!getPreloadedTrack(trackId)?.audioElement;
+
       // STOP old audio immediately before loading new track.
       // NOTE: Do NOT set src = '' — this can break MediaElementAudioSourceNode in some browsers.
       // The source node stays wired through src changes automatically (Web Audio API design).
@@ -546,45 +551,57 @@ export const AudioPlayer = () => {
         audioRef.current.oncanplay = null;
         audioRef.current.onplay = null;
         audioRef.current.loop = false;
-        // Clone+replace trick: removes ALL anonymous addEventListener listeners
-        // (canplay handlers added with { once: true } that haven't fired yet).
-        // The Web Audio source node survives because it's bound to the element
-        // reference, not its event listeners.
-        // NOTE: Skip this — cloning breaks MediaElementAudioSourceNode binding.
-        // Instead, the stale guards (isStale()) in each handler prevent action.
 
-        // FAST MUTE: 8ms ramp (352 samples — smooth zero-crossing, no click)
-        // + 10ms wait for the ramp to drain. Total: 18ms before pause.
-        // Previously 15ms ramp + 18ms wait = 33ms which added perceptible
-        // silence on every skip. 18ms is below human temporal resolution.
+        // isWarm hoisted above — warm = preload cache hit (0ms swap),
+        // cold = VPS extraction path (3s audible fade while extraction runs).
+        const fadeDurationSec = isWarm ? 0.008 : 3.0;
+        const waitMs = isWarm ? 10 : 0; // cold path: don't await — resolveSource runs during the fade
+
         if (gainNodeRef.current && audioContextRef.current) {
           const ctx = audioContextRef.current;
           const now = ctx.currentTime;
           const p = gainNodeRef.current.gain;
           p.cancelScheduledValues(now);
           p.setValueAtTime(p.value, now);
-          p.linearRampToValueAtTime(0.0001, now + 0.008);
+          p.linearRampToValueAtTime(0.0001, now + fadeDurationSec);
         }
         armGainWatchdog('mute-before-load');
         const audioToFade = audioRef.current;
-        // Wait for the 8ms gain ramp to fully drain before pausing.
-        // BACKGROUND SKIP: skip the wait when hidden — setTimeout is
-        // throttled to 1/min in background, turning a 10ms wait into 60s.
-        // User can't hear the transition anyway, so no click risk.
-        if (!document.hidden) {
-          await new Promise<void>(resolve => setTimeout(resolve, 10));
-        }
-        if (isStale()) { trace('load_abandoned', trackId, { at: 'after_fade_timeout' }); devLog(`[AudioPlayer] cancelled stale load for ${trackId} after fade timeout`); return; }
-        if (audioRef.current === audioToFade) {
-          if (document.hidden && silentKeeperUrlRef.current) {
-            // BG bridge via the consolidated helper — one lifecycle owner.
+
+        if (isWarm && !document.hidden) {
+          // Warm: wait for the 8ms ramp to drain before pausing.
+          await new Promise<void>(resolve => setTimeout(resolve, waitMs));
+          if (isStale()) { trace('load_abandoned', trackId, { at: 'after_fade_timeout' }); devLog(`[AudioPlayer] cancelled stale load for ${trackId} after fade timeout`); return; }
+          if (audioRef.current === audioToFade) {
+            audioRef.current.pause();
+            audioRef.current.currentTime = 0;
+          }
+        } else if (document.hidden) {
+          // Background: engage silent wav immediately (same as before).
+          if (audioRef.current === audioToFade && silentKeeperUrlRef.current) {
             engageSilentWav('bg_load_bridge', trackId);
-          } else {
+          } else if (audioRef.current === audioToFade) {
             audioRef.current.pause();
             audioRef.current.currentTime = 0;
           }
         }
+        // Cold foreground: audio keeps playing (fading) — resolveSource runs
+        // in parallel below. pauseOutgoing() called after resolve returns.
       }
+
+      // Helper: snap gain to 0 + pause outgoing audio. Called after resolveSource
+      // returns on cold paths so the swap is click-free regardless of where the
+      // 3s fade is at.
+      const pauseOutgoing = () => {
+        if (!audioRef.current) return;
+        if (gainNodeRef.current && audioContextRef.current) {
+          const p = gainNodeRef.current.gain;
+          p.cancelScheduledValues(audioContextRef.current.currentTime);
+          p.setValueAtTime(0.0001, audioContextRef.current.currentTime);
+        }
+        audioRef.current.pause();
+        audioRef.current.currentTime = 0;
+      };
 
       // RESUME FIX: On initial load, always auto-resume playback.
       // Previously gated on `savedCurrentTime > 5`, which meant tracks with
@@ -745,6 +762,10 @@ export const AudioPlayer = () => {
         navigator.mediaSession.playbackState = 'playing';
         return;
       }
+
+      // Cold-path: audio was still playing during resolveSource — stop it now
+      // before the src swap. Gain ramp is already at/near 0 from the 3s fade.
+      if (!isWarm && !document.hidden) pauseOutgoing();
 
       // Apply per-source state before the src swap.
       if (resolved.source === 'preload' && resolved.preloadedAudio) {
