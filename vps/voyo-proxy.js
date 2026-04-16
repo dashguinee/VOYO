@@ -304,11 +304,24 @@ async function handleAudio(req, res, trackId, quality) {
 
   // Pipe upstream into FFmpeg. Upstream errors (edge worker hiccup,
   // googlevideo connection reset) close stdin; FFmpeg finishes what it
-  // has, we check size below and discard if truncated.
+  // has, we check `upstreamTruncated` below and discard the partial
+  // cache if so (FFmpeg would otherwise exit code 0 with a half-song
+  // and the size check alone can't distinguish a legit 2-min track
+  // from a truncated 4-min one).
+  let upstreamTruncated = false;
   upstream.pipe(ffmpeg.stdin);
   upstream.on("error", (e) => {
+    upstreamTruncated = true;
     console.error(`[VOYO] Upstream error (${trackId}): ${e.message}`);
     try { ffmpeg.stdin.end(); } catch {}
+  });
+  upstream.on("end", () => {
+    // IncomingMessage.complete is false if response ended prematurely
+    // (connection reset, content-length mismatch, etc.).
+    if (upstream.complete === false) {
+      upstreamTruncated = true;
+      console.error(`[VOYO] Upstream ended incomplete (${trackId})`);
+    }
   });
   ffmpeg.stdin.on("error", (e) => {
     // EPIPE is expected when upstream ends before FFmpeg consumes all —
@@ -353,8 +366,11 @@ async function handleAudio(req, res, trackId, quality) {
       let size = 0;
       try { size = fs.statSync(tmpPath).size; } catch {}
 
-      if (code !== 0 || size < CACHE_MIN_BYTES) {
-        console.error(`[VOYO] ${trackId}/${quality} bad finalize (code=${code}, size=${size}) — discarding`);
+      if (code !== 0 || size < CACHE_MIN_BYTES || upstreamTruncated) {
+        const reason = upstreamTruncated ? "upstream_truncated"
+                      : code !== 0 ? `ffmpeg_exit_${code}`
+                      : `size_${size}`;
+        console.error(`[VOYO] ${trackId}/${quality} bad finalize (${reason}) — discarding`);
         try { fs.unlinkSync(tmpPath); } catch {}
         return;
       }
