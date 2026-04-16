@@ -736,6 +736,9 @@ export const AudioPlayer = () => {
       if (isStale()) return;
 
       if (!resolved) {
+        // Cold-path fade was running during resolveSource — cancel it now so
+        // the outgoing audio doesn't keep fading after the skip fires.
+        if (!isWarm && !document.hidden) pauseOutgoing();
         // Every path exhausted. markBlocked already set by sourceResolver.
         // Run the cascade brake: after 5 consecutive extraction failures,
         // force-pause so the user can intervene rather than sit in silence.

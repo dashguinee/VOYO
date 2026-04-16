@@ -590,8 +590,15 @@ function openUpstreamViaYtdlp(trackId) {
   return new Promise((resolve, reject) => {
     const cmd = `/usr/local/bin/yt-dlp-safe -f "bestaudio" --get-url --no-warnings --geo-bypass "https://www.youtube.com/watch?v=${trackId}"`;
     exec(cmd, { timeout: 30_000 }, (err, stdout, stderr) => {
+      const stderrStr = (stderr || "").toString();
+      // Fast-fail + alert on cookie auth loss. Don't wait 180s.
+      if (stderrStr.includes("Sign in to confirm")) {
+        console.error(`[VOYO] Cookie auth lost for ${trackId} — emitting critical_alert`);
+        postTelemetry("critical_alert", trackId, { subtype: "cookie_login_lost", source: "yt-dlp-stderr" });
+        return reject(new Error("cookie_auth_required"));
+      }
       if (err) {
-        console.error("[VOYO] yt-dlp err:", err?.message, "stderr:", stderr?.toString()?.slice(0, 300));
+        console.error("[VOYO] yt-dlp err:", err?.message, "stderr:", stderrStr.slice(0, 200));
         return reject(new Error("Both extraction methods failed"));
       }
       const url = (stdout || "").trim();
@@ -599,6 +606,22 @@ function openUpstreamViaYtdlp(trackId) {
 
       const ytReq = https.get(url, { timeout: 30_000 }, (ytRes) => {
         if (ytRes.statusCode >= 200 && ytRes.statusCode < 300) {
+          // First-byte watchdog: if googlevideo opens but sends no data within
+          // 15s the stream is stalled (IP-level throttle / expired signed URL).
+          // Kill it early instead of letting FFmpeg hang for 180s safety_timeout.
+          let firstByteReceived = false;
+          const firstByteTimer = setTimeout(() => {
+            if (!firstByteReceived) {
+              console.error(`[VOYO] First-byte timeout for ${trackId} — stalled googlevideo stream`);
+              ytReq.destroy();
+              reject(new Error("googlevideo stalled: no first byte within 15s"));
+            }
+          }, 15_000);
+          ytRes.once("data", () => {
+            firstByteReceived = true;
+            clearTimeout(firstByteTimer);
+          });
+          ytRes.once("error", () => clearTimeout(firstByteTimer));
           resolve(ytRes);
           return;
         }
