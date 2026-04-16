@@ -41,6 +41,36 @@ CREATE INDEX IF NOT EXISTS idx_video_intel_play_count
   ON video_intelligence(play_count DESC) WHERE play_count > 0;
 
 -- ─── 2. Merge voyo_tracks signals (phase 2 re-run with NULL defense) ────
+-- DISTINCT ON deduplicates voyo_tracks before the INSERT so two rows with the
+-- same youtube_id never try to update the same video_intelligence row twice in
+-- one statement (which PostgreSQL rejects with "command cannot affect row a
+-- second time"). We keep the row with the highest play_count per duplicate.
+WITH deduped AS (
+  SELECT DISTINCT ON (youtube_id)
+    youtube_id,
+    COALESCE(title, '[unknown]')  AS title,
+    artist, thumbnail,
+    COALESCE(vibe_afro_heat, 0)   AS vibe_afro_heat,
+    COALESCE(vibe_chill_vibes, 0) AS vibe_chill_vibes,
+    COALESCE(vibe_party_mode, 0)  AS vibe_party_mode,
+    COALESCE(vibe_late_night, 0)  AS vibe_late_night,
+    COALESCE(vibe_workout, 0)     AS vibe_workout,
+    COALESCE(play_count, 0)       AS play_count,
+    COALESCE(queue_count, 0)      AS queue_count,
+    COALESCE(love_count, 0)       AS love_count,
+    COALESCE(skip_count, 0)       AS skip_count,
+    COALESCE(complete_count, 0)   AS complete_count,
+    COALESCE(skip_rate, 0)        AS skip_rate,
+    COALESCE(completion_rate, 0)  AS completion_rate,
+    COALESCE(love_rate, 0)        AS love_rate,
+    COALESCE(heat_score, 0)       AS heat_score,
+    COALESCE(verified, FALSE)     AS verified,
+    COALESCE(r2_cached, FALSE)    AS r2_cached,
+    r2_quality, r2_size, r2_cached_at, last_played
+  FROM voyo_tracks
+  WHERE youtube_id IS NOT NULL AND youtube_id <> ''
+  ORDER BY youtube_id, play_count DESC  -- keep highest-signal row per duplicate
+)
 INSERT INTO video_intelligence (
   youtube_id, title, artist, thumbnail_url,
   vibe_afro_heat, vibe_chill_vibes, vibe_party_mode, vibe_late_night, vibe_workout,
@@ -52,22 +82,15 @@ INSERT INTO video_intelligence (
   last_played
 )
 SELECT
-  youtube_id,
-  COALESCE(title, '[unknown]'),
-  artist, thumbnail,
-  COALESCE(vibe_afro_heat, 0),   COALESCE(vibe_chill_vibes, 0),
-  COALESCE(vibe_party_mode, 0),  COALESCE(vibe_late_night, 0),
-  COALESCE(vibe_workout, 0),
-  COALESCE(play_count, 0),       COALESCE(queue_count, 0),
-  COALESCE(love_count, 0),       COALESCE(skip_count, 0),
-  COALESCE(complete_count, 0),
-  COALESCE(skip_rate, 0),        COALESCE(completion_rate, 0),
-  COALESCE(love_rate, 0),
-  COALESCE(heat_score, 0),       COALESCE(verified, FALSE),
-  COALESCE(r2_cached, FALSE),    r2_quality, r2_size, r2_cached_at,
+  youtube_id, title, artist, thumbnail,
+  vibe_afro_heat, vibe_chill_vibes, vibe_party_mode, vibe_late_night, vibe_workout,
+  play_count, queue_count,
+  love_count, skip_count, complete_count,
+  skip_rate, completion_rate, love_rate,
+  heat_score, verified,
+  r2_cached, r2_quality, r2_size, r2_cached_at,
   last_played
-FROM voyo_tracks
-WHERE youtube_id IS NOT NULL AND youtube_id <> ''
+FROM deduped
 ON CONFLICT (youtube_id) DO UPDATE SET
   vibe_afro_heat   = GREATEST(EXCLUDED.vibe_afro_heat,   video_intelligence.vibe_afro_heat),
   vibe_chill_vibes = GREATEST(EXCLUDED.vibe_chill_vibes, video_intelligence.vibe_chill_vibes),
