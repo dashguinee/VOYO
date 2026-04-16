@@ -174,6 +174,10 @@ export const AudioPlayer = () => {
         error_code: e.name === 'NotAllowedError' ? 'not_allowed' : e.name === 'AbortError' ? 'aborted' : 'unknown',
         meta: { label, errorMessage: e.message },
       });
+      // GLOBAL SIGNAL: persist fail to video_intelligence — auto-blocklists at 3 fails
+      import('../lib/supabase').then(({ supabase }) => {
+        void (supabase?.rpc('record_signal', { p_youtube_id: track.trackId, p_action: 'fail' }) as unknown as Promise<unknown>)?.catch(() => {});
+      });
     }
     if (e.name === 'NotAllowedError') {
       // Autoplay blocked by browser (no user gesture). Set pending flag
@@ -890,6 +894,10 @@ export const AudioPlayer = () => {
         oyoOnTrackPlay(track, prev || undefined);
         viRegisterPlay(track.trackId, track.title, track.artist, 'user_play');
         devLog(`[VOYO] Recorded play: ${track.title}`);
+        // GLOBAL SIGNAL: persist play to video_intelligence for recommender learning
+        import('../lib/supabase').then(({ supabase }) => {
+          void (supabase?.rpc('record_signal', { p_youtube_id: track.trackId, p_action: 'play' }) as unknown as Promise<unknown>)?.catch(() => {});
+        });
       } catch (e) {
         devWarn('[VOYO] recordPlayEvent failed:', e);
       }

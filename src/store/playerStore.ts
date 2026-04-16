@@ -754,9 +754,17 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
         // that triggers a skip (Portrait, Landscape, Classic, queue, hotkey)
         // feeds the brain for free — no per-surface wiring needed.
         oyoOnTrackSkip(state.currentTrack);
+        // GLOBAL SIGNAL: persist skip to video_intelligence so recommender learns
+        import('../lib/supabase').then(({ supabase }) => {
+          void (supabase?.rpc('record_signal', { p_youtube_id: state.currentTrack!.trackId, p_action: 'skip' }) as unknown as Promise<unknown>)?.catch(() => {});
+        });
       } else {
         // User completed (at least 30% played)
         recordPoolEngagement(state.currentTrack.id, 'complete', { completionRate });
+        // GLOBAL SIGNAL: persist complete to video_intelligence
+        import('../lib/supabase').then(({ supabase }) => {
+          void (supabase?.rpc('record_signal', { p_youtube_id: state.currentTrack!.trackId, p_action: 'complete' }) as unknown as Promise<unknown>)?.catch(() => {});
+        });
       }
     }
 
@@ -1662,6 +1670,10 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
 
       // POOL ENGAGEMENT: Record reaction (strong positive signal)
       recordPoolEngagement(currentTrack.id, 'react');
+      // GLOBAL SIGNAL: persist love to video_intelligence
+      import('../lib/supabase').then(({ supabase }) => {
+        void (supabase?.rpc('record_signal', { p_youtube_id: currentTrack.trackId, p_action: 'love' }) as unknown as Promise<unknown>)?.catch(() => {});
+      });
 
       // 🔥 OYE = AUTO-BOOST: When user OYEs a track, cache it for offline
       // This is the signature VOYO feature - love it? Keep it forever.
