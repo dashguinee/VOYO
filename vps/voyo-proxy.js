@@ -324,6 +324,36 @@ async function handleAudio(req, res, trackId, quality) {
 
   activeJobs.set(jobKey, { status: "processing", started: Date.now() });
 
+  // v2.3 — activeJobs leak fix. Previous revision leaked slots when FFmpeg
+  // hung waiting for stdin that never arrived (upstream returned a Readable
+  // that immediately errored AFTER being assigned — pipe took, bytes never
+  // flowed, ffmpeg waited forever, never emitted 'close', activeJobs.delete
+  // never fired). Observed: MAX_CONCURRENT_FFMPEG=6 slots permanently
+  // occupied by dead trackIds, every subsequent cold request blocked.
+  //
+  // Defenses: (a) a single `releaseJob(reason)` that the close / error /
+  // safety paths all funnel through, idempotent. (b) 180s safety timer
+  // that force-kills FFmpeg if it hangs. (c) upstream pre-broken check
+  // before piping. (d) ffmpeg.on('error') handler for spawn/runtime errors
+  // that don't produce a 'close' event.
+  const tmpPath = `${cachedPath}.tmp`;
+  let jobCleaned = false;
+  const releaseJob = (reason) => {
+    if (jobCleaned) return;
+    jobCleaned = true;
+    activeJobs.delete(jobKey);
+    console.log(`[VOYO] Released slot ${jobKey} (${reason})`);
+  };
+
+  // Early-out: upstream arrived already-broken.
+  if (upstream.destroyed || upstream.readableEnded === true) {
+    releaseJob("upstream_prebroken");
+    console.error(`[VOYO] Upstream ${trackId} arrived pre-ended/destroyed`);
+    res.writeHead(502, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error: "Upstream pre-ended" }));
+    return;
+  }
+
   // FFmpeg: reads from stdin, writes Opus/Ogg to stdout. Two-pass loudnorm
   // params (measured_I/TP/LRA) tell FFmpeg to use the declared values
   // without running a measurement pass — keeps one-pass output streamable.
@@ -342,6 +372,32 @@ async function handleAudio(req, res, trackId, quality) {
     "-f", "ogg",
     "-",
   ], { stdio: ["pipe", "pipe", "pipe"] });
+
+  // v2.3 — ffmpeg lifecycle errors that don't fire 'close' (spawn error,
+  // runtime crash) would leak the slot without this handler.
+  ffmpeg.on("error", (e) => {
+    console.error(`[VOYO] FFmpeg process error (${trackId}): ${e.message}`);
+    try { fileStream.end(); } catch {}
+    try { fs.unlinkSync(tmpPath); } catch {}
+    postTelemetry("trace", trackId, { subtype: "vps_extract_fail", quality, reason: `ffmpeg_error_${e.code || 'unknown'}`, elapsedMs: Date.now() - extractStart });
+    releaseJob("ffmpeg_error");
+    if (clientAlive) { try { res.end(); } catch {} }
+    clearTimeout(safetyTimer);
+  });
+
+  // Absolute safety timer: if ffmpeg hasn't closed in 180s, force-kill and
+  // free the slot. Catches the "upstream alive but starved" hang pattern.
+  const safetyTimer = setTimeout(() => {
+    if (!jobCleaned) {
+      console.error(`[VOYO] Safety-timeout ${jobKey} — force-killing FFmpeg after 180s`);
+      try { ffmpeg.kill("SIGKILL"); } catch {}
+      try { fileStream.end(); } catch {}
+      try { fs.unlinkSync(tmpPath); } catch {}
+      postTelemetry("trace", trackId, { subtype: "vps_extract_fail", quality, reason: "safety_timeout_180s", elapsedMs: Date.now() - extractStart });
+      releaseJob("safety_timeout");
+      if (clientAlive) { try { res.end(); } catch {} }
+    }
+  }, 180_000);
 
   // Pipe upstream into FFmpeg. Upstream errors (edge worker hiccup,
   // googlevideo connection reset) close stdin; FFmpeg finishes what it
@@ -370,7 +426,6 @@ async function handleAudio(req, res, trackId, quality) {
     if (e.code !== "EPIPE") console.error(`[VOYO] FFmpeg stdin err: ${e.message}`);
   });
 
-  const tmpPath = `${cachedPath}.tmp`;
   const fileStream = fs.createWriteStream(tmpPath);
 
   res.writeHead(200, {
@@ -415,9 +470,10 @@ async function handleAudio(req, res, trackId, quality) {
   });
 
   ffmpeg.on("close", (code) => {
+    clearTimeout(safetyTimer);
     fileStream.end();
     if (clientAlive) { try { res.end(); } catch {} }
-    activeJobs.delete(jobKey);
+    releaseJob(`ffmpeg_close_${code}`);
 
     fileStream.on("finish", () => {
       let size = 0;
