@@ -127,10 +127,26 @@ const server = https.createServer(ssl, async (req, res) => {
 
   if (url.pathname === "/health" || url.pathname === "/voyo/health") {
     const jobs = Object.fromEntries([...activeJobs.entries()].map(([k, v]) => [k, v.status]));
+    const edgeCircuit = isEdgeCircuitOpen()
+      ? { open: true, reopensInMs: edgeCircuitOpenUntil - Date.now() }
+      : { open: false, consecutiveFailures: edgeConsecutiveFailures };
+    let cacheStats = null;
+    try {
+      const entries = fs.readdirSync(CACHE_DIR).filter(f => f.endsWith(".opus"));
+      let bytes = 0;
+      entries.forEach(f => { try { bytes += fs.statSync(`${CACHE_DIR}/${f}`).size; } catch {} });
+      cacheStats = { count: entries.length, bytes };
+    } catch {}
     res.writeHead(200, { "Content-Type": "application/json" });
     res.end(JSON.stringify({
-      status: "ok", service: "voyo-audio", version: "v2-pipe-tee",
-      uptime: process.uptime(), activeJobs: activeJobs.size, jobs,
+      status: "ok",
+      service: "voyo-audio",
+      version: "v2.1-circuit-race",
+      uptime: process.uptime(),
+      activeJobs: activeJobs.size,
+      jobs,
+      edgeCircuit,
+      cache: cacheStats,
     }));
     return;
   }

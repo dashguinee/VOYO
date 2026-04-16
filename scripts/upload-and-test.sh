@@ -1,4 +1,10 @@
 #!/bin/bash
+# ── EMERGENCY-FALLBACK ONLY (as of v214, 2026-04-16) ─────────────────────
+# Writes to the file-based cookie fallback at /opt/voyo/cookies-00N.txt.
+# VOYO now uses --cookies-from-browser primary via yt-dlp-safe v3; this
+# script only matters if the persistent Chrome session died and you're
+# keeping the service alive on files while you re-login.
+# ─────────────────────────────────────────────────────────────────────────
 # Step 2: after fix-cookie-destruction.sh, re-upload fresh cookies and test
 
 echo "=== Replace ALL cookies files (fallback + per-account rotation) ==="
