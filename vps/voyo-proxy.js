@@ -37,6 +37,37 @@ const PORT = 8443;
 const R2_BASE = "https://voyo-edge.dash-webtv.workers.dev";
 const EDGE_EXTRACT = "https://voyo-edge.dash-webtv.workers.dev/extract";
 
+// Telemetry sink — best-effort POST to Supabase voyo_playback_events with
+// source='vps'. Complements PWA-side telemetry so we can see the timeline
+// of edge circuit trips, cache hit rates, and cookie-source failures from
+// BOTH ends. All calls fire-and-forget (no awaits anywhere on the request
+// path) so a telemetry hiccup never blocks audio.
+const TELEMETRY_URL = process.env.VOYO_SUPABASE_URL
+  ? `${process.env.VOYO_SUPABASE_URL}/rest/v1/voyo_playback_events`
+  : "";
+const TELEMETRY_KEY = process.env.VOYO_SUPABASE_ANON_KEY || "";
+const HOSTNAME = require("os").hostname();
+function postTelemetry(eventType, trackId, meta) {
+  if (!TELEMETRY_URL || !TELEMETRY_KEY) return;
+  const body = JSON.stringify({
+    event_type: eventType,
+    track_id: trackId || "-",
+    meta: { ...meta, source: "vps", host: HOSTNAME },
+    user_agent: "voyo-proxy/v2.2",
+    session_id: `vps_${HOSTNAME}`,
+  });
+  fetch(TELEMETRY_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "apikey": TELEMETRY_KEY,
+      "Authorization": `Bearer ${TELEMETRY_KEY}`,
+      "Prefer": "return=minimal",
+    },
+    body,
+  }).catch(() => {}); // silence network errors — proxy keeps running
+}
+
 // Hot-tier cache. Persists across restarts; cron-evicted by age/size.
 const CACHE_DIR = "/var/cache/voyo";
 if (!fs.existsSync(CACHE_DIR)) fs.mkdirSync(CACHE_DIR, { recursive: true, mode: 0o755 });
@@ -71,9 +102,15 @@ function recordEdgeFailure() {
     edgeCircuitOpenUntil = Date.now() + EDGE_CIRCUIT_COOLDOWN_MS;
     edgeConsecutiveFailures = 0;
     console.log(`[VOYO] Edge circuit OPEN for ${EDGE_CIRCUIT_COOLDOWN_MS/1000}s`);
+    postTelemetry("trace", null, { subtype: "edge_circuit_open", cooldownMs: EDGE_CIRCUIT_COOLDOWN_MS });
   }
 }
-function recordEdgeSuccess() { edgeConsecutiveFailures = 0; edgeCircuitOpenUntil = 0; }
+function recordEdgeSuccess() {
+  const wasOpen = edgeCircuitOpenUntil > 0;
+  edgeConsecutiveFailures = 0;
+  edgeCircuitOpenUntil = 0;
+  if (wasOpen) postTelemetry("trace", null, { subtype: "edge_circuit_closed" });
+}
 
 const ssl = {
   key: fs.readFileSync("/etc/letsencrypt/live/stream.zionsynapse.online/privkey.pem"),
@@ -200,6 +237,7 @@ async function handleAudio(req, res, trackId, quality) {
     const stat = fs.statSync(cachedPath);
     if (stat.size >= CACHE_MIN_BYTES) {
       console.log(`[VOYO] /var/cache hit: ${trackId}/${quality} (${stat.size}B)`);
+      postTelemetry("trace", trackId, { subtype: "vps_cache_hit", tier: "local", quality, bytes: stat.size });
       return serveFromCache(req, res, cachedPath, stat.size);
     }
     // Corrupt — toss it and proceed to extraction.
@@ -211,6 +249,7 @@ async function handleAudio(req, res, trackId, quality) {
     const r2Url = `${R2_BASE}/audio/${trackId}?q=${quality}`;
     if (await checkR2(r2Url)) {
       console.log(`[VOYO] R2 hit: ${trackId}/${quality}`);
+      postTelemetry("trace", trackId, { subtype: "vps_cache_hit", tier: "r2", quality });
       res.writeHead(302, { Location: r2Url });
       res.end();
       return;
@@ -261,7 +300,9 @@ async function handleAudio(req, res, trackId, quality) {
   }
 
   // 5. Live extraction via pipe-tee.
-  activeJobs.set(jobKey, { status: "extracting", started: Date.now() });
+  const extractStart = Date.now();
+  activeJobs.set(jobKey, { status: "extracting", started: extractStart });
+  postTelemetry("trace", trackId, { subtype: "vps_extract_start", quality });
 
   let upstream;
   try {
@@ -339,17 +380,33 @@ async function handleAudio(req, res, trackId, quality) {
     "Access-Control-Allow-Origin": "*",
   });
 
+  // Tee with backpressure: FFmpeg output → user response + disk.
+  // When the user's TCP socket can't keep up (slow client, mobile hiccup,
+  // 2G network), we PAUSE ffmpeg.stdout so Node doesn't buffer the
+  // unwritten bytes in memory indefinitely. Resume on res.drain.
+  //
+  // Consequence: slow clients slow the extraction+cache rate too (disk
+  // write lives in the same data handler). Trade-off accepted — memory
+  // stays bounded, cache still completes, worst case is extraction taking
+  // a few extra seconds. At scale, unbounded buffering of one slow user
+  // is the catastrophic outcome, not slow-extraction.
   let clientAlive = true;
+  let ffmpegPaused = false;
   ffmpeg.stdout.on("data", (chunk) => {
     if (clientAlive) {
-      if (!res.write(chunk)) {
-        // Backpressure on the user side. Don't block FFmpeg or the
-        // cache write — just stop fanning to the user until drain.
-        // This means a slow client can fall behind; we accept that
-        // because caching always completes at FFmpeg's rate.
+      const ok = res.write(chunk);
+      if (!ok && !ffmpegPaused) {
+        ffmpegPaused = true;
+        ffmpeg.stdout.pause();
       }
     }
     fileStream.write(chunk);
+  });
+  res.on("drain", () => {
+    if (ffmpegPaused) {
+      ffmpegPaused = false;
+      ffmpeg.stdout.resume();
+    }
   });
 
   ffmpeg.stderr.on("data", (data) => {
@@ -372,12 +429,14 @@ async function handleAudio(req, res, trackId, quality) {
                       : `size_${size}`;
         console.error(`[VOYO] ${trackId}/${quality} bad finalize (${reason}) — discarding`);
         try { fs.unlinkSync(tmpPath); } catch {}
+        postTelemetry("trace", trackId, { subtype: "vps_extract_fail", quality, reason, elapsedMs: Date.now() - extractStart });
         return;
       }
 
       try {
         fs.renameSync(tmpPath, cachedPath);
         console.log(`[VOYO] Cached: ${trackId}/${quality} (${(size/1024/1024).toFixed(2)}MB)`);
+        postTelemetry("trace", trackId, { subtype: "vps_extract_done", quality, bytes: size, elapsedMs: Date.now() - extractStart });
       } catch (e) {
         console.error(`[VOYO] Cache rename failed ${trackId}: ${e.message}`);
         return;

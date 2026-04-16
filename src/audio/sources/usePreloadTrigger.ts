@@ -10,12 +10,12 @@
  * preload effect re-running → preload only fires for track 1 of the
  * session. Per-trackId dedup has no timing dependency.
  *
- * Upcoming tracks: queue first, then predictNextTrack fallback. Stagger
+ * Upcoming tracks: queue first, then predictUpcoming fallback. Stagger
  * the preloads (1.5s, 6s, 12s in FG; 0, 2s, 5s in BG) so they don't
  * compete with the current track's decoder spinning up.
  */
 
-import { useEffect, useRef, RefObject } from 'react';
+import { useEffect, useRef } from 'react';
 import { usePlayerStore } from '../../store/playerStore';
 import { preloadNextTrack, cancelPreload } from '../../services/preloadManager';
 import { devLog, devWarn } from '../../utils/logger';
@@ -25,16 +25,12 @@ interface UsePreloadTriggerParams {
   currentTrack: Track | null;
   queue: { track: Track | null }[];
   checkCache: (trackId: string) => Promise<string | null>;
-  predictNextTrack: () => Track | null;
   /** v214 — N-deep upcoming predictor. Used as discover-pool fallback when queue is thin. */
   predictUpcoming: (n?: number) => Track[];
-  // Kept in sync with the effect firing — some other paths historically
-  // read this flag. Future phase can retire it entirely.
-  hasTriggeredPreloadRef: RefObject<boolean>;
 }
 
 export function usePreloadTrigger(params: UsePreloadTriggerParams) {
-  const { currentTrack, queue, checkCache, predictNextTrack, predictUpcoming, hasTriggeredPreloadRef } = params;
+  const { currentTrack, queue, checkCache, predictUpcoming } = params;
 
   // Per-trackId dedup — the one ref that survives every React effect race.
   const preloadedForTrackIdRef = useRef<string | null>(null);
@@ -43,7 +39,6 @@ export function usePreloadTrigger(params: UsePreloadTriggerParams) {
     if (!currentTrack?.trackId) return;
     if (preloadedForTrackIdRef.current === currentTrack.trackId) return;
     preloadedForTrackIdRef.current = currentTrack.trackId;
-    hasTriggeredPreloadRef.current = false;
 
     // Gather upcoming: queue first, then N-deep prediction to fill.
     // v214 — deep predict. Previously this fell back to ONE predictNextTrack()
@@ -88,7 +83,6 @@ export function usePreloadTrigger(params: UsePreloadTriggerParams) {
         // Double-check: the user hasn't skipped away from the track that
         // triggered this preload batch.
         if (usePlayerStore.getState().currentTrack?.trackId !== currentTrack.trackId) return;
-        if (index === 0) hasTriggeredPreloadRef.current = true;
         preloadNextTrack(track.trackId, checkCache)
           .then(r => { if (r) devLog(`🔮 [preload] ready: ${track.title} (${r.source})`); })
           .catch(err => { devWarn(`🔮 [preload] failed:`, err); });
@@ -96,7 +90,7 @@ export function usePreloadTrigger(params: UsePreloadTriggerParams) {
       timeoutIds.push(tid);
     });
     return () => timeoutIds.forEach(clearTimeout);
-  }, [currentTrack?.trackId, queue, checkCache, predictNextTrack, predictUpcoming, hasTriggeredPreloadRef]);
+  }, [currentTrack?.trackId, queue, checkCache, predictUpcoming]);
 
   // Cancel any in-flight preloads on track change. Separate effect so its
   // cleanup fires BEFORE the new preload effect schedules fresh ones.
@@ -104,3 +98,4 @@ export function usePreloadTrigger(params: UsePreloadTriggerParams) {
     return () => { cancelPreload(); };
   }, [currentTrack?.trackId]);
 }
+

@@ -92,12 +92,10 @@ export const AudioPlayer = () => {
   const backgroundBoostingRef = useRef<string | null>(null);
   const hasTriggered50PercentCacheRef = useRef<boolean>(false); // 50% auto-boost trigger
   const hasTriggered85PercentCacheRef = useRef<boolean>(false); // 85% edge-stream cache trigger
-  const hasTriggeredPreloadRef = useRef<boolean>(false);
   const shouldAutoResumeRef = useRef<boolean>(false); // Resume playback on refresh if position was saved
   const pendingAutoResumeRef = useRef<boolean>(false); // True when autoplay was blocked by browser — first user tap resumes
   const isEdgeStreamRef = useRef<boolean>(false); // True when playing from Edge Worker stream URL (not IndexedDB)
   const hasTriggered75PercentKeptRef = useRef<boolean>(false); // 75% permanent cache trigger
-  const hasTriggered30sListenRef = useRef<boolean>(false); // 30s artist discovery listen tracking
   const hasTriggeredContextNotifRef = useRef<boolean>(false); // OYO track context notification (10s)
   // BACKGROUND GUARD: On some mobile browsers, the `pause` event fires BEFORE
   // `visibilitychange`. If onPause sets isPlaying=false during this window,
@@ -127,6 +125,12 @@ export const AudioPlayer = () => {
   // always experiences flow. Stale guard ensures a late fire doesn't skip
   // the CURRENT playing track after recovery.
   const loadWatchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // v214 adaptive-watchdog (task #62): holds the fire callback + isStale
+  // captured inside loadTrack's closure so audio-element 'progress' /
+  // 'loadedmetadata' events can re-arm the timer from outside loadTrack.
+  // When bytes are flowing, each progress event restarts the 8s countdown
+  // — only TRUE silence (no bytes for 8s straight) fires the skip.
+  const loadWatchdogFireFnRef = useRef<(() => void) | null>(null);
   // BG watchdog uses MessageChannel (setTimeout is throttled 1/min in BG).
   // Hold the active port so we can cancel on clearLoadWatchdog or on a
   // new loadTrack — without this, the MC tick loop is uncancellable and
@@ -141,6 +145,16 @@ export const AudioPlayer = () => {
       try { bgWatchdogPortRef.current.close(); } catch {}
       bgWatchdogPortRef.current = null;
     }
+    loadWatchdogFireFnRef.current = null;
+  };
+  // Re-arm the FG watchdog with an 8s "got-progress" countdown. Called from
+  // the audio element's onProgress / onLoadedMetadata handlers when bytes
+  // are actively flowing — distinguishes "slow-but-alive" from "dead."
+  const bumpLoadWatchdog = () => {
+    if (!loadWatchdogFireFnRef.current || !loadWatchdogRef.current) return;
+    if (document.hidden) return; // BG watchdog is MC-based, handled separately
+    clearTimeout(loadWatchdogRef.current);
+    loadWatchdogRef.current = setTimeout(loadWatchdogFireFnRef.current, 8000);
   };
   // Handles the .catch side of a loadTrack play() promise. Distinguishes
   // autoplay-block (user must tap — not a real failure) from real failures
@@ -248,7 +262,6 @@ export const AudioPlayer = () => {
   const clearSeekPosition = usePlayerStore(s => s.clearSeekPosition);
   const togglePlay = usePlayerStore(s => s.togglePlay);
   const nextTrack = usePlayerStore(s => s.nextTrack);
-  const predictNextTrack = usePlayerStore(s => s.predictNextTrack);
   const predictUpcoming = usePlayerStore(s => s.predictUpcoming);
   const setBufferHealth = usePlayerStore(s => s.setBufferHealth);
   const setPlaybackSource = usePlayerStore(s => s.setPlaybackSource);
@@ -380,7 +393,7 @@ export const AudioPlayer = () => {
   // PRELOAD: Start preloading next 2-3 tracks IMMEDIATELY when track starts (like Spotify)
   // Major platforms don't wait - they start buffering upcoming tracks right away
   // Preload trigger + cleanup live in one module.
-  usePreloadTrigger({ currentTrack, queue, checkCache, predictNextTrack, predictUpcoming, hasTriggeredPreloadRef });
+  usePreloadTrigger({ currentTrack, queue, checkCache, predictUpcoming });
 
   useWakeLock(isPlaying);
 
@@ -597,10 +610,8 @@ export const AudioPlayer = () => {
       hasTriggered50PercentCacheRef.current = false; // Reset 50% trigger for new track
       hasTriggered85PercentCacheRef.current = false; // Reset 85% trigger for new track
       lastProgressWriteBucketRef.current = -1; // Reset throttle bucket → first frame of new track writes
-      hasTriggeredPreloadRef.current = false; // Reset preload trigger for new track
       isEdgeStreamRef.current = false; // Reset edge stream flag for new track
       hasTriggered75PercentKeptRef.current = false; // Reset 75% kept trigger for new track
-      hasTriggered30sListenRef.current = false; // Reset 30s listen flag for new track
       hasTriggeredContextNotifRef.current = false; // Reset OYO context notification for new track
       // crossfade refs removed — clean gapless transitions only
 
@@ -625,18 +636,21 @@ export const AudioPlayer = () => {
       // few seconds of headroom absorbs PoToken-cold and network-hiccup
       // cases that used to prematurely skip a healthy-but-slow load.
       clearLoadWatchdog();
-      loadWatchdogRef.current = setTimeout(() => {
+      const fireWatchdog = () => {
         loadWatchdogRef.current = null;
+        loadWatchdogFireFnRef.current = null;
         if (isStale()) return;
         const store = usePlayerStore.getState();
         if (!store.isPlaying) return;
         trace('watchdog_fire', trackId, { timer: 'fg-12s', hidden: document.hidden });
-        devWarn(`[VOYO] Load watchdog fired for ${trackId} — 12s without playback, skipping`);
+        devWarn(`[VOYO] Load watchdog fired for ${trackId} — 12s no-progress, skipping`);
         { const t = usePlayerStore.getState().currentTrack; logPlaybackEvent({ event_type: 'skip_auto', track_id: trackId, track_title: t?.title, track_artist: t?.artist, error_code: 'load_watchdog', meta: { timer: 'fg-12s' } }); }
         isLoadingTrackRef.current = false;
         trace('next_call', trackId, { from: 'watchdog_fg' });
         nextTrack();
-      }, 12000);
+      };
+      loadWatchdogFireFnRef.current = fireWatchdog;
+      loadWatchdogRef.current = setTimeout(fireWatchdog, 12000);
       // BACKGROUND: setTimeout is throttled to 1/min. MessageChannel is NOT
       // throttled, so we use it as a polling pump — but we MUST gate on a
       // wall-clock elapsed time. The old `ticks < 500` was iteration-only
@@ -1253,9 +1267,15 @@ export const AudioPlayer = () => {
   }, [runEndedAdvance]);
 
   const handleProgress = useCallback(() => {
+    // v214 adaptive watchdog — bytes are flowing, extend the countdown.
+    // Fires here first, before the buffer-health branch, so we also
+    // bump the watchdog even during the early pre-canplay phase when
+    // buffered.length may still be 0.
+    bumpLoadWatchdog();
     if ((playbackSource !== 'cached' && playbackSource !== 'r2') || !audioRef.current?.buffered.length) return;
     const health = audioEngine.getBufferHealth(audioRef.current);
     setBufferHealth(health.percentage, health.status);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [playbackSource, setBufferHealth]);
 
   // ERROR HANDLER: Handle audio element errors with recovery (music never stops)
@@ -1368,6 +1388,10 @@ export const AudioPlayer = () => {
       onPlaying={() => {
         clearStallTimer();
         (playbackSource === 'cached' || playbackSource === 'r2') && setBufferHealth(100, 'healthy');
+      }}
+      onLoadedMetadata={() => {
+        // v214 adaptive watchdog — metadata parsed, stream is alive.
+        bumpLoadWatchdog();
       }}
       onWaiting={() => {
         // 'waiting' fires on EVERY brief rebuffer (RTT spike, slow CDN,
