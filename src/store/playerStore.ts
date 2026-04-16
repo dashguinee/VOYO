@@ -323,6 +323,7 @@ interface PlayerStore {
   nextTrack: () => void;
   prevTrack: () => void;
   predictNextTrack: () => Track | null; // Predict what track will play next (for preloading)
+  predictUpcoming: (n?: number) => Track[];   // v214 — predict N-deep for warm-ahead preload
   toggleShuffle: () => void;
   cycleRepeat: () => void;
 
@@ -1156,6 +1157,54 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     // Pick [0] — matches nextTrack's non-shuffle pick. Now preload caches
     // the SAME track nextTrack will actually select.
     return availableTracks[0];
+  },
+
+  // v214 — predict up to N upcoming tracks for deep preloading.
+  // Queue first, then discover-pool fallback. Sequential picks simulate
+  // what nextTrack() would actually land on after each advance, so the
+  // prefetched blobs line up with what the user really hears.
+  predictUpcoming: (n = 2) => {
+    const state = get();
+    const results: Track[] = [];
+    const excluded = new Set<string>();
+
+    // Seed exclusion with history + current track (same as predictNextTrack)
+    state.history.slice(-20).forEach(h => {
+      if (h.track?.id) excluded.add(h.track.id);
+      if (h.track?.trackId) excluded.add(h.track.trackId);
+    });
+    const currentId = state.currentTrack?.id || state.currentTrack?.trackId;
+    if (currentId) excluded.add(currentId);
+    if (state.currentTrack?.trackId) excluded.add(state.currentTrack.trackId);
+
+    // Queue is definitive — take as many as we need, skipping dupes/blocked.
+    for (const qi of state.queue) {
+      if (results.length >= n) break;
+      const t = qi.track;
+      if (!t?.trackId) continue;
+      if (excluded.has(t.trackId) || excluded.has(t.id)) continue;
+      if (isKnownUnplayable(t.trackId) || isBlocklisted(t.trackId)) continue;
+      results.push(t);
+      excluded.add(t.trackId);
+      if (t.id) excluded.add(t.id);
+    }
+    if (results.length >= n) return results;
+
+    // Fill from discover/hot pool with same filter as nextTrack/predictNextTrack.
+    const allAvailable = state.discoverTracks.length > 0 ? state.discoverTracks
+      : state.hotTracks.length > 0 ? state.hotTracks
+      : TRACKS;
+    for (const t of allAvailable) {
+      if (results.length >= n) break;
+      if (!t.trackId) continue;
+      if (excluded.has(t.trackId) || excluded.has(t.id)) continue;
+      if (isKnownUnplayable(t.trackId) || isBlocklisted(t.trackId)) continue;
+      results.push(t);
+      excluded.add(t.trackId);
+      if (t.id) excluded.add(t.id);
+    }
+
+    return results;
   },
 
   // View Mode Actions

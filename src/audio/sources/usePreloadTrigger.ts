@@ -26,13 +26,15 @@ interface UsePreloadTriggerParams {
   queue: { track: Track | null }[];
   checkCache: (trackId: string) => Promise<string | null>;
   predictNextTrack: () => Track | null;
+  /** v214 — N-deep upcoming predictor. Used as discover-pool fallback when queue is thin. */
+  predictUpcoming: (n?: number) => Track[];
   // Kept in sync with the effect firing — some other paths historically
   // read this flag. Future phase can retire it entirely.
   hasTriggeredPreloadRef: RefObject<boolean>;
 }
 
 export function usePreloadTrigger(params: UsePreloadTriggerParams) {
-  const { currentTrack, queue, checkCache, predictNextTrack, hasTriggeredPreloadRef } = params;
+  const { currentTrack, queue, checkCache, predictNextTrack, predictUpcoming, hasTriggeredPreloadRef } = params;
 
   // Per-trackId dedup — the one ref that survives every React effect race.
   const preloadedForTrackIdRef = useRef<string | null>(null);
@@ -43,7 +45,13 @@ export function usePreloadTrigger(params: UsePreloadTriggerParams) {
     preloadedForTrackIdRef.current = currentTrack.trackId;
     hasTriggeredPreloadRef.current = false;
 
-    // Gather upcoming: queue first, then prediction to fill.
+    // Gather upcoming: queue first, then N-deep prediction to fill.
+    // v214 — deep predict. Previously this fell back to ONE predictNextTrack()
+    // call, so if queue was empty we only preloaded 1 track ahead. If the user
+    // skipped rapidly, the cold path hit every other skip. predictUpcoming(3)
+    // returns up to 3 non-duplicate candidates from the discover pool using
+    // the same filter as nextTrack, so by the time we pick [0] to play,
+    // [1] and [2] are already warming in IDB.
     const upcoming: Track[] = [];
     const seen = new Set<string>();
     for (const qi of queue) {
@@ -54,9 +62,14 @@ export function usePreloadTrigger(params: UsePreloadTriggerParams) {
       }
     }
     if (upcoming.length < 3) {
-      const predicted = predictNextTrack();
-      if (predicted?.trackId && !seen.has(predicted.trackId)) {
-        upcoming.push(predicted);
+      const needed = 3 - upcoming.length;
+      const predicted = predictUpcoming(needed);
+      for (const t of predicted) {
+        if (t.trackId && !seen.has(t.trackId)) {
+          upcoming.push(t);
+          seen.add(t.trackId);
+          if (upcoming.length >= 3) break;
+        }
       }
     }
     if (upcoming.length === 0) {
@@ -83,7 +96,7 @@ export function usePreloadTrigger(params: UsePreloadTriggerParams) {
       timeoutIds.push(tid);
     });
     return () => timeoutIds.forEach(clearTimeout);
-  }, [currentTrack?.trackId, queue, checkCache, predictNextTrack, hasTriggeredPreloadRef]);
+  }, [currentTrack?.trackId, queue, checkCache, predictNextTrack, predictUpcoming, hasTriggeredPreloadRef]);
 
   // Cancel any in-flight preloads on track change. Separate effect so its
   // cleanup fires BEFORE the new preload effect schedules fresh ones.

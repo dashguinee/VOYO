@@ -56,6 +56,25 @@ const MAX_CONCURRENT_FFMPEG = 6;
 // polls the cache path and serves from there once ready.
 const activeJobs = new Map();
 
+// v2.1 — Edge worker circuit breaker. When the Cloudflare worker returns
+// 502 repeatedly (YouTube bot-checking CF's IPs), stop wasting 1-2s per
+// request waiting for it to fail. After 3 consecutive failures, skip
+// the edge path entirely for 60s and go straight to yt-dlp.
+const EDGE_CIRCUIT_THRESHOLD = 3;
+const EDGE_CIRCUIT_COOLDOWN_MS = 60_000;
+let edgeConsecutiveFailures = 0;
+let edgeCircuitOpenUntil = 0;
+function isEdgeCircuitOpen() { return Date.now() < edgeCircuitOpenUntil; }
+function recordEdgeFailure() {
+  edgeConsecutiveFailures++;
+  if (edgeConsecutiveFailures >= EDGE_CIRCUIT_THRESHOLD) {
+    edgeCircuitOpenUntil = Date.now() + EDGE_CIRCUIT_COOLDOWN_MS;
+    edgeConsecutiveFailures = 0;
+    console.log(`[VOYO] Edge circuit OPEN for ${EDGE_CIRCUIT_COOLDOWN_MS/1000}s`);
+  }
+}
+function recordEdgeSuccess() { edgeConsecutiveFailures = 0; edgeCircuitOpenUntil = 0; }
+
 const ssl = {
   key: fs.readFileSync("/etc/letsencrypt/live/stream.zionsynapse.online/privkey.pem"),
   cert: fs.readFileSync("/etc/letsencrypt/live/stream.zionsynapse.online/fullchain.pem"),
@@ -202,10 +221,12 @@ async function handleAudio(req, res, trackId, quality) {
           }
         } catch {}
       }
-      if (Date.now() - waitStart > 30_000) {
+      if (Date.now() - waitStart > 120_000) {
+        // v2.1 — bumped from 30s to 120s to cover full-track transcodes.
+        // A 4-5 minute song can take 60-90s to fully transcode with
+        // two-pass loudnorm, so the .opus rename lands well after 30s.
+        // 120s covers the vast majority of real tracks.
         clearInterval(poll);
-        // Extraction took too long — fall back to R2 where the live
-        // extraction will land, or 503 if neither route resolved.
         const r2Url = `${R2_BASE}/audio/${trackId}?q=${quality}`;
         res.writeHead(302, { Location: r2Url });
         res.end();
@@ -353,40 +374,67 @@ async function handleAudio(req, res, trackId, quality) {
 
 /**
  * Opens a streaming source for a trackId.
- * Primary: Cloudflare Worker /extract/{id} — returns audio bytes piped
- *   through Cloudflare (the worker fetches from googlevideo with its own
- *   IP, we receive bytes on the worker's connection — no IP-lock issue).
- * Fallback: yt-dlp-safe on VPS — returns a googlevideo URL signed for the
- *   VPS IP, then we https.get that URL directly.
  *
- * Resolves with a Readable stream. Rejects on infrastructure error.
- * Resolves null only if yt-dlp succeeds but returns no URL.
+ * v2.1 — Edge + yt-dlp race in parallel (Promise.any) instead of sequential.
+ * When both paths are healthy, whichever resolves first wins. When edge is
+ * degraded, circuit-breaker skips it entirely so we don't wait 1-2s for it
+ * to fail before even starting yt-dlp.
+ *
+ * Edge: Cloudflare Worker /extract/{id} streams bytes back through CF.
+ * yt-dlp: VPS-side wrapper reads from persistent Chrome cookies, returns
+ *   a googlevideo URL signed for the VPS IP, we open it with https.get.
+ *
+ * Resolves with a Readable stream. Rejects only if BOTH paths fail.
+ * Resolves null if yt-dlp returns no URL (track genuinely unavailable).
+ *
+ * Trade-off: when edge wins, yt-dlp may still be mid-flight in the
+ * background. We accept the wasted work — yt-dlp exits on its own
+ * schedule and the slot self-frees. Alternative (AbortController chain)
+ * added non-trivial complexity for ~1-2s of CPU savings per cold miss.
  */
 function openUpstream(trackId) {
+  const candidates = [];
+
+  if (!isEdgeCircuitOpen()) {
+    candidates.push(openUpstreamViaEdge(trackId));
+  } else {
+    console.log(`[VOYO] Edge circuit open, skipping edge: ${trackId}`);
+  }
+  candidates.push(openUpstreamViaYtdlp(trackId));
+
+  // Promise.any — first success wins; only rejects if ALL candidates reject.
+  // Filter nulls (yt-dlp returned no URL) as successful-but-unavailable.
+  return Promise.any(candidates).then((stream) => {
+    if (!stream) throw new Error("Track not available");
+    return stream;
+  });
+}
+
+function openUpstreamViaEdge(trackId) {
   return new Promise((resolve, reject) => {
     const edgeUrl = `${EDGE_EXTRACT}/${trackId}`;
     console.log(`[VOYO] Opening upstream via edge worker: ${trackId}`);
-
-    const edgeReq = https.get(edgeUrl, { timeout: 30_000 }, (edgeRes) => {
+    const edgeReq = https.get(edgeUrl, { timeout: 15_000 }, (edgeRes) => {
       if (edgeRes.statusCode === 200 || edgeRes.statusCode === 206) {
+        recordEdgeSuccess();
         resolve(edgeRes);
         return;
       }
-      // Edge failed — drain and fall through to yt-dlp.
       edgeRes.resume();
-      console.log(`[VOYO] Edge ${edgeRes.statusCode}, trying yt-dlp`);
-      openUpstreamViaYtdlp(trackId).then(resolve).catch(reject);
+      console.log(`[VOYO] Edge ${edgeRes.statusCode}: ${trackId}`);
+      recordEdgeFailure();
+      reject(new Error(`Edge returned ${edgeRes.statusCode}`));
     });
-
     edgeReq.on("error", (e) => {
-      console.log(`[VOYO] Edge connection error (${e.message}), trying yt-dlp`);
-      openUpstreamViaYtdlp(trackId).then(resolve).catch(reject);
+      console.log(`[VOYO] Edge err (${e.message}): ${trackId}`);
+      recordEdgeFailure();
+      reject(e);
     });
-
     edgeReq.on("timeout", () => {
       edgeReq.destroy();
-      console.log(`[VOYO] Edge timeout, trying yt-dlp`);
-      openUpstreamViaYtdlp(trackId).then(resolve).catch(reject);
+      console.log(`[VOYO] Edge timeout: ${trackId}`);
+      recordEdgeFailure();
+      reject(new Error("Edge timeout"));
     });
   });
 }

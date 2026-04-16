@@ -1,0 +1,104 @@
+#!/bin/bash
+# yt-dlp-safe v3 — persistent-browser primary, file-cookies fallback.
+#
+# Pipeline per request:
+#   1. Check 5-min negative cache — exit fast on known-dead IDs.
+#   2. PRIMARY: try each browser profile × each player_client.
+#      Browser cookies self-refresh via Chrome's live session — no
+#      manual re-ship needed as long as Chrome stays running.
+#   3. FALLBACK: if all browsers fail (or none configured), rotate
+#      through /opt/voyo/cookies-00N.txt as before. This keeps us
+#      running if Chrome ever gets force-logged-out.
+#   4. First success exits 0. All failures → negative cache.
+
+shopt -s nullglob
+NEG_DIR=/tmp/voyo-yt-neg
+mkdir -p "$NEG_DIR" 2>/dev/null
+chmod 700 "$NEG_DIR" 2>/dev/null
+
+# Extract videoId from args (last arg typically https://...v=ID or just ID)
+VIDEO_ID=""
+for a in "$@"; do
+  if [[ "$a" =~ v=([A-Za-z0-9_-]{11}) ]]; then VIDEO_ID="${BASH_REMATCH[1]}"; fi
+  if [[ "$a" =~ ^[A-Za-z0-9_-]{11}$ ]]; then VIDEO_ID="$a"; fi
+done
+
+# Negative cache check (5 min TTL) — stops dead IDs burning retries
+if [ -n "$VIDEO_ID" ]; then
+  NEG_FILE="$NEG_DIR/$VIDEO_ID.dead"
+  if [ -f "$NEG_FILE" ]; then
+    AGE=$(( $(date +%s) - $(stat -c %Y "$NEG_FILE" 2>/dev/null || echo 0) ))
+    if [ "$AGE" -lt 300 ]; then
+      echo "yt-dlp-safe: negative-cached for ${AGE}s ($VIDEO_ID)" >&2
+      exit 1
+    fi
+    rm -f "$NEG_FILE"
+  fi
+fi
+
+# Player client priority — tv_embedded unlocks many age-gated tracks
+CLIENTS=("tv_embedded" "ios" "web_safari")
+
+# Persistent-browser profiles — primary cookie source (self-refreshing)
+BROWSER_PROFILES=(/opt/voyo/chrome-profile-[0-9][0-9][0-9])
+
+# File-based cookies — emergency fallback (drift-prone, manual refresh)
+MASTERS=(/opt/voyo/cookies-[0-9][0-9][0-9].txt)
+[ ${#MASTERS[@]} -eq 0 ] && MASTERS=(/opt/voyo/cookies.txt)
+
+# Shuffle both pools for account rotation
+for ((i=${#BROWSER_PROFILES[@]}-1; i>0; i--)); do
+  j=$((RANDOM % (i+1))); tmp=${BROWSER_PROFILES[i]}; BROWSER_PROFILES[i]=${BROWSER_PROFILES[j]}; BROWSER_PROFILES[j]=$tmp
+done
+for ((i=${#MASTERS[@]}-1; i>0; i--)); do
+  j=$((RANDOM % (i+1))); tmp=${MASTERS[i]}; MASTERS[i]=${MASTERS[j]}; MASTERS[j]=$tmp
+done
+
+LAST_OUT=""
+LAST_RC=1
+
+# PRIMARY: browser-cookies path
+for PROFILE in "${BROWSER_PROFILES[@]}"; do
+  [ -d "$PROFILE" ] || continue
+  for CLIENT in "${CLIENTS[@]}"; do
+    LAST_OUT=$(/usr/local/bin/yt-dlp \
+      --cookies-from-browser "chrome:$PROFILE" \
+      --extractor-args "youtube:player_client=$CLIENT" \
+      "$@" 2>&1)
+    LAST_RC=$?
+    if [ $LAST_RC -eq 0 ]; then
+      echo "$LAST_OUT"
+      exit 0
+    fi
+    # Cookie/auth issue → next profile (skip remaining clients)
+    if echo "$LAST_OUT" | grep -qE "Sign in to confirm|cookies are no longer valid|cookies.*not valid"; then
+      break
+    fi
+  done
+done
+
+# FALLBACK: file-cookies path (kept during migration; Chrome is authoritative)
+for MASTER in "${MASTERS[@]}"; do
+  [ -f "$MASTER" ] || continue
+  TMP=$(mktemp /tmp/ytc.XXXXXX); chmod 600 "$TMP"; cp "$MASTER" "$TMP"
+  for CLIENT in "${CLIENTS[@]}"; do
+    LAST_OUT=$(/usr/local/bin/yt-dlp --cookies "$TMP" --extractor-args "youtube:player_client=$CLIENT" "$@" 2>&1)
+    LAST_RC=$?
+    if [ $LAST_RC -eq 0 ]; then
+      rm -f "$TMP"
+      echo "$LAST_OUT"
+      exit 0
+    fi
+    if echo "$LAST_OUT" | grep -qE "Sign in to confirm|cookies are no longer valid|cookies.*not valid"; then
+      break
+    fi
+  done
+  rm -f "$TMP"
+done
+
+# All combinations exhausted — write to negative cache
+if [ -n "$VIDEO_ID" ]; then
+  touch "$NEG_DIR/$VIDEO_ID.dead" 2>/dev/null
+fi
+echo "$LAST_OUT" >&2
+exit $LAST_RC

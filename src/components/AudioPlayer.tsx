@@ -249,6 +249,7 @@ export const AudioPlayer = () => {
   const togglePlay = usePlayerStore(s => s.togglePlay);
   const nextTrack = usePlayerStore(s => s.nextTrack);
   const predictNextTrack = usePlayerStore(s => s.predictNextTrack);
+  const predictUpcoming = usePlayerStore(s => s.predictUpcoming);
   const setBufferHealth = usePlayerStore(s => s.setBufferHealth);
   const setPlaybackSource = usePlayerStore(s => s.setPlaybackSource);
 
@@ -379,7 +380,7 @@ export const AudioPlayer = () => {
   // PRELOAD: Start preloading next 2-3 tracks IMMEDIATELY when track starts (like Spotify)
   // Major platforms don't wait - they start buffering upcoming tracks right away
   // Preload trigger + cleanup live in one module.
-  usePreloadTrigger({ currentTrack, queue, checkCache, predictNextTrack, hasTriggeredPreloadRef });
+  usePreloadTrigger({ currentTrack, queue, checkCache, predictNextTrack, predictUpcoming, hasTriggeredPreloadRef });
 
   useWakeLock(isPlaying);
 
@@ -619,19 +620,23 @@ export const AudioPlayer = () => {
       //
       // Stale guard ensures a late fire from a superseded loadTrack doesn't
       // skip the current playing track. Pause guard respects user intent.
+      // v214 — bumped FG watchdog 8s → 12s. Cold-path extraction on the
+      // VPS takes 5–7s with parallel edge+yt-dlp (proxy v2.1). Adding a
+      // few seconds of headroom absorbs PoToken-cold and network-hiccup
+      // cases that used to prematurely skip a healthy-but-slow load.
       clearLoadWatchdog();
       loadWatchdogRef.current = setTimeout(() => {
         loadWatchdogRef.current = null;
         if (isStale()) return;
         const store = usePlayerStore.getState();
         if (!store.isPlaying) return;
-        trace('watchdog_fire', trackId, { timer: 'fg-8s', hidden: document.hidden });
-        devWarn(`[VOYO] Load watchdog fired for ${trackId} — 8s without playback, skipping`);
-        { const t = usePlayerStore.getState().currentTrack; logPlaybackEvent({ event_type: 'skip_auto', track_id: trackId, track_title: t?.title, track_artist: t?.artist, error_code: 'load_watchdog', meta: { timer: 'fg-8s' } }); }
+        trace('watchdog_fire', trackId, { timer: 'fg-12s', hidden: document.hidden });
+        devWarn(`[VOYO] Load watchdog fired for ${trackId} — 12s without playback, skipping`);
+        { const t = usePlayerStore.getState().currentTrack; logPlaybackEvent({ event_type: 'skip_auto', track_id: trackId, track_title: t?.title, track_artist: t?.artist, error_code: 'load_watchdog', meta: { timer: 'fg-12s' } }); }
         isLoadingTrackRef.current = false;
         trace('next_call', trackId, { from: 'watchdog_fg' });
         nextTrack();
-      }, 8000);
+      }, 12000);
       // BACKGROUND: setTimeout is throttled to 1/min. MessageChannel is NOT
       // throttled, so we use it as a polling pump — but we MUST gate on a
       // wall-clock elapsed time. The old `ticks < 500` was iteration-only
@@ -660,14 +665,15 @@ export const AudioPlayer = () => {
             return;
           }
           const elapsed = Date.now() - startMs;
-          if (elapsed < 5000) { mc.port2.postMessage(null); return; }
+          // v214 — bumped BG watchdog 5s → 8s to match the FG bump.
+          if (elapsed < 8000) { mc.port2.postMessage(null); return; }
           // Time elapsed — close, re-check guards, fire.
           try { mc.port1.close(); } catch {}
           bgWatchdogPortRef.current = null;
           if (isStale() || !loadWatchdogRef.current) return;
           const store = usePlayerStore.getState();
           if (!store.isPlaying) return;
-          trace('watchdog_fire', trackId, { timer: 'bg-5s', hidden: document.hidden, elapsedMs: elapsed });
+          trace('watchdog_fire', trackId, { timer: 'bg-8s', hidden: document.hidden, elapsedMs: elapsed });
           devWarn(`[VOYO] Load watchdog (bg) fired for ${trackId} — ${elapsed}ms, skipping`);
           clearLoadWatchdog();
           isLoadingTrackRef.current = false;
