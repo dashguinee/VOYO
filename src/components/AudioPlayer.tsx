@@ -181,21 +181,30 @@ export const AudioPlayer = () => {
       });
     }
     if (e.name === 'NotAllowedError') {
-      // Autoplay blocked by browser (no user gesture). Set pending flag
-      // so the FIRST user tap anywhere on the app resumes playback.
-      // The track is already loaded + seeked to position — one tap = instant resume.
-      usePlayerStore.getState().setIsPlaying(false);
       isLoadingTrackRef.current = false;
+
+      if (document.hidden) {
+        // BG NotAllowedError: OS took audio focus (lock screen, call, notification).
+        // DO NOT set isPlaying=false — that kills the heartbeat MC → no more
+        // gain rescues, no paused-kick, silence forever. Instead re-engage
+        // silent WAV to hold the audio session alive; the heartbeat will
+        // re-kick the real track every 4s. When the user returns to FG the
+        // visibility handler kicks play() with full gesture context.
+        engageSilentWav('play_rejected_bg');
+        trace('play_failure_bg_silent_wav', usePlayerStore.getState().currentTrack?.trackId, { err: 'NotAllowedError' });
+        devLog('[VOYO] BG play() NotAllowedError — holding session via silent WAV');
+        return;
+      }
+
+      // FG: autoplay blocked (no user gesture). Wait for first tap.
+      usePlayerStore.getState().setIsPlaying(false);
       pendingAutoResumeRef.current = true;
 
-      // Install a one-time gesture listener on document to resume.
-      // Fires on the first touch/click, then removes itself.
       const resumeOnGesture = () => {
         if (!pendingAutoResumeRef.current) return;
         pendingAutoResumeRef.current = false;
         document.removeEventListener('touchstart', resumeOnGesture);
         document.removeEventListener('click', resumeOnGesture);
-        // The user just tapped — we have gesture authority. Resume.
         if (audioRef.current && audioRef.current.paused && audioRef.current.src) {
           audioContextRef.current?.resume().catch(() => {});
           fadeInMasterGain(80);
@@ -856,7 +865,10 @@ export const AudioPlayer = () => {
         if (shouldAutoResume) shouldAutoResumeRef.current = false;
 
         if ((shouldPlay || shouldAutoResume) && (audioRef.current.paused || document.hidden)) {
-          audioContextRef.current?.state === 'suspended' && audioContextRef.current.resume().catch(() => {});
+          const ctxState = audioContextRef.current?.state;
+          if (ctxState === 'suspended' || (ctxState as string) === 'interrupted') {
+            audioContextRef.current!.resume().catch(() => {});
+          }
           fadeInMasterGain(shouldAutoResume ? 200 : 80);
           trace('play_call', trackId, { path, hidden: document.hidden });
           audioRef.current.play().then(() => {

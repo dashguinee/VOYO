@@ -183,13 +183,22 @@ export function useBgEngine(params: UseBgEngineParams): BgEngineApi {
       // Returning from BG. Clear the flag + re-kick if needed.
       isTransitioningToBackgroundRef.current = false;
 
+      // Always resume AudioContext on FG return — even if a load is in
+      // flight. A suspended/interrupted context during load means the
+      // canplay gain ramp fires against a frozen clock. The element kick
+      // (play()) is still guarded below so it doesn't race canplay.
+      const ctx = audioContextRef.current;
+      if (ctx && (ctx.state === 'suspended' || (ctx.state as string) === 'interrupted')) {
+        ctx.resume().catch(() => {});
+        devLog('🔄 [BG] AudioContext resumed on FG return');
+      }
+
       const { isPlaying: sp } = usePlayerStore.getState();
-      // Don't re-kick if a load is in flight — its canplay handler will
-      // call play() once the new src is ready. Double-play here races
-      // with that and causes duplicate play_success events.
+      // Don't re-kick the element if a load is in flight — its canplay
+      // handler will call play() once the new src is ready. Double-play
+      // here races with that and causes duplicate play_success events.
       if (isLoadingTrackRef.current) return;
       if (sp && audioRef.current?.paused && audioRef.current.src) {
-        audioContextRef.current?.resume().catch(() => {});
         audioRef.current.play().catch(() => {});
         devLog('🔄 [BG] Re-kicked element on foreground return');
       }
