@@ -24,8 +24,14 @@ import { checkR2Cache } from './api';
 import { devLog, devWarn } from '../utils/logger';
 import { trace } from './telemetry';
 
-// Edge Worker for extraction (FREE - replaces Fly.io)
-const EDGE_WORKER_URL = 'https://voyo-edge.dash-webtv.workers.dev';
+// VPS audio proxy — authoritative cold-extraction route.
+// Edge Worker dropped: CF datacenter IPs get bot-detected by YouTube.
+const VPS_AUDIO_URL = 'https://stream.zionsynapse.online:8443';
+
+// Only 1 concurrent VPS cold preload — each uses a FFmpeg slot on the VPS.
+// Tracks[1] and [2] in the preload queue are often reshuffled before being
+// played; warming them all simultaneously wastes slots.
+let vpsPreloadInFlight = 0;
 
 // Decode VOYO ID to YouTube ID
 function decodeVoyoId(voyoId: string): string {
@@ -204,56 +210,32 @@ export async function preloadNextTrack(
       return preloadEntry;
     }
 
-    // STEP 3: Get YouTube direct URL and preload
-    devLog('🔮 [Preload] Not in cache/R2, getting YouTube stream URL');
+    // STEP 3: Cold track — preload via VPS streaming extraction.
+    // Edge Worker /stream path dropped: CF datacenter IPs get bot-detected
+    // by YouTube, so the endpoint returns 502 on most cold tracks. VPS yt-dlp
+    // is the authoritative cold-extraction route.
+    devLog('🔮 [Preload] Not in cache/R2, attempting VPS cold preload');
 
+    if (vpsPreloadInFlight > 0) {
+      devLog('🔮 [Preload] VPS preload cap reached — skipping cold preload');
+      state.isPreloading = false;
+      trackAbortControllers.delete(normalizedId);
+      return null;
+    }
+
+    vpsPreloadInFlight++;
     try {
-      // Pass the AbortSignal so rapid track-skips actually CANCEL the in-flight
-      // fetch instead of leaving zombie requests draining the connection pool.
-      // Without this, ~5-10 rapid skips fill the browser's per-host connection
-      // limit and playback halts entirely until GC + TCP timeouts recover
-      // (~60s of "rest" — exactly the symptom we were chasing).
-      //
-      // Also wrap with a 5s hard timeout: if the Edge Worker is slow/down, the
-      // fetch could hang indefinitely otherwise (the abort signal only fires
-      // when the user skips tracks). Combine our per-track signal with a
-      // timeout signal so either path cancels.
-      // AbortSignal.any combines our per-track abort with a 5s timeout — either
-      // one fires and the fetch unwinds. AbortSignal.any is supported in Chrome
-      // 116+, Firefox 124+, Safari 17.4+ (same baseline as AbortSignal.timeout
-      // already used by api.ts).
-      const combinedSignal = AbortSignal.any([signal, AbortSignal.timeout(5000)]);
-      const streamResponse = await fetch(
-        `${EDGE_WORKER_URL}/stream?v=${normalizedId}`,
-        { signal: combinedSignal },
-      );
-
-      if (signal.aborted) {
-        trackAbortControllers.delete(normalizedId);
-        return null;
-      }
-
-      const streamData = await streamResponse.json();
-
-      if (signal.aborted) {
-        trackAbortControllers.delete(normalizedId);
-        return null;
-      }
-
-      if (!streamData.url) {
-        devWarn('🔮 [Preload] No stream URL available for:', normalizedId);
-        state.isPreloading = false;
-        trackAbortControllers.delete(normalizedId);
-        return null;
-      }
-
-      const audioEl = createPreloadAudioElement(streamData.url, signal);
+      const vpsUrl = `${VPS_AUDIO_URL}/voyo/audio/${normalizedId}?quality=high`;
+      const audioEl = createPreloadAudioElement(vpsUrl, signal);
 
       const preloadEntry: PreloadedTrack = {
         trackId,
         normalizedId,
-        source: 'r2', // Treat as r2 for consistent handling
-        url: streamData.url,
+        // 'r2' label so sourceResolver preload_check accepts it (checks for
+        // source === 'cached' || source === 'r2'). The actual bytes come from
+        // VPS but the contract is identical: url + audioElement already primed.
+        source: 'r2',
+        url: vpsUrl,
         audioElement: audioEl,
         isReady: false,
         preloadedAt: Date.now(),
@@ -263,29 +245,34 @@ export async function preloadNextTrack(
       state.preloadedTracks.set(normalizedId, preloadEntry);
       evictOldPreloads();
 
-      await waitForAudioReady(audioEl, signal, 8000);
+      // VPS cold extraction (yt-dlp + FFmpeg) takes 10-20s TTFB on first
+      // request. Give the audio element enough time to receive the OGG header
+      // and trigger canplaythrough. Resolves on partial buffer (good enough).
+      await waitForAudioReady(audioEl, signal, 20000);
 
       if (signal.aborted) {
         audioEl.src = '';
         audioEl.pause();
         state.preloadedTracks.delete(normalizedId);
         trackAbortControllers.delete(normalizedId);
-        trace('preload_abort', normalizedId, { source: 'edge', stage: 'after_wait' });
+        trace('preload_abort', normalizedId, { source: 'vps', stage: 'after_wait' });
         return null;
       }
 
       preloadEntry.isReady = true;
       state.isPreloading = false;
       trackAbortControllers.delete(normalizedId);
-      trace('preload_complete', normalizedId, { source: 'edge' });
-      devLog('🔮 [Preload] ✅ YouTube direct stream preload complete');
+      trace('preload_complete', normalizedId, { source: 'vps' });
+      devLog('🔮 [Preload] ✅ VPS cold stream preload complete');
       return preloadEntry;
     } catch (extractError) {
-      devWarn('🔮 [Preload] Stream preload error:', extractError);
+      devWarn('🔮 [Preload] VPS preload error:', extractError);
       state.isPreloading = false;
       trackAbortControllers.delete(normalizedId);
-      trace('preload_fail', normalizedId, { source: 'edge', err: (extractError as Error)?.name, msg: ((extractError as Error)?.message || '').slice(0, 80) });
+      trace('preload_fail', normalizedId, { source: 'vps', err: (extractError as Error)?.name, msg: ((extractError as Error)?.message || '').slice(0, 80) });
       return null;
+    } finally {
+      vpsPreloadInFlight = Math.max(0, vpsPreloadInFlight - 1);
     }
 
   } catch (error) {

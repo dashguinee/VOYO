@@ -17,7 +17,7 @@
 
 import { useEffect, useRef } from 'react';
 import { usePlayerStore } from '../../store/playerStore';
-import { preloadNextTrack, cancelPreload } from '../../services/preloadManager';
+import { preloadNextTrack } from '../../services/preloadManager';
 import { devLog, devWarn } from '../../utils/logger';
 import type { Track } from '../../types';
 
@@ -72,10 +72,10 @@ export function usePreloadTrigger(params: UsePreloadTriggerParams) {
       return;
     }
 
-    // Stagger: 1.5/6/12s in FG. In BG, fire first preload immediately —
-    // setTimeout is throttled to 1/min, so a 1.5s delay becomes 60s and
-    // the next track isn't ready by the time the current one ends.
-    const delays = document.hidden ? [0, 2000, 5000] : [1500, 6000, 12000];
+    // Stagger: 300ms/6s/12s in FG. Fire early (300ms not 1.5s) to maximise
+    // VPS extraction lead time — every extra second matters on cold tracks.
+    // In BG, fire first preload immediately (setTimeout throttled to 1/min).
+    const delays = document.hidden ? [0, 2000, 5000] : [300, 6000, 12000];
     const timeoutIds: ReturnType<typeof setTimeout>[] = [];
     upcoming.forEach((track, index) => {
       const delay = delays[index] || delays[delays.length - 1];
@@ -92,10 +92,10 @@ export function usePreloadTrigger(params: UsePreloadTriggerParams) {
     return () => timeoutIds.forEach(clearTimeout);
   }, [currentTrack?.trackId, queue, checkCache, predictUpcoming]);
 
-  // Cancel any in-flight preloads on track change. Separate effect so its
-  // cleanup fires BEFORE the new preload effect schedules fresh ones.
-  useEffect(() => {
-    return () => { cancelPreload(); };
-  }, [currentTrack?.trackId]);
+  // NOTE: cancelPreload() on track-change removed. It was killing the very
+  // preload about to be consumed by the new track (N→N+1 transition aborted
+  // N+1's in-flight VPS preload). Preloads now persist until consumed or
+  // evicted by evictOldPreloads() (MAX=3 tracks). The per-track dedup and
+  // vpsPreloadInFlight cap prevent runaway concurrent extractions.
 }
 

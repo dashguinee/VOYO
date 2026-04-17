@@ -98,8 +98,11 @@ export async function resolveSource(params: ResolveParams): Promise<ResolvedSour
     };
   }
 
-  // (4+5) VPS + Edge race, up to 3 attempts with 2s gaps.
-  // Most tracks resolve on attempt 1 if they're going to resolve at all.
+  // (4) VPS direct stream — up to 3 attempts with 2s gaps.
+  // Edge worker extraction (/stream?v=) removed: YouTube bot-detects all
+  // CF datacenter IPs; the endpoint always 502s, wasting 5s per attempt.
+  // R2-cached tracks are already handled in step 3 above (via checkR2Cache).
+  // VPS yt-dlp path is the authoritative cold-extraction route.
   const MAX_RETRIES = 3;
   let firstFailLogged = false;
 
@@ -109,9 +112,7 @@ export async function resolveSource(params: ResolveParams): Promise<ResolvedSour
     const retryStart = performance.now();
     let resolved: ResolvedSource | null = null;
 
-    // Each .then returns early if isStale or resolved. First success wins;
-    // the other in-flight fetch's response is ignored.
-    const vpsP = fetch(`${VPS_AUDIO_URL}/voyo/audio/${trackId}?quality=high`, { signal: AbortSignal.timeout(5000) })
+    const vpsP = fetch(`${VPS_AUDIO_URL}/voyo/audio/${trackId}?quality=high`, { signal: AbortSignal.timeout(12000) })
       .then(async (res) => {
         if (resolved || isStale()) return;
         if (res.ok || res.redirected) {
@@ -124,17 +125,7 @@ export async function resolveSource(params: ResolveParams): Promise<ResolvedSour
         }
       }).catch(() => {});
 
-    const edgeP = fetch(`${EDGE_WORKER_URL}/stream?v=${trackId}`, { signal: AbortSignal.timeout(5000) })
-      .then(async (res) => {
-        if (resolved || isStale()) return;
-        const data = await res.json();
-        if (resolved || isStale()) return;
-        if (data.url) {
-          resolved = { url: data.url, source: 'edge', isBlob: false };
-        }
-      }).catch(() => {});
-
-    await Promise.allSettled([vpsP, edgeP]);
+    await Promise.allSettled([vpsP]);
 
     if (resolved && !isStale()) {
       logPlaybackEvent({

@@ -553,9 +553,14 @@ export const AudioPlayer = () => {
         audioRef.current.loop = false;
 
         // isWarm hoisted above — warm = preload cache hit (0ms swap),
-        // cold = VPS extraction path (3s audible fade while extraction runs).
-        const fadeDurationSec = isWarm ? 0.008 : 3.0;
+        // cold = VPS extraction path (fade to ~25% while extraction runs so
+        // there is NO silence gap — old track stays audible until resolved).
+        const fadeDurationSec = isWarm ? 0.008 : 1.5;
         const waitMs = isWarm ? 10 : 0; // cold path: don't await — resolveSource runs during the fade
+        // Cold: target 25% (–12 dB) so the outgoing track remains audible
+        // during VPS extraction (~10–15 s). pauseOutgoing() will snap to 0
+        // the moment the next source resolves.
+        const fadeTargetGain = isWarm ? 0.0001 : 0.25;
 
         if (gainNodeRef.current && audioContextRef.current) {
           const ctx = audioContextRef.current;
@@ -563,7 +568,7 @@ export const AudioPlayer = () => {
           const p = gainNodeRef.current.gain;
           p.cancelScheduledValues(now);
           p.setValueAtTime(p.value, now);
-          p.linearRampToValueAtTime(0.0001, now + fadeDurationSec);
+          p.linearRampToValueAtTime(fadeTargetGain, now + fadeDurationSec);
         }
         armGainWatchdog('mute-before-load');
         const audioToFade = audioRef.current;
@@ -589,15 +594,22 @@ export const AudioPlayer = () => {
         // in parallel below. pauseOutgoing() called after resolve returns.
       }
 
-      // Helper: snap gain to 0 + pause outgoing audio. Called after resolveSource
-      // returns on cold paths so the swap is click-free regardless of where the
-      // 3s fade is at.
+      // Helper: snap gain to silence + pause outgoing audio synchronously.
+      // Called after resolveSource returns on the cold foreground path.
+      // 2ms DC-block ramp prevents a speaker pop (gain may be at 0.25).
+      // Pause is SYNCHRONOUS — no setTimeout. The prior 90ms async pause was
+      // firing on the NEW track mid-buffer, occasionally halting it before
+      // canplay. Since swapSrcSafely runs immediately after, the old element
+      // is already stopping (src change resets HTMLMediaElement per spec).
       const pauseOutgoing = () => {
         if (!audioRef.current) return;
         if (gainNodeRef.current && audioContextRef.current) {
+          const ctx = audioContextRef.current;
+          const now = ctx.currentTime;
           const p = gainNodeRef.current.gain;
-          p.cancelScheduledValues(audioContextRef.current.currentTime);
-          p.setValueAtTime(0.0001, audioContextRef.current.currentTime);
+          p.cancelScheduledValues(now);
+          p.setValueAtTime(p.value, now);
+          p.linearRampToValueAtTime(0.0001, now + 0.002); // 2ms DC-block
         }
         audioRef.current.pause();
         audioRef.current.currentTime = 0;
@@ -652,7 +664,7 @@ export const AudioPlayer = () => {
       //
       // Stale guard ensures a late fire from a superseded loadTrack doesn't
       // skip the current playing track. Pause guard respects user intent.
-      // v214 — bumped FG watchdog 8s → 12s. Cold-path extraction on the
+      // v214 — bumped FG watchdog 8s → 12s. v215 → 20s. Cold-path extraction on the
       // VPS takes 5–7s with parallel edge+yt-dlp (proxy v2.1). Adding a
       // few seconds of headroom absorbs PoToken-cold and network-hiccup
       // cases that used to prematurely skip a healthy-but-slow load.
@@ -663,15 +675,15 @@ export const AudioPlayer = () => {
         if (isStale()) return;
         const store = usePlayerStore.getState();
         if (!store.isPlaying) return;
-        trace('watchdog_fire', trackId, { timer: 'fg-12s', hidden: document.hidden });
-        devWarn(`[VOYO] Load watchdog fired for ${trackId} — 12s no-progress, skipping`);
+        trace('watchdog_fire', trackId, { timer: 'fg-20s', hidden: document.hidden });
+        devWarn(`[VOYO] Load watchdog fired for ${trackId} — 20s no-progress, skipping`);
         { const t = usePlayerStore.getState().currentTrack; logPlaybackEvent({ event_type: 'skip_auto', track_id: trackId, track_title: t?.title, track_artist: t?.artist, error_code: 'load_watchdog', meta: { timer: 'fg-12s' } }); }
         isLoadingTrackRef.current = false;
         trace('next_call', trackId, { from: 'watchdog_fg' });
         nextTrack();
       };
       loadWatchdogFireFnRef.current = fireWatchdog;
-      loadWatchdogRef.current = setTimeout(fireWatchdog, 12000);
+      loadWatchdogRef.current = setTimeout(fireWatchdog, 20000);
       // BACKGROUND: setTimeout is throttled to 1/min. MessageChannel is NOT
       // throttled, so we use it as a polling pump — but we MUST gate on a
       // wall-clock elapsed time. The old `ticks < 500` was iteration-only
@@ -700,15 +712,15 @@ export const AudioPlayer = () => {
             return;
           }
           const elapsed = Date.now() - startMs;
-          // v214 — bumped BG watchdog 5s → 8s to match the FG bump.
-          if (elapsed < 8000) { mc.port2.postMessage(null); return; }
+          // v214 — bumped BG watchdog 5s → 8s; v215 → 25s to cover cold VPS extraction (yt-dlp ~10s + dedup ~1s).
+          if (elapsed < 25000) { mc.port2.postMessage(null); return; }
           // Time elapsed — close, re-check guards, fire.
           try { mc.port1.close(); } catch {}
           bgWatchdogPortRef.current = null;
           if (isStale() || !loadWatchdogRef.current) return;
           const store = usePlayerStore.getState();
           if (!store.isPlaying) return;
-          trace('watchdog_fire', trackId, { timer: 'bg-8s', hidden: document.hidden, elapsedMs: elapsed });
+          trace('watchdog_fire', trackId, { timer: 'bg-25s', hidden: document.hidden, elapsedMs: elapsed });
           devWarn(`[VOYO] Load watchdog (bg) fired for ${trackId} — ${elapsed}ms, skipping`);
           clearLoadWatchdog();
           isLoadingTrackRef.current = false;
@@ -775,7 +787,7 @@ export const AudioPlayer = () => {
         resolved.preloadedAudio.pause();
         resolved.preloadedAudio.src = '';
       }
-      isEdgeStreamRef.current = resolved.source === 'edge';
+      isEdgeStreamRef.current = resolved.source === 'edge' || resolved.source === 'vps';
       setPlaybackSource(
         (resolved.source === 'preload' || resolved.source === 'cached') ? 'cached' : 'r2'
       );
@@ -832,8 +844,10 @@ export const AudioPlayer = () => {
         if (isStale()) return;
 
         // Restore position on initial (reload) load.
-        if (isInitialLoadRef.current && savedCurrentTime > 5) {
-          audioRef.current.currentTime = savedCurrentTime;
+        if (isInitialLoadRef.current) {
+          if (savedCurrentTime > 5) {
+            audioRef.current.currentTime = savedCurrentTime;
+          }
           isInitialLoadRef.current = false;
         }
 

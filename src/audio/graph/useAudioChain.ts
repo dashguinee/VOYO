@@ -194,17 +194,15 @@ export function useAudioChain(params: UseAudioChainParams): AudioChainApi {
 
   const armGainWatchdog = useCallback((label: string, timeoutMs: number = 6000) => {
     if (watchdogTimerRef.current) clearTimeout(watchdogTimerRef.current);
+    watchdogTimerRef.current = null;
     if (watchdogMcRef.current) {
       try { watchdogMcRef.current.port1.close(); } catch {}
       watchdogMcRef.current = null;
     }
-    watchdogTimerRef.current = setTimeout(() => {
-      watchdogTimerRef.current = null;
-      rescueGain(label);
-    }, timeoutMs);
-    // BG: setTimeout throttled 1/min. MC-based backup at 3s (wall-clock
-    // via Date.now() — iteration-count was the v188 cascade bug).
     if (document.hidden) {
+      // BG: setTimeout is throttled to ~1/min by Chrome — use MC only.
+      // Prior code armed BOTH setTimeout AND MC → double rescueGain fire in BG
+      // → second call cancelled the first's ramp mid-flight → audible click.
       const startMs = Date.now();
       const mc = new MessageChannel();
       watchdogMcRef.current = mc;
@@ -216,6 +214,12 @@ export function useAudioChain(params: UseAudioChainParams): AudioChainApi {
         rescueGain(`${label}-bg`);
       };
       mc.port2.postMessage(null);
+    } else {
+      // FG: setTimeout is reliable when tab is visible.
+      watchdogTimerRef.current = setTimeout(() => {
+        watchdogTimerRef.current = null;
+        rescueGain(label);
+      }, timeoutMs);
     }
   }, [rescueGain]);
 
@@ -260,7 +264,11 @@ export function useAudioChain(params: UseAudioChainParams): AudioChainApi {
     const param = gainNodeRef.current.gain;
     const target = computeMasterTarget();
     param.cancelScheduledValues(now);
-    param.setValueAtTime(0.0001, now);
+    // Use param.value (actual current gain) not hardcoded 0.0001.
+    // If pauseOutgoing() ran and left gain mid-ramp (e.g. 0.12), starting
+    // the fade-in ramp from 0.0001 would cause an instant jump → audible pop.
+    // Starting from the real current value → smooth 3ms ramp to target.
+    param.setValueAtTime(param.value, now);
     param.linearRampToValueAtTime(target, now + 0.003);
   }, [computeMasterTarget, disarmGainWatchdog, isLoadingTrackRef]);
 

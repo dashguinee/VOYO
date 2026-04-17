@@ -298,8 +298,10 @@ export function useBgEngine(params: UseBgEngineParams): BgEngineApi {
         ) {
           try {
             const target = computeMasterTarget();
-            gain.gain.cancelScheduledValues(ctx.currentTime);
-            gain.gain.setValueAtTime(target, ctx.currentTime);
+            const now = ctx.currentTime;
+            gain.gain.cancelScheduledValues(now);
+            gain.gain.setValueAtTime(gain.gain.value, now);
+            gain.gain.linearRampToValueAtTime(target, now + 0.05); // 50ms ramp — less click than instant
             trace('gain_rescue', usePlayerStore.getState().currentTrack?.trackId, {
               prevValue: gain.gain.value,
               target,

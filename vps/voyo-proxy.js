@@ -162,6 +162,36 @@ const server = https.createServer(ssl, async (req, res) => {
 
   const url = new URL(req.url, "https://localhost");
 
+  // PoToken endpoint — CF Worker fetches this to authenticate InnerTube requests.
+  // bgutil-pot service runs at localhost:4416 and generates browser-proof tokens.
+  if (url.pathname === "/voyo/pot") {
+    const videoId = url.searchParams.get("v") || "dQw4w9WgXcQ";
+    if (!/^[A-Za-z0-9_-]{11}$/.test(videoId)) {
+      res.writeHead(400, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "invalid videoId" }));
+      return;
+    }
+    try {
+      const potRes = await fetch("http://localhost:4416/get_pot", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ videoId }),
+      });
+      if (!potRes.ok) throw new Error(`bgutil ${potRes.status}`);
+      const pot = await potRes.json();
+      res.writeHead(200, {
+        "Content-Type": "application/json",
+        "Access-Control-Allow-Origin": "*",
+        "Cache-Control": "no-store",
+      });
+      res.end(JSON.stringify({ poToken: pot.poToken, contentBinding: pot.contentBinding, expiresAt: pot.expiresAt }));
+    } catch (e) {
+      res.writeHead(503, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: `bgutil unavailable: ${e.message}` }));
+    }
+    return;
+  }
+
   if (url.pathname === "/health" || url.pathname === "/voyo/health") {
     const jobs = Object.fromEntries([...activeJobs.entries()].map(([k, v]) => [k, v.status]));
     const edgeCircuit = isEdgeCircuitOpen()
@@ -258,36 +288,84 @@ async function handleAudio(req, res, trackId, quality) {
     console.log(`[VOYO] R2 check failed, proceeding with extraction: ${e.message}`);
   }
 
-  // 3. In-flight dedup — poll the cache path, serve when the live
-  //    extraction finalizes it. Previously we polled activeJobs and
-  //    redirected to R2, but R2 upload trails the cache rename by
-  //    seconds; /var/cache is authoritative the moment .tmp → .opus.
+  // 3. In-flight dedup — stream from the growing .tmp file as FFmpeg writes
+  //    it, instead of waiting for the full .tmp → .opus rename (30-90s).
+  //    Second requester gets audio after ~3-4s (once 80KB is written) which
+  //    is the same TTFB as a cache hit. This is the "join in-progress tee"
+  //    pattern: first caller owns the pipe-tee + cache write; second caller
+  //    tail-reads from the same .tmp file.
   if (activeJobs.has(jobKey)) {
-    console.log(`[VOYO] Already extracting ${jobKey} — waiting on cache`);
-    const waitStart = Date.now();
-    const poll = setInterval(() => {
-      if (fs.existsSync(cachedPath)) {
-        try {
-          const stat = fs.statSync(cachedPath);
-          if (stat.size >= CACHE_MIN_BYTES) {
-            clearInterval(poll);
-            serveFromCache(req, res, cachedPath, stat.size);
-            return;
-          }
-        } catch {}
+    console.log(`[VOYO] Already extracting ${jobKey} — joining live .tmp stream`);
+    const tmpPath = `${cachedPath}.tmp`;
+    // Min bytes before we start streaming: ~4s of 64kbps = 32KB.
+    // Enough for OGG container header + several frames.
+    const MIN_START_BYTES = 32_000;
+    const deadline = Date.now() + 120_000;
+
+    res.writeHead(200, {
+      "Content-Type": "audio/ogg; codecs=opus",
+      "Cache-Control": "public, max-age=86400",
+      "Transfer-Encoding": "chunked",
+      "Access-Control-Allow-Origin": "*",
+    });
+
+    let clientAlive = true;
+    req.on("close", () => { clientAlive = false; });
+
+    (async () => {
+      // Phase 1: wait for .tmp to reach MIN_START_BYTES (or job completes).
+      while (clientAlive && Date.now() < deadline) {
+        if (fs.existsSync(cachedPath)) break; // rename already happened
+        try { if (fs.statSync(tmpPath).size >= MIN_START_BYTES) break; } catch {}
+        if (!activeJobs.has(jobKey) && !fs.existsSync(tmpPath) && !fs.existsSync(cachedPath)) break;
+        await new Promise(r => setTimeout(r, 200));
       }
-      if (Date.now() - waitStart > 120_000) {
-        // v2.1 — bumped from 30s to 120s to cover full-track transcodes.
-        // A 4-5 minute song can take 60-90s to fully transcode with
-        // two-pass loudnorm, so the .opus rename lands well after 30s.
-        // 120s covers the vast majority of real tracks.
-        clearInterval(poll);
-        const r2Url = `${R2_BASE}/audio/${trackId}?q=${quality}`;
-        res.writeHead(302, { Location: r2Url });
-        res.end();
+
+      if (!clientAlive) { try { res.end(); } catch {} return; }
+
+      // Phase 2: tail-stream bytes from the live file, polling for more
+      // until the .opus file appears and we've drained all bytes.
+      let offset = 0;
+      while (clientAlive && Date.now() < deadline) {
+        const livePath = fs.existsSync(cachedPath) ? cachedPath : tmpPath;
+        let size = 0;
+        try { size = fs.statSync(livePath).size; } catch {}
+
+        if (size > offset) {
+          await new Promise((resolve) => {
+            const stream = fs.createReadStream(livePath, { start: offset, end: size - 1 });
+            stream.on("data", (chunk) => {
+              if (!res.write(chunk)) {
+                stream.pause();
+                res.once("drain", () => stream.resume());
+              }
+            });
+            stream.on("end", resolve);
+            stream.on("error", (e) => {
+              // ENOENT = .tmp renamed to .opus mid-read, non-fatal.
+              if (e.code !== "ENOENT") clientAlive = false;
+              resolve(null);
+            });
+          });
+          offset = size;
+        }
+
+        // Done once we've sent all bytes from the finalized .opus file.
+        if (fs.existsSync(cachedPath)) {
+          let cacheSize = 0;
+          try { cacheSize = fs.statSync(cachedPath).size; } catch {}
+          if (offset >= cacheSize && cacheSize >= CACHE_MIN_BYTES) break;
+        }
+
+        if (!clientAlive) break;
+        // Bail if the active job is gone and no files exist — extraction failed.
+        // avoids waiting 120s for the deadline when FFmpeg was killed early.
+        if (!activeJobs.has(jobKey) && !fs.existsSync(tmpPath) && !fs.existsSync(cachedPath)) break;
+        await new Promise(r => setTimeout(r, 200));
       }
-    }, 300);
-    req.on("close", () => clearInterval(poll));
+
+      try { res.end(); } catch {}
+    })();
     return;
   }
 
@@ -588,7 +666,8 @@ function openUpstreamViaEdge(trackId) {
 
 function openUpstreamViaYtdlp(trackId) {
   return new Promise((resolve, reject) => {
-    const cmd = `/usr/local/bin/yt-dlp-safe -f "bestaudio" --get-url --no-warnings --geo-bypass "https://www.youtube.com/watch?v=${trackId}"`;
+    // bestaudio[vcodec=none] prefers audio-only DASH stream (single URL); falls back to combined.
+    const cmd = `/usr/local/bin/yt-dlp-safe -f "bestaudio[vcodec=none]/bestaudio" --get-url --no-warnings --geo-bypass "https://www.youtube.com/watch?v=${trackId}"`;
     exec(cmd, { timeout: 30_000 }, (err, stdout, stderr) => {
       const stderrStr = (stderr || "").toString();
       // Fast-fail + alert on cookie auth loss. Don't wait 180s.
@@ -601,8 +680,22 @@ function openUpstreamViaYtdlp(trackId) {
         console.error("[VOYO] yt-dlp err:", err?.message, "stderr:", stderrStr.slice(0, 200));
         return reject(new Error("Both extraction methods failed"));
       }
-      const url = (stdout || "").trim();
-      if (!url || !url.startsWith("http")) return resolve(null);
+      // yt-dlp-safe uses 2>&1 so yt-dlp's info/progress lines are mixed into stdout.
+      // Extract only lines that are valid HTTP URLs — filter out [youtube]/[info] noise.
+      const stdoutLines = (stdout || "").split('\n').map(l => l.trim()).filter(l => l.startsWith('http'));
+      if (!stdoutLines.length) {
+        console.log("[VOYO] yt-dlp no URL for " + trackId + " stdout:", (stdout || "").slice(0, 200));
+        return resolve(null);
+      }
+      // DASH formats may yield two lines: video URL first, audio URL second.
+      // We want the audio-only stream. Common audio itags: 251,250,249 (opus),
+      // 140,141,139 (m4a), 233,234,599,600 (mp4 audio).
+      const AUDIO_ITAG_RE = /[?&]itag=(25[012349]|140|141|139|233|234|599|600)(&|$)/;
+      const audioUrl = stdoutLines.find(l => AUDIO_ITAG_RE.test(l))
+        || stdoutLines.find(l => l.includes('mime=audio%2F') || l.includes('mime=audio/'))
+        || stdoutLines[stdoutLines.length - 1]; // last line: audio comes after video in DASH pairs
+      console.log("[VOYO] yt-dlp selected for " + trackId + ":", audioUrl ? audioUrl.slice(0, 100) : "none");
+      const url = audioUrl;
 
       const ytReq = https.get(url, { timeout: 30_000 }, (ytRes) => {
         if (ytRes.statusCode >= 200 && ytRes.statusCode < 300) {

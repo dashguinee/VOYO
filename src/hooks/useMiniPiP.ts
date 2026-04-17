@@ -21,6 +21,7 @@ import { useRef, useCallback, useEffect } from 'react';
 import { usePlayerStore } from '../store/playerStore';
 import { getYouTubeThumbnail } from '../data/tracks';
 import { devLog, devWarn } from '../utils/logger';
+import { pipService } from '../services/pipService';
 
 // PiP window size (card-like ratio)
 const PIP_SIZE = 320;
@@ -29,6 +30,7 @@ export function useMiniPiP() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const isActiveRef = useRef(false);
+  const hasArmedRef = useRef(false); // true once user has explicitly triggered PiP
   const mountedRef = useRef(true); // Prevents crashes after unmount
   const enteringRef = useRef(false); // Prevents visibility race
 
@@ -59,8 +61,13 @@ export function useMiniPiP() {
       const video = document.createElement('video');
       video.srcObject = stream;
       video.muted = true;
+      video.volume = 0;
       video.playsInline = true;
       video.style.display = 'none';
+      // Prevent media session / AirPlay / remote from seeing this canvas video
+      if ('disableRemotePlayback' in video) {
+        (video as HTMLVideoElement & { disableRemotePlayback: boolean }).disableRemotePlayback = true;
+      }
       document.body.appendChild(video);
       videoRef.current = video;
 
@@ -230,6 +237,7 @@ export function useMiniPiP() {
       isActiveRef.current = true;
       enteringRef.current = false;
 
+      hasArmedRef.current = true;
       devLog('[VOYO PiP] Entered mini player mode');
       return true;
     } catch (err) {
@@ -272,13 +280,36 @@ export function useMiniPiP() {
     }
   }, [currentTrack?.trackId, drawAlbumArt]);
 
-  // AUTO-PIP DISABLED — was killing background audio.
-  // video.play() + requestPictureInPicture() from a visibility handler
-  // (no user gesture) creates a competing media element that steals
-  // audio focus. The PiP request fails (NotAllowedError) but the video
-  // element stays in play state, causing the browser to pause the main
-  // audio element. MediaSession API provides lock screen controls
-  // without PiP — PiP is user-triggered only via the toggle button.
+  // AUTO-PIP: Re-enter PiP when app goes to background IF user has already
+  // interacted with PiP this session (hasArmedRef = true). This avoids the
+  // "video.play() without gesture steals audio focus" bug — video.play() is
+  // only called ONCE in enterPiP (with user gesture). On subsequent re-entries
+  // the video is already playing (muted), so requestPictureInPicture() alone
+  // is enough and doesn't compete with the audio element.
+  useEffect(() => {
+    if (!isSupported()) return;
+    const handleVisibility = () => {
+      if (!document.hidden) return; // only fire on background
+      if (!hasArmedRef.current) return; // user never interacted with PiP
+      if (isActiveRef.current || enteringRef.current) return; // already in PiP
+      if (!isPlaying) return; // don't open PiP when paused
+      if (!videoRef.current || videoRef.current.paused) return; // video not primed
+      // Re-enter PiP — video is already playing (muted), no gesture needed for requestPiP
+      videoRef.current.requestPictureInPicture().then(() => {
+        isActiveRef.current = true;
+        devLog('[VOYO PiP] Auto re-entered on app background');
+      }).catch(() => {
+        // NotAllowedError: browser blocked auto-PiP — fine, MediaSession covers it
+      });
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+  }, [isSupported, isPlaying]);
+
+  // Register with pipService so VoyoPortraitPlayer can call enterPiP without prop drilling.
+  useEffect(() => {
+    pipService.register(enterPiP, exitPiP, togglePiP);
+  }, [enterPiP, exitPiP, togglePiP]);
 
   // Cleanup — set mounted=false FIRST to kill all async paths
   useEffect(() => {

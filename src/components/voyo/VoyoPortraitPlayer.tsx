@@ -28,6 +28,7 @@ import { BoostSettings } from '../ui/BoostSettings';
 import { haptics, getReactionHaptic } from '../../utils/haptics';
 import { useReactionStore, ReactionCategory, initReactionSubscription } from '../../store/reactionStore';
 import { devLog } from '../../utils/logger';
+import { pipService } from '../../services/pipService';
 // TiviPlusCrossPromo moved to HomeFeed.tsx (classic homepage)
 import { useAuth } from '../../hooks/useAuth';
 import { getCurrentSegment, type EnrichedLyrics, type LyricsGenerationProgress } from '../../services/lyricsEngine';
@@ -4910,7 +4911,11 @@ export const VoyoPortraitPlayer = ({
           {currentTrack ? (
             <BigCenterCard
               track={currentTrack}
-              onExpandVideo={() => setVideoTarget('portrait')}
+              onExpandVideo={async () => {
+                // Try PiP first; fall back to YouTube iframe in portrait card
+                const ok = await pipService.enter();
+                if (!ok) setVideoTarget('portrait');
+              }}
               onShowLyrics={() => setShowLyricsOverlay(true)}
               hideThumb={videoTarget === 'portrait'}
               // Signal "audio flowing through the iframe right now" so the

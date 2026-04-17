@@ -25,6 +25,7 @@ import type { Track } from '../../types';
 import { playbackState } from '../playback/playbackState';
 
 const EDGE_WORKER_URL = 'https://voyo-edge.dash-webtv.workers.dev';
+const VPS_AUDIO_URL = 'https://stream.zionsynapse.online:8443';
 
 interface UseErrorRecoveryParams {
   audioRef: RefObject<HTMLAudioElement | null>;
@@ -152,24 +153,22 @@ export function useErrorRecovery(params: UseErrorRecoveryParams): ErrorRecoveryA
       }
     } catch {}
 
-    // (3) Re-extract via Edge Worker (last resort before skip).
+    // (3) VPS direct URL — yt-dlp extraction path. Edge Worker broken for cold
+    //     tracks from CF datacenter IPs; VPS is the authoritative cold route.
     try {
-      const streamResponse = await fetch(`${EDGE_WORKER_URL}/stream?v=${currentTrack.trackId}`, {
-        signal: AbortSignal.timeout(5000),
-      });
+      const vpsUrl = `${VPS_AUDIO_URL}/voyo/audio/${currentTrack.trackId}?quality=high`;
       if (recoveryIsStale()) return;
-      const streamData = await streamResponse.json();
-      if (recoveryIsStale()) return;
-      if (streamData.url && audioRef.current) {
-        devLog('🔄 [recover] 3/3 re-extract');
-        audioRef.current.src = streamData.url;
+      if (audioRef.current) {
+        devLog('🔄 [recover] 3/3 VPS fallback');
+        audioRef.current.src = vpsUrl;
         audioRef.current.load();
         audioRef.current.oncanplay = () => {
           if (!audioRef.current) return;
           audioRef.current.oncanplay = null;
           if (recoveryIsStale()) return;
           if (savedPos > 2) audioRef.current.currentTime = savedPos;
-          isEdgeStreamRef.current = true;
+          isEdgeStreamRef.current = false;
+          setPlaybackSource('r2');
           fadeInMasterGain(80);
           audioRef.current.play().then(() => {
             devLog(`🔄 [recover] 3/3 done in ${(performance.now() - recoveryStart).toFixed(0)}ms`);

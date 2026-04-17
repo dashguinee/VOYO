@@ -101,6 +101,33 @@ async function getVisitorData() {
 // embedded in ytcfg on youtube.com). Used only as the ?key= query param.
 const INNERTUBE_API_KEY = 'AIzaSyA8eiZmM1FaDVjRy-df2KTyQ_vz_yYM39w';
 
+// VPS audio proxy — fallback when all InnerTube clients fail.
+// The VPS runs yt-dlp with Chrome browser cookies (not datacenter IP blocked).
+const VPS_AUDIO_URL = 'https://stream.zionsynapse.online:8443';
+
+// In-memory PoToken cache — fetched from VPS bgutil-pot service.
+// PoTokens prove a real Chrome instance signed the request (bypasses bot check).
+let _cachedPoToken = null;
+let _cachedPoTokenAt = 0;
+const POT_CACHE_MS = 25 * 60 * 1000; // 25 min (bgutil tokens expire ~30 min)
+
+async function fetchPoToken(videoId) {
+  if (_cachedPoToken && (Date.now() - _cachedPoTokenAt) < POT_CACHE_MS) {
+    return _cachedPoToken;
+  }
+  try {
+    const r = await fetch(`${VPS_AUDIO_URL}/voyo/pot?v=${videoId}`, { signal: AbortSignal.timeout(4000) });
+    if (!r.ok) return null;
+    const d = await r.json();
+    if (d.poToken) {
+      _cachedPoToken = d.poToken;
+      _cachedPoTokenAt = Date.now();
+      return d.poToken;
+    }
+  } catch (_) {}
+  return null;
+}
+
 // Client configurations ranked by success rate (best → worst).
 // IOS is the most reliable for audio extraction as of late-2025; returns
 // un-ciphered URLs. ANDROID_VR is less throttled but sometimes returns
@@ -113,6 +140,7 @@ const INNERTUBE_API_KEY = 'AIzaSyA8eiZmM1FaDVjRy-df2KTyQ_vz_yYM39w';
 // WEB_EMBEDDED_PLAYER removed — returns "unavailable" for most videos.
 // TVHTML5 removed — "no longer supported" error.
 // Added WEB_CREATOR — returns unciphered URLs, no sign-in required.
+// Added MWEB — mobile web, different bot-detection surface.
 const CLIENTS = [
   {
     name: 'IOS',
@@ -174,13 +202,52 @@ const CLIENTS = [
     },
     userAgent: 'com.google.android.youtube/19.44.38 (Linux; U; Android 14) gzip'
   },
+  {
+    // MWEB — mobile web client, different bot-detection surface than desktop clients.
+    // Uses the same InnerTube key but presents as a mobile browser (lower scrutiny).
+    name: 'MWEB',
+    context: {
+      client: {
+        clientName: 'MWEB',
+        clientVersion: '2.20240726.01.00',
+        hl: 'en',
+        gl: 'US',
+      }
+    },
+    userAgent: 'Mozilla/5.0 (Linux; Android 14; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36'
+  },
 ];
 
-async function tryClient(videoId, clientConfig, signatureTimestamp) {
+async function tryClient(videoId, clientConfig, signatureTimestamp, poToken) {
   // Use REAL visitorData fetched from an actual YouTube homepage session.
   // A fake random ID triggers "Sign in to confirm you're not a bot" on
   // datacenter IPs. A real one (cached 6h) dramatically improves success.
   const visitorId = await getVisitorData();
+
+  const body = {
+    videoId: videoId,
+    context: {
+      ...clientConfig.context,
+      client: {
+        ...clientConfig.context.client,
+        visitorData: visitorId,
+      },
+    },
+    playbackContext: {
+      contentPlaybackContext: {
+        signatureTimestamp: signatureTimestamp,
+        html5Preference: 'HTML5_PREF_WANTS'
+      }
+    },
+    contentCheckOk: true,
+    racyCheckOk: true
+  };
+
+  // Include PoToken when available — proves a real Chrome browser signed the
+  // request, which bypasses YouTube's datacenter-IP bot detection.
+  if (poToken) {
+    body.serviceIntegrityDimensions = { poToken };
+  }
 
   const response = await fetch(`https://www.youtube.com/youtubei/v1/player?key=${INNERTUBE_API_KEY}&prettyPrint=false`, {
     method: 'POST',
@@ -195,24 +262,7 @@ async function tryClient(videoId, clientConfig, signatureTimestamp) {
       'Accept': 'application/json',
       'Accept-Language': 'en-US,en;q=0.9',
     },
-    body: JSON.stringify({
-      videoId: videoId,
-      context: {
-        ...clientConfig.context,
-        client: {
-          ...clientConfig.context.client,
-          visitorData: visitorId,
-        },
-      },
-      playbackContext: {
-        contentPlaybackContext: {
-          signatureTimestamp: signatureTimestamp,
-          html5Preference: 'HTML5_PREF_WANTS'
-        }
-      },
-      contentCheckOk: true,
-      racyCheckOk: true
-    })
+    body: JSON.stringify(body)
   });
 
   // Surface HTTP errors — YouTube sometimes returns 400/403 with an HTML
@@ -509,12 +559,13 @@ export default {
       }
 
       const attempts = [];
-      const sts = await getSignatureTimestamp();
+      const [sts, poToken] = await Promise.all([getSignatureTimestamp(), fetchPoToken(videoId)]);
+      if (poToken) console.log(`[Stream] ${videoId} using PoToken (bgutil-pot)`);
 
       // Try each client until one works
       for (const client of CLIENTS) {
         try {
-          const data = await tryClient(videoId, client, sts);
+          const data = await tryClient(videoId, client, sts, poToken);
           const result = extractBestAudio(data);
 
           if (result.url) {
@@ -536,15 +587,16 @@ export default {
         }
       }
 
-      // All clients failed — return a populated error body so the client
-      // can log exactly which clients were tried and why each one failed.
+      // All InnerTube clients failed — fall back to VPS stream URL.
+      // VPS uses Chrome cookies + yt-dlp (not datacenter-IP blocked).
+      console.log(`[Stream] ${videoId} all clients failed, returning VPS fallback URL`);
       return new Response(JSON.stringify({
-        error: 'All InnerTube clients failed',
-        videoId,
+        url: `${VPS_AUDIO_URL}/voyo/audio/${videoId}?quality=high`,
+        source: 'vps_fallback',
+        client: 'vps',
         triedClients: attempts.map(a => a.client),
         attempts
       }), {
-        status: 502,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
     }
@@ -566,11 +618,12 @@ export default {
       let audioUrl = null;
       let mimeType = 'audio/mp4';
       const extractAttempts = [];
-      const sts = await getSignatureTimestamp();
+      const [sts, poToken] = await Promise.all([getSignatureTimestamp(), fetchPoToken(videoId)]);
+      if (poToken) console.log(`[Extract] ${videoId} using PoToken (bgutil-pot)`);
 
       for (const client of CLIENTS) {
         try {
-          const data = await tryClient(videoId, client, sts);
+          const data = await tryClient(videoId, client, sts, poToken);
           const result = extractBestAudio(data);
 
           if (result.url) {
@@ -588,14 +641,15 @@ export default {
       }
 
       if (!audioUrl) {
-        return new Response(JSON.stringify({
-          error: 'All InnerTube clients failed',
-          videoId,
-          triedClients: extractAttempts.map(a => a.client),
-          attempts: extractAttempts
-        }), {
+        // All InnerTube clients failed. Return 502 so VPS falls through to
+        // yt-dlp instead of receiving a 302 redirect that loops back to itself.
+        // (VPS calls /extract → 302 to VPS → VPS rejects 302 as error → circuit
+        // breaker trips. Returning 502 is cleaner: VPS records edge failure and
+        // skips edge for 60s, going straight to yt-dlp which is what we want.)
+        console.log(`[Extract] ${videoId} all clients failed`);
+        return new Response(JSON.stringify({ error: 'All InnerTube clients failed' }), {
           status: 502,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
         });
       }
 
