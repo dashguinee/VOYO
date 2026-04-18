@@ -179,15 +179,25 @@ const server = https.createServer(ssl, async (req, res) => {
       entries.forEach(f => { try { bytes += fs.statSync(`${CACHE_DIR}/${f}`).size; } catch {} });
       cacheStats = { count: entries.length, bytes };
     } catch {}
+    const now = Date.now();
+    const pool = POOL_NODES.map(n => ({
+      host: n.host,
+      port: n.port,
+      healthy: n.unhealthyUntil <= now,
+      failures: n.failures,
+      cooldownSec: n.unhealthyUntil > now ? Math.ceil((n.unhealthyUntil - now)/1000) : 0,
+    }));
     res.writeHead(200, { "Content-Type": "application/json" });
     res.end(JSON.stringify({
       status: "ok",
       service: "voyo-audio",
-      version: "v2.3-range-fix",
+      version: "v2.4-pool",
       uptime: process.uptime(),
       activeJobs: activeJobs.size,
       jobs,
       cache: cacheStats,
+      pool,
+      fallbackProxy: !!PROXY_CFG,
     }));
     return;
   }
@@ -603,16 +613,101 @@ async function handleAudio(req, res, trackId, quality) {
  * schedule and the slot self-frees. Alternative (AbortController chain)
  * added non-trivial complexity for ~1-2s of CPU savings per cold miss.
  */
+// ── Proxy pool ────────────────────────────────────────────────────────────
+//
+// VOYO_PROXY_POOL env var = JSON array of exit nodes, each running tinyproxy.
+// Example:
+//   export VOYO_PROXY_POOL='[
+//     {"host":"1.2.3.4","port":8888,"healthPort":8889},
+//     {"host":"5.6.7.8","port":8888,"healthPort":8889}
+//   ]'
+//
+// Selection: round-robin through healthy nodes.
+// Deprecate: 3 consecutive failures → node goes unhealthy for 5 min.
+// Fallback: if no node is healthy, fall back to VOYO_RESIDENTIAL_PROXY
+// (Webshare) so we never lose extraction capability during rollout/incident.
+//
+// Rebuild a flagged node: destroy the VPS, re-provision (fresh IP),
+// run vps/pool/node-bootstrap.sh. Update VOYO_PROXY_POOL with the new IP
+// and restart voyo-proxy.js. Whole turnaround ~10 min.
+const POOL_FAIL_THRESHOLD   = 3;
+const POOL_COOLDOWN_MS      = 5 * 60_000;
+let POOL_NODES              = [];
+let POOL_ROUND_ROBIN_IDX    = 0;
+try {
+  POOL_NODES = JSON.parse(process.env.VOYO_PROXY_POOL || '[]').map(n => ({
+    host: n.host,
+    port: parseInt(n.port, 10) || 8888,
+    healthPort: n.healthPort ? parseInt(n.healthPort, 10) : null,
+    failures: 0,
+    unhealthyUntil: 0,
+  }));
+} catch (e) {
+  console.error(`[VOYO] VOYO_PROXY_POOL parse error: ${e.message} — pool disabled`);
+}
+if (POOL_NODES.length) {
+  console.log(`[VOYO] Pool nodes (${POOL_NODES.length}):`);
+  POOL_NODES.forEach(n => console.log(`[VOYO]   ${n.host}:${n.port}`));
+}
+
+function _pickPoolNode() {
+  if (!POOL_NODES.length) return null;
+  const now = Date.now();
+  // One full rotation through the ring, picking the first healthy node
+  for (let i = 0; i < POOL_NODES.length; i++) {
+    const idx = (POOL_ROUND_ROBIN_IDX + i) % POOL_NODES.length;
+    const n = POOL_NODES[idx];
+    if (n.unhealthyUntil > now) continue;
+    POOL_ROUND_ROBIN_IDX = (idx + 1) % POOL_NODES.length;
+    return n;
+  }
+  return null; // all nodes in cooldown
+}
+function _markPoolFailure(node, reason) {
+  node.failures = (node.failures || 0) + 1;
+  if (node.failures >= POOL_FAIL_THRESHOLD) {
+    node.unhealthyUntil = Date.now() + POOL_COOLDOWN_MS;
+    node.failures = 0;
+    console.error(`[VOYO] pool ${node.host}:${node.port} DEPRECATED for ${POOL_COOLDOWN_MS/1000}s (${reason})`);
+  } else {
+    console.warn(`[VOYO] pool ${node.host}:${node.port} failure ${node.failures}/${POOL_FAIL_THRESHOLD} (${reason})`);
+  }
+}
+function _markPoolSuccess(node) {
+  if (node.failures > 0 || node.unhealthyUntil > 0) {
+    console.log(`[VOYO] pool ${node.host}:${node.port} recovered`);
+  }
+  node.failures = 0;
+  node.unhealthyUntil = 0;
+}
+function _nodeProxyUrl(node) {
+  return `http://${node.host}:${node.port}`;
+}
+
 function openUpstream(trackId) {
-  if (!PROXY_CFG) return Promise.reject(new Error('No extraction path configured'));
-  return openUpstreamViaProxy(trackId).then((stream) => {
-    if (!stream) throw new Error('Track not available');
-    return stream;
-  });
+  // 1. Try a pool node (round-robin, skip cooldowned).
+  const node = _pickPoolNode();
+  if (node) {
+    return openUpstreamViaEndpoint(trackId, _nodeProxyUrl(node), node)
+      .then(stream => { _markPoolSuccess(node); return stream; })
+      .catch(err => {
+        _markPoolFailure(node, err.message);
+        // Fallback to Webshare if still configured
+        if (PROXY_CFG) {
+          console.warn(`[VOYO] pool miss → webshare fallback: ${trackId}`);
+          return openUpstreamViaProxy(trackId);
+        }
+        throw err;
+      });
+  }
+  // 2. No healthy pool node — fall back to Webshare if configured
+  if (PROXY_CFG) return openUpstreamViaProxy(trackId).then(s => { if (!s) throw new Error('Track not available'); return s; });
+  return Promise.reject(new Error('No extraction path — pool drained, no Webshare'));
 }
 
 // Residential proxy — set VOYO_RESIDENTIAL_PROXY env var (http://user:pass@host:port)
-// Webshare.io Residential ~$3.50/mo/1GB. Leave unset to skip.
+// Webshare.io ~$3.50/mo/1GB. Leave unset to skip. Pool (VOYO_PROXY_POOL) is
+// the primary path; Webshare is kept only as rollout fallback.
 const RESIDENTIAL_PROXY_URL = process.env.VOYO_RESIDENTIAL_PROXY || "";
 function _parseProxy(raw) {
   if (!raw) return null;
@@ -626,10 +721,25 @@ if (PROXY_CFG) console.log(`[VOYO] Residential proxy: ${PROXY_CFG.host}:${PROXY_
 
 function openUpstreamViaProxy(trackId) {
   if (!PROXY_CFG || !RESIDENTIAL_PROXY_URL) return Promise.reject(new Error('residential_proxy_disabled'));
+  return openUpstreamViaEndpoint(trackId, RESIDENTIAL_PROXY_URL, null);
+}
+
+/**
+ * Extract + stream a track through an arbitrary HTTP proxy endpoint.
+ *
+ * Shared path for both Webshare (legacy) and pool nodes (new). Both paths:
+ *   1. yt-dlp --get-url --proxy PROXY_URL  → signed googlevideo URL
+ *   2. curl --proxy PROXY_URL the signed URL → Opus/webm bytes (PassThrough)
+ *
+ * Same proxy endpoint for both steps = same exit IP = signed URL stays
+ * valid during the fetch. Any IP rotation between steps causes 403.
+ *
+ * @param {string} trackId
+ * @param {string} proxyUrl  e.g. "http://user:pass@host:port" or "http://host:port"
+ * @param {object|null} node pool node object (for telemetry); null for Webshare
+ */
+function openUpstreamViaEndpoint(trackId, proxyUrl, node) {
   return new Promise((resolve, reject) => {
-    // Use base (non-sticky) proxy credentials for both URL extraction and download.
-    // WebShare maintains the same exit IP for close-in-time requests from the same source,
-    // so the signed googlevideo URL matches the subsequent curl download IP.
     const _cfs = require('fs').readdirSync('/opt/voyo')
       .filter(f => /^cookies(-[0-9]+)?\.txt$/.test(f))
       .map(f => '/opt/voyo/' + f);
@@ -637,23 +747,24 @@ function openUpstreamViaProxy(trackId) {
       ? _cfs[Math.floor(Math.random() * _cfs.length)]
       : '/opt/voyo/cookies.txt';
 
-    // Step 1: extract signed audio URL through residential proxy
-    const cmd = `/usr/local/bin/yt-dlp -f "bestaudio[vcodec=none]/bestaudio" --get-url --no-warnings --proxy "${RESIDENTIAL_PROXY_URL}" --cookies "${cookieFile}" --extractor-args "youtube:player_client=tv_embedded" "https://www.youtube.com/watch?v=${trackId}"`;
+    const sourceLabel = node ? `pool ${node.host}:${node.port}` : 'webshare';
+
+    // Step 1: extract signed audio URL through proxy
+    const cmd = `/usr/local/bin/yt-dlp -f "bestaudio[vcodec=none]/bestaudio" --get-url --no-warnings --proxy "${proxyUrl}" --cookies "${cookieFile}" --extractor-args "youtube:player_client=tv_embedded" "https://www.youtube.com/watch?v=${trackId}"`;
     exec(cmd, { timeout: 40_000 }, (err, stdout, stderr) => {
       const stderrStr = (stderr || '').toString();
-      if (stderrStr.includes('Sign in to confirm')) return reject(new Error('proxy: cookie auth lost'));
-      if (err) return reject(new Error(`proxy yt-dlp: ${err.message}`));
+      if (stderrStr.includes('Sign in to confirm')) return reject(new Error(`${sourceLabel}: bot_challenge`));
+      if (err) return reject(new Error(`${sourceLabel} yt-dlp: ${err.message}`));
       const lines = (stdout || '').split('\n').map(l => l.trim()).filter(l => l.startsWith('http'));
-      if (!lines.length) return reject(new Error('proxy: no URL extracted'));
+      if (!lines.length) return reject(new Error(`${sourceLabel}: no URL extracted`));
       const ITAG_RE = /[?&]itag=(25[012]|140|141|139|233|234|599|600)(&|$)/;
       const audioUrl = lines.find(l => ITAG_RE.test(l))
         || lines.find(l => l.includes('mime=audio%2F') || l.includes('mime=audio/'))
         || lines[lines.length - 1];
 
-      // Step 2: download via curl through the same proxy.
-      // curl handles CONNECT+TLS reliably; same proxy = same exit IP = URL valid.
+      // Step 2: download via curl through the SAME proxy.
       const curl = spawn('curl', [
-        '--proxy', RESIDENTIAL_PROXY_URL,
+        '--proxy', proxyUrl,
         '--range', '0-',
         '--silent',
         '--location',
@@ -663,7 +774,7 @@ function openUpstreamViaProxy(trackId) {
 
       let resolved = false;
       const bt = setTimeout(() => {
-        if (!resolved) { curl.kill('SIGKILL'); reject(new Error('proxy curl: no first byte in 20s')); }
+        if (!resolved) { curl.kill('SIGKILL'); reject(new Error(`${sourceLabel} curl: no first byte in 20s`)); }
       }, 20_000);
 
       const pass = new PassThrough();
@@ -673,19 +784,19 @@ function openUpstreamViaProxy(trackId) {
         if (!resolved) {
           resolved = true;
           clearTimeout(bt);
-          console.log(`[VOYO] Residential proxy piping: ${trackId}`);
+          console.log(`[VOYO] ${sourceLabel} piping: ${trackId}`);
           resolve(pass);
         }
       });
 
       curl.stderr.on('data', (d) => {
         const s = d.toString().trim();
-        if (s) console.error(`[VOYO] proxy curl stderr (${trackId}): ${s}`);
+        if (s) console.error(`[VOYO] ${sourceLabel} curl stderr (${trackId}): ${s}`);
       });
-      curl.on('error', (e) => { clearTimeout(bt); if (!resolved) reject(new Error(`proxy curl spawn: ${e.message}`)); });
+      curl.on('error', (e) => { clearTimeout(bt); if (!resolved) reject(new Error(`${sourceLabel} curl spawn: ${e.message}`)); });
       curl.on('close', (code) => {
         clearTimeout(bt);
-        if (!resolved) reject(new Error(`proxy curl exited ${code} before first byte`));
+        if (!resolved) reject(new Error(`${sourceLabel} curl exited ${code} before first byte`));
       });
     });
   });
