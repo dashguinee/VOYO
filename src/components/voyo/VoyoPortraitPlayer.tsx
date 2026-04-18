@@ -28,6 +28,7 @@ import { BoostSettings } from '../ui/BoostSettings';
 import { haptics, getReactionHaptic } from '../../utils/haptics';
 import { useReactionStore, ReactionCategory, initReactionSubscription } from '../../store/reactionStore';
 import { devLog } from '../../utils/logger';
+import { voyoStream } from '../../services/voyoStream';
 import { pipService } from '../../services/pipService';
 // TiviPlusCrossPromo moved to HomeFeed.tsx (classic homepage)
 import { useAuth } from '../../hooks/useAuth';
@@ -46,6 +47,9 @@ import {
   trainVibeOnReaction,
   MixBoardMode,
 } from '../../services/centralDJ';
+
+import { onTrackSkip as oyoOnTrackSkip } from '../../services/oyoDJ';
+import { onSignal as oyaPlanSignal } from '../../services/oyoPlan';
 
 // OYO Island - DJ Voice Search & Chat
 import { OyoIsland } from './OyoIsland';
@@ -3370,7 +3374,7 @@ const LyricsOverlay = memo(({ track, isOpen, onClose, currentTime }: LyricsOverl
                 const isCurrent = currentSegment?.startTime === segment.startTime;
                 return (
                   <div
-                    key={i}
+                    key={segment.startTime ?? i}
                     className={`p-4 rounded-xl transition-all ${
                       isCurrent
                         ? 'bg-purple-500/30 border border-purple-500/50'
@@ -3469,7 +3473,6 @@ export const VoyoPortraitPlayer = ({
   const hotTracks = usePlayerStore(s => s.hotTracks);
   const discoverTracks = usePlayerStore(s => s.discoverTracks);
   const refreshRecommendations = usePlayerStore(s => s.refreshRecommendations);
-  const nextTrack = usePlayerStore(s => s.nextTrack);
   const prevTrack = usePlayerStore(s => s.prevTrack);
   const playTrack = usePlayerStore(s => s.playTrack);
   const addReaction = usePlayerStore(s => s.addReaction);
@@ -4055,7 +4058,7 @@ export const VoyoPortraitPlayer = ({
       el.style.opacity = '0';
     }
     setTimeout(() => {
-      if (dir > 0) prevTrack(); else nextTrack();
+      if (dir > 0) prevTrack(); else { voyoStream.skip(); }
       // Reset wrapper to center instantly — next track's artwork will
       // fade in via BigCenterCard's own mount animation.
       setTimeout(() => {
@@ -4641,8 +4644,12 @@ export const VoyoPortraitPlayer = ({
   const handleNextTrack = useCallback(() => {
     if (wasSkeeping.current && Date.now() - wasSkeepingClearedAt.current < 250) return;
     wasSkeeping.current = false;
-    nextTrack();
-  }, [nextTrack]);
+    const positionSec = voyoStream.getPosition();
+    voyoStream.skip(); // tell VPS to advance — SSE now_playing will update the store
+    // Give OYO the skip position — it learns when in tracks you bail
+    const track = usePlayerStore.getState().currentTrack;
+    if (track) oyoOnTrackSkip(track, positionSec);
+  }, []);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -4668,8 +4675,9 @@ export const VoyoPortraitPlayer = ({
       text,
       emoji,
       multiplier,
-      userId: 'user-1', // Default user
+      userId: 'user-1',
     } as any);
+    oyaPlanSignal('reaction', currentTrack?.artist ?? '');
   };
 
   // (30s teaser preview removed — tap on a stream card now plays the
@@ -4724,8 +4732,6 @@ export const VoyoPortraitPlayer = ({
         )}
       
 
-      {/* Noise texture overlay */}
-      <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-[0.03] mix-blend-overlay pointer-events-none z-[1]" />
 
       {/* OYO ISLAND - DJ Voice Search & Chat (tap screen to show) */}
       <div data-no-canvas-swipe="true">
@@ -4807,7 +4813,7 @@ export const VoyoPortraitPlayer = ({
           >
             {historyTracks.length > 0 ? (
               historyTracks.slice(0, 10).map((track, i) => (
-                <div key={track.id + i} style={{ scrollSnapAlign: 'start', flexShrink: 0 }}>
+                <div key={track.id} style={{ scrollSnapAlign: 'start', flexShrink: 0 }}>
                   <SmallCard
                     track={track}
                     onTap={() => playTrack(track)}
@@ -4854,7 +4860,7 @@ export const VoyoPortraitPlayer = ({
 
             {queueTracks.length > 0 ? (
               queueTracks.slice(0, 10).map((track, i) => (
-                <div key={track.id + i} style={{ scrollSnapAlign: 'start', flexShrink: 0 }}>
+                <div key={track.id} style={{ scrollSnapAlign: 'start', flexShrink: 0 }}>
                   <SmallCard
                     track={track}
                     onTap={() => playTrack(track)}

@@ -17,6 +17,8 @@
 import { useRef, useEffect, useState, useCallback, memo } from 'react';
 import { SkipBack, SkipForward, Play, Pause, Plus, Volume2, Smartphone, Loader2 } from 'lucide-react';
 import { usePlayerStore } from '../../store/playerStore';
+import { voyoStream } from '../../services/voyoStream';
+import { getThumb } from '../../utils/thumbnail';
 import { BoostButton } from '../ui/BoostButton';
 import { getYouTubeThumbnail, TRACKS } from '../../data/tracks';
 import { Track } from '../../types';
@@ -510,7 +512,6 @@ export const LandscapeVOYO = ({ onVideoMode }: LandscapeVOYOProps) => {
   const queue = usePlayerStore(s => s.queue);
   const hotTracks = usePlayerStore(s => s.hotTracks);
   const discoverTracks = usePlayerStore(s => s.discoverTracks);
-  const nextTrack = usePlayerStore(s => s.nextTrack);
   const prevTrack = usePlayerStore(s => s.prevTrack);
   const playTrack = usePlayerStore(s => s.playTrack);
   const addToQueue = usePlayerStore(s => s.addToQueue);
@@ -666,7 +667,7 @@ export const LandscapeVOYO = ({ onVideoMode }: LandscapeVOYOProps) => {
               trackId: videoId,
               title: title,
               artist: artist || 'YouTube',
-              coverUrl: `https://i.ytimg.com/vi/${videoId}/maxresdefault.jpg`,
+              coverUrl: getThumb(videoId),
               duration: 0,
               tags: ['afrobeats'],
               mood: 'party',
@@ -763,7 +764,7 @@ export const LandscapeVOYO = ({ onVideoMode }: LandscapeVOYOProps) => {
               {/* Skip Next */}
               <button
                 className="p-3 rounded-full bg-white/10 backdrop-blur-sm"
-                onClick={() => { nextTrack(); startHideTimer(); }}
+                onClick={() => { voyoStream.skip(); startHideTimer(); }}
               >
                 <SkipForward className="w-6 h-6 text-white" />
               </button>

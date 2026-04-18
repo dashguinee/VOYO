@@ -249,6 +249,8 @@ export const useReactionStore = create<ReactionStore>((set, get) => ({
       });
 
       if (error) {
+        const s = (error as any).status;
+        if (s === 401 || s === 403) return false;
         console.error('[Reactions] Error creating reaction:', error);
         return false;
       }
@@ -273,7 +275,9 @@ export const useReactionStore = create<ReactionStore>((set, get) => ({
       } as Track);
       devLog(`[Reactions] Boosted pool score + fed OYO DJ for ${trackId}`);
       return true;
-    } catch (err) {
+    } catch (err: any) {
+      const s = err?.status || err?.response?.status;
+      if (s === 401 || s === 403) return false;
       console.error('[Reactions] Error:', err);
       return false;
     }
@@ -311,7 +315,9 @@ export const useReactionStore = create<ReactionStore>((set, get) => ({
       });
 
       return reactions;
-    } catch (err) {
+    } catch (err: any) {
+      const s = err?.status || err?.response?.status;
+      if (s === 401 || s === 403) return [];
       console.error('[Reactions] Error fetching track reactions:', err);
       return [];
     }
@@ -330,7 +336,9 @@ export const useReactionStore = create<ReactionStore>((set, get) => ({
 
       if (error) throw error;
       return data as Reaction[];
-    } catch (err) {
+    } catch (err: any) {
+      const s = err?.status || err?.response?.status;
+      if (s === 401 || s === 403) return [];
       console.error('[Reactions] Error fetching user reactions:', err);
       return [];
     }
@@ -367,7 +375,9 @@ export const useReactionStore = create<ReactionStore>((set, get) => ({
       });
 
       return stats;
-    } catch (err) {
+    } catch (err: any) {
+      const s = err?.status || err?.response?.status;
+      if (s === 401 || s === 403) return null;
       console.error('[Reactions] Error fetching track stats:', err);
       return null;
     }
@@ -390,7 +400,9 @@ export const useReactionStore = create<ReactionStore>((set, get) => ({
       const reactions = data as Reaction[];
       set({ recentReactions: reactions });
       return reactions;
-    } catch (err) {
+    } catch (err: any) {
+      const s = err?.status || err?.response?.status;
+      if (s === 401 || s === 403) return [];
       console.error('[Reactions] Error fetching recent reactions:', err);
       return [];
     }

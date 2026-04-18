@@ -32,10 +32,12 @@ const https = require("https");
 const http = require("http");
 const fs = require("fs");
 const { exec, spawn } = require("child_process");
+const { PassThrough } = require("stream");
 
 const PORT = 8443;
 const R2_BASE = "https://voyo-edge.dash-webtv.workers.dev";
-const EDGE_EXTRACT = "https://voyo-edge.dash-webtv.workers.dev/extract";
+
+
 
 // Telemetry sink — best-effort POST to Supabase voyo_playback_events with
 // source='vps'. Complements PWA-side telemetry so we can see the timeline
@@ -87,30 +89,6 @@ const MAX_CONCURRENT_FFMPEG = 6;
 // polls the cache path and serves from there once ready.
 const activeJobs = new Map();
 
-// v2.1 — Edge worker circuit breaker. When the Cloudflare worker returns
-// 502 repeatedly (YouTube bot-checking CF's IPs), stop wasting 1-2s per
-// request waiting for it to fail. After 3 consecutive failures, skip
-// the edge path entirely for 60s and go straight to yt-dlp.
-const EDGE_CIRCUIT_THRESHOLD = 3;
-const EDGE_CIRCUIT_COOLDOWN_MS = 60_000;
-let edgeConsecutiveFailures = 0;
-let edgeCircuitOpenUntil = 0;
-function isEdgeCircuitOpen() { return Date.now() < edgeCircuitOpenUntil; }
-function recordEdgeFailure() {
-  edgeConsecutiveFailures++;
-  if (edgeConsecutiveFailures >= EDGE_CIRCUIT_THRESHOLD) {
-    edgeCircuitOpenUntil = Date.now() + EDGE_CIRCUIT_COOLDOWN_MS;
-    edgeConsecutiveFailures = 0;
-    console.log(`[VOYO] Edge circuit OPEN for ${EDGE_CIRCUIT_COOLDOWN_MS/1000}s`);
-    postTelemetry("trace", null, { subtype: "edge_circuit_open", cooldownMs: EDGE_CIRCUIT_COOLDOWN_MS });
-  }
-}
-function recordEdgeSuccess() {
-  const wasOpen = edgeCircuitOpenUntil > 0;
-  edgeConsecutiveFailures = 0;
-  edgeCircuitOpenUntil = 0;
-  if (wasOpen) postTelemetry("trace", null, { subtype: "edge_circuit_closed" });
-}
 
 const ssl = {
   key: fs.readFileSync("/etc/letsencrypt/live/stream.zionsynapse.online/privkey.pem"),
@@ -194,9 +172,6 @@ const server = https.createServer(ssl, async (req, res) => {
 
   if (url.pathname === "/health" || url.pathname === "/voyo/health") {
     const jobs = Object.fromEntries([...activeJobs.entries()].map(([k, v]) => [k, v.status]));
-    const edgeCircuit = isEdgeCircuitOpen()
-      ? { open: true, reopensInMs: edgeCircuitOpenUntil - Date.now() }
-      : { open: false, consecutiveFailures: edgeConsecutiveFailures };
     let cacheStats = null;
     try {
       const entries = fs.readdirSync(CACHE_DIR).filter(f => f.endsWith(".opus"));
@@ -208,11 +183,10 @@ const server = https.createServer(ssl, async (req, res) => {
     res.end(JSON.stringify({
       status: "ok",
       service: "voyo-audio",
-      version: "v2.1-circuit-race",
+      version: "v2.3-range-fix",
       uptime: process.uptime(),
       activeJobs: activeJobs.size,
       jobs,
-      edgeCircuit,
       cache: cacheStats,
     }));
     return;
@@ -325,7 +299,13 @@ async function handleAudio(req, res, trackId, quality) {
 
       // Phase 2: tail-stream bytes from the live file, polling for more
       // until the .opus file appears and we've drained all bytes.
+      // Single drain listener registered once — avoids MaxListenersExceeded
+      // that occurred when res.once('drain') was added inside each loop iteration.
       let offset = 0;
+      let activeReadStream = null;
+      const onResDrain = () => { if (activeReadStream) activeReadStream.resume(); };
+      res.on("drain", onResDrain);
+
       while (clientAlive && Date.now() < deadline) {
         const livePath = fs.existsSync(cachedPath) ? cachedPath : tmpPath;
         let size = 0;
@@ -334,15 +314,14 @@ async function handleAudio(req, res, trackId, quality) {
         if (size > offset) {
           await new Promise((resolve) => {
             const stream = fs.createReadStream(livePath, { start: offset, end: size - 1 });
+            activeReadStream = stream;
             stream.on("data", (chunk) => {
-              if (!res.write(chunk)) {
-                stream.pause();
-                res.once("drain", () => stream.resume());
-              }
+              if (!res.write(chunk)) stream.pause();
             });
-            stream.on("end", resolve);
+            stream.on("end", () => { activeReadStream = null; resolve(); });
             stream.on("error", (e) => {
               // ENOENT = .tmp renamed to .opus mid-read, non-fatal.
+              activeReadStream = null;
               if (e.code !== "ENOENT") clientAlive = false;
               resolve(null);
             });
@@ -364,6 +343,7 @@ async function handleAudio(req, res, trackId, quality) {
         await new Promise(r => setTimeout(r, 200));
       }
 
+      res.off("drain", onResDrain);
       try { res.end(); } catch {}
     })();
     return;
@@ -527,10 +507,15 @@ async function handleAudio(req, res, trackId, quality) {
   let ffmpegPaused = false;
   ffmpeg.stdout.on("data", (chunk) => {
     if (clientAlive) {
-      const ok = res.write(chunk);
-      if (!ok && !ffmpegPaused) {
-        ffmpegPaused = true;
-        ffmpeg.stdout.pause();
+      try {
+        const ok = res.write(chunk);
+        if (!ok && !ffmpegPaused) {
+          ffmpegPaused = true;
+          ffmpeg.stdout.pause();
+        }
+      } catch (e) {
+        // Client disconnected while we were mid-write — stop trying
+        clientAlive = false;
       }
     }
     fileStream.write(chunk);
@@ -551,6 +536,7 @@ async function handleAudio(req, res, trackId, quality) {
     clearTimeout(safetyTimer);
     fileStream.end();
     if (clientAlive) { try { res.end(); } catch {} }
+    clientAlive = false; // prevent buffered data events writing to ended response
     releaseJob(`ffmpeg_close_${code}`);
 
     fileStream.on("finish", () => {
@@ -618,114 +604,93 @@ async function handleAudio(req, res, trackId, quality) {
  * added non-trivial complexity for ~1-2s of CPU savings per cold miss.
  */
 function openUpstream(trackId) {
-  const candidates = [];
-
-  if (!isEdgeCircuitOpen()) {
-    candidates.push(openUpstreamViaEdge(trackId));
-  } else {
-    console.log(`[VOYO] Edge circuit open, skipping edge: ${trackId}`);
-  }
-  candidates.push(openUpstreamViaYtdlp(trackId));
-
-  // Promise.any — first success wins; only rejects if ALL candidates reject.
-  // Filter nulls (yt-dlp returned no URL) as successful-but-unavailable.
-  return Promise.any(candidates).then((stream) => {
-    if (!stream) throw new Error("Track not available");
+  if (!PROXY_CFG) return Promise.reject(new Error('No extraction path configured'));
+  return openUpstreamViaProxy(trackId).then((stream) => {
+    if (!stream) throw new Error('Track not available');
     return stream;
   });
 }
 
-function openUpstreamViaEdge(trackId) {
-  return new Promise((resolve, reject) => {
-    const edgeUrl = `${EDGE_EXTRACT}/${trackId}`;
-    console.log(`[VOYO] Opening upstream via edge worker: ${trackId}`);
-    const edgeReq = https.get(edgeUrl, { timeout: 15_000 }, (edgeRes) => {
-      if (edgeRes.statusCode === 200 || edgeRes.statusCode === 206) {
-        recordEdgeSuccess();
-        resolve(edgeRes);
-        return;
-      }
-      edgeRes.resume();
-      console.log(`[VOYO] Edge ${edgeRes.statusCode}: ${trackId}`);
-      recordEdgeFailure();
-      reject(new Error(`Edge returned ${edgeRes.statusCode}`));
-    });
-    edgeReq.on("error", (e) => {
-      console.log(`[VOYO] Edge err (${e.message}): ${trackId}`);
-      recordEdgeFailure();
-      reject(e);
-    });
-    edgeReq.on("timeout", () => {
-      edgeReq.destroy();
-      console.log(`[VOYO] Edge timeout: ${trackId}`);
-      recordEdgeFailure();
-      reject(new Error("Edge timeout"));
-    });
-  });
+// Residential proxy — set VOYO_RESIDENTIAL_PROXY env var (http://user:pass@host:port)
+// Webshare.io Residential ~$3.50/mo/1GB. Leave unset to skip.
+const RESIDENTIAL_PROXY_URL = process.env.VOYO_RESIDENTIAL_PROXY || "";
+function _parseProxy(raw) {
+  if (!raw) return null;
+  try {
+    const u = new URL(raw);
+    return { host: u.hostname, port: parseInt(u.port,10)||80, auth: u.username ? Buffer.from(decodeURIComponent(u.username)+":"+decodeURIComponent(u.password||"")).toString("base64") : null };
+  } catch { return null; }
 }
+const PROXY_CFG = _parseProxy(RESIDENTIAL_PROXY_URL);
+if (PROXY_CFG) console.log(`[VOYO] Residential proxy: ${PROXY_CFG.host}:${PROXY_CFG.port}`);
 
-function openUpstreamViaYtdlp(trackId) {
+function openUpstreamViaProxy(trackId) {
+  if (!PROXY_CFG || !RESIDENTIAL_PROXY_URL) return Promise.reject(new Error('residential_proxy_disabled'));
   return new Promise((resolve, reject) => {
-    // bestaudio[vcodec=none] prefers audio-only DASH stream (single URL); falls back to combined.
-    const cmd = `/usr/local/bin/yt-dlp-safe -f "bestaudio[vcodec=none]/bestaudio" --get-url --no-warnings --geo-bypass "https://www.youtube.com/watch?v=${trackId}"`;
-    exec(cmd, { timeout: 30_000 }, (err, stdout, stderr) => {
-      const stderrStr = (stderr || "").toString();
-      // Fast-fail + alert on cookie auth loss. Don't wait 180s.
-      if (stderrStr.includes("Sign in to confirm")) {
-        console.error(`[VOYO] Cookie auth lost for ${trackId} — emitting critical_alert`);
-        postTelemetry("critical_alert", trackId, { subtype: "cookie_login_lost", source: "yt-dlp-stderr" });
-        return reject(new Error("cookie_auth_required"));
-      }
-      if (err) {
-        console.error("[VOYO] yt-dlp err:", err?.message, "stderr:", stderrStr.slice(0, 200));
-        return reject(new Error("Both extraction methods failed"));
-      }
-      // yt-dlp-safe uses 2>&1 so yt-dlp's info/progress lines are mixed into stdout.
-      // Extract only lines that are valid HTTP URLs — filter out [youtube]/[info] noise.
-      const stdoutLines = (stdout || "").split('\n').map(l => l.trim()).filter(l => l.startsWith('http'));
-      if (!stdoutLines.length) {
-        console.log("[VOYO] yt-dlp no URL for " + trackId + " stdout:", (stdout || "").slice(0, 200));
-        return resolve(null);
-      }
-      // DASH formats may yield two lines: video URL first, audio URL second.
-      // We want the audio-only stream. Common audio itags: 251,250,249 (opus),
-      // 140,141,139 (m4a), 233,234,599,600 (mp4 audio).
-      const AUDIO_ITAG_RE = /[?&]itag=(25[012349]|140|141|139|233|234|599|600)(&|$)/;
-      const audioUrl = stdoutLines.find(l => AUDIO_ITAG_RE.test(l))
-        || stdoutLines.find(l => l.includes('mime=audio%2F') || l.includes('mime=audio/'))
-        || stdoutLines[stdoutLines.length - 1]; // last line: audio comes after video in DASH pairs
-      console.log("[VOYO] yt-dlp selected for " + trackId + ":", audioUrl ? audioUrl.slice(0, 100) : "none");
-      const url = audioUrl;
+    // Use base (non-sticky) proxy credentials for both URL extraction and download.
+    // WebShare maintains the same exit IP for close-in-time requests from the same source,
+    // so the signed googlevideo URL matches the subsequent curl download IP.
+    const _cfs = require('fs').readdirSync('/opt/voyo')
+      .filter(f => /^cookies(-[0-9]+)?\.txt$/.test(f))
+      .map(f => '/opt/voyo/' + f);
+    const cookieFile = _cfs.length
+      ? _cfs[Math.floor(Math.random() * _cfs.length)]
+      : '/opt/voyo/cookies.txt';
 
-      const ytReq = https.get(url, { timeout: 30_000 }, (ytRes) => {
-        if (ytRes.statusCode >= 200 && ytRes.statusCode < 300) {
-          // First-byte watchdog: if googlevideo opens but sends no data within
-          // 15s the stream is stalled (IP-level throttle / expired signed URL).
-          // Kill it early instead of letting FFmpeg hang for 180s safety_timeout.
-          let firstByteReceived = false;
-          const firstByteTimer = setTimeout(() => {
-            if (!firstByteReceived) {
-              console.error(`[VOYO] First-byte timeout for ${trackId} — stalled googlevideo stream`);
-              ytReq.destroy();
-              reject(new Error("googlevideo stalled: no first byte within 15s"));
-            }
-          }, 15_000);
-          ytRes.once("data", () => {
-            firstByteReceived = true;
-            clearTimeout(firstByteTimer);
-          });
-          ytRes.once("error", () => clearTimeout(firstByteTimer));
-          resolve(ytRes);
-          return;
+    // Step 1: extract signed audio URL through residential proxy
+    const cmd = `/usr/local/bin/yt-dlp -f "bestaudio[vcodec=none]/bestaudio" --get-url --no-warnings --proxy "${RESIDENTIAL_PROXY_URL}" --cookies "${cookieFile}" --extractor-args "youtube:player_client=tv_embedded" "https://www.youtube.com/watch?v=${trackId}"`;
+    exec(cmd, { timeout: 40_000 }, (err, stdout, stderr) => {
+      const stderrStr = (stderr || '').toString();
+      if (stderrStr.includes('Sign in to confirm')) return reject(new Error('proxy: cookie auth lost'));
+      if (err) return reject(new Error(`proxy yt-dlp: ${err.message}`));
+      const lines = (stdout || '').split('\n').map(l => l.trim()).filter(l => l.startsWith('http'));
+      if (!lines.length) return reject(new Error('proxy: no URL extracted'));
+      const ITAG_RE = /[?&]itag=(25[012]|140|141|139|233|234|599|600)(&|$)/;
+      const audioUrl = lines.find(l => ITAG_RE.test(l))
+        || lines.find(l => l.includes('mime=audio%2F') || l.includes('mime=audio/'))
+        || lines[lines.length - 1];
+
+      // Step 2: download via curl through the same proxy.
+      // curl handles CONNECT+TLS reliably; same proxy = same exit IP = URL valid.
+      const curl = spawn('curl', [
+        '--proxy', RESIDENTIAL_PROXY_URL,
+        '--range', '0-',
+        '--silent',
+        '--location',
+        '--max-time', '180',
+        audioUrl,
+      ]);
+
+      let resolved = false;
+      const bt = setTimeout(() => {
+        if (!resolved) { curl.kill('SIGKILL'); reject(new Error('proxy curl: no first byte in 20s')); }
+      }, 20_000);
+
+      const pass = new PassThrough();
+      curl.stdout.pipe(pass);
+
+      pass.once('readable', () => {
+        if (!resolved) {
+          resolved = true;
+          clearTimeout(bt);
+          console.log(`[VOYO] Residential proxy piping: ${trackId}`);
+          resolve(pass);
         }
-        ytRes.resume();
-        reject(new Error(`googlevideo returned ${ytRes.statusCode}`));
       });
-      ytReq.on("error", (e) => reject(new Error(`googlevideo fetch failed: ${e.message}`)));
-      ytReq.on("timeout", () => { ytReq.destroy(); reject(new Error("googlevideo timeout")); });
+
+      curl.stderr.on('data', (d) => {
+        const s = d.toString().trim();
+        if (s) console.error(`[VOYO] proxy curl stderr (${trackId}): ${s}`);
+      });
+      curl.on('error', (e) => { clearTimeout(bt); if (!resolved) reject(new Error(`proxy curl spawn: ${e.message}`)); });
+      curl.on('close', (code) => {
+        clearTimeout(bt);
+        if (!resolved) reject(new Error(`proxy curl exited ${code} before first byte`));
+      });
     });
   });
 }
+
 
 // ── Cache serving (complete file) ────────────────────────────────────────
 

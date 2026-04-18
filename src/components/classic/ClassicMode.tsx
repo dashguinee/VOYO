@@ -23,6 +23,7 @@ import { PlaylistModal } from '../playlist/PlaylistModal';
 import { useReactionStore } from '../../store/reactionStore';
 import { useAuth } from '../../hooks/useAuth';
 import { useOyoInvocation } from '../../oyo-ui/useOyoInvocation';
+import { useMobilePlay } from '../../hooks/useMobilePlay';
 
 type ClassicTab = 'home' | 'hub' | 'library';
 
@@ -48,6 +49,7 @@ const MiniPlayer = ({ onVOYOClick, onOpenFull }: { onVOYOClick: () => void; onOp
   const cycleRepeat = usePlayerStore(s => s.cycleRepeat);
   const createReaction = useReactionStore(s => s.createReaction);
   const { dashId } = useAuth();
+  const { handlePlayPause } = useMobilePlay();
   const [shouldScroll, setShouldScroll] = useState(false);
   const [swipeDirection, setSwipeDirection] = useState<'left' | 'right' | null>(null);
   const [showBubbles, setShowBubbles] = useState(false);
@@ -302,7 +304,7 @@ const MiniPlayer = ({ onVOYOClick, onOpenFull }: { onVOYOClick: () => void; onOp
             aria-label={isPlaying ? 'Pause' : 'Play'}
             onClick={(e) => {
               e.stopPropagation();
-              togglePlay();
+              handlePlayPause(e);
             }}
           >
             {isPlaying ? (

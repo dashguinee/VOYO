@@ -841,6 +841,20 @@ export function recordPoolEngagement(
 /**
  * Get pool statistics for debugging
  */
+/**
+ * Returns pool tracks sourced specifically from trending queries (TRENDING_QUERIES
+ * in poolCurator). These are the "freshness tier" — recent viral/hot music that
+ * should rotate into the top 30% of the Hot section regardless of long-term score.
+ * Falls back gracefully to empty array if pool hasn't warmed yet.
+ */
+export function getTrendingPoolTracks(limit: number = 15): Track[] {
+  const hotPool = useTrackPoolStore.getState().hotPool;
+  return hotPool
+    .filter(pt => pt.source === 'trending')
+    .sort((a, b) => b.poolScore - a.poolScore)
+    .slice(0, limit) as unknown as Track[];
+}
+
 export function getPoolStats(): { hot: number; cold: number; total: number; byMode: Record<VibeMode, number> } {
   const poolStore = useTrackPoolStore.getState();
   const stats = poolStore.getPoolStats();

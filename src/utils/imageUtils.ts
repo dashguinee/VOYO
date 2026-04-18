@@ -14,7 +14,7 @@ export const getYouTubeThumbnail = getThumb;
 // Get fallback chain as array (for SmartImage compatibility)
 export const getThumbnailFallbackChain = (trackId: string): string[] => {
   const fallbacks = getThumbWithFallback(trackId);
-  return [fallbacks.primary, fallbacks.fallback, fallbacks.fallback2];
+  return [fallbacks.primary, fallbacks.fallback];
 };
 
 // Additional utilities for SmartImage and cache hooks

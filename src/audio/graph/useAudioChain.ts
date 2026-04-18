@@ -20,13 +20,11 @@
  *     tap-play/pause one)
  *
  * WHAT IT EXPOSES TO AudioPlayer:
- *   - audioContextRef + gainNodeRef (needed by bgEngine for ctx.state reads
- *     and gain rescue)
- *   - setupAudioEnhancement (called from loadTrack canplay paths)
- *   - muteMasterGainInstantly + fadeInMasterGain (called from mediaSession
- *     seek, hotSwap, errorRecovery)
- *   - computeMasterTarget (called by bgEngine.gain_rescue)
- *   - armGainWatchdog + disarmGainWatchdog (called by loadTrack mute path)
+ *   - audioContextRef + gainNodeRef (refs for external gain/ctx reads)
+ *   - setupAudioEnhancement (called on canplay when stream is ready)
+ *   - muteMasterGainInstantly + fadeInMasterGain (gain transitions)
+ *   - computeMasterTarget (current gain target based on volume/preset)
+ *   - armGainWatchdog + disarmGainWatchdog (rescue stuck-muted chain)
  *
  * WHY IT'S ONE HOOK: the 40+ refs are tightly interconnected at setup time
  * (source → filter → filter → gain → comp → ... → destination). Moving
@@ -42,7 +40,7 @@ import { devLog, devWarn } from '../../utils/logger';
 import { BOOST_PRESETS, type BoostPreset } from './boostPresets';
 
 export interface AudioChainApi {
-  // Core refs exposed so bgEngine + other modules can read (but not write).
+  // Core refs for external readers.
   audioContextRef: RefObject<AudioContext | null>;
   gainNodeRef: RefObject<GainNode | null>;
 
@@ -52,13 +50,13 @@ export interface AudioChainApi {
   applyMasterGain: () => void;
   muteMasterGainInstantly: () => void;
   fadeInMasterGain: (durationMs?: number) => void;
+  softFadeOut: (durationMs: number) => void;
   armGainWatchdog: (label: string, timeoutMs?: number) => void;
   disarmGainWatchdog: () => void;
 }
 
 interface UseAudioChainParams {
   audioRef: RefObject<HTMLAudioElement | null>;
-  isLoadingTrackRef: RefObject<boolean>;
   volume: number;
   boostProfile: BoostPreset;
   voyexSpatial: number;
@@ -67,7 +65,7 @@ interface UseAudioChainParams {
 }
 
 export function useAudioChain(params: UseAudioChainParams): AudioChainApi {
-  const { audioRef, isLoadingTrackRef, volume, boostProfile, voyexSpatial, isPlaying, playbackSource } = params;
+  const { audioRef, volume, boostProfile, voyexSpatial, isPlaying, playbackSource } = params;
 
   // ── CHAIN REFS ───────────────────────────────────────────────────────
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -156,9 +154,6 @@ export function useAudioChain(params: UseAudioChainParams): AudioChainApi {
   // Called from preset/spatial/volume effects. 25ms ramp — felt-instant.
   const applyMasterGain = useCallback(() => {
     if (!gainNodeRef.current) return;
-    // Skip during track load: loadTrack's fadeInMasterGain owns the ramp.
-    // Fighting with it here produces a speaker pop on every track change.
-    if (isLoadingTrackRef.current) return;
     const target = computeMasterTarget();
     const ctx = audioContextRef.current;
     if (ctx) {
@@ -170,7 +165,7 @@ export function useAudioChain(params: UseAudioChainParams): AudioChainApi {
     } else {
       gainNodeRef.current.gain.value = target;
     }
-  }, [computeMasterTarget, isLoadingTrackRef]);
+  }, [computeMasterTarget]);
 
   // ── GAIN WATCHDOG ────────────────────────────────────────────────────
   // If canplaythrough hangs, masterGain stays muted at 0.0001 while audio
@@ -254,7 +249,6 @@ export function useAudioChain(params: UseAudioChainParams): AudioChainApi {
   // the end time in the past (ramp "completes" instantly = gain jump).
   const fadeInMasterGain = useCallback((_durationMs: number = 80) => {
     disarmGainWatchdog();
-    isLoadingTrackRef.current = false;
     if (!gainNodeRef.current || !audioContextRef.current) return;
     const ctx = audioContextRef.current;
     if (ctx.state === 'suspended' || (ctx as any).state === 'interrupted') {
@@ -270,7 +264,21 @@ export function useAudioChain(params: UseAudioChainParams): AudioChainApi {
     // Starting from the real current value → smooth 3ms ramp to target.
     param.setValueAtTime(param.value, now);
     param.linearRampToValueAtTime(target, now + 0.003);
-  }, [computeMasterTarget, disarmGainWatchdog, isLoadingTrackRef]);
+  }, [computeMasterTarget, disarmGainWatchdog]);
+
+  /**
+   * Slow gain ramp to near-silence over durationMs.
+   * Used for search crossfade transitions — tasteful, not abrupt.
+   */
+  const softFadeOut = useCallback((durationMs: number) => {
+    if (!gainNodeRef.current || !audioContextRef.current) return;
+    const ctx = audioContextRef.current;
+    const now = ctx.currentTime;
+    const param = gainNodeRef.current.gain;
+    param.cancelScheduledValues(now);
+    param.setValueAtTime(param.value, now);
+    param.linearRampToValueAtTime(0.0001, now + durationMs / 1000);
+  }, []);
 
   // ── UPDATE BOOST PRESET ──────────────────────────────────────────────
   // Click-free switch: cancelScheduledValues → setValueAtTime anchor →
@@ -381,6 +389,11 @@ export function useAudioChain(params: UseAudioChainParams): AudioChainApi {
   const updateVoyexSpatial = useCallback((value: number) => {
     if (!spatialEnhancedRef.current) return;
     const v = Math.max(-100, Math.min(100, value));
+    // Lazy-build spatial nodes on first non-zero activation
+    if (v !== 0 && !diveReverbWetRef.current) {
+      const builder = (spatialBypassDirectRef as unknown as { _buildSpatial?: () => void })._buildSpatial;
+      builder?.();
+    }
     const i = Math.abs(v) / 100;
 
     const ctx = audioContextRef.current;
@@ -518,17 +531,19 @@ export function useAudioChain(params: UseAudioChainParams): AudioChainApi {
       spInput.connect(spatialBypassDirect); spatialBypassDirect.connect(ctx.destination);
       hM.connect(spatialBypassMain); spatialBypassMain.connect(ctx.destination);
 
-      // Heavy VOYEX spatial nodes — deferred to idle. ~352K math ops +
-      // 44100 Math.tanh calls would block the audio thread for 50-200ms
-      // right at first-track startup ("fresh start glitch"). Building
-      // during requestIdleCallback lets the first track come up clean.
+      // VOYEX spatial nodes — built lazily on first spatial activation.
+      // ConvolverNode processes audio every render quantum even at gain=0 — permanent
+      // CPU tax on the mobile audio thread → stutter. Build only when user enables
+      // spatial so default VOYEX mode is stutter-free.
       const buildVoyexSpatialNodes = () => {
+        if (diveReverbWetRef.current) return; // already built
         const generateIR = (duration: number, decay: number, lpCutoff: number): AudioBuffer => {
+          // 0.25-0.35s IRs — same character as 1.5-2.5s, ~7x less CPU on audio thread.
           const len = Math.ceil(ctx.sampleRate * duration);
           const buf = ctx.createBuffer(2, len, ctx.sampleRate);
           const L = buf.getChannelData(0), R = buf.getChannelData(1);
-          const erEnd = Math.ceil(ctx.sampleRate * 0.08);
-          for (let er = 0; er < 12; er++) {
+          const erEnd = Math.ceil(ctx.sampleRate * 0.04);
+          for (let er = 0; er < 8; er++) {
             const pos = Math.floor(Math.random() * erEnd);
             const amp = (1 - pos / erEnd) * 0.4;
             L[pos] += (Math.random() * 2 - 1) * amp;
@@ -548,32 +563,29 @@ export function useAudioChain(params: UseAudioChainParams): AudioChainApi {
           return buf;
         };
         const diveConv = ctx.createConvolver();
-        diveConv.buffer = generateIR(2.5, 2.0, 1800);
+        diveConv.buffer = generateIR(0.35, 2.0, 1800);
         const diveWet = ctx.createGain(); diveWet.gain.value = 0;
         diveReverbWetRef.current = diveWet;
         spInput.connect(diveConv); diveConv.connect(diveWet); diveWet.connect(ctx.destination);
 
         const immConv = ctx.createConvolver();
-        immConv.buffer = generateIR(1.5, 3.5, 9000);
+        immConv.buffer = generateIR(0.25, 3.5, 9000);
         const immWet = ctx.createGain(); immWet.gain.value = 0;
         immerseReverbWetRef.current = immWet;
         spInput.connect(immConv); immConv.connect(immWet); immWet.connect(ctx.destination);
 
+        // Sub-harmonic: 256-sample curve (was 44100 — same output, 170x less memory)
         const sBP = ctx.createBiquadFilter(); sBP.type = 'bandpass'; sBP.frequency.value = 90; sBP.Q.value = 1;
         const sSh = ctx.createWaveShaper();
-        const sC = new Float32Array(44100);
-        for (let si = 0; si < 44100; si++) { const sx = (si * 2) / 44100 - 1; sC[si] = Math.tanh(sx * 3) * 0.8; }
+        const sC = new Float32Array(256);
+        for (let si = 0; si < 256; si++) { const sx = (si * 2) / 256 - 1; sC[si] = Math.tanh(sx * 3) * 0.8; }
         sSh.curve = sC; sSh.oversample = '2x';
         const sLP = ctx.createBiquadFilter(); sLP.type = 'lowpass'; sLP.frequency.value = 80;
         const sMx = ctx.createGain(); sMx.gain.value = 0; subHarmonicGainRef.current = sMx;
         spInput.connect(sBP); sBP.connect(sSh); sSh.connect(sLP); sLP.connect(sMx); sMx.connect(ctx.destination);
       };
-      const w = window as unknown as { requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => void };
-      if (typeof w.requestIdleCallback === 'function') {
-        w.requestIdleCallback(buildVoyexSpatialNodes, { timeout: 4000 });
-      } else {
-        setTimeout(buildVoyexSpatialNodes, 1500);
-      }
+      // Store builder on a ref so updateVoyexSpatial can trigger it on first spatial use
+      (spatialBypassDirectRef as unknown as { _buildSpatial?: () => void })._buildSpatial = buildVoyexSpatialNodes;
 
       spatialEnhancedRef.current = true;
 
@@ -689,8 +701,10 @@ export function useAudioChain(params: UseAudioChainParams): AudioChainApi {
 
   // ── EFFECTS: volume / preset / spatial change ────────────────────────
   // Volume effect — applies new master target via 25ms ramp.
+  // Gate: skip only for iframe audio (cross-origin, can't route through WebAudio).
+  // VPS stream, cached, r2, null → always get full VOYEX processing.
   useEffect(() => {
-    if ((playbackSource !== 'cached' && playbackSource !== 'r2') || !audioRef.current) return;
+    if (playbackSource === 'iframe' || !audioRef.current) return;
     if (audioEnhancedRef.current && gainNodeRef.current) {
       audioRef.current.volume = 1.0;
       applyMasterGain();
@@ -702,7 +716,7 @@ export function useAudioChain(params: UseAudioChainParams): AudioChainApi {
 
   // Preset change — apply via updateBoostPreset.
   useEffect(() => {
-    if ((playbackSource === 'cached' || playbackSource === 'r2') && audioEnhancedRef.current) {
+    if (playbackSource !== 'iframe' && audioEnhancedRef.current) {
       updateBoostPreset(boostProfile as BoostPreset);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -710,7 +724,7 @@ export function useAudioChain(params: UseAudioChainParams): AudioChainApi {
 
   // Spatial slider — only meaningful on VOYEX; otherwise neutralized.
   useEffect(() => {
-    if ((playbackSource === 'cached' || playbackSource === 'r2') && spatialEnhancedRef.current) {
+    if (playbackSource !== 'iframe' && spatialEnhancedRef.current) {
       if (boostProfile === 'voyex') updateVoyexSpatial(voyexSpatial);
       else updateVoyexSpatial(0);
     }
@@ -718,13 +732,12 @@ export function useAudioChain(params: UseAudioChainParams): AudioChainApi {
   }, [voyexSpatial, boostProfile, updateVoyexSpatial]);
 
   // ── PLAY/PAUSE CLICK-FREE FADE ───────────────────────────────────────
-  // User-initiated play/pause only (tap the button). loadTrack's canplay
-  // handler owns its own fade-in — we defer to it via isLoadingTrackRef.
+  // User-initiated play/pause only (tap the button).
   // Rapid toggle needs RAF cancellation (otherwise two ramps compete and
   // volume glitches).
   const playPauseRafRef = useRef<number | null>(null);
   useEffect(() => {
-    if ((playbackSource !== 'cached' && playbackSource !== 'r2') || !audioRef.current) return;
+    if (playbackSource === 'iframe' || !audioRef.current) return;
 
     // Cancel any in-flight HTML-volume ramp from a previous toggle.
     if (playPauseRafRef.current != null) {
@@ -734,13 +747,9 @@ export function useAudioChain(params: UseAudioChainParams): AudioChainApi {
 
     const audio = audioRef.current;
     if (isPlaying && audio.paused && audio.src && audio.readyState >= 2) {
-      audioContextRef.current?.resume().catch(() => {});
-
-      if (isLoadingTrackRef.current) {
-        // loadTrack owns the ramp; just resume the element.
-        audio.volume = 1.0;
-        audio.play().catch(() => {});
-        return;
+      const ctx = audioContextRef.current;
+      if (ctx && (ctx.state === 'suspended' || (ctx as any).state === 'interrupted')) {
+        ctx.resume().catch(() => {});
       }
 
       if (audioEnhancedRef.current && gainNodeRef.current && audioContextRef.current) {
@@ -813,6 +822,7 @@ export function useAudioChain(params: UseAudioChainParams): AudioChainApi {
     applyMasterGain,
     muteMasterGainInstantly,
     fadeInMasterGain,
+    softFadeOut,
     armGainWatchdog,
     disarmGainWatchdog,
   };

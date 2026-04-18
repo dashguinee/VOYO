@@ -24,7 +24,8 @@ const path = require('path');
 const SUPABASE_HOST = 'anmgyxhnyhbyxzpjhxgx.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFubWd5eGhueWhieXh6cGpoeGd4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjU5NzE3NDAsImV4cCI6MjA4MTU0Nzc0MH0.VKzfgrAbwvfs6WC1xhVbJ-mShmex3ycfib8jI57dyR4';
 
-const GEMINI_API_KEY = 'AIzaSyD7x2ITG1TiyVkKBag7ETb0Vd-zNG7RRoE';
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY || '';
+if (!GEMINI_API_KEY) { console.error('Missing GEMINI_API_KEY env var'); process.exit(1); }
 const GEMINI_MODEL = 'gemini-2.0-flash';
 const GEMINI_HOST = 'generativelanguage.googleapis.com';
 

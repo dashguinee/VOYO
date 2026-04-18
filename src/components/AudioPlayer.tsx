@@ -24,6 +24,9 @@ import { recordPoolEngagement } from '../services/personalization';
 import { recordTrackInSession } from '../services/poolCurator';
 import { recordPlay as djRecordPlay } from '../services/intelligentDJ';
 import { onTrackPlay as oyoOnTrackPlay } from '../services/oyoDJ';
+import { loadOyoState, handleRapidSkip } from '../services/oyoState';
+import { onSignal as oyaPlanSignal } from '../services/oyoPlan';
+import type { Track } from '../types';
 
 import type { BoostPreset } from '../audio/graph/boostPresets';
 export type { BoostPreset };
@@ -33,6 +36,7 @@ const YT_ART   = 'https://i.ytimg.com/vi';
 
 export const AudioPlayer = () => {
   const audioRef = useRef<HTMLAudioElement>(null);
+  const completionSignaledRef = useRef(false);
 
   const {
     currentTrack,
@@ -41,7 +45,6 @@ export const AudioPlayer = () => {
     boostProfile,
     voyexSpatial,
     playbackSource,
-    queue,
     setProgress,
     setCurrentTime,
     setDuration,
@@ -55,6 +58,7 @@ export const AudioPlayer = () => {
     applyMasterGain,
     fadeInMasterGain,
     muteMasterGainInstantly,
+    softFadeOut,
   } = useAudioChain({
     audioRef,
     volume,
@@ -74,6 +78,7 @@ export const AudioPlayer = () => {
     voyoStream.bindAudio(el);
     return () => {
       voyoStream.onBeforeStreamStart = null;
+      voyoStream.onRapidSkip = null;
       voyoStream.endSession();
     };
   }, []);
@@ -82,14 +87,46 @@ export const AudioPlayer = () => {
   useEffect(() => {
     voyoStream.onBeforeStreamStart = () => {
       setupAudioEnhancement(boostProfile as BoostPreset);
-      audioContextRef.current?.resume().catch(() => {});
+      const ctx = audioContextRef.current;
+      if (ctx && (ctx.state === 'suspended' || (ctx as any).state === 'interrupted')) {
+        ctx.resume().catch(() => {});
+      }
       muteMasterGainInstantly();
     };
-  }, [muteMasterGainInstantly, setupAudioEnhancement, boostProfile, audioContextRef]);
+    voyoStream.onSoftFade = (durationMs: number) => {
+      softFadeOut(durationMs);
+    };
+    voyoStream.onRapidSkip = async () => {
+      try {
+        const { deck } = await loadOyoState();
+        if (deck.trackIds.length === 0) return;
+        const { pivotTrackId } = await handleRapidSkip(deck);
+        if (!pivotTrackId) return;
+        const meta = deck.metadata[pivotTrackId];
+        if (!meta) return;
+        const pivot: Track = {
+          id: pivotTrackId,
+          trackId: pivotTrackId,
+          title: meta.title,
+          artist: meta.artist,
+          coverUrl: `${EDGE_ART}/${pivotTrackId}?quality=high`,
+          duration: 0,
+          tags: [],
+          oyeScore: 0,
+          createdAt: new Date().toISOString(),
+        };
+        voyoStream.priorityInject(pivot);
+        devLog(`[OYO] Rapid skip pivot → ${meta.title}`);
+      } catch {}
+    };
+  }, [muteMasterGainInstantly, setupAudioEnhancement, boostProfile, audioContextRef, softFadeOut]);
 
   // ── React to currentTrack changes ─────────────────────────────────────
   useEffect(() => {
     if (!currentTrack) return;
+    // Reset completion signal on every track change (VPS-driven or user-initiated)
+    completionSignaledRef.current = false;
+    if (voyoStream.isSkipping) return;
     // VPS-driven change (now_playing SSE) — stream already advanced, no-op
     if (currentTrack.trackId === voyoStream.currentTrackId) return;
     // VPS-driven track change — don't start a new session.
@@ -97,7 +134,6 @@ export const AudioPlayer = () => {
     // so if they match, the change came from the VPS (skip advance, normal advance).
     // User-initiated taps change the store track before VPS knows about it,
     // so voyoStream.currentTrackId won't match yet → correctly falls through.
-    if (voyoStream.sessionId && voyoStream.currentTrackId === currentTrack.trackId) return;
 
     devLog(`[AudioPlayer] user-initiated: ${currentTrack.trackId}`);
 
@@ -200,6 +236,18 @@ export const AudioPlayer = () => {
   }, [setIsPlaying]);
 
   const handlePause = useCallback(() => {
+    // Intentional pause (user tap, MediaSession) — honour it
+    if (voyoStream.intentionalPause) {
+      voyoStream.intentionalPause = false;
+      setIsPlaying(false);
+      return;
+    }
+    // Involuntary stall — stream hiccup or brief disconnect.
+    // Try to recover silently instead of showing the paused UI.
+    if (voyoStream.sessionId && voyoStream.streamUrl) {
+      audioRef.current?.play().catch(() => {});
+      return;
+    }
     setIsPlaying(false);
   }, [setIsPlaying]);
 
@@ -215,6 +263,11 @@ export const AudioPlayer = () => {
     if (dur > 0 && position >= dur) return;
 
     const progress = dur > 0 ? position / dur : 0;
+
+    if (progress >= 0.8 && !completionSignaledRef.current) {
+      completionSignaledRef.current = true;
+      oyaPlanSignal('completion');
+    }
 
     setCurrentTime(position);
     setProgress(progress * 100);
@@ -240,9 +293,20 @@ export const AudioPlayer = () => {
     });
     const el = audioRef.current;
     if (!el || !voyoStream.streamUrl) return;
+    // Preserve the current playback position so getPosition() stays accurate
+    // after the reconnect. markAudioRestarted() resets trackStartAudioTime to 0,
+    // which would make the progress bar jump to 0s even though the VPS resumes
+    // from the correct byte offset — the user sees a fake "restart".
+    // Snapshot position BEFORE reload. After el.src reload, audioEl.currentTime
+    // resets to 0 but the VPS resumes from the correct byte offset. We offset
+    // trackStartAudioTime so getPosition() = currentTime - trackStartAudioTime
+    // stays accurate (no fake "restart" at 0s on the progress bar).
+    const positionBeforeReload = voyoStream.getPosition();
     setTimeout(() => {
       if (el && voyoStream.streamUrl) {
-        voyoStream.markAudioRestarted();
+        // Do NOT call markAudioRestarted() — that resets trackStartAudioTime to 0
+        // and sets _audioRestarted which the SSE handler would clobber on next event.
+        voyoStream.trackStartAudioTime = -positionBeforeReload;
         el.src = voyoStream.streamUrl;
         el.play().catch(() => {});
       }

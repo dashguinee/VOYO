@@ -35,10 +35,6 @@ const ClassicMode = lazy(() => import('./components/classic/ClassicMode'));
 const SearchOverlay = lazy(() => import('./components/search/SearchOverlayV2'));
 const ArtistPage = lazy(() => import('./components/voyo/ArtistPage'));
 const UniversePanel = lazy(() => import('./components/universe/UniversePanel').then(m => ({ default: m.UniversePanel })));
-// OYO ambient AI invocation overlay — Phase 2. Lazy so the mercury SVG +
-// chat layer don't bloat the initial bundle. Only loads the first time
-// the user long-presses the VOYO orb to summon OYO.
-const OyoInvocation = lazy(() => import('./oyo-ui/OyoInvocation').then(m => ({ default: m.OyoInvocation })));
 import { useReactionStore } from './store/reactionStore';
 import { devLog, devWarn } from './utils/logger';
 import { AuthProvider } from './providers/AuthProvider';
@@ -1256,26 +1252,30 @@ function App() {
       }
     };
 
-    // FIRST: refresh recommendations immediately so the UI has data fast.
-    // This is the only thing the user actually sees on startup.
-    usePlayerStore.getState().refreshRecommendations();
-    devLog('[VOYO] VIBES FIRST: Loading from 324K database...');
+    // FIRST: OYO builds the session plan — owns HOT + DISCOVER pools from now on.
+    import('./services/oyoPlan').then(({ initPlan }) => initPlan()).catch(() => {});
+    devLog('[VOYO] VIBES FIRST: OYO plan engine initialising...');
 
-    // SECOND: defer pool maintenance + seed syncs to idle.
+    // SECOND: pool maintenance on idle, seed syncs hard-delayed 12s.
+    // Seed syncs were inside scheduleIdle which fires as soon as CPU is free —
+    // often within 100ms of mount, racing initPlan() + reactions + moments and
+    // saturating the Supabase HTTP/2 connection (ERR_HTTP2_SERVER_REFUSED_STREAM).
+    // Audio must be established before any DB write work starts.
     const idleId = scheduleIdle(() => {
       startPoolMaintenance();
       devLog('[VOYO] Track pool maintenance started (deferred)');
+    });
 
+    const seedTimer = setTimeout(() => {
       syncSeedTracks(TRACKS).then(count => {
         if (count > 0) devLog(`[VOYO] 🌱 Synced ${count} seed tracks to Supabase`);
       });
-
       syncManyToDatabase(TRACKS).then(count => {
         if (count > 0) devLog(`[VOYO] 🧠 Synced ${count} seed tracks to video_intelligence`);
       });
-    });
+    }, 12_000);
 
-    return () => cancelIdle(idleId);
+    return () => { cancelIdle(idleId); clearTimeout(seedTimer); };
   }, []);
 
   // REALTIME NOTIFICATIONS: Subscribe to Supabase events for DynamicIsland.
@@ -1650,12 +1650,6 @@ function App() {
       <AudioErrorBoundary>
         <AudioPlayer />
       </AudioErrorBoundary>
-
-      {/* OYO Ambient AI Overlay — Phase 2. Mounted once at root, reads
-          isInvoked from oyoStore. Long-press the VOYO orb to summon. */}
-      <Suspense fallback={null}>
-        <OyoInvocation />
-      </Suspense>
 
       {/* YouTube Iframe - GLOBAL for all modes (Classic needs it for streaming) */}
       <YouTubeIframe />

@@ -11,21 +11,15 @@
 
 import { useCallback } from 'react';
 import { usePlayerStore } from '../store/playerStore';
+import { voyoStream } from '../services/voyoStream';
 import { unlockMobileAudio, isAudioUnlocked } from '../utils/mobileAudioUnlock';
-import { devWarn } from '../utils/logger';
+import { devLog, devWarn } from '../utils/logger';
 
 /**
  * Get the global audio element used by AudioPlayer
  */
 function getAudioElement(): HTMLAudioElement | null {
   return document.querySelector('audio');
-}
-
-/**
- * Get the global video element used by AudioPlayer
- */
-function getVideoElement(): HTMLVideoElement | null {
-  return document.querySelector('video');
 }
 
 export function useMobilePlay() {
@@ -60,6 +54,7 @@ export function useMobilePlay() {
     if (currentState) {
       // Pause - this always works
       try {
+        voyoStream.intentionalPause = true;
         element.pause();
         togglePlay();
       } catch (err) {
@@ -69,9 +64,27 @@ export function useMobilePlay() {
     } else {
       // Play - DIRECTLY in user gesture handler
       try {
-        // Check if element has a source
+        // No active session yet (first-song tap on a staged track, or after
+        // session was ended without starting a new one). Start the session
+        // NOW — we are inside a user gesture so play() will be allowed.
         if (!element.src || element.src === '') {
-          togglePlay();
+          const store = usePlayerStore.getState();
+          const currentTrack = store.currentTrack;
+          if (!currentTrack) {
+            // Nothing staged — just flip the UI state and let AudioPlayer sort it
+            togglePlay();
+            return;
+          }
+          devLog('[useMobilePlay] No src — starting session from user gesture');
+          // Mark as playing immediately so the UI responds
+          store.setIsPlaying(true);
+          const queueTracks = store.queue.map(qi => qi.track);
+          // startSession calls audioEl.play() internally after setting src.
+          // Since we are in a user gesture context the play() will succeed.
+          voyoStream.startSession(currentTrack, queueTracks).catch(e => {
+            devWarn('[useMobilePlay] startSession failed:', e);
+            store.setIsPlaying(false);
+          });
           return;
         }
 
@@ -100,25 +113,6 @@ export function useMobilePlay() {
   }, [togglePlay]);
 
   /**
-   * Force play (use when you're certain there's a valid source)
-   */
-  const forcePlay = useCallback(async () => {
-    const element = getAudioElement();
-    if (!element) return false;
-
-    if (!isAudioUnlocked()) {
-      await unlockMobileAudio();
-    }
-
-    try {
-      await element.play();
-      return true;
-    } catch (err) {
-      return false;
-    }
-  }, []);
-
-  /**
    * Check if we can play (has source and ready)
    */
   const canPlay = useCallback(() => {
@@ -128,7 +122,6 @@ export function useMobilePlay() {
 
   return {
     handlePlayPause,
-    forcePlay,
     canPlay,
     isUnlocked: isAudioUnlocked(),
   };

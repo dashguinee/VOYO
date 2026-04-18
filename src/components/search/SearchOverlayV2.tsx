@@ -8,7 +8,7 @@ import { Search, X, Loader2, Music2, Clock, Play, ListPlus, Compass, Disc3, Radi
 import { VoyoIcon, VoyoIconName } from '../ui/VoyoIcon';
 import { usePlayerStore } from '../../store/playerStore';
 import { Track } from '../../types';
-import { searchMusic, SearchResult } from '../../services/api';
+import { searchMusic, SearchResult, prefetchTrack } from '../../services/api';
 import { getThumb } from '../../utils/thumbnail';
 import { SmartImage } from '../ui/SmartImage';
 import { searchCache } from '../../utils/searchCache';
@@ -19,6 +19,8 @@ import { VibesSection } from './VibesSection';
 import { devWarn } from '../../utils/logger';
 import { supabase, isSupabaseConfigured } from '../../lib/supabase';
 import { getVibeEssence } from '../../services/essenceEngine';
+import { voyoStream } from '../../services/voyoStream';
+import { onSignal as oyaPlanSignal } from '../../services/oyoPlan';
 
 interface SearchOverlayProps {
   isOpen: boolean;
@@ -218,6 +220,14 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap }: SearchOverlayP
       setCachedSet(next);
     });
     return () => { cancelled = true; };
+  }, [results]);
+
+  // Pre-warm top 3 results as soon as they appear — fire-and-forget.
+  // By the time the user taps (typically 2-5s later), the VPS has already
+  // started extracting. Uses the existing edge-worker prefetch endpoint.
+  useEffect(() => {
+    if (results.length === 0) return;
+    results.slice(0, 3).forEach(r => { prefetchTrack(r.voyoId); });
   }, [results]);
 
   // Load search history
@@ -425,18 +435,19 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap }: SearchOverlayP
     createdAt: new Date().toISOString(),
   }), []);
 
-  const handleSelectTrack = useCallback((result: SearchResult) => {
-    const track = resultToTrack(result);
-    addSearchResultsToPool([track]);
-    usePlayerStore.getState().playTrack(track);
-    usePlayerStore.getState().setShouldOpenNowPlaying(true);
-    onClose();
-  }, [resultToTrack, onClose]);
-
   const showToast = useCallback((text: string, type: 'queue' | 'discovery') => {
     setToast({ text, type });
     setTimeout(() => setToast(null), 1500);
   }, []);
+
+  const handleSelectTrack = useCallback((result: SearchResult) => {
+    const track = resultToTrack(result);
+    addSearchResultsToPool([track]);
+    voyoStream.searchInject(track);
+    oyaPlanSignal('search_play', track.artist ?? '');
+    showToast('Playing now', 'queue');
+    // Search stays open — user keeps exploring
+  }, [resultToTrack, showToast]);
 
   const handleAddToQueue = useCallback((result: SearchResult) => {
     const track = resultToTrack(result);

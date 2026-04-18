@@ -23,6 +23,7 @@ const voyoKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 
 export const supabase = voyoUrl && voyoKey
   ? createClient(voyoUrl, voyoKey, {
+      auth: { persistSession: false, storageKey: 'voyo-data' },
       realtime: { params: { eventsPerSecond: 10 } },
     })
   : null;
@@ -33,6 +34,7 @@ const commandKey = import.meta.env.VITE_COMMAND_CENTER_KEY || '';
 
 export const commandCenter: SupabaseClient | null = commandUrl && commandKey
   ? createClient(commandUrl, commandKey, {
+      auth: { persistSession: false, storageKey: 'voyo-cc-data' },
       realtime: { params: { eventsPerSecond: 10 } },
     })
   : null;
@@ -131,6 +133,8 @@ export const profileAPI = {
       .rpc('get_or_create_profile', { p_dash_id: dashId });
 
     if (error) {
+      const s = (error as any).status;
+      if (s === 401 || s === 403) return null;
       console.error('[VOYO] Profile error:', error);
       return null;
     }
@@ -328,6 +332,8 @@ export const friendsAPI = {
       });
 
     if (error) {
+      const s = (error as any).status;
+      if (s === 401 || s === 403) return false;
       console.error('[VOYO] Add friend error:', error.message);
       return false;
     }
@@ -348,6 +354,8 @@ export const friendsAPI = {
       });
 
     if (error) {
+      const s = (error as any).status;
+      if (s === 401 || s === 403) return false;
       console.error('[VOYO] Remove friend error:', error.message);
       return false;
     }
@@ -473,6 +481,8 @@ export const messagesAPI = {
       });
 
     if (error) {
+      const s = (error as any).status;
+      if (s === 401 || s === 403) return false;
       console.error('[VOYO] Send message error:', error.message);
       return false;
     }
@@ -499,6 +509,8 @@ export const messagesAPI = {
       });
 
     if (error) {
+      const s = (error as any).status;
+      if (s === 401 || s === 403) return [];
       console.error('[VOYO] Get conversation error:', error.message);
       return [];
     }
@@ -540,6 +552,8 @@ export const messagesAPI = {
       });
 
     if (error) {
+      const s = (error as any).status;
+      if (s === 401 || s === 403) return false;
       console.error('[VOYO] Mark read error:', error.message);
       return false;
     }
@@ -573,6 +587,8 @@ export const messagesAPI = {
       .rpc('get_conversations', { p_user_id: dashId });
 
     if (error) {
+      const s = (error as any).status;
+      if (s === 401 || s === 403) return [];
       console.error('[VOYO] Get conversations error:', error.message);
       return [];
     }

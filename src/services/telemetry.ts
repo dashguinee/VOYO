@@ -23,17 +23,19 @@ const APP_ID = 'voyo';
 const TABLE = 'voyo_playback_events';
 
 export type PlaybackEventType =
-  | 'play_start'       // loadTrack fired
-  | 'play_success'     // audio element's onPlay event — actually playing
-  | 'play_fail'        // audio.play() rejected (not autoplay-block)
-  | 'source_resolved'  // a source (cache/r2/vps/edge) delivered the track
-  | 'stall'            // playback stalled during streaming
-  | 'skip_auto'        // track auto-skipped (watchdog / max-retry / recovery)
-  | 'trace';           // full-session debug trace — only fires when
-                       // localStorage.voyoDebug = '1'. Carries per-event
-                       // `meta.subtype` describing what decision was made,
-                       // `meta.why` for the reason, plus whatever context
-                       // matters (guards, paths, latencies).
+  | 'play_start'         // user-initiated session start
+  | 'play_success'       // audio element's onPlay — actually playing
+  | 'play_fail'          // audio.play() rejected
+  | 'stream_error'       // audio element onError — MediaError.code + message
+  | 'stream_stall'       // audio element waiting/stalled with readyState
+  | 'stream_ended'       // audio element ended while session still active (unexpected)
+  | 'bg_disconnect'      // stream dropped on background
+  | 'bg_reconnect'       // stream recovered after background disconnect
+  | 'skip_stuck'         // isSkipping flag stuck for >10s — cleared automatically
+  | 'source_resolved'    // a source (cache/r2/vps/edge) delivered the track
+  | 'stall'              // playback stalled during streaming
+  | 'skip_auto'          // track auto-skipped (watchdog / max-retry / recovery)
+  | 'trace';             // full-session debug trace (localStorage.voyoDebug = '1')
 
 export type PlaybackSource =
   | 'preload'

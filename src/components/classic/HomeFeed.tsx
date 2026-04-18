@@ -16,6 +16,7 @@ import { SmartImage } from '../ui/SmartImage';
 import { VIBES, Vibe } from '../../data/tracks';
 import { LottieIcon } from '../ui/LottieIcon';
 import { getUserTopTracks, getPoolAwareHotTracks, getPoolAwareDiscoveryTracks, calculateBehaviorScore, recordPoolEngagement } from '../../services/personalization';
+import { curateAllSections } from '../../services/poolCurator';
 import { getInsights as getOyoInsights } from '../../services/oyoDJ';
 import { usePreferenceStore } from '../../store/preferenceStore';
 import { usePlayerStore } from '../../store/playerStore';
@@ -1349,6 +1350,13 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
   useEffect(() => {
     refreshRecommendations();
   }, [hotPool.length, refreshRecommendations]);
+
+  // Session prewarm: fill pool trending/west-african/classics sections on Home mount.
+  // These feed the freshness tier in Hot and the Discovery pool.
+  // Portrait player is warm by the time user taps play — same pool, shared session.
+  useEffect(() => {
+    curateAllSections().catch(() => {});
+  }, []);
 
   const handleRefresh = () => {
     setIsRefreshing(true);

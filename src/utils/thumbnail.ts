@@ -6,24 +6,18 @@
 // YouTube thumbnail quality options
 export type ThumbnailQuality = 'default' | 'medium' | 'high' | 'max';
 
-// CRITICAL: YouTube serves thumbnails at DIFFERENT aspect ratios depending on
-// the file. The 'default'/'mq'/'hq' family is 4:3 with BLACK LETTERBOX BARS
-// (the 16:9 video frame embedded in a 4:3 image). When you object-cover crop
-// these into a square card, the effective content is ~75% of the image — and
-// the cropped result looks blurry/small even at "high" quality.
+// YouTube thumbnail availability:
+//   default / mqdefault / hqdefault — always exist (4:3 letterboxed)
+//   sddefault — usually exists (640x480)
+//   hq720 / maxresdefault — only for HD uploads, 404 for many music videos
 //
-// 'maxresdefault' is 16:9 without bars, but YouTube only generates it for
-// higher-quality uploads — for many tracks it returns 404 and we fall back
-// to the letterboxed lower quality.
-//
-// SOLUTION: 'hq720' (1280x720, 16:9, no bars) — the actual playback frame.
-// It's generated for EVERY video and is the same pixel res as maxresdefault
-// without the 404 risk.
+// Use hqdefault (480x360) as the reliable high-quality option.
+// Use maxresdefault only as an optimistic first-try with hqdefault fallback.
 const QUALITY_MAP: Record<ThumbnailQuality, string> = {
-  default: 'default',      // 120x90, 4:3 letterboxed
-  medium: 'mqdefault',     // 320x180, 4:3 letterboxed
-  high: 'hq720',           // 1280x720, 16:9, NO LETTERBOX, always exists
-  max: 'maxresdefault',    // 1280x720, 16:9, may 404 — fall back to hq720
+  default: 'default',       // 120x90,  always exists
+  medium: 'mqdefault',      // 320x180, always exists
+  high: 'hqdefault',        // 480x360, always exists
+  max: 'maxresdefault',     // 1280x720, HD-only — may 404
 };
 
 /**
@@ -52,20 +46,14 @@ export const getThumb = (trackId: string, quality: ThumbnailQuality = 'high'): s
  * Get thumbnail with fallback chain (for progressive loading).
  *
  * Order:
- * 1. maxresdefault (1280x720, 16:9) — best when available
- * 2. hq720 (1280x720, 16:9, no letterbox) — always exists, same res
- * 3. hqdefault (480x360, 4:3 letterboxed) — last resort, low res
- *
- * The maxresdefault → hq720 fallback is the key fix: previously when
- * maxresdefault 404'd we'd drop straight to hqdefault (small + letterboxed)
- * which looked blurry on cards. hq720 gives us same-pixel-res 16:9 fallback.
+ * 1. maxresdefault (1280x720) — best when available, HD uploads only
+ * 2. hqdefault (480x360)     — always exists, reliable fallback
  */
 export const getThumbWithFallback = (trackId: string) => {
   const ytId = decodeYtId(trackId);
   return {
-    primary: `https://i.ytimg.com/vi/${ytId}/maxresdefault.jpg`,
-    fallback: `https://i.ytimg.com/vi/${ytId}/hq720.jpg`,
-    fallback2: `https://i.ytimg.com/vi/${ytId}/hqdefault.jpg`,
+    primary:  `https://i.ytimg.com/vi/${ytId}/maxresdefault.jpg`,
+    fallback: `https://i.ytimg.com/vi/${ytId}/hqdefault.jpg`,
   };
 };
 

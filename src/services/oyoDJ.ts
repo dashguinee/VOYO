@@ -401,6 +401,21 @@ function learnFromBehavior(behavior: {
         }
       }
     }
+
+    // Store WHEN in the track the skip happened — OYO uses this for timing awareness.
+    // Patterns: early skip (<15s) = wrong vibe entirely, mid-skip (15-60s) = tried but no,
+    // late-skip (>60s) = liked but moved on. These inform autonomous timing decisions.
+    const positionSec = context?.positionSec;
+    if (positionSec !== undefined && positionSec >= 0) {
+      djProfile.relationship.learnedPreferences.push({
+        type: 'skip_timing',
+        subject: track.trackId ?? track.id,
+        detail: positionSec < 15 ? 'early' : positionSec < 60 ? 'mid' : 'late',
+        positionSec,
+        timestamp: Date.now(),
+      } as any);
+    }
+
     // Cap learnedPreferences at 200 entries
     if (djProfile.relationship.learnedPreferences.length > 200) {
       djProfile.relationship.learnedPreferences = djProfile.relationship.learnedPreferences.slice(-200);
@@ -617,7 +632,7 @@ RESPOND WITH JSON ONLY:
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         contents: [{ parts: [{ text: fullPrompt }] }],
-        generationConfig: { temperature: 0.9, maxOutputTokens: 200 },
+        generationConfig: { temperature: 0.9, maxOutputTokens: 500 },
       }),
     });
 
@@ -628,6 +643,8 @@ RESPOND WITH JSON ONLY:
     const data = await response.json();
     let text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
     text = text.replace(/```json?\n?/g, '').replace(/```/g, '').trim();
+    // Guard against truncated responses — let catch() handle fallback
+    if (!text.endsWith('}')) throw new Error('truncated response');
     const result = JSON.parse(text);
 
     announcementHistory.push(result.text);
@@ -743,9 +760,9 @@ export async function onTrackPlay(track: Track, previousTrack?: Track): Promise<
 /**
  * Called when a track is skipped
  */
-export function onTrackSkip(track: Track): void {
+export function onTrackSkip(track: Track, positionSec?: number): void {
   skipCount++;
-  learnFromBehavior({ type: 'skip', track });
+  learnFromBehavior({ type: 'skip', track, context: { positionSec } });
 
   // If many skips, maybe check in
   if (skipCount % 5 === 0) {

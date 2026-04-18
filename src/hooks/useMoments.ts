@@ -17,7 +17,12 @@
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { devWarn } from '../utils/logger';
 import type { Moment } from '../services/momentsService';
+
+// Circuit breaker: voyo_moments queries time out when table lacks indexes.
+// After first timeout, stop making requests to prevent repeated 500s in console.
+let _momentsBlocked = false;
 
 // ============================================
 // TYPES
@@ -207,7 +212,7 @@ export function useMoments(): UseMomentsReturn {
 
   const fetchMomentsForCategory = useCallback(
     async (axis: CategoryAxis, category: string, offset = 0) => {
-      if (!supabase || !isSupabaseConfigured) return;
+      if (!supabase || !isSupabaseConfigured || _momentsBlocked) return;
 
       const key = cacheKey(axis, category);
 
@@ -241,7 +246,14 @@ export function useMoments(): UseMomentsReturn {
         const { data, error } = await query;
 
         if (error) {
-          console.error(`[useMoments] Fetch error for ${category}:`, error.message);
+          // DB statement timeout = missing index on voyo_moments. Block future
+          // requests so the console isn't spammed with repeated 500s.
+          if (error.message?.includes('timeout') || error.message?.includes('statement')) {
+            _momentsBlocked = true;
+            devWarn('[useMoments] DB timeout — moments queries disabled until next reload');
+          } else {
+            devWarn(`[useMoments] Fetch error for ${category}:`, error.message);
+          }
           return;
         }
 
@@ -263,7 +275,7 @@ export function useMoments(): UseMomentsReturn {
 
         fetchedRef.current.add(key);
       } catch (err) {
-        console.error('[useMoments] Fetch exception:', err);
+        devWarn('[useMoments] Fetch exception:', err);
       } finally {
         fetchingRef.current.delete(key);
         if (offset === 0) setLoading(false);

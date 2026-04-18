@@ -13,6 +13,7 @@
 
 import { useEffect, useRef, useCallback, memo, useState, type Dispatch, type SetStateAction } from 'react';
 import { usePlayerStore } from '../store/playerStore';
+import { voyoStream } from '../services/voyoStream';
 import { markTrackAsFailed } from '../services/trackVerifier';
 import { devLog } from '../utils/logger';
 
@@ -97,6 +98,7 @@ export const YouTubeIframe = memo(() => {
   const currentVideoIdRef = useRef<string | null>(null);
   const initializingRef = useRef(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const initPlayerRef = useRef<((id: string) => void) | null>(null);
 
   const currentTrack = usePlayerStore((s) => s.currentTrack);
   const isPlaying = usePlayerStore((s) => s.isPlaying);
@@ -136,20 +138,64 @@ export const YouTubeIframe = memo(() => {
   // subscribes to currentTime, writes to state only on zone transitions).
   // See the <OverlayTimingSync> in the render tree below.
 
-  // Load YouTube API once
+  // Load YouTube API once — deferred until first user gesture.
+  // Loading www-widgetapi.js immediately on mount causes:
+  //   1. AudioContext warning (YouTube's API creates audio infrastructure before gesture)
+  //   2. postMessage SecurityError (iframe navigates to about:blank before YouTube URL)
+  // After any user interaction the gesture requirement is satisfied, so defer is safe.
   useEffect(() => {
-    if (isApiLoadedRef.current || (window as any).YT?.Player) {
-      isApiLoadedRef.current = true;
-      return;
-    }
-    const tag = document.createElement('script');
-    tag.src = 'https://www.youtube.com/iframe_api';
-    document.head.appendChild(tag);
-    (window as any).onYouTubeIframeAPIReady = () => {
-      isApiLoadedRef.current = true;
-      if (youtubeId) initPlayer(youtubeId);
+    const loadApi = () => {
+      if (isApiLoadedRef.current || (window as any).YT?.Player) {
+        isApiLoadedRef.current = true;
+        return;
+      }
+      const tag = document.createElement('script');
+      tag.src = 'https://www.youtube.com/iframe_api';
+      document.head.appendChild(tag);
+      (window as any).onYouTubeIframeAPIReady = () => {
+        isApiLoadedRef.current = true;
+        const store = usePlayerStore.getState();
+        const trackId = store.currentTrack?.trackId;
+        // Don't create player if VPS is active and video isn't needed —
+        // would immediately enter the polling loop we're trying to avoid.
+        const isBoosted = store.playbackSource === 'cached' || store.playbackSource === 'r2';
+        if (trackId && !(isBoosted && store.videoTarget === 'hidden')) {
+          initPlayerRef.current?.(getYouTubeId(trackId));
+        }
+      };
+    };
+
+    // If API already present (e.g. hot reload), mark loaded immediately
+    if ((window as any).YT?.Player) { isApiLoadedRef.current = true; return; }
+
+    const onGesture = () => {
+      document.removeEventListener('click', onGesture);
+      document.removeEventListener('touchstart', onGesture);
+      loadApi();
+    };
+    document.addEventListener('click', onGesture, { passive: true });
+    document.addEventListener('touchstart', onGesture, { passive: true });
+    return () => {
+      document.removeEventListener('click', onGesture);
+      document.removeEventListener('touchstart', onGesture);
     };
   }, []);
+
+  // Destroy the YouTube player when VPS is active and video is hidden.
+  // Previously we only muted+paused it, which left it in YouTube's internal
+  // polling registry. www-widgetapi.js setInterval kept sending postMessage to
+  // the muted iframe — when the origin didn't match it threw SecurityError and
+  // YouTube's state machine fired spurious PAUSED events, causing playback to
+  // stutter. Destroying removes the player from the registry entirely.
+  useEffect(() => {
+    const isBoosted = playbackSource === 'cached' || playbackSource === 'r2';
+    if (isBoosted && videoTarget === 'hidden' && playerRef.current) {
+      try { playerRef.current.destroy(); } catch {}
+      playerRef.current = null;
+      currentVideoIdRef.current = null;
+      if (containerRef.current) containerRef.current.innerHTML = '';
+    }
+  }, [playbackSource, videoTarget]);
 
   const initPlayer = useCallback((videoId: string) => {
     if (!isApiLoadedRef.current || !(window as any).YT?.Player) return;
@@ -214,6 +260,14 @@ export const YouTubeIframe = memo(() => {
         },
         onStateChange: (e: any) => {
           if (e.data === YT_STATES.ENDED) {
+            // In VPS streaming mode, the VPS handles all track advancement via SSE.
+            // Ignore ENDED from YouTube — it fires spuriously on player init/destroy
+            // and would cause session cycling if allowed through.
+            const ps = usePlayerStore.getState().playbackSource;
+            if (ps === 'cached' || ps === 'r2') {
+              devLog('[YouTubeIframe] ENDED ignored — VPS owns track advance in boosted mode');
+              return;
+            }
             nextTrack();
           }
         },
@@ -247,9 +301,13 @@ export const YouTubeIframe = memo(() => {
             devLog('[YouTubeIframe] Video not found:', videoId);
             if (videoId) markTrackAsFailed(videoId, errorCode);
             // Re-check on fire: if the hot-swap completed during this
-            // 500ms window, the audio element is already playing the
-            // track via /stream — don't skip away from a working track.
+            // 500ms window, or VPS session is active (VPS owns track advance),
+            // don't skip away from a working track.
             setTimeout(() => {
+              if (voyoStream.sessionId) {
+                devLog('[YouTubeIframe] 100 recovery skipped — VPS session active');
+                return;
+              }
               const ps = usePlayerStore.getState().playbackSource;
               if (ps === 'cached' || ps === 'r2') {
                 devLog('[YouTubeIframe] 100 recovery skipped — hot-swap won');
@@ -278,6 +336,10 @@ export const YouTubeIframe = memo(() => {
             // Same re-check as the 100 path: hot-swap may have won the
             // race during the 500ms delay. Don't skip a newly-ready track.
             setTimeout(() => {
+              if (voyoStream.sessionId) {
+                devLog('[YouTubeIframe] embed-blocked recovery skipped — VPS session active');
+                return;
+              }
               const ps = usePlayerStore.getState().playbackSource;
               if (ps === 'cached' || ps === 'r2') {
                 devLog('[YouTubeIframe] embed-blocked recovery skipped — hot-swap won');
@@ -295,14 +357,26 @@ export const YouTubeIframe = memo(() => {
     });
   }, [volume, nextTrack, setDuration]);
 
-  // Init player when track changes — also clear any prior videoBlocked flag
-  // so each new track starts with a fresh "video is fine until proven otherwise" state.
+  // Keep initPlayerRef current so the deferred API-load callback can always
+  // call the latest initPlayer without creating a stale-closure dependency.
+  useEffect(() => { initPlayerRef.current = initPlayer; }, [initPlayer]);
+
+  // Init player when track changes — also clear any prior videoBlocked flag.
+  // Skip creation when video is hidden AND we're not the audio source (VPS/boosted mode).
+  // Player will be created on-demand when the user opens video mode or source switches to iframe.
   useEffect(() => {
-    if (youtubeId) {
-      usePlayerStore.getState().setVideoBlocked(false);
-      if (isApiLoadedRef.current) initPlayer(youtubeId);
-    }
-  }, [youtubeId, initPlayer]);
+    if (!youtubeId) return;
+    usePlayerStore.getState().setVideoBlocked(false);
+    if (videoTarget === 'hidden' && playbackSource !== 'iframe') return;
+    if (isApiLoadedRef.current) initPlayer(youtubeId);
+  }, [youtubeId, videoTarget, playbackSource, initPlayer]);
+
+  // On-demand player creation: user opened video mode or source switched to iframe
+  useEffect(() => {
+    if (!youtubeId || playerRef.current || !isApiLoadedRef.current) return;
+    if (videoTarget === 'hidden' && playbackSource !== 'iframe') return;
+    initPlayer(youtubeId);
+  }, [videoTarget, playbackSource, youtubeId, initPlayer]);
 
   // Play/Pause sync
   // DOUBLE STREAMING FIX: When using cached/r2 audio with hidden video, pause iframe to save bandwidth

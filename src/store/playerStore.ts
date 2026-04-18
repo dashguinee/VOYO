@@ -26,10 +26,10 @@ import { getThumb } from '../utils/thumbnail';
 import {
   getPoolAwareHotTracks,
   getPoolAwareDiscoveryTracks,
+  getTrendingPoolTracks,
   recordPoolEngagement,
 } from '../services/personalization';
 import { BitrateLevel, BufferStatus } from '../services/audioEngine';
-import { prefetchTrack } from '../services/api';
 
 // VIBES FIRST: Database discovery from 324K tracks (lazy import to avoid circular deps)
 let databaseDiscoveryModule: typeof import('../services/databaseDiscovery') | null = null;
@@ -51,6 +51,10 @@ type PrefetchStatus = 'idle' | 'loading' | 'ready' | 'error';
 
 // AbortController for cancelling async operations on rapid track changes
 let currentTrackAbortController: AbortController | null = null;
+
+// Circuit breaker: if record_signal RPC returns 401/403 (not accessible to anon),
+// stop firing requests — each failed fetch appears as red in Chrome console.
+let _rpcSignalBlocked = false;
 
 // Dedup trackers for setCurrentTime persistence — see setCurrentTime impl
 let _lastPersistedSec = -1;
@@ -341,6 +345,7 @@ interface PlayerStore {
 
   // Actions - Queue
   addToQueue: (track: Track, position?: number) => void;
+  addTracksToQueue: (tracks: Track[]) => void;
   removeFromQueue: (index: number) => void;
   clearQueue: () => void;
   reorderQueue: (fromIndex: number, toIndex: number) => void;
@@ -753,17 +758,23 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
         // Wired here at the playerStore.nextTrack boundary so EVERY surface
         // that triggers a skip (Portrait, Landscape, Classic, queue, hotkey)
         // feeds the brain for free — no per-surface wiring needed.
-        oyoOnTrackSkip(state.currentTrack);
+        oyoOnTrackSkip(state.currentTrack, state.currentTime);
         // GLOBAL SIGNAL: persist skip to video_intelligence so recommender learns
-        import('../lib/supabase').then(({ supabase }) => {
-          void (supabase?.rpc('record_signal', { p_youtube_id: state.currentTrack!.trackId, p_action: 'skip' }) as unknown as Promise<unknown>)?.catch(() => {});
+        if (!_rpcSignalBlocked) import('../lib/supabase').then(async ({ supabase }) => {
+          try {
+            const r = await supabase?.rpc('record_signal', { p_youtube_id: state.currentTrack!.trackId, p_action: 'skip' });
+            if ((r as any)?.error?.status === 401 || (r as any)?.error?.code === '42501') _rpcSignalBlocked = true;
+          } catch {}
         });
       } else {
         // User completed (at least 30% played)
         recordPoolEngagement(state.currentTrack.id, 'complete', { completionRate });
         // GLOBAL SIGNAL: persist complete to video_intelligence
-        import('../lib/supabase').then(({ supabase }) => {
-          void (supabase?.rpc('record_signal', { p_youtube_id: state.currentTrack!.trackId, p_action: 'complete' }) as unknown as Promise<unknown>)?.catch(() => {});
+        if (!_rpcSignalBlocked) import('../lib/supabase').then(async ({ supabase }) => {
+          try {
+            const r = await supabase?.rpc('record_signal', { p_youtube_id: state.currentTrack!.trackId, p_action: 'complete' });
+            if ((r as any)?.error?.status === 401 || (r as any)?.error?.code === '42501') _rpcSignalBlocked = true;
+          } catch {}
         });
       }
     }
@@ -802,11 +813,6 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
         }
         // POOL ENGAGEMENT: Record play for next track
         recordPoolEngagement(nextPlayable.track.id, 'play');
-
-        // INSTANT SKIP: Prefetch the next track in queue for even faster loading
-        if (rest.length > 0 && rest[0].track.trackId) {
-          prefetchTrack(rest[0].track.trackId);
-        }
 
         set({
           currentTrack: nextPlayable.track,
@@ -1251,46 +1257,6 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
         source: 'manual',
       };
 
-      // INSTANT PLAYBACK: Warm up the track for streaming
-      if (track.trackId) {
-        prefetchTrack(track.trackId);
-      }
-
-      // QUEUE PRE-BOOST: kick off a background cacheTrack for the
-      // queued track so it hits R2 before the user reaches it. This
-      // means background play will work for queued tracks — the audio
-      // element will find the R2 URL on loadTrack instead of falling
-      // back to iframe audio (which can't play in background).
-      //
-      // Deferred 2.5s so it doesn't compete with the currently-playing
-      // track's first-buffer bandwidth. Respects downloadSetting ('never'
-      // bypasses entirely, 'wifi-only' gates on connection type).
-      //
-      // Dynamic import to keep downloadStore out of the player-store
-      // startup dependency chain.
-      if (track.trackId) {
-        setTimeout(() => {
-          import('./downloadStore').then(({ useDownloadStore }) => {
-            const ds = useDownloadStore.getState();
-            if (ds.downloadSetting === 'never') return;
-            if (ds.downloadSetting === 'wifi-only') {
-              const conn = (navigator as any).connection || (navigator as any).mozConnection || (navigator as any).webkitConnection;
-              const isWifi = !conn || conn.type === 'wifi' || conn.type === 'ethernet' || !conn.effectiveType?.includes('2g');
-              if (!isWifi) return;
-            }
-            // Don't re-cache if already present (cacheTrack itself no-ops
-            // if the track is already in IndexedDB at any quality).
-            ds.cacheTrack(
-              track.trackId!,
-              track.title,
-              track.artist,
-              track.duration || 0,
-              `https://voyo-edge.dash-webtv.workers.dev/cdn/art/${track.trackId}?quality=high`,
-            ).catch(() => {});
-          }).catch(() => {});
-        }, 2500);
-      }
-
       // POOL ENGAGEMENT: Record queue action (strong intent signal)
       recordPoolEngagement(track.id, 'queue');
 
@@ -1338,6 +1304,17 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     };
     if (typeof w.requestIdleCallback === 'function') w.requestIdleCallback(() => syncQueue(), { timeout: 5000 });
     else setTimeout(() => syncQueue(), 2000);
+  },
+
+  addTracksToQueue: (tracks) => {
+    set((state) => {
+      const existingIds = new Set(state.queue.map(q => q.track.id));
+      const newItems = tracks
+        .filter(t => !existingIds.has(t.id) && t.trackId && !isKnownUnplayable(t.trackId) && !isBlocklisted(t.trackId))
+        .map(t => ({ track: t, addedAt: new Date().toISOString(), source: 'auto' as const }));
+      if (newItems.length === 0) return state;
+      return { queue: [...state.queue, ...newItems] };
+    });
   },
 
   removeFromQueue: (index) => {
@@ -1525,8 +1502,21 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
           // AI picks from top of discover pool
           const aiPicks = mergedDiscover.slice(0, 5);
 
+          // ── FRESHNESS TIER: 30% of Hot dedicated to trending content ──
+          // These are tracks from TRENDING_QUERIES (poolCurator) — recent/viral music.
+          // They sit in the front 30% slots regardless of long-term pool score,
+          // so Hot always feels current, not just personalized-but-stale.
+          const FRESH_SLOTS = Math.ceil(MAX_HOT_POOL * 0.3);
+          const trendingTier = getTrendingPoolTracks(FRESH_SLOTS)
+            .filter(t => !excludeIds.has(t.id ?? ''));
+          const freshIds = new Set(trendingTier.map(t => t.id));
+          const finalHot = [
+            ...trendingTier,
+            ...mergedHot.filter(t => !freshIds.has(t.id)),
+          ].slice(0, MAX_HOT_POOL);
+
           set({
-            hotTracks: mergedHot,
+            hotTracks: finalHot,
             aiPicks: aiPicks,
             discoverTracks: mergedDiscover,
           });
@@ -1671,8 +1661,11 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       // POOL ENGAGEMENT: Record reaction (strong positive signal)
       recordPoolEngagement(currentTrack.id, 'react');
       // GLOBAL SIGNAL: persist love to video_intelligence
-      import('../lib/supabase').then(({ supabase }) => {
-        void (supabase?.rpc('record_signal', { p_youtube_id: currentTrack.trackId, p_action: 'love' }) as unknown as Promise<unknown>)?.catch(() => {});
+      if (!_rpcSignalBlocked) import('../lib/supabase').then(async ({ supabase }) => {
+        try {
+          const r = await supabase?.rpc('record_signal', { p_youtube_id: currentTrack.trackId, p_action: 'love' });
+          if ((r as any)?.error?.status === 401 || (r as any)?.error?.code === '42501') _rpcSignalBlocked = true;
+        } catch {}
       });
 
       // 🔥 OYE = AUTO-BOOST: When user OYEs a track, cache it for offline

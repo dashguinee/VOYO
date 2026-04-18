@@ -163,6 +163,8 @@ export const universeAPI = {
     });
 
     if (error) {
+      const s = (error as any).status;
+      if (s === 401 || s === 403) return { success: false, error: 'Unauthorized' };
       console.error('[VOYO] Create universe error:', error);
       return { success: false, error: error.message };
     }
@@ -316,6 +318,8 @@ export const portalChatAPI = {
       .order('created_at', { ascending: true })
       .limit(limit);
     if (error) {
+      const s = (error as any).status;
+      if (s === 401 || s === 403) return [];
       console.error('[VOYO] Failed to fetch portal messages:', error);
       return [];
     }
@@ -331,6 +335,8 @@ export const portalChatAPI = {
       message: message.slice(0, 500),
     });
     if (error) {
+      const s = (error as any).status;
+      if (s === 401 || s === 403) return false;
       console.error('[VOYO] Failed to send portal message:', error);
       return false;
     }
@@ -411,6 +417,8 @@ export const lyricsAPI = {
       updated_at: new Date().toISOString(),
     });
     if (error) {
+      const s = (error as any).status;
+      if (s === 401 || s === 403) return false;
       console.error('[Lyrics] Save error:', error);
       return false;
     }
@@ -570,26 +578,37 @@ export interface VideoIntelligenceRow {
   last_played_at: string | null;
 }
 
+// Batch debounce for sync() — collects individual calls into one batchSync()
+// after 600ms idle. Prevents HTTP/2 stream refusal when multiple tracks fire
+// sync() simultaneously on startup or queue fill.
+const _syncQueue = new Map<string, Partial<VideoIntelligenceRow> & { youtube_id: string }>();
+let _syncTimer: ReturnType<typeof setTimeout> | null = null;
+function _flushSyncQueue() {
+  _syncTimer = null;
+  if (!supabase || _syncQueue.size === 0) return;
+  const batch = [..._syncQueue.values()];
+  _syncQueue.clear();
+  const cleanVideos = batch.map(v => ({
+    youtube_id: v.youtube_id,
+    title: v.title || 'Unknown',
+    artist: v.artist || null,
+    thumbnail_url: v.thumbnail_url || `https://i.ytimg.com/vi/${v.youtube_id}/hqdefault.jpg`,
+  }));
+  supabase.from('video_intelligence').upsert(cleanVideos, { onConflict: 'youtube_id' }).then(({ error }) => {
+    if (error) {
+      const s = (error as any).status;
+      if (s !== 401 && s !== 403) devLog('[VideoIntelligence] Batch sync error:', error.message);
+    }
+  });
+}
+
 export const videoIntelligenceAPI = {
   async sync(video: Partial<VideoIntelligenceRow> & { youtube_id: string }): Promise<boolean> {
-    if (!supabase) {
-      devLog('[VideoIntelligence] Supabase not configured, skipping sync');
-      return false;
-    }
-    const { error } = await supabase
-      .from('video_intelligence')
-      .upsert({
-        youtube_id: video.youtube_id,
-        title: video.title || 'Unknown',
-        artist: video.artist || null,
-        thumbnail_url: video.thumbnail_url || `https://i.ytimg.com/vi/${video.youtube_id}/hqdefault.jpg`,
-      }, { onConflict: 'youtube_id' });
-
-    if (error) {
-      console.error('[VideoIntelligence] Sync error:', error.message);
-      return false;
-    }
-    devLog(`[VideoIntelligence] Synced ${video.youtube_id} to Supabase`);
+    if (!supabase) return false;
+    // Enqueue — dedup by youtube_id, flush after 600ms of quiet
+    _syncQueue.set(video.youtube_id, video);
+    if (_syncTimer) clearTimeout(_syncTimer);
+    _syncTimer = setTimeout(_flushSyncQueue, 600);
     return true;
   },
 
@@ -626,7 +645,7 @@ export const videoIntelligenceAPI = {
 
   async recordQueue(youtubeId: string): Promise<void> {
     if (!supabase) return;
-    await supabase.rpc('increment_video_queue', { video_id: youtubeId });
+    supabase.rpc('increment_video_queue', { video_id: youtubeId });
   },
 
   async getPopular(limit = 20): Promise<VideoIntelligenceRow[]> {
@@ -663,6 +682,8 @@ export const videoIntelligenceAPI = {
       .from('video_intelligence')
       .upsert(cleanVideos, { onConflict: 'youtube_id', count: 'exact' });
     if (error) {
+      const s = (error as any).status;
+      if (s === 401 || s === 403) return 0;
       console.error('[VideoIntelligence] Batch sync error:', error.message);
       return 0;
     }
@@ -765,6 +786,8 @@ export const playlistAPI = {
         updated_at: playlist.updatedAt,
       }, { onConflict: 'id' });
     if (error) {
+      const s = (error as any).status;
+      if (s === 401 || s === 403) return false;
       console.error('[Playlist] Save error:', error.message);
       return false;
     }
@@ -780,6 +803,8 @@ export const playlistAPI = {
       .eq('username', username.toLowerCase())
       .order('created_at', { ascending: false });
     if (error) {
+      const s = (error as any).status;
+      if (s === 401 || s === 403) return [];
       console.error('[Playlist] Get error:', error.message);
       return [];
     }
@@ -802,6 +827,8 @@ export const playlistAPI = {
       .eq('id', playlistId)
       .eq('username', username.toLowerCase());
     if (error) {
+      const s = (error as any).status;
+      if (s === 401 || s === 403) return false;
       console.error('[Playlist] Delete error:', error.message);
       return false;
     }
@@ -825,6 +852,8 @@ export const playlistAPI = {
       .from('voyo_playlists')
       .upsert(rows, { onConflict: 'id', count: 'exact' });
     if (error) {
+      const s = (error as any).status;
+      if (s === 401 || s === 403) return 0;
       console.error('[Playlist] Batch save error:', error.message);
       return 0;
     }

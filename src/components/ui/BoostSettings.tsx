@@ -693,7 +693,7 @@ export const BoostSettings = ({ isOpen, onClose }: BoostSettingsProps) => {
                         trackId: track.id,
                         title: track.title,
                         artist: track.artist,
-                        coverUrl: `https://i.ytimg.com/vi/${track.id}/hq720.jpg`,
+                        coverUrl: `https://i.ytimg.com/vi/${track.id}/hqdefault.jpg`,
                         duration: 0,
                         tags: [],
                         oyeScore: 0,

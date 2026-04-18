@@ -378,38 +378,42 @@ export async function saveVerifiedTracks(
 // SIGNAL RECORDING
 // ============================================
 
+// Circuit breaker: if voyo_signals is blocked by RLS (anon not permitted),
+// stop making requests — each failed fetch shows as red in Chrome console.
+let _signalsBlocked = false;
+
 /**
  * Record a user signal (play, love, skip, complete, queue)
  * This is how the collective learns!
  */
 export async function recordSignal(signal: SignalData): Promise<boolean> {
-  if (!supabase || !isSupabaseConfigured) {
-    devLog('[Central DJ] Cannot record signal - Supabase not configured');
-    return false;
-  }
+  if (!supabase || !isSupabaseConfigured || _signalsBlocked) return false;
 
   try {
-    const { error } = await supabase.from('voyo_signals').insert({
+    const { error } = await supabase.from('voyo_signals').upsert({
       track_id: signal.trackId,
       user_hash: getUserHash(),
       action: signal.action,
       session_vibe: signal.sessionVibe || null,
       time_of_day: getTimeOfDay(),
       listen_duration: signal.listenDuration || 0,
-    });
+    }, { ignoreDuplicates: true });
 
     if (error) {
-      // Might fail if track doesn't exist in central DB yet - that's OK
-      if (!error.message.includes('foreign key')) {
-        console.error('[Central DJ] Signal error:', error);
+      // FK = track not in DB yet — skip silently
+      if (error.message?.includes('foreign key')) return false;
+      // RLS blocks anon — disable future requests to stop console noise
+      if (error.code === 'PGRST301' || (error as { status?: number }).status === 401 || error.code === '42501') {
+        _signalsBlocked = true;
+        return false;
       }
+      devLog('[Central DJ] Signal error:', error.message);
       return false;
     }
 
     devLog(`[Central DJ] 📊 Signal: ${signal.action} on ${signal.trackId.substring(0, 10)}...`);
     return true;
-  } catch (err) {
-    console.error('[Central DJ] Signal error:', err);
+  } catch {
     return false;
   }
 }
@@ -619,15 +623,13 @@ export async function syncSeedTracks(tracks: Track[]): Promise<number> {
 
   devLog(`[Central DJ] 🌱 Syncing ${tracks.length} seed tracks to Supabase...`);
 
-  // Parallel seed sync with bounded concurrency.
-  const CONCURRENCY = 8;
+  // Sequential sync — seed data is background/non-urgent. Parallel batches
+  // caused HTTP/2 stream refusal (ERR_HTTP2_SERVER_REFUSED_STREAM) at startup
+  // by opening too many concurrent streams to the same Supabase project.
   let synced = 0;
-  for (let i = 0; i < tracks.length; i += CONCURRENCY) {
-    const batch = tracks.slice(i, i + CONCURRENCY);
-    const results = await Promise.all(
-      batch.map(t => saveVerifiedTrack(t, undefined, 'seed').catch(() => false))
-    );
-    synced += results.filter(Boolean).length;
+  for (const t of tracks) {
+    const ok = await saveVerifiedTrack(t, undefined, 'seed').catch(() => false);
+    if (ok) synced++;
   }
 
   // Mark as synced
