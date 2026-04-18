@@ -25,8 +25,6 @@ import { Track } from '../../types';
 import { SmartImage } from '../ui/SmartImage';
 import { DJTextInput } from './PortraitVOYO';
 import {
-  extractTextFromImage,
-  parseVideoTitles,
   searchLocalCache,
   searchYouTube,
   cacheVideo,

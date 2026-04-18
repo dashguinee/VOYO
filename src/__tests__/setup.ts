@@ -15,15 +15,6 @@ vi.mock('../services/api', () => ({
   checkR2Cache: vi.fn(async () => ({ exists: false, url: null, hasHigh: false, hasLow: false, quality: null })),
 }));
 
-// preloadManager — empty by default.
-vi.mock('../services/preloadManager', () => ({
-  getPreloadedTrack: vi.fn(() => null),
-  consumePreloadedAudio: vi.fn(() => null),
-  preloadNextTrack: vi.fn(async () => null),
-  cancelPreload: vi.fn(),
-  cleanupPreloaded: vi.fn(),
-}));
-
 // trackBlocklist — tests can selectively override
 vi.mock('../services/trackBlocklist', () => ({
   isBlocked: vi.fn(() => false),

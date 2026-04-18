@@ -12,7 +12,7 @@
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { House, ChatCircle } from '@phosphor-icons/react';
+import { Home as House, MessageCircle as ChatCircle } from 'lucide-react';
 import { usePlayerStore } from '../../../store/playerStore';
 import { useAuth } from '../../../hooks/useAuth';
 import { messagesAPI } from '../../../lib/voyo-api';
@@ -277,7 +277,6 @@ export const VoyoBottomNav = ({ onDahub, onHome, oyoSurface = 'home', playerMode
           >
             <House
               size={20}
-              weight="duotone"
               color="rgba(255, 255, 255, 0.4)"
               style={{ transition: 'color 0.15s ease' }}
             />
@@ -421,7 +420,6 @@ export const VoyoBottomNav = ({ onDahub, onHome, oyoSurface = 'home', playerMode
             <div className="relative">
               <ChatCircle
                 size={20}
-                weight="duotone"
                 color="rgba(255, 255, 255, 0.4)"
                 style={{ transition: 'color 0.15s ease' }}
               />

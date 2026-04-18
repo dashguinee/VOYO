@@ -1,17 +1,10 @@
 /**
  * VOYO Video Intelligence - The Collective Brain
  *
- * OCR extraction + centralized database = zero API calls at scale
- *
- * Flow:
- * 1. Screenshot YouTube suggestions region
- * 2. Tesseract.js extracts text (client-side, FREE)
- * 3. Search local DB for video ID
- * 4. If miss → ytsr scrape → cache forever
- * 5. One user's discovery = everyone's knowledge
+ * Local IndexedDB cache + Supabase collective table. OCR discovery path
+ * retired — HungryScouts disabled since v220 (324K tracks in DB already).
  */
 
-import Tesseract from 'tesseract.js';
 import { videoIntelligenceAPI, isSupabaseConfigured } from '../lib/supabase';
 import { devLog, devWarn } from '../utils/logger';
 
@@ -39,170 +32,6 @@ export interface VideoIntelligence {
   voyoReactionCount?: number;
   discoveredBy?: string;
   discoveryMethod?: 'manual_play' | 'ocr_extraction' | 'api_search' | 'related_crawl' | 'import';
-}
-
-export interface OCRResult {
-  text: string;
-  confidence: number;
-  lines: string[];
-}
-
-export interface ExtractedVideo {
-  title: string;
-  artist?: string;
-  confidence: number;
-}
-
-// ============================================
-// OCR ENGINE (Tesseract.js)
-// ============================================
-
-let worker: Tesseract.Worker | null = null;
-let isInitializing = false;
-let initPromise: Promise<Tesseract.Worker> | null = null;
-
-/**
- * Initialize Tesseract worker (lazy, singleton)
- */
-async function getWorker(): Promise<Tesseract.Worker> {
-  if (worker) return worker;
-
-  if (isInitializing && initPromise) {
-    return initPromise;
-  }
-
-  isInitializing = true;
-  initPromise = (async () => {
-    devLog('[VOYO OCR] Initializing Tesseract...');
-    const newWorker = await Tesseract.createWorker('eng', 1, {
-      logger: (m) => {
-        if (m.status === 'recognizing text') {
-          devLog(`[VOYO OCR] Progress: ${Math.round(m.progress * 100)}%`);
-        }
-      }
-    });
-    worker = newWorker;
-    devLog('[VOYO OCR] Ready');
-    return worker;
-  })();
-
-  return initPromise;
-}
-
-/**
- * Extract text from image using OCR
- */
-export async function extractTextFromImage(imageSource: string | HTMLCanvasElement | Blob): Promise<OCRResult> {
-  const tesseractWorker = await getWorker();
-
-  const startTime = performance.now();
-  const result = await tesseractWorker.recognize(imageSource);
-  const endTime = performance.now();
-
-  devLog(`[VOYO OCR] Extracted in ${Math.round(endTime - startTime)}ms`);
-
-  const lines = result.data.text
-    .split('\n')
-    .map(line => line.trim())
-    .filter(line => line.length > 3); // Filter noise
-
-  return {
-    text: result.data.text,
-    confidence: result.data.confidence,
-    lines
-  };
-}
-
-/**
- * Capture screenshot of a specific region
- */
-export async function captureRegion(
-  element: HTMLElement,
-  region?: { x: number; y: number; width: number; height: number }
-): Promise<HTMLCanvasElement> {
-  // Use html2canvas or native canvas capture
-  const canvas = document.createElement('canvas');
-  const ctx = canvas.getContext('2d')!;
-
-  if (region) {
-    canvas.width = region.width;
-    canvas.height = region.height;
-  } else {
-    const rect = element.getBoundingClientRect();
-    canvas.width = rect.width;
-    canvas.height = rect.height;
-  }
-
-  // If element is an iframe, we need a different approach
-  // For YouTube iframe, we'll capture the parent region
-  if (element instanceof HTMLIFrameElement) {
-    // Can't directly access iframe content due to CORS
-    // But we can capture the region where suggestions appear
-    devLog('[VOYO OCR] Iframe detected - will capture visible region');
-  }
-
-  return canvas;
-}
-
-// ============================================
-// VIDEO TITLE PARSING
-// ============================================
-
-/**
- * Parse OCR text to extract video titles
- * YouTube suggestions format: "Title - Artist" or "Title | Artist"
- */
-export function parseVideoTitles(ocrResult: OCRResult): ExtractedVideo[] {
-  const videos: ExtractedVideo[] = [];
-
-  for (const line of ocrResult.lines) {
-    // Skip very short lines or noise
-    if (line.length < 5) continue;
-
-    // Skip common YouTube UI text
-    const skipPatterns = [
-      /^(up next|autoplay|queue|watch later|save|share|report)/i,
-      /^\d+:\d+$/,  // Duration only
-      /^(views|subscribers|ago)/i,
-      /^[0-9,]+\s*(views|likes)/i,
-    ];
-
-    if (skipPatterns.some(p => p.test(line))) continue;
-
-    // Try to extract artist from title
-    let title = line;
-    let artist: string | undefined;
-
-    // Common separators: " - ", " | ", " by ", " ft. ", " feat. "
-    const separators = [' - ', ' | ', ' — ', ' – '];
-    for (const sep of separators) {
-      if (line.includes(sep)) {
-        const parts = line.split(sep);
-        artist = parts[0].trim();
-        title = parts.slice(1).join(sep).trim();
-        break;
-      }
-    }
-
-    // Check for "ft." or "feat." in title
-    const featMatch = title.match(/\s+(ft\.?|feat\.?)\s+(.+)/i);
-    if (featMatch && !artist) {
-      // Artist might be before the feature
-      const beforeFeat = title.substring(0, featMatch.index);
-      if (beforeFeat.includes(' - ')) {
-        const parts = beforeFeat.split(' - ');
-        artist = parts[0].trim();
-      }
-    }
-
-    videos.push({
-      title: title.substring(0, 100), // Limit length
-      artist,
-      confidence: ocrResult.confidence / 100
-    });
-  }
-
-  return videos;
 }
 
 // ============================================
@@ -491,70 +320,6 @@ export async function getRelatedVideos(videoId: string, limit = 5): Promise<Rela
 }
 
 // ============================================
-// MAIN FLOW: Extract → Search → Cache
-// ============================================
-
-/**
- * Process OCR-extracted video title
- * Returns YouTube ID if found, null if not
- */
-export async function processExtractedTitle(
-  extractedVideo: ExtractedVideo,
-  discoveredBy?: string
-): Promise<string | null> {
-  const searchQuery = extractedVideo.artist
-    ? `${extractedVideo.artist} ${extractedVideo.title}`
-    : extractedVideo.title;
-
-  // 1. Check local cache first (instant, free)
-  const cached = await searchLocalCache(searchQuery);
-  if (cached) {
-    return cached.youtubeId;
-  }
-
-  // 2. Search YouTube (scraping, rate-limited but free)
-  const found = await searchYouTube(searchQuery);
-  if (found) {
-    // Cache for everyone
-    await cacheVideo({
-      ...found,
-      discoveredBy,
-      discoveryMethod: 'ocr_extraction'
-    });
-    return found.youtubeId;
-  }
-
-  return null;
-}
-
-/**
- * Full OCR pipeline: Screenshot → Extract → Find IDs
- */
-export async function extractVideosFromScreenshot(
-  imageSource: string | HTMLCanvasElement | Blob,
-  discoveredBy?: string
-): Promise<string[]> {
-  // 1. OCR extraction
-  const ocrResult = await extractTextFromImage(imageSource);
-  devLog('[VOYO Intelligence] OCR extracted:', ocrResult.lines);
-
-  // 2. Parse video titles
-  const extractedVideos = parseVideoTitles(ocrResult);
-  devLog('[VOYO Intelligence] Parsed videos:', extractedVideos);
-
-  // 3. Find YouTube IDs for each (parallel — was serial)
-  const results = await Promise.all(
-    extractedVideos.map(video =>
-      processExtractedTitle(video, discoveredBy).catch(() => null)
-    )
-  );
-  const videoIds: string[] = results.filter((id): id is string => Boolean(id));
-
-  devLog('[VOYO Intelligence] Found IDs:', videoIds);
-  return videoIds;
-}
-
-// ============================================
 // REGISTER TRACK ON PLAY (Build the database)
 // ============================================
 
@@ -604,17 +369,3 @@ export async function registerTrackQueue(youtubeId: string): Promise<void> {
   }
 }
 
-// ============================================
-// CLEANUP
-// ============================================
-
-/**
- * Terminate OCR worker (call on app unmount)
- */
-export async function terminateOCR(): Promise<void> {
-  if (worker) {
-    await worker.terminate();
-    worker = null;
-    devLog('[VOYO OCR] Terminated');
-  }
-}
