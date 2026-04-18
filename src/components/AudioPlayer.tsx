@@ -401,7 +401,11 @@ export const AudioPlayer = () => {
           },
         });
 
-        // Circuit breaker — loop detected, rebuild session from scratch
+        // Circuit breaker — loop detected, rebuild session from scratch.
+        // force:true bypasses the 3s cooldown (error burst can fire within
+        // seconds of last session create). startSession handles cleanup
+        // internally via endSession({keepSrc:true}) — no explicit endSession
+        // here so we don't open the Empty-src error window.
         if (burstCount >= ERROR_BURST_LIMIT) {
           errorBurst = [];
           devWarn('[AudioPlayer] error-burst threshold hit — rebuilding session');
@@ -410,11 +414,10 @@ export const AudioPlayer = () => {
             track_id: voyoStream.currentTrackId ?? 'unknown',
             meta: { subtype: 'session_rebuild', reason: 'error_burst' },
           });
-          voyoStream.endSession();
           const s = usePlayerStore.getState();
           if (s.currentTrack) {
             const queueTracks = s.queue.map(qi => qi.track);
-            voyoStream.startSession(s.currentTrack, queueTracks).catch(() => {});
+            voyoStream.startSession(s.currentTrack, queueTracks, 'high', { force: true }).catch(() => {});
           }
           return;
         }

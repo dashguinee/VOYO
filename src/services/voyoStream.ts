@@ -86,17 +86,24 @@ class VoyoStreamService {
 
   // ── Start / end session ─────────────────────────────────────────────────
 
-  async startSession(firstTrack: Track, queue: Track[], quality = 'high'): Promise<void> {
-    if (this.isCreatingSession) {
+  async startSession(
+    firstTrack: Track,
+    queue: Track[],
+    quality = 'high',
+    opts: { force?: boolean } = {}
+  ): Promise<void> {
+    if (this.isCreatingSession && !opts.force) {
       devWarn('[VoyoStream] startSession already in progress — ignoring');
       return;
     }
-    if (this.lastSessionCreatedAt > 0 && Date.now() - this.lastSessionCreatedAt < 3000) {
+    if (!opts.force && this.lastSessionCreatedAt > 0 && Date.now() - this.lastSessionCreatedAt < 3000) {
       devWarn('[VoyoStream] startSession called too soon after last create — ignoring');
       return;
     }
     this.isCreatingSession = true;
-    this.endSession();
+    // keepSrc:true — avoid the Empty-src error window during the fetch POST;
+    // audioEl.src gets overwritten with the new streamUrl at line 153.
+    this.endSession({ keepSrc: true });
     // Pre-set the expected track so the AudioPlayer guard works during the
     // fetch + SSE-connect window (endSession nulled currentTrackId; without
     // this a re-render arriving before now_playing would pass the guard and
@@ -156,7 +163,17 @@ class VoyoStreamService {
     }
   }
 
-  endSession() {
+  /**
+   * Tear down the current session.
+   *
+   * keepSrc=true — used by startSession() during a session rebuild. The new
+   * streamUrl is about to overwrite audioEl.src, so clearing it to '' here
+   * only opens a fetch-POST-duration window where the browser fires
+   * MEDIA_ELEMENT_ERROR: Empty src attribute (~147 events/day before fix).
+   * Default (keepSrc=false) still runs for app unmount / full teardown so
+   * the browser releases the stream fetch.
+   */
+  endSession(opts: { keepSrc?: boolean } = {}) {
     this.isCreatingSession = false;
     this.eventSource?.close();
     this.eventSource = null;
@@ -166,7 +183,7 @@ class VoyoStreamService {
     this.trackMap.clear();
     this.recentSkipTimes = [];
     if (this.skipStuckTimer) { clearTimeout(this.skipStuckTimer); this.skipStuckTimer = null; }
-    if (this.audioEl) {
+    if (this.audioEl && !opts.keepSrc) {
       this.audioEl.pause();
       this.audioEl.src = '';
     }
