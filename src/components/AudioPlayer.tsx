@@ -34,6 +34,13 @@ export type { BoostPreset };
 const EDGE_ART = 'https://voyo-edge.dash-webtv.workers.dev/cdn/art';
 const YT_ART   = 'https://i.ytimg.com/vi';
 
+// Circuit breaker — 3 errors within 10s on the same session = tear down
+// and rebuild instead of looping el.src assignments. Module-scope so it
+// survives re-renders of the AudioPlayer component.
+const ERROR_BURST_WINDOW_MS = 10_000;
+const ERROR_BURST_LIMIT     = 3;
+let errorBurst: number[] = [];
+
 export const AudioPlayer = () => {
   const audioRef = useRef<HTMLAudioElement>(null);
   const completionSignaledRef = useRef(false);
@@ -376,7 +383,11 @@ export const AudioPlayer = () => {
         const el = audioRef.current;
         const code = el?.error?.code;
         const msg  = el?.error?.message ?? '';
-        devWarn('[AudioPlayer] stream error — reconnecting in 2s', code, msg);
+        const now = Date.now();
+        errorBurst = errorBurst.filter(t => now - t < ERROR_BURST_WINDOW_MS);
+        errorBurst.push(now);
+        const burstCount = errorBurst.length;
+        devWarn('[AudioPlayer] stream error', { code, msg, burst: burstCount });
         logPlaybackEvent({
           event_type: 'stream_error',
           track_id: voyoStream.currentTrackId ?? 'unknown',
@@ -386,8 +397,28 @@ export const AudioPlayer = () => {
             ready_state: el?.readyState,
             network_state: el?.networkState,
             has_session: !!voyoStream.sessionId,
+            burst_count: burstCount,
           },
         });
+
+        // Circuit breaker — loop detected, rebuild session from scratch
+        if (burstCount >= ERROR_BURST_LIMIT) {
+          errorBurst = [];
+          devWarn('[AudioPlayer] error-burst threshold hit — rebuilding session');
+          logPlaybackEvent({
+            event_type: 'trace',
+            track_id: voyoStream.currentTrackId ?? 'unknown',
+            meta: { subtype: 'session_rebuild', reason: 'error_burst' },
+          });
+          voyoStream.endSession();
+          const s = usePlayerStore.getState();
+          if (s.currentTrack) {
+            const queueTracks = s.queue.map(qi => qi.track);
+            voyoStream.startSession(s.currentTrack, queueTracks).catch(() => {});
+          }
+          return;
+        }
+
         setTimeout(() => {
           const el = audioRef.current;
           if (el && voyoStream.streamUrl) {

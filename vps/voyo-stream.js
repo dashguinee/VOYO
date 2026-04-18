@@ -122,6 +122,48 @@ function isCached(trackId, quality) {
   } catch { return false; }
 }
 
+/**
+ * Find the first OGG page boundary at-or-after `approxByte`.
+ *
+ * Chrome/Firefox demuxers require a valid OGG "capture pattern" ("OggS", 4B)
+ * at the start of the stream bytes they receive on a new connection. If we
+ * resume mid-file from an arbitrary byte offset, the first page header is
+ * mid-word → MEDIA_ELEMENT_ERROR / DEMUXER_ERROR_COULD_NOT_OPEN → browser
+ * reloads src → we re-resume at another arbitrary offset → infinite error
+ * loop on a single track.
+ *
+ * Scan window: 128 KB. OGG max page size is 65307 B (27-byte header + up to
+ * 255×255 B payload per Opus spec). One window covers at least one boundary
+ * for a sane stream.
+ *
+ * Returns the aligned byte offset, or 0 if no boundary found (degraded but
+ * always decodable — user hears the track restart).
+ */
+function findOggPageBoundary(filePath, approxByte, fileSize) {
+  if (approxByte <= 0) return 0;
+  const WINDOW = 128 * 1024;
+  const start = Math.min(approxByte, Math.max(0, fileSize - 4));
+  const len   = Math.min(WINDOW, Math.max(0, fileSize - start));
+  if (len < 4) return 0;
+  let fd;
+  try {
+    fd = fs.openSync(filePath, 'r');
+    const buf = Buffer.alloc(len);
+    const n = fs.readSync(fd, buf, 0, len, start);
+    for (let i = 0; i + 4 <= n; i++) {
+      // "OggS" = 0x4F 0x67 0x67 0x53
+      if (buf[i] === 0x4F && buf[i+1] === 0x67 && buf[i+2] === 0x67 && buf[i+3] === 0x53) {
+        return start + i;
+      }
+    }
+    return 0;
+  } catch {
+    return 0;
+  } finally {
+    if (fd !== undefined) { try { fs.closeSync(fd); } catch {} }
+  }
+}
+
 async function waitForCache(trackId, quality, timeoutMs) {
   const deadline = Date.now() + timeoutMs;
   const p = cachePath(trackId, quality);
@@ -387,9 +429,10 @@ function pipeTrack(session, filePath, trackId) {
       if (drainFn && drainRes) { try { drainRes.off('drain', drainFn); } catch {} drainFn = null; drainRes = null; }
 
       // Skip reconnect: browser reloaded audio.src to flush skip buffer.
-      // New track starts at byte 0 — always an OGG page boundary, no decoder desync.
-      // Regular background reconnect: resume from elapsed position so user doesn't
-      // hear the same seconds twice after a tab resume.
+      // New track starts at byte 0 — always an OGG page boundary.
+      // Background reconnect: resume near elapsed position but align to the next
+      // OGG page boundary so the browser demuxer gets a valid stream (arbitrary
+      // byte offsets cause DEMUXER_ERROR_COULD_NOT_OPEN and a retry-loop storm).
       let startByte = 0;
       if (session._skipReconnect) {
         session._skipReconnect = false;
@@ -398,11 +441,13 @@ function pipeTrack(session, filePath, trackId) {
         const rawReconnDur = session.currentTrack?.duration;
         const trackDur = (rawReconnDur && rawReconnDur > 0) ? rawReconnDur : Math.ceil(fileSize / 16_000);
         let offsetSecs = 0;
+        let approxByte = 0;
         if (fileSize > 0) {
           offsetSecs = Math.max(0, Math.min((Date.now() - pipeStartAt) / 1000, trackDur - 1));
-          startByte  = Math.floor((offsetSecs / trackDur) * fileSize);
+          approxByte = Math.floor((offsetSecs / trackDur) * fileSize);
         }
-        log(session.id, `client reconnected — resuming ${trackId} at ${Math.round(offsetSecs)}s`);
+        startByte = findOggPageBoundary(filePath, approxByte, fileSize);
+        log(session.id, `client reconnected — resuming ${trackId} at ${Math.round(offsetSecs)}s (page-aligned byte ${startByte})`);
       }
       startFileStream(startByte);
     };
