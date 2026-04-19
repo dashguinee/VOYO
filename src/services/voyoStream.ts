@@ -65,25 +65,9 @@ async function queueUpsertForPreWarm(track: Track, sessionId: string | null): Pr
   }).catch(() => {});
 }
 
-/**
- * Poll R2 HEAD every 2s up to timeoutMs waiting for a newly-extracted track
- * to appear. Returns true if it lands, false on timeout. Current track keeps
- * playing during the wait (soft fade + skip happen after this resolves).
- */
 const R2_POLL_INTERVAL_MS = 2000;
-const SEARCH_WAIT_MS      = 60_000;
+const SEARCH_WAIT_MS      = 30_000;  // 30s ceiling — most tracks land in ≤15s
 const R2_EDGE             = 'https://voyo-edge.dash-webtv.workers.dev/audio';
-async function waitForR2(trackId: string, timeoutMs: number = SEARCH_WAIT_MS): Promise<boolean> {
-  const start = Date.now();
-  while (Date.now() - start < timeoutMs) {
-    try {
-      const res = await fetch(`${R2_EDGE}/${trackId}?q=high`, { method: 'HEAD' });
-      if (res.ok) return true;
-    } catch { /* network hiccup, retry */ }
-    await new Promise(r => setTimeout(r, R2_POLL_INTERVAL_MS));
-  }
-  return false;
-}
 
 /**
  * "No music deserves to be aborted brutally" — the unified handoff pattern.
@@ -93,7 +77,8 @@ async function waitForR2(trackId: string, timeoutMs: number = SEARCH_WAIT_MS): P
  * (GH Actions primary path) and polls R2 via HEAD. Callers can then invoke
  * the normal VPS priorityInject/startSession with confidence that either:
  *   - R2 hit → VPS serves from cache instantly, zero Webshare
- *   - Wait ran its course → VPS priorityInject extracts via Webshare (fallback)
+ *   - Queue row went 'failed' → abort wait early, VPS fallback (Webshare)
+ *   - Wait ran its course → VPS priorityInject extracts via Webshare
  *
  * Applied globally (priorityInject + startSession's first track) so every
  * track entry respects flow over interruption.
@@ -108,10 +93,35 @@ async function ensureTrackReady(track: Track, sessionId: string | null): Promise
     if (res.ok) return;
   } catch { /* offline probe, fall through to wait */ }
 
-  // Wait up to SEARCH_WAIT_MS for GH Actions to populate R2. Current audio
-  // keeps playing during this time — that's the "flow" promise. Webshare
-  // stays as the eventual fallback via the VPS priorityInject that follows.
-  await waitForR2(track.trackId).catch(() => {});
+  // Wait up to SEARCH_WAIT_MS, polling BOTH R2 (success) AND the queue row
+  // (early abort on failed). Current audio keeps playing during this time.
+  const supaUrl  = import.meta.env.VITE_SUPABASE_URL;
+  const supaKey  = import.meta.env.VITE_SUPABASE_ANON_KEY;
+  const start = Date.now();
+  while (Date.now() - start < SEARCH_WAIT_MS) {
+    // 1. R2 HEAD — the win condition
+    try {
+      const res = await fetch(`${R2_EDGE}/${track.trackId}?q=high`, { method: 'HEAD' });
+      if (res.ok) return;
+    } catch { /* transient, continue */ }
+
+    // 2. Queue row status — if GH Actions gave up, abort immediately so VPS
+    //    fallback kicks in without wasting the rest of the budget.
+    if (supaUrl && supaKey) {
+      try {
+        const r = await fetch(
+          `${supaUrl}/rest/v1/voyo_upload_queue?select=status,failure_count&youtube_id=eq.${track.trackId}&limit=1`,
+          { headers: { apikey: supaKey, Authorization: `Bearer ${supaKey}` } }
+        );
+        if (r.ok) {
+          const rows = await r.json() as Array<{ status: string; failure_count: number }>;
+          if (rows[0]?.status === 'failed' || (rows[0]?.failure_count ?? 0) >= 3) return;
+        }
+      } catch { /* transient, continue */ }
+    }
+
+    await new Promise(res => setTimeout(res, R2_POLL_INTERVAL_MS));
+  }
 }
 
 function toQueueItem(t: Track) {
