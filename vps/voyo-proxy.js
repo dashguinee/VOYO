@@ -858,10 +858,13 @@ function openUpstreamNoProxy(trackId) {
     const profile = profiles[Math.floor(Math.random() * profiles.length)];
 
     // Step 1: extract signed audio URL (no proxy)
-    // Force player_client=default,mweb,web_safari — the auto-picked tv_downgraded
-    // returns "playability: ERROR" → "Video unavailable" on cookie-authed tracks
-    // (regressed 2026-04-19). The explicit clients still succeed.
-    const cmd = `/usr/local/bin/yt-dlp -f "bestaudio[vcodec=none]/bestaudio" --get-url --no-warnings --cookies-from-browser "chrome:${profile}" --extractor-args "youtube:player_client=default,mweb,web_safari" "https://www.youtube.com/watch?v=${trackId}"`;
+    // Cascade through player_clients: yt-dlp tries each in order and takes the
+    // first that yields formats. `default,mweb,web_safari` is the baseline that
+    // unblocks the post-2026-04-19 regression; adding `web_music,tv_simply,tv`
+    // catches tracks hidden from the main YT pool but visible via Music/TV
+    // catalogs. All cookie-compatible clients. Extra clients add ~0s on success
+    // paths (yt-dlp stops at first hit).
+    const cmd = `/usr/local/bin/yt-dlp -f "bestaudio[vcodec=none]/bestaudio" --get-url --no-warnings --cookies-from-browser "chrome:${profile}" --extractor-args "youtube:player_client=default,mweb,web_safari,web_music,tv_simply,tv" "https://www.youtube.com/watch?v=${trackId}"`;
     exec(cmd, { timeout: 40_000 }, (err, stdout, stderr) => {
       const stderrStr = (stderr || '').toString();
       if (stderrStr.includes('Sign in to confirm')) return reject(new Error('noproxy: bot_challenge'));

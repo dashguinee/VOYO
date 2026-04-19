@@ -278,6 +278,14 @@ interface PlayerStore {
   // 'disappear' - hides completely after timeout
   oyeBarBehavior: 'fade' | 'disappear';
 
+  // OYÉ Lightning Bulb — predictive pre-warm of the upcoming queue (N+1, N+2).
+  // Bulb on  → voyoStream.prewarmUpcoming fires ensureTrackReady ahead of time
+  //            so the next track's audio is already in R2 when the user gets
+  //            there. Deep-cut / cold-start wait vanishes on playlist flows.
+  // Bulb off → purely reactive: next track is extracted only when played. Saves
+  //            a small amount of bandwidth/work if the user skips a lot.
+  oyePrewarm: boolean;
+
   // Playback Modes
   shuffleMode: boolean;
   repeatMode: 'off' | 'all' | 'one';
@@ -381,6 +389,7 @@ interface PlayerStore {
   setBoostProfile: (profile: 'off' | 'boosted' | 'calm' | 'voyex') => void;
   setVoyexSpatial: (value: number) => void;
   setOyeBarBehavior: (behavior: 'fade' | 'disappear') => void;
+  setOyePrewarm: (enabled: boolean) => void;
 }
 
 // Load persisted state once at init
@@ -424,6 +433,9 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   })(),
   oyeBarBehavior: ((): 'fade' | 'disappear' => {
     try { return (localStorage.getItem('voyo-oye-behavior') as 'fade' | 'disappear') || 'fade'; } catch { return 'fade'; }
+  })(),
+  oyePrewarm: ((): boolean => {
+    try { return localStorage.getItem('voyo-oye-prewarm') !== 'false'; } catch { return true; }
   })(),
 
   // FIX 2: Persist queue and history across refreshes
@@ -1772,6 +1784,10 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   setOyeBarBehavior: (behavior) => {
     set({ oyeBarBehavior: behavior });
     try { localStorage.setItem('voyo-oye-behavior', behavior); } catch {}
+  },
+  setOyePrewarm: (enabled) => {
+    set({ oyePrewarm: enabled });
+    try { localStorage.setItem('voyo-oye-prewarm', String(enabled)); } catch {}
   },
 
   setPrefetchStatus: (trackId, status) => {

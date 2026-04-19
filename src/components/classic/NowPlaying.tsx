@@ -32,6 +32,7 @@ import {
   Share2,
   ListMusic,
   Zap,
+  Lightbulb,
   Video,
   Image
 } from 'lucide-react';
@@ -239,6 +240,8 @@ export const NowPlaying = ({ isOpen, onClose }: NowPlayingProps) => {
   const isPlaying = usePlayerStore(s => s.isPlaying);
   const progress = usePlayerStore(s => s.progress);
   const duration = usePlayerStore(s => s.duration);
+  const oyePrewarm = usePlayerStore(s => s.oyePrewarm);
+  const setOyePrewarm = usePlayerStore(s => s.setOyePrewarm);
   const nextTrack = usePlayerStore(s => s.nextTrack);
   const prevTrack = usePlayerStore(s => s.prevTrack);
   const seekTo = usePlayerStore(s => s.seekTo);
@@ -576,6 +579,28 @@ export const NowPlaying = ({ isOpen, onClose }: NowPlayingProps) => {
               >
                 <Zap className="w-4 h-4 text-white" fill="white" />
                 <span className="text-white text-sm font-bold">OYÉ</span>
+              </button>
+
+              {/* OYÉ Lightning Bulb — predictive pre-warm toggle. Glows when on
+                  (workers warm N+1/N+2 ahead), dim when off (reactive only). */}
+              <button
+                onClick={() => setOyePrewarm(!oyePrewarm)}
+                aria-label={oyePrewarm ? 'OYÉ bulb on — pre-warming' : 'OYÉ bulb off — reactive'}
+                title={oyePrewarm ? 'Bulb ON — next tracks pre-loading' : 'Bulb OFF — load on demand'}
+                className="flex items-center justify-center w-10 h-10 rounded-full transition-all"
+                style={{
+                  background: oyePrewarm ? 'rgba(253,224,71,0.15)' : 'rgba(255,255,255,0.05)',
+                  border: oyePrewarm ? '1px solid rgba(253,224,71,0.5)' : '1px solid rgba(255,255,255,0.1)',
+                  boxShadow: oyePrewarm ? '0 0 12px rgba(253,224,71,0.35)' : 'none',
+                }}
+              >
+                <Lightbulb
+                  className="w-4 h-4 transition-all"
+                  style={{
+                    color: oyePrewarm ? '#fde047' : 'rgba(255,255,255,0.45)',
+                    fill:  oyePrewarm ? 'rgba(253,224,71,0.35)' : 'none',
+                  }}
+                />
               </button>
 
               {/* Right buttons */}

@@ -41,9 +41,17 @@ const ERROR_BURST_WINDOW_MS = 10_000;
 const ERROR_BURST_LIMIT     = 3;
 let errorBurst: number[] = [];
 
+// How long we wait on a stall before skipping forward. The fade cross-over
+// masks the hand-off so the skip reads as a DJ transition, not a bug.
+const STALL_SKIP_THRESHOLD_MS = 4_000;
+
 export const AudioPlayer = () => {
   const audioRef = useRef<HTMLAudioElement>(null);
   const completionSignaledRef = useRef(false);
+  // Stall-skip guard — if the stream sits in 'waiting' state longer than
+  // STALL_SKIP_THRESHOLD_MS, we trigger nextTrack() so the groove keeps moving.
+  // Cleared on any 'playing' event.
+  const stallSkipTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const {
     currentTrack,
@@ -240,6 +248,11 @@ export const AudioPlayer = () => {
   // onPlaying catches buffer-stall auto-resumes — browser fires 'playing' not 'play'
   const handlePlaying = useCallback(() => {
     setIsPlaying(true);
+    // Audio recovered — cancel any pending stall-skip.
+    if (stallSkipTimerRef.current) {
+      clearTimeout(stallSkipTimerRef.current);
+      stallSkipTimerRef.current = null;
+    }
   }, [setIsPlaying]);
 
   const handlePause = useCallback(() => {
@@ -370,6 +383,25 @@ export const AudioPlayer = () => {
           track_id: voyoStream.currentTrackId ?? 'unknown',
           meta: { sub: 'waiting', ready_state: el?.readyState, network_state: el?.networkState },
         });
+        // Start a fade on the master gain so the stall isn't just silence —
+        // it reads as an intentional transition. If the buffer doesn't recover
+        // in STALL_SKIP_THRESHOLD_MS, advance to the next track instead of
+        // hanging forever.
+        voyoStream.onSoftFade?.(STALL_SKIP_THRESHOLD_MS);
+        if (stallSkipTimerRef.current) clearTimeout(stallSkipTimerRef.current);
+        stallSkipTimerRef.current = setTimeout(() => {
+          stallSkipTimerRef.current = null;
+          const curEl = audioRef.current;
+          // Don't skip if the browser already recovered — readyState >=3 means
+          // we have at least one frame of data queued.
+          if (curEl && curEl.readyState >= 3) return;
+          logPlaybackEvent({
+            event_type: 'stream_stall',
+            track_id: voyoStream.currentTrackId ?? 'unknown',
+            meta: { sub: 'skip_on_stall', waited_ms: STALL_SKIP_THRESHOLD_MS },
+          });
+          usePlayerStore.getState().nextTrack();
+        }, STALL_SKIP_THRESHOLD_MS);
       }}
       onStalled={() => {
         const el = audioRef.current;

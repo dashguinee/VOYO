@@ -20,6 +20,8 @@ if [ "${ON_VPS:-0}" != "1" ]; then
   ssh vps "chmod +x /tmp/voyo-drain.sh && \
     SUPABASE_KEY='$KEY' \
     SESSION_FILTER='seed-2025-2026' \
+    RETRY_FAILED='${RETRY_FAILED:-0}' \
+    BATCH='${BATCH:-2}' \
     ON_VPS=1 \
     nohup /tmp/voyo-drain.sh > /tmp/voyo-drain.log 2>&1 < /dev/null & \
     disown; \
@@ -37,6 +39,11 @@ SESSION_FILTER="${SESSION_FILTER:-}"
 BATCH="${BATCH:-2}"                 # concurrent extractions (voyo-proxy 503s above ~4)
 PROXY="${PROXY:-https://127.0.0.1:8443}"
 MAX_ITER="${MAX_ITER:-0}"           # 0 = until queue empty
+# RETRY_FAILED=1 first resets seed rows currently in status=failed back to
+# pending (with failure_count=0) then drains. Useful after a different worker
+# (e.g. GH Actions) failed the rows with a different error path — VPS Tier A
+# with Chrome profile cookies bypasses most of those.
+RETRY_FAILED="${RETRY_FAILED:-0}"
 
 extract_one() {
   local yid="$1"
@@ -82,6 +89,21 @@ extract_one() {
 export -f extract_one
 export URL KEY PROXY
 
+# Optional pre-step: reset failed seed rows back to pending so this drain
+# takes a second crack at them. Scoped to the SESSION_FILTER to avoid
+# touching unrelated work.
+if [ "$RETRY_FAILED" = "1" ]; then
+  reset_filter="status=eq.failed"
+  [ -n "$SESSION_FILTER" ] && reset_filter="${reset_filter}&requested_by_session=eq.${SESSION_FILTER}"
+  echo "[$(date -u +%H:%M:%S)] RETRY_FAILED=1 — resetting failed rows (filter='$reset_filter') → pending"
+  curl -sS -o /dev/null -X PATCH \
+    "${URL}/rest/v1/voyo_upload_queue?${reset_filter}" \
+    -H "apikey: $KEY" -H "Authorization: Bearer $KEY" \
+    -H "Content-Type: application/json" \
+    -H "Prefer: return=minimal" \
+    --data '{"status":"pending","failure_count":0,"last_error":null}'
+fi
+
 iter=0
 while true; do
   iter=$((iter+1))
@@ -90,7 +112,9 @@ while true; do
   # Fetch up to 32 pending rows (we'll xargs them in batches of $BATCH)
   filter="status=eq.pending&failure_count=lt.3"
   [ -n "$SESSION_FILTER" ] && filter="${filter}&requested_by_session=eq.${SESSION_FILTER}"
-  rows=$(curl -sS "${URL}/rest/v1/voyo_upload_queue?select=id,youtube_id&${filter}&order=requested_at.asc&limit=32" \
+  # Sort by requested_at DESC so freshly-resolved rows (higher quality IDs from
+  # v3 / re-resolves) get extracted first. Old stale v1 rows drain last.
+  rows=$(curl -sS "${URL}/rest/v1/voyo_upload_queue?select=id,youtube_id&${filter}&order=requested_at.desc&limit=32" \
     -H "apikey: $KEY" -H "Authorization: Bearer $KEY" \
     | python3 -c "import json,sys; [print(r['youtube_id'], r['id']) for r in json.load(sys.stdin)]")
 

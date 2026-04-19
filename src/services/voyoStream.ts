@@ -44,7 +44,17 @@ const VPS = 'https://stream.zionsynapse.online:8444';
  * and Webshare extracts like before. Worst case = today's behaviour. Best
  * case = zero Webshare usage for search cold misses.
  */
-async function queueUpsertForPreWarm(track: Track, sessionId: string | null): Promise<void> {
+/**
+ * Upsert a row for this track into voyo_upload_queue so workers extract it to R2.
+ *
+ * `priority` bumps the row to the front of the claim queue. Use 10+ for user
+ * clicks (explicit intent — they're waiting). 0 = background/predictive warm.
+ */
+async function queueUpsertForPreWarm(
+  track: Track,
+  sessionId: string | null,
+  priority: number = 0,
+): Promise<void> {
   const url = import.meta.env.VITE_SUPABASE_URL;
   const key = import.meta.env.VITE_SUPABASE_ANON_KEY;
   if (!url || !key) return;
@@ -61,6 +71,7 @@ async function queueUpsertForPreWarm(track: Track, sessionId: string | null): Pr
       title:                track.title ?? null,
       artist:               track.artist ?? null,
       requested_by_session: sessionId,
+      priority,
     }),
   }).catch(() => {});
 }
@@ -83,9 +94,14 @@ const R2_EDGE             = 'https://voyo-edge.dash-webtv.workers.dev/audio';
  * Applied globally (priorityInject + startSession's first track) so every
  * track entry respects flow over interruption.
  */
-async function ensureTrackReady(track: Track, sessionId: string | null): Promise<void> {
+async function ensureTrackReady(
+  track: Track,
+  sessionId: string | null,
+  opts: { priority?: number } = {},
+): Promise<void> {
   // Fire queue upsert (primary free path) — non-blocking, fire-and-forget.
-  queueUpsertForPreWarm(track, sessionId).catch(() => {});
+  // Priority 10 = user click (they're waiting). Default 0 = background warm.
+  queueUpsertForPreWarm(track, sessionId, opts.priority ?? 0).catch(() => {});
 
   // Probe R2 — if already cached, skip the wait entirely.
   try {
@@ -160,6 +176,8 @@ class VoyoStreamService {
   private trackMap:        Map<string, Track> = new Map();
   private skipStuckTimer:  ReturnType<typeof setTimeout> | null = null;
   private _audioRestarted: boolean = false;
+  /** Track IDs we've already fired ensureTrackReady for — avoid re-warming */
+  private prewarmedIds:    Set<string> = new Set();
 
   // ── Bind audio element ──────────────────────────────────────────────────
 
@@ -222,7 +240,7 @@ class VoyoStreamService {
     // explicitly opted out (circuit breaker rebuild, rapid-skip pivot), wait
     // for R2 on the first track. GH Actions is primary, Webshare fallback.
     if (!opts.skipReadyWait && !opts.force) {
-      await ensureTrackReady(firstTrack, null);
+      await ensureTrackReady(firstTrack, null, { priority: 10 });
     }
 
     // Fire BEFORE the first await — if called from a user gesture this keeps us
@@ -375,6 +393,12 @@ class VoyoStreamService {
 
         // OYO deck management — runs async in background, never blocks playback
         this._oyoTrackPlayed(track);
+
+        // Predictive pre-warm — fire ensureTrackReady for N+1 and N+2 so R2 is
+        // hot by the time they're needed. Non-blocking; failures are silent.
+        // Cap the warm-ahead depth to avoid flooding the queue if the user is
+        // scrolling through long playlists.
+        this.prewarmUpcoming(2);
         break;
       }
 
@@ -487,7 +511,8 @@ class VoyoStreamService {
 
     // "No music deserves to be aborted brutally" — let current track breathe
     // while the next one gets ready. Bounded by SEARCH_WAIT_MS (60s).
-    await ensureTrackReady(track, this.sessionId);
+    // priority=10 — user just clicked, push this row to the front of the queue.
+    await ensureTrackReady(track, this.sessionId, { priority: 10 });
 
     try {
       await fetch(`${VPS}/voyo/session/${this.sessionId}/queue`, {
@@ -506,6 +531,29 @@ class VoyoStreamService {
     await this.priorityInject(track);
     this.onSoftFade?.(2000);
     setTimeout(() => this.skip(), 2000);
+  }
+
+  /**
+   * Predictive pre-warm — fire ensureTrackReady on the next N upcoming tracks so
+   * R2 has them by the time the current track ends. Non-blocking, silent failures.
+   * Skips tracks already pre-warmed this session (prewarmedIds set) to avoid
+   * flooding the queue table with duplicate upserts.
+   */
+  private prewarmUpcoming(depth: number): void {
+    const store = usePlayerStore.getState();
+    if (!store.oyePrewarm) return;  // bulb off — stay reactive
+    const upcoming = store.queue.slice(0, depth).map(qi => qi.track);
+    for (const t of upcoming) {
+      if (!t?.trackId) continue;
+      if (this.prewarmedIds.has(t.trackId)) continue;
+      this.prewarmedIds.add(t.trackId);
+      // Fire and forget — we don't care when it finishes, we just want R2 warm.
+      ensureTrackReady(t, this.sessionId).catch(() => {});
+    }
+    // Trim set if it grows unbounded (long-running sessions)
+    if (this.prewarmedIds.size > 200) {
+      this.prewarmedIds = new Set(Array.from(this.prewarmedIds).slice(-100));
+    }
   }
 
   private async _oyoTrackPlayed(track: Track): Promise<void> {
