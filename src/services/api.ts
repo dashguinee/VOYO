@@ -63,19 +63,19 @@ export async function searchMusic(query: string, limit: number = 10): Promise<Se
 
   // Search is explicit user intent — proactively queue every result at a
   // high-ish priority so by the time the user actually taps one, the lane
-  // likely has it in R2 already. First three at priority=10 (most-likely
-  // taps), rest at 7 (search-context prefetch).
+  // likely has it in R2 already. Routed through oyo.prefetch so the OYO
+  // facade is the sole writer to voyo_upload_queue outside the player.
   if (results.length) {
     void (async () => {
-      const { queueForExtraction } = await import('./r2Gate');
+      const { oyo } = await import('./oyo');
       const toTrack = (r: SearchResult) => ({
         id: r.voyoId, trackId: r.voyoId, title: r.title, artist: r.artist,
         coverUrl: r.thumbnail, duration: r.duration, tags: [], oyeScore: 0,
         createdAt: new Date().toISOString(),
       });
-      await queueForExtraction(results.slice(0, 3).map(toTrack), 10, `search-top3:${query}`.slice(0, 60));
+      await oyo.prefetch(results.slice(0, 3).map(toTrack), 10);
       if (results.length > 3) {
-        await queueForExtraction(results.slice(3).map(toTrack), 7, `search-rest:${query}`.slice(0, 60));
+        await oyo.prefetch(results.slice(3).map(toTrack), 7);
       }
     })();
   }

@@ -255,8 +255,8 @@ async function curateUncachedForPrefetch(
         });
     const candidates = ((data || []) as DiscoveryTrack[]).map(toTrack);
     if (!candidates.length) return;
-    const { queueForExtraction } = await import('./r2Gate');
-    await queueForExtraction(candidates, 5, `curate-${mode}`);
+    const { oyo } = await import('./oyo');
+    await oyo.prefetch(candidates, 5);
     devLog(`[Discovery] queued ${candidates.length} ${mode} candidates for lane extraction`);
   } catch (err) {
     devWarn('[Discovery] curateUncachedForPrefetch error:', err);

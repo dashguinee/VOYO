@@ -279,18 +279,19 @@ async function fetchTracks(artistName: string): Promise<ArtistTrack[]> {
   const uncached = rows.filter(r => r.r2_cached !== true);
 
   // Fire-and-forget: kick uncached artist tracks onto the lanes so they
-  // become cached over time. priority=5 (predicted taste, not urgent).
+  // become cached over time. Routed through oyo.prefetch (priority=5 =
+  // predicted taste, not user-waiting).
   if (uncached.length) {
     void (async () => {
-      const { queueForExtraction } = await import('../services/r2Gate');
-      await queueForExtraction(
+      const { oyo } = await import('../services/oyo');
+      await oyo.prefetch(
         uncached.slice(0, 20).map(r => ({
           id: r.youtube_id, trackId: r.youtube_id, title: r.title || '',
           artist: r.artist || '', coverUrl: r.thumbnail_url || '',
           duration: r.duration_seconds || 0, tags: [], oyeScore: 0,
           createdAt: new Date().toISOString(),
         })),
-        5, `artist-prefetch:${artistName}`.slice(0, 60),
+        5,
       );
     })();
   }

@@ -37,6 +37,7 @@ import {
   Image
 } from 'lucide-react';
 import { usePlayerStore } from '../../store/playerStore';
+import { oyo } from '../../services/oyo';
 import { usePreferenceStore } from '../../store/preferenceStore';
 import { getTrackThumbnailUrl } from '../../utils/imageHelpers';
 import { useMobilePlay } from '../../hooks/useMobilePlay';
@@ -323,6 +324,8 @@ export const NowPlaying = ({ isOpen, onClose }: NowPlayingProps) => {
   const handleOye = useCallback(() => {
     spawnReaction('⚡');
     if (currentTrack) {
+      // Fan out through OYO facade — updates taste, pool, global signal.
+      oyo.onOye(currentTrack);
       createReaction({
         username: dashId || 'anonymous',
         trackId: currentTrack.id,

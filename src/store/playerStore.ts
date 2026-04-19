@@ -41,7 +41,8 @@ async function getDatabaseDiscovery() {
 }
 import { isKnownUnplayable } from '../services/trackVerifier';
 import { isBlocked as isBlocklisted } from '../services/trackBlocklist';
-import { getInsights as getOyoInsights, onTrackSkip as oyoOnTrackSkip } from '../services/oyoDJ';
+import { getInsights as getOyoInsights } from '../services/oyoDJ';
+import { oyo } from '../services/oyo';
 import { devLog, devWarn } from '../utils/logger';
 import { trace } from '../services/telemetry';
 
@@ -760,34 +761,16 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       return;
     }
 
-    // POOL ENGAGEMENT: Detect skip vs completion for current track
+    // Signal fanout — every skip/completion feeds OYO in one call.
+    // playerStore.nextTrack is the single boundary where this happens, so
+    // every surface (Portrait, Landscape, Classic, queue, hotkey, media
+    // keys) gets the same consistent signal graph for free.
     if (state.currentTrack && state.duration > 0) {
       const completionRate = (state.currentTime / state.duration) * 100;
       if (completionRate < 30) {
-        // User skipped (less than 30% played)
-        recordPoolEngagement(state.currentTrack.id, 'skip');
-        // OYO DJ learning: feed the skip event so dislikedArtists builds up.
-        // Wired here at the playerStore.nextTrack boundary so EVERY surface
-        // that triggers a skip (Portrait, Landscape, Classic, queue, hotkey)
-        // feeds the brain for free — no per-surface wiring needed.
-        oyoOnTrackSkip(state.currentTrack, state.currentTime);
-        // GLOBAL SIGNAL: persist skip to video_intelligence so recommender learns
-        if (!_rpcSignalBlocked) import('../lib/supabase').then(async ({ supabase }) => {
-          try {
-            const r = await supabase?.rpc('record_signal', { p_youtube_id: state.currentTrack!.trackId, p_action: 'skip' });
-            if ((r as any)?.error?.status === 401 || (r as any)?.error?.code === '42501') _rpcSignalBlocked = true;
-          } catch {}
-        });
+        oyo.onSkip(state.currentTrack, state.currentTime);
       } else {
-        // User completed (at least 30% played)
-        recordPoolEngagement(state.currentTrack.id, 'complete', { completionRate });
-        // GLOBAL SIGNAL: persist complete to video_intelligence
-        if (!_rpcSignalBlocked) import('../lib/supabase').then(async ({ supabase }) => {
-          try {
-            const r = await supabase?.rpc('record_signal', { p_youtube_id: state.currentTrack!.trackId, p_action: 'complete' });
-            if ((r as any)?.error?.status === 401 || (r as any)?.error?.code === '42501') _rpcSignalBlocked = true;
-          } catch {}
-        });
+        oyo.onComplete(state.currentTrack, completionRate);
       }
     }
 

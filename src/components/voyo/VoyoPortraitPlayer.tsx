@@ -48,7 +48,6 @@ import {
   MixBoardMode,
 } from '../../services/centralDJ';
 
-import { onTrackSkip as oyoOnTrackSkip } from '../../services/oyoDJ';
 import { onSignal as oyaPlanSignal } from '../../services/oyoPlan';
 
 // OYO Island - DJ Voice Search & Chat
@@ -4644,11 +4643,10 @@ export const VoyoPortraitPlayer = ({
   const handleNextTrack = useCallback(() => {
     if (wasSkeeping.current && Date.now() - wasSkeepingClearedAt.current < 250) return;
     wasSkeeping.current = false;
-    const positionSec = voyoStream.getPosition();
-    voyoStream.skip(); // tell VPS to advance — SSE now_playing will update the store
-    // Give OYO the skip position — it learns when in tracks you bail
-    const track = usePlayerStore.getState().currentTrack;
-    if (track) oyoOnTrackSkip(track, positionSec);
+    // voyoStream.skip() delegates to playerStore.nextTrack(), which fans out
+    // oyo.onSkip (position-aware) to the whole signal graph. No redundant
+    // oyoOnTrackSkip call needed here.
+    voyoStream.skip();
   }, []);
 
   // Cleanup on unmount

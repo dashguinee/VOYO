@@ -19,11 +19,27 @@
 import type { Track } from '../../types';
 import { getHotTracks, getDiscoveryTracks } from '../databaseDiscovery';
 import { onSignal as oyoPlanSignal } from '../oyoPlan';
-import { onTrackPlay as oyoDJOnTrackPlay } from '../oyoDJ';
+import { onTrackPlay as oyoDJOnTrackPlay, onTrackSkip as oyoDJOnTrackSkip } from '../oyoDJ';
 import { recordPlay as djRecordPlay } from '../intelligentDJ';
 import { recordTrackInSession } from '../poolCurator';
 import { recordPoolEngagement } from '../personalization';
 import { gateToR2, queueForExtraction } from '../r2Gate';
+
+// Supabase record_signal RPC cooldown — if it returns 401 or 42501 (RLS
+// denied), we stop retrying to avoid flooding console with errors.
+let _rpcSignalBlocked = false;
+async function recordRemoteSignal(trackId: string, action: 'play' | 'skip' | 'complete' | 'react'): Promise<void> {
+  if (_rpcSignalBlocked) return;
+  try {
+    const { supabase } = await import('../../lib/supabase');
+    const r = await supabase?.rpc('record_signal', { p_youtube_id: trackId, p_action: action });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const err = (r as any)?.error;
+    if (err && (err.status === 401 || err.code === '42501')) {
+      _rpcSignalBlocked = true;
+    }
+  } catch { /* non-fatal; just local learning */ }
+}
 
 // ── Signals in ────────────────────────────────────────────────────────────
 
@@ -40,19 +56,36 @@ export function onPlay(track: Track): void {
 
 /**
  * User (or the fade-skip safety net) skipped a track before it completed.
+ *
+ * Fans out to:
+ *   • intelligentDJ — recordPlay(skipped=true) for learning
+ *   • oyoPlan — the "skip" signal for OYO's pool reshuffling
+ *   • oyoDJ — onTrackSkip builds dislikedArtists over time (uses position)
+ *   • personalization — recordPoolEngagement for pool-score demotion
+ *   • video_intelligence.record_signal RPC — global recommender learning
  */
-export function onSkip(track: Track): void {
+export function onSkip(track: Track, positionSec: number = 0): void {
   djRecordPlay(track, false, true);
   oyoPlanSignal('skip', track.trackId);
+  oyoDJOnTrackSkip(track, positionSec);
+  recordPoolEngagement(track.trackId, 'skip');
+  void recordRemoteSignal(track.trackId, 'skip');
 }
 
 /**
  * Track played to natural completion. Strongest positive signal.
+ *
+ * Fans out to:
+ *   • intelligentDJ — recordPlay(skipped=false)
+ *   • oyoPlan — the "completion" signal
+ *   • personalization — recordPoolEngagement with completionRate meta
+ *   • video_intelligence.record_signal RPC
  */
-export function onComplete(track: Track): void {
+export function onComplete(track: Track, completionRate: number = 100): void {
   djRecordPlay(track, false, false);
   oyoPlanSignal('completion', track.trackId);
-  recordPoolEngagement(track.trackId, 'complete');
+  recordPoolEngagement(track.trackId, 'complete', { completionRate });
+  void recordRemoteSignal(track.trackId, 'complete');
 }
 
 /**
@@ -62,6 +95,7 @@ export function onOye(track: Track): void {
   djRecordPlay(track, true, false);
   oyoPlanSignal('reaction', track.trackId);
   recordPoolEngagement(track.trackId, 'react');
+  void recordRemoteSignal(track.trackId, 'react');
 }
 
 // ── Tracks out (always R2-gated) ──────────────────────────────────────────
@@ -106,4 +140,6 @@ export const oyo = {
   getHot,
   getDiscovery,
   prefetch,
+  /** Convenience: alias so callers that pass a whole list can still hit it. */
+  prefetchMany: prefetch,
 };
