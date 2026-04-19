@@ -59,12 +59,24 @@ def claim_batch():
         log(f'claim error: {e}')
         return []
 
-def mark_done(row_id: int) -> None:
+def mark_done(row_id: int, yt_id: str) -> None:
+    """Mark the queue row done AND flip video_intelligence.r2_cached so the
+    home-feed discovery filter picks it up. Two PATCHes, independent — if the
+    second fails, the track still plays (R2 HEAD is the source of truth for
+    playback) but won't appear in cached-filtered feeds until reconciled."""
     requests.patch(
         f'{SUPABASE_URL}/rest/v1/voyo_upload_queue?id=eq.{row_id}',
         json={'status': 'done', 'completed_at': 'now()'},
         headers=HEADERS, timeout=10,
     )
+    try:
+        requests.patch(
+            f'{SUPABASE_URL}/rest/v1/video_intelligence?youtube_id=eq.{yt_id}',
+            json={'r2_cached': True, 'r2_cached_at': 'now()'},
+            headers=HEADERS, timeout=10,
+        )
+    except Exception:
+        pass
 
 def mark_failed(row_id: int, error_msg: str) -> None:
     # Bump failure_count; status=failed once >=3, else back to pending.
@@ -194,7 +206,7 @@ def main():
             t0 = time.time()
             try:
                 extract_and_upload(yt_id)
-                mark_done(row_id)
+                mark_done(row_id, yt_id)
                 processed += 1
                 log(f'✓ {yt_id} in {time.time()-t0:.1f}s (total {processed})')
             except Exception as e:

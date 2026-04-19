@@ -148,15 +148,57 @@ function getPlayedTrackIds(): string[] {
 /**
  * Get HOT tracks: Trending NOW + matches your vibes
  */
+/**
+ * R2-cached-only query. The home feed must show tracks that will play instantly
+ * (every card = cached). Queries video_intelligence directly, filters on the
+ * r2_cached flag, orders by the caller-picked heat/vibe signal.
+ *
+ * Returns [] if Supabase is down — callers fall back to the RPC path which
+ * may return uncached tracks (iframe path), still functional, less silky.
+ */
+async function getCachedTracks(
+  limit: number,
+  orderBy: 'heat_score' | 'vibe_afro_heat' | 'vibe_chill_vibes' | 'vibe_party_mode' | 'vibe_late_night' | 'vibe_workout',
+  excludeIds: string[] = [],
+): Promise<DiscoveryTrack[]> {
+  if (!supabaseConfigured) return [];
+  try {
+    let q = getSupabase()
+      .from('video_intelligence')
+      .select('youtube_id,title,artist,thumbnail_url,artist_tier,primary_genre,cultural_tags,heat_score')
+      .eq('r2_cached', true)
+      .not('youtube_id', 'is', null)
+      .order(orderBy, { ascending: false, nullsFirst: false })
+      .limit(limit);
+    if (excludeIds.length) q = q.not('youtube_id', 'in', `(${excludeIds.map(id => `"${id}"`).join(',')})`);
+    const { data, error } = await q;
+    if (error) { devWarn('[Discovery] cached query error:', error); return []; }
+    return ((data || []) as DiscoveryTrack[]).map(r => ({ ...r, vibe_match_score: (r as any).heat_score ?? 0 }));
+  } catch (err) {
+    devWarn('[Discovery] cached query exception:', err);
+    return [];
+  }
+}
+
 export async function getHotTracks(limit: number = 30): Promise<Track[]> {
   if (!supabaseConfigured) {
     devLog('[Discovery] Supabase not configured, using fallback');
     return getFallbackTracks('hot', limit);
   }
 
-  const essence = getVibeEssence();
-  const playedIds = getPlayedTrackIds();
+  // R2-cached-first: every card on the home feed must be instantly playable.
+  // Uncached candidates go through iframe fallback which is jankier, so we
+  // keep the feed tight to the cached set by default.
+  const cached = await getCachedTracks(limit, 'heat_score');
+  const cachedMusic = filterMusicOnly(cached);
+  if (cachedMusic.length >= Math.min(limit, 10)) {
+    devLog(`[Discovery] HOT cached: ${cachedMusic.length}/${limit} from R2 pool`);
+    return cachedMusic.map(toTrack);
+  }
 
+  // Not enough cached tracks yet — widen to the RPC pool so the feed isn't
+  // empty. These may be uncached (iframe plays them).
+  const essence = getVibeEssence();
   try {
     const { data, error } = await getSupabase().rpc('get_hot_tracks', {
       p_afro_heat: essence.afro_heat,
@@ -165,19 +207,15 @@ export async function getHotTracks(limit: number = 30): Promise<Track[]> {
       p_workout: essence.workout,
       p_late_night: essence.late_night,
       p_limit: limit,
-      p_exclude_ids: [], // Don't exclude for hot - they want to see trending
+      p_exclude_ids: [],
     });
-
-    if (error) {
-      console.error('[Discovery] Hot tracks error:', error);
-      return getFallbackTracks('hot', limit);
-    }
-
-    // Filter out non-music content (news, podcasts, etc.)
+    if (error) { console.error('[Discovery] Hot tracks error:', error); return getFallbackTracks('hot', limit); }
     const tracks = (data || []) as DiscoveryTrack[];
     const musicOnly = filterMusicOnly(tracks);
-    devLog(`[Discovery] HOT: ${musicOnly.length} tracks from 324K database (filtered ${tracks.length - musicOnly.length} non-music)`);
-    return musicOnly.map(toTrack);
+    // Keep cached ones at the top, pad with RPC results.
+    const merged = [...cachedMusic, ...musicOnly.filter(t => !cachedMusic.some(c => c.youtube_id === t.youtube_id))].slice(0, limit);
+    devLog(`[Discovery] HOT hybrid: ${cachedMusic.length} cached + ${merged.length - cachedMusic.length} RPC-padded`);
+    return merged.map(toTrack);
   } catch (err) {
     console.error('[Discovery] Hot tracks exception:', err);
     return getFallbackTracks('hot', limit);
@@ -202,6 +240,24 @@ export async function getDiscoveryTracks(limit: number = 30): Promise<Track[]> {
   const essence = getVibeEssence();
   const playedIds = getPlayedTrackIds();
 
+  // R2-cached-first: rank cached pool by the user's dominant vibe so discovery
+  // still feels personal, but every card is guaranteed instant-play.
+  const dominant = essence.dominantVibes[0] || 'afro_heat';
+  const vibeCol: Record<string, Parameters<typeof getCachedTracks>[1]> = {
+    afro_heat:   'vibe_afro_heat',
+    chill:       'vibe_chill_vibes',
+    party:       'vibe_party_mode',
+    workout:     'vibe_workout',
+    late_night:  'vibe_late_night',
+  };
+  const orderBy = vibeCol[dominant] || 'vibe_afro_heat';
+  const cached = await getCachedTracks(limit, orderBy, playedIds);
+  const cachedMusic = filterMusicOnly(cached);
+  if (cachedMusic.length >= Math.min(limit, 10)) {
+    devLog(`[Discovery] DISCOVERY cached: ${cachedMusic.length}/${limit} (ordered by ${orderBy})`);
+    return cachedMusic.map(toTrack);
+  }
+
   try {
     const { data, error } = await getSupabase().rpc('get_discovery_tracks', {
       p_afro_heat: essence.afro_heat,
@@ -209,22 +265,17 @@ export async function getDiscoveryTracks(limit: number = 30): Promise<Track[]> {
       p_party: essence.party,
       p_workout: essence.workout,
       p_late_night: essence.late_night,
-      p_dominant_vibe: essence.dominantVibes[0] || 'afro_heat',
+      p_dominant_vibe: dominant,
       p_limit: limit,
       p_exclude_ids: [],
       p_played_ids: playedIds,
     });
-
-    if (error) {
-      console.error('[Discovery] Discovery tracks error:', error);
-      return getFallbackTracks('discovery', limit);
-    }
-
-    // Filter out non-music content (news, podcasts, etc.)
+    if (error) { console.error('[Discovery] Discovery tracks error:', error); return getFallbackTracks('discovery', limit); }
     const tracks = (data || []) as DiscoveryTrack[];
     const musicOnly = filterMusicOnly(tracks);
-    devLog(`[Discovery] DISCOVERY: ${musicOnly.length} tracks (filtered ${tracks.length - musicOnly.length} non-music)`);
-    return musicOnly.map(toTrack);
+    const merged = [...cachedMusic, ...musicOnly.filter(t => !cachedMusic.some(c => c.youtube_id === t.youtube_id))].slice(0, limit);
+    devLog(`[Discovery] DISCOVERY hybrid: ${cachedMusic.length} cached + ${merged.length - cachedMusic.length} RPC-padded`);
+    return merged.map(toTrack);
   } catch (err) {
     console.error('[Discovery] Discovery tracks exception:', err);
     return getFallbackTracks('discovery', limit);
