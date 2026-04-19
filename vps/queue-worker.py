@@ -27,9 +27,17 @@ R2_UPLOAD_BASE  = os.environ.get('R2_UPLOAD_BASE', 'https://voyo-edge.dash-webtv
 LANE_ID         = os.environ.get('VOYO_LANE_ID', f'vps-lane-{os.getpid()}')
 CHROME_PROFILE  = os.environ.get('VOYO_CHROME_PROFILE', '/opt/voyo/chrome-profile-001')
 
-POLL_IDLE_SEC   = 3
-BATCH_SIZE      = 3           # claim N rows per cycle
-HOUSEKEEP_EVERY = 300         # seconds between requeue_stale sweeps
+POLL_IDLE_SEC          = 3
+BATCH_SIZE             = 3     # claim N rows per cycle
+HOUSEKEEP_EVERY        = 300   # seconds between requeue_stale sweeps
+# Politeness delay between extractions — YouTube rate-limits sessions that
+# hammer yt-dlp too fast. 8–12s keeps two lanes sustainable without tripping
+# the hour-long cooldown we saw on 2026-04-20.
+COOLDOWN_MIN_SEC       = 8
+COOLDOWN_MAX_SEC       = 12
+# Rate-limit back-off: when we see the rate-limited error, pause the lane
+# for this long so it doesn't keep firing hopeless requests.
+RATE_LIMIT_BACKOFF_SEC = 900  # 15 min
 
 TEMP_DIR = Path('/tmp/voyo-lane')
 TEMP_DIR.mkdir(exist_ok=True)
@@ -210,10 +218,19 @@ def main():
                 processed += 1
                 log(f'✓ {yt_id} in {time.time()-t0:.1f}s (total {processed})')
             except Exception as e:
-                mark_failed(row_id, str(e))
-                log(f'✗ {yt_id} in {time.time()-t0:.1f}s: {str(e)[:150]}')
-            # Small politeness sleep between tracks
-            time.sleep(random.uniform(0.2, 0.4))
+                err = str(e)
+                mark_failed(row_id, err)
+                log(f'✗ {yt_id} in {time.time()-t0:.1f}s: {err[:150]}')
+                # YouTube rate-limited us — pause the lane so we don't burn
+                # through more rows just to fail them all. The other lane
+                # (different Chrome profile) is unaffected by our cooldown.
+                if 'rate-limited' in err or 'Too Many Requests' in err:
+                    log(f'rate-limited — backing off {RATE_LIMIT_BACKOFF_SEC}s')
+                    time.sleep(RATE_LIMIT_BACKOFF_SEC)
+                    break   # drop the rest of this batch; re-claim fresh after
+            # Politeness cooldown between extractions to avoid tripping YT's
+            # anti-abuse. Randomized so concurrent lanes don't sync up.
+            time.sleep(random.uniform(COOLDOWN_MIN_SEC, COOLDOWN_MAX_SEC))
 
     log(f'exiting cleanly after {processed} extractions')
 
