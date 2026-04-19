@@ -94,7 +94,7 @@ const R2_EDGE             = 'https://voyo-edge.dash-webtv.workers.dev/audio';
  * Applied globally (priorityInject + startSession's first track) so every
  * track entry respects flow over interruption.
  */
-async function ensureTrackReady(
+export async function ensureTrackReady(
   track: Track,
   sessionId: string | null,
   opts: { priority?: number } = {},

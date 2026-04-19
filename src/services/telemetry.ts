@@ -41,6 +41,7 @@ export type PlaybackSource =
   | 'preload'
   | 'cache'
   | 'r2'
+  | 'iframe'
   | 'vps'
   | 'vps-r2'
   | 'edge'

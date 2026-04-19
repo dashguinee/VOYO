@@ -15,7 +15,7 @@
 
 import { useEffect, useRef, useCallback } from 'react';
 import { usePlayerStore } from '../store/playerStore';
-import { voyoStream } from '../services/voyoStream';
+import { voyoStream, ensureTrackReady } from '../services/voyoStream';
 import { useAudioChain } from '../audio/graph/useAudioChain';
 import { useFrequencyPump } from '../audio/graph/freqPump';
 import { devLog, devWarn } from '../utils/logger';
@@ -33,6 +33,20 @@ export type { BoostPreset };
 
 const EDGE_ART = 'https://voyo-edge.dash-webtv.workers.dev/cdn/art';
 const YT_ART   = 'https://i.ytimg.com/vi';
+const R2_AUDIO = 'https://voyo-edge.dash-webtv.workers.dev/audio';
+
+/**
+ * Probe R2 for a track. Returns true if the object is served (200), false if
+ * the edge reports 404 or the request fails.
+ */
+async function r2HasTrack(trackId: string): Promise<boolean> {
+  try {
+    const res = await fetch(`${R2_AUDIO}/${trackId}?q=high`, { method: 'HEAD' });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
 
 // Circuit breaker — 3 errors within 10s on the same session = tear down
 // and rebuild instead of looping el.src assignments. Module-scope so it
@@ -139,35 +153,56 @@ export const AudioPlayer = () => {
   // ── React to currentTrack changes ─────────────────────────────────────
   useEffect(() => {
     if (!currentTrack) return;
-    // Reset completion signal on every track change (VPS-driven or user-initiated)
+    // Reset completion signal on every track change
     completionSignaledRef.current = false;
     if (voyoStream.isSkipping) return;
-    // VPS-driven change (now_playing SSE) — stream already advanced, no-op
     if (currentTrack.trackId === voyoStream.currentTrackId) return;
-    // VPS-driven track change — don't start a new session.
-    // now_playing SSE sets voyoStream.currentTrackId before calling setCurrentTrack,
-    // so if they match, the change came from the VPS (skip advance, normal advance).
-    // User-initiated taps change the store track before VPS knows about it,
-    // so voyoStream.currentTrackId won't match yet → correctly falls through.
 
-    devLog(`[AudioPlayer] user-initiated: ${currentTrack.trackId}`);
+    devLog(`[AudioPlayer] track change: ${currentTrack.trackId}`);
 
-    const storeQueue = usePlayerStore.getState().queue;
-    const queueTracks = storeQueue.map(qi => qi.track);
-    voyoStream.startSession(currentTrack, queueTracks).catch(e => {
-      devWarn('[AudioPlayer] startSession failed:', e);
-    });
+    const el = audioRef.current;
+    const setSource = usePlayerStore.getState().setPlaybackSource;
+
+    // R2-first playback. HEAD R2 for the track:
+    //   • hit  → audio element plays direct from R2 (Cloudflare CDN, zero VPS).
+    //            YouTubeIframe stays muted (playbackSource='r2').
+    //   • miss → unmute YouTubeIframe as fallback audio source
+    //            (playbackSource='iframe') + bump queue priority=10 so the
+    //            egyptian lanes extract it ASAP for next time.
+    //
+    // No more VPS voyo-stream session — the FFmpeg live pipe is the source of
+    // every "File ended prematurely" stall. Cached tracks play clean; cold
+    // tracks fall back to YouTube's own player until R2 is filled.
+    (async () => {
+      const cached = await r2HasTrack(currentTrack.trackId);
+      if (cached && el) {
+        el.src = `${R2_AUDIO}/${currentTrack.trackId}?q=high`;
+        el.play().catch(() => {});
+        setSource('r2');
+        logPlaybackEvent({
+          event_type: 'play_start',
+          track_id: currentTrack.trackId,
+          source: 'r2',
+        });
+      } else {
+        // Blank the audio element so the iframe is the sole audio source.
+        if (el) { try { el.pause(); } catch {} el.removeAttribute('src'); }
+        setSource('iframe');
+        logPlaybackEvent({
+          event_type: 'play_start',
+          track_id: currentTrack.trackId,
+          source: 'iframe',
+        });
+        // Fire-and-forget: queue this track for the lanes to extract to R2.
+        // Next time anyone plays it, it'll be cached → r2 path.
+        void ensureTrackReady(currentTrack, null, { priority: 10 });
+      }
+    })();
 
     oyoOnTrackPlay(currentTrack);
     djRecordPlay(currentTrack);
     recordTrackInSession(currentTrack);
     recordPoolEngagement(currentTrack.trackId, 'play');
-
-    logPlaybackEvent({
-      event_type: 'play_start',
-      track_id: currentTrack.trackId,
-      source: 'vps',
-    });
   }, [currentTrack?.trackId]);
 
   // ── Pause / resume sync ───────────────────────────────────────────────
@@ -305,6 +340,22 @@ export const AudioPlayer = () => {
   }, [setCurrentTime, setProgress, setDuration]);
 
   const handleEnded = useCallback(() => {
+    // R2-direct playback (no VPS session): just advance the queue locally.
+    // This is the common case now — the audio element gets a discrete R2 file
+    // per track, so 'ended' means track-over, not stream-broken.
+    const ps = usePlayerStore.getState().playbackSource;
+    if (ps === 'r2' || !voyoStream.sessionId) {
+      logPlaybackEvent({
+        event_type: 'stream_ended',
+        track_id: voyoStream.currentTrackId ?? 'unknown',
+        meta: { source: ps, advance: 'local_next' },
+      });
+      usePlayerStore.getState().nextTrack();
+      return;
+    }
+
+    // Legacy VPS session path — kept for any code path that still calls
+    // voyoStream.startSession(). Can be removed once all sessions are gone.
     devWarn('[AudioPlayer] stream ended — reconnecting');
     logPlaybackEvent({
       event_type: 'stream_ended',
