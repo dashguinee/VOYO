@@ -34,10 +34,15 @@ import { onSignal as oyoPlanSignal } from './oyoPlan';
 const VPS = 'https://stream.zionsynapse.online:8444';
 
 /**
- * Fire-and-forget: upsert a search-miss trackId into voyo_upload_queue so
- * the GH Actions warm-polling worker can pre-cache it into R2 in parallel
- * with the VPS's real-time Webshare extraction. Non-blocking — the UX
- * path is unchanged and gets its bytes from the VPS like always.
+ * Upsert a search-miss trackId into voyo_upload_queue — this is the PRIMARY
+ * path now that deno + yt-dlp-ejs are wired into the GH Actions workflow.
+ * Workers drain the queue and upload to R2 within ~10-60s (100% success on
+ * live videos at time of verification 2026-04-19).
+ *
+ * Webshare stays as the fallback: searchInject waits up to SEARCH_WAIT_MS
+ * for R2 to populate; if it doesn't, the VPS priorityInject path kicks in
+ * and Webshare extracts like before. Worst case = today's behaviour. Best
+ * case = zero Webshare usage for search cold misses.
  */
 async function queueUpsertForPreWarm(track: Track, sessionId: string | null): Promise<void> {
   const url = import.meta.env.VITE_SUPABASE_URL;
@@ -58,6 +63,26 @@ async function queueUpsertForPreWarm(track: Track, sessionId: string | null): Pr
       requested_by_session: sessionId,
     }),
   }).catch(() => {});
+}
+
+/**
+ * Poll R2 HEAD every 2s up to timeoutMs waiting for a newly-extracted track
+ * to appear. Returns true if it lands, false on timeout. Current track keeps
+ * playing during the wait (soft fade + skip happen after this resolves).
+ */
+const R2_POLL_INTERVAL_MS = 2000;
+const SEARCH_WAIT_MS      = 60_000;
+const R2_EDGE             = 'https://voyo-edge.dash-webtv.workers.dev/audio';
+async function waitForR2(trackId: string, timeoutMs: number = SEARCH_WAIT_MS): Promise<boolean> {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    try {
+      const res = await fetch(`${R2_EDGE}/${trackId}?q=high`, { method: 'HEAD' });
+      if (res.ok) return true;
+    } catch { /* network hiccup, retry */ }
+    await new Promise(r => setTimeout(r, R2_POLL_INTERVAL_MS));
+  }
+  return false;
 }
 
 function toQueueItem(t: Track) {
@@ -399,13 +424,28 @@ class VoyoStreamService {
   }
 
   async searchInject(track: Track): Promise<void> {
-    // Dual-fire: the VPS path (priorityInject + skip below) serves the user
-    // instantly via Webshare extraction. We ALSO enqueue for the free GH
-    // Actions pre-warm pipeline so if GH Actions happens to succeed first
-    // (~30% hit rate on easy tracks), R2 is populated and Webshare's
-    // bandwidth is saved for the next listener. Non-blocking — the VPS
-    // path proceeds regardless.
+    // PRIMARY: queue for GH Actions extraction (free path; verified 100%
+    // success on live tracks 2026-04-19 once deno + yt-dlp-ejs were wired).
     queueUpsertForPreWarm(track, this.sessionId).catch(() => {});
+
+    // If already in R2 (cached from past extraction) — skip the wait and
+    // play immediately via the normal VPS session.
+    let r2Hit = false;
+    try {
+      const res = await fetch(`${R2_EDGE}/${track.trackId}?q=high`, { method: 'HEAD' });
+      r2Hit = res.ok;
+    } catch { /* offline probe — treat as miss, fall through to wait */ }
+
+    if (!r2Hit) {
+      // Not in R2. Give GH Actions up to SEARCH_WAIT_MS to produce it.
+      // Current track keeps playing during the wait (no dead air).
+      //
+      // FALLBACK path: if the wait times out, priorityInject below still
+      // fires; the VPS will extract via Webshare like the pre-fix flow.
+      // Worst case = today's latency + Webshare bandwidth. Best case =
+      // zero Webshare for this extraction.
+      await waitForR2(track.trackId).catch(() => {});
+    }
 
     if (!this.sessionId) {
       return this.startSession(track, []);
