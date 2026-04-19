@@ -255,83 +255,6 @@ const server = https.createServer(ssl, async (req, res) => {
     return;
   }
 
-  // ── Chrome profile snapshot — /voyo/chrome-snap ──────────────────────
-  //
-  // Serves a tarball of just the files yt-dlp needs for
-  // `--cookies-from-browser chrome:<dir>`:
-  //   - Default/Cookies       (SQLite cookie store)
-  //   - Default/Network/Cookies (newer Chrome location)
-  //   - Local State           (encryption key for cookies)
-  //
-  // Experiment: does shipping the live browser profile state (not just
-  // a Netscape cookie dump) bypass YouTube's IP-class rejection that
-  // happens when file cookies are replayed from datacenter IPs?
-  //
-  // Auth: same X-Voyo-Key header as /voyo/cookies.
-  // ?account= param optional (random profile if omitted).
-  if (url.pathname === "/voyo/chrome-snap") {
-    const COOKIES_SECRET = process.env.VOYO_COOKIES_SECRET || "";
-    const provided = req.headers["x-voyo-key"] || "";
-    if (!COOKIES_SECRET || provided !== COOKIES_SECRET) {
-      res.writeHead(401, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ error: "unauthorized" }));
-      return;
-    }
-    try {
-      const profiles = fs.readdirSync("/opt/voyo")
-        .filter(f => /^chrome-profile-\d+$/.test(f))
-        .map(f => `/opt/voyo/${f}`);
-      if (!profiles.length) {
-        res.writeHead(503, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ error: "no chrome profiles" }));
-        return;
-      }
-      const requested = url.searchParams.get("account");
-      const explicit  = requested && profiles.find(p => p.endsWith(requested));
-      const chosen    = explicit || profiles[Math.floor(Math.random() * profiles.length)];
-      const accountLabel = chosen.split("/").pop();
-
-      // Build tarball of the minimal file set into a temp location, stream it.
-      // -h dereferences symlinks (some Chrome profiles symlink Default).
-      // Redirecting stderr to /dev/null avoids "file changed as we read it"
-      // warnings from Chrome's live writes.
-      const tmp = `/tmp/chrome-snap-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.tar`;
-      const { execSync } = require("child_process");
-      try {
-        execSync(
-          `tar -cf "${tmp}" -C "${chosen}" --ignore-failed-read ` +
-          `"Default/Cookies" "Default/Cookies-journal" ` +
-          `"Default/Network/Cookies" "Default/Network/Cookies-journal" ` +
-          `"Local State" 2>/dev/null || true`,
-          { timeout: 10_000 }
-        );
-      } catch (e) {
-        console.error(`[VOYO] tar failed for ${accountLabel}: ${e.message}`);
-      }
-      let size = 0;
-      try { size = fs.statSync(tmp).size; } catch {}
-      if (!size) {
-        res.writeHead(500, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ error: "snapshot empty", account: accountLabel }));
-        try { fs.unlinkSync(tmp); } catch {}
-        return;
-      }
-      res.writeHead(200, {
-        "Content-Type":     "application/x-tar",
-        "Content-Length":   size,
-        "X-Cookie-Account": accountLabel,
-      });
-      const stream = fs.createReadStream(tmp);
-      stream.pipe(res);
-      stream.on("close", () => { try { fs.unlinkSync(tmp); } catch {} });
-      console.log(`[VOYO] served chrome-snap from ${accountLabel} (${size}B)`);
-    } catch (e) {
-      res.writeHead(500, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ error: e.message }));
-    }
-    return;
-  }
-
   if (url.pathname === "/health" || url.pathname === "/voyo/health") {
     const jobs = Object.fromEntries([...activeJobs.entries()].map(([k, v]) => [k, v.status]));
     let cacheStats = null;
@@ -859,7 +782,7 @@ function openUpstream(trackId) {
   // Chrome profile (not a stale file export). Zero Webshare bandwidth.
   return openUpstreamNoProxy(trackId)
     .then(stream => {
-      postTelemetry("trace", trackId, { subtype: "vps_extract_source", source: "noproxy" });
+      postTelemetry("trace", trackId, { subtype: "extract_tier", tier: "noproxy" });
       return stream;
     })
     .catch(noProxyErr => {
@@ -871,7 +794,7 @@ function openUpstream(trackId) {
         return openUpstreamViaEndpoint(trackId, _nodeProxyUrl(node), node)
           .then(stream => {
             _markPoolSuccess(node);
-            postTelemetry("trace", trackId, { subtype: "vps_extract_source", source: "pool" });
+            postTelemetry("trace", trackId, { subtype: "extract_tier", tier: "pool" });
             return stream;
           })
           .catch(err => {
@@ -889,14 +812,14 @@ function tryHomeOrWebshare(trackId, originalErr) {
   if (HOME_TUNNEL_URL) {
     return openUpstreamViaEndpoint(trackId, HOME_TUNNEL_URL, null)
       .then(s => {
-        postTelemetry("trace", trackId, { subtype: "vps_extract_source", source: "home_tunnel" });
+        postTelemetry("trace", trackId, { subtype: "extract_tier", tier: "home_tunnel" });
         console.log(`[VOYO] home tunnel served: ${trackId}`);
         return s;
       })
       .catch(homeErr => {
         console.warn(`[VOYO] home tunnel failed: ${trackId} — ${homeErr.message}`);
         if (PROXY_CFG) return openUpstreamViaProxy(trackId).then(s => {
-          postTelemetry("trace", trackId, { subtype: "vps_extract_source", source: "webshare" });
+          postTelemetry("trace", trackId, { subtype: "extract_tier", tier: "webshare" });
           return s;
         });
         throw homeErr;
@@ -904,7 +827,7 @@ function tryHomeOrWebshare(trackId, originalErr) {
   }
   if (PROXY_CFG) return openUpstreamViaProxy(trackId).then(s => {
     if (!s) throw new Error('Track not available');
-    postTelemetry("trace", trackId, { subtype: "vps_extract_source", source: "webshare" });
+    postTelemetry("trace", trackId, { subtype: "extract_tier", tier: "webshare" });
     return s;
   });
   throw originalErr;
