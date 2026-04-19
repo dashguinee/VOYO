@@ -270,18 +270,42 @@ export const AudioPlayer = () => {
               event: 'UPDATE', schema: 'public', table: 'voyo_upload_queue',
               filter: `youtube_id=eq.${trackId}`,
             }, (payload: { new?: { status?: string } }) => {
+              logPlaybackEvent({
+                event_type: 'trace', track_id: trackId,
+                meta: { subtype: 'hotswap_rt_event', new_status: payload.new?.status },
+              });
               if (payload.new?.status === 'done') trigger('realtime');
             })
-            .subscribe();
+            .subscribe((status: string) => {
+              logPlaybackEvent({
+                event_type: 'trace', track_id: trackId,
+                meta: { subtype: 'hotswap_rt_subscribe', status },
+              });
+            });
+        } else {
+          logPlaybackEvent({
+            event_type: 'trace', track_id: trackId,
+            meta: { subtype: 'hotswap_rt_skip', reason: 'no_supabase_client' },
+          });
         }
 
+        let pollTicks = 0;
         hotSwapPollRef.current = setInterval(async () => {
           if (usePlayerStore.getState().currentTrack?.trackId !== trackId) {
             if (hotSwapPollRef.current) clearInterval(hotSwapPollRef.current);
             hotSwapPollRef.current = null;
             return;
           }
-          if (await r2HasTrack(trackId)) trigger('poll');
+          pollTicks++;
+          const has = await r2HasTrack(trackId);
+          // Trace only every 4th tick to limit telemetry volume, plus any hit.
+          if (has || pollTicks % 4 === 0) {
+            logPlaybackEvent({
+              event_type: 'trace', track_id: trackId,
+              meta: { subtype: 'hotswap_poll_tick', ticks: pollTicks, r2_hit: has },
+            });
+          }
+          if (has) trigger('poll');
         }, HOT_SWAP_POLL_MS);
       }
     })();
