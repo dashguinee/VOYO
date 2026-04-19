@@ -18,14 +18,11 @@ import { usePlayerStore } from '../store/playerStore';
 import { voyoStream, ensureTrackReady } from '../services/voyoStream';
 import { iframeBridge } from '../services/iframeBridge';
 import { supabase } from '../lib/supabase';
+import { oyo } from '../services/oyo';
 import { useAudioChain } from '../audio/graph/useAudioChain';
 import { useFrequencyPump } from '../audio/graph/freqPump';
 import { devLog, devWarn } from '../utils/logger';
 import { logPlaybackEvent } from '../services/telemetry';
-import { recordPoolEngagement } from '../services/personalization';
-import { recordTrackInSession } from '../services/poolCurator';
-import { recordPlay as djRecordPlay } from '../services/intelligentDJ';
-import { onTrackPlay as oyoOnTrackPlay } from '../services/oyoDJ';
 import { loadOyoState, handleRapidSkip } from '../services/oyoState';
 import { onSignal as oyaPlanSignal } from '../services/oyoPlan';
 import type { Track } from '../types';
@@ -81,6 +78,10 @@ export const AudioPlayer = () => {
   const hotSwapPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const hotSwapChannelRef = useRef<any>(null);
+  // Last-known iframe currentTime — captured on each tick so that if the
+  // iframe cuts (mobile background, YT glitch) we can resume the audio
+  // element at the right position without needing the dead iframe.
+  const lastIframePosRef = useRef<{ trackId: string; seconds: number } | null>(null);
 
   const {
     currentTrack,
@@ -268,10 +269,10 @@ export const AudioPlayer = () => {
       }
     })();
 
-    oyoOnTrackPlay(currentTrack);
-    djRecordPlay(currentTrack);
-    recordTrackInSession(currentTrack);
-    recordPoolEngagement(currentTrack.trackId, 'play');
+    // Smart layer hears one clean "play" signal; internals fan out to all
+    // taste/curation modules. Player no longer knows about intelligentDJ,
+    // poolCurator, personalization, etc.
+    oyo.onPlay(currentTrack);
   }, [currentTrack?.trackId]);
 
   // ── Pause / resume sync ───────────────────────────────────────────────
@@ -422,10 +423,21 @@ export const AudioPlayer = () => {
     if (!el) return;
     const storeVol = usePlayerStore.getState().volume;
 
-    const t = iframeBridge.getCurrentTime();
+    // Position priority:
+    //   1. Live iframe currentTime (normal hot-swap while playing)
+    //   2. Last-known iframe tick snapshot (iframe was cut by background/OS)
+    //   3. 0 (cold restart — acceptable graceful degradation)
+    let t = iframeBridge.getCurrentTime();
+    let posSource: 'live' | 'snapshot' | 'cold' = 'live';
     if (t == null || !isFinite(t)) {
-      // No iframe position available — fall back to starting R2 from 0.
-      // User will hear a brief restart but it's graceful.
+      const snap = lastIframePosRef.current;
+      if (snap && snap.trackId === trackId && snap.seconds > 0) {
+        t = snap.seconds;
+        posSource = 'snapshot';
+      }
+    }
+    if (t == null || !isFinite(t)) {
+      // Cold restart from 0 — iframe never had a chance to report position.
       el.src = `${R2_AUDIO}/${trackId}?q=high`;
       el.volume = storeVol;
       el.play().catch(() => {});
@@ -468,9 +480,65 @@ export const AudioPlayer = () => {
     logPlaybackEvent({
       event_type: 'trace',
       track_id: trackId,
-      meta: { subtype: 'hotswap', mode: 'faded', at_seconds: Math.round(t) },
+      meta: { subtype: 'hotswap', mode: posSource === 'snapshot' ? 'resume_snapshot' : 'faded', at_seconds: Math.round(t) },
     });
   }, []);
+
+  /**
+   * Background / iframe-cut handling.
+   *
+   * YouTube iframe audio cuts when the tab goes background on mobile (iOS
+   * Safari is strictest, Android Chrome partial). The R2 <audio> element
+   * keeps playing in background cleanly — so the strategy is:
+   *
+   *   1. While iframe is our source, snapshot its currentTime once a second.
+   *      This gives hotSwapToR2 a "last known" position even if iframe dies.
+   *   2. When iframe reports PAUSED while store.isPlaying is still true, we
+   *      treat it as an involuntary cut. The realtime + poll watchers already
+   *      running will swap to R2 as soon as the lane finishes.
+   *   3. On foregrounding, if we're in iframe mode and R2 still isn't ready
+   *      after a short grace (2s), skip forward + requeue the current track
+   *      at priority=10 so it's cached by the time the user scrolls back.
+   */
+  useEffect(() => {
+    if (playbackSource !== 'iframe' || !currentTrack) return;
+
+    // Snapshot tick — record iframe currentTime while it's actively playing
+    // so hot-swap has a resume point even if iframe gets cut.
+    const snap = setInterval(() => {
+      const t = iframeBridge.getCurrentTime();
+      if (t != null && isFinite(t) && t > 0) {
+        lastIframePosRef.current = { trackId: currentTrack.trackId, seconds: t };
+      }
+    }, 1000);
+
+    // Foreground handler — when the user comes back, if we're still on iframe
+    // and R2 isn't ready imminently, abandon this track and let the next one
+    // take over. The original gets requeued with priority=10 for a clean replay.
+    const onVisible = () => {
+      if (document.hidden) return;
+      if (usePlayerStore.getState().playbackSource !== 'iframe') return;
+      const trackId = currentTrack.trackId;
+      setTimeout(async () => {
+        if (usePlayerStore.getState().playbackSource !== 'iframe') return;
+        if (usePlayerStore.getState().currentTrack?.trackId !== trackId) return;
+        // Give the watchers 2s to swap. If they don't, skip + requeue.
+        logPlaybackEvent({
+          event_type: 'trace',
+          track_id: trackId,
+          meta: { subtype: 'foreground_timeout_skip' },
+        });
+        void ensureTrackReady(currentTrack, null, { priority: 10 });
+        usePlayerStore.getState().nextTrack();
+      }, 2000);
+    };
+    document.addEventListener('visibilitychange', onVisible);
+
+    return () => {
+      clearInterval(snap);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [playbackSource, currentTrack?.trackId]);
 
   const handleEnded = useCallback(() => {
     // R2-direct playback (no VPS session): just advance the queue locally.
