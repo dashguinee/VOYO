@@ -1,23 +1,22 @@
 /**
- * AudioPlayer — v3 (VPS streaming architecture)
+ * AudioPlayer — R2-first playback shell.
  *
- * The browser's only job:
- *   1. Play one persistent stream from the VPS
- *   2. Apply VOYEX EQ/spatial effects via Web Audio API
- *   3. Keep OS lock-screen controls alive via MediaSession
+ * Responsibilities of this file (kept narrow):
+ *   1. Mount the <audio> element and wire Web Audio chain (VOYEX EQ/spatial)
+ *   2. React to currentTrack changes → R2 HEAD probe → route audio to either
+ *      the <audio> element (R2 direct) or YouTubeIframe (fallback)
+ *   3. MediaSession handlers for OS lock-screen controls
  *   4. Update progress bar at 4Hz from audio.currentTime
  *
- * voyoStream singleton owns the session. AudioPlayer binds the audio
- * element to it and reacts to currentTrack changes from the store:
- *   - VPS-driven change (now_playing SSE) → already handled, no-op here
- *   - User-initiated change (UI tap)       → start new session
+ * The hot-swap cross-fade (iframe → R2 when lane finishes extraction) lives
+ * in ../player/useHotSwap. Iframe player control + volume fading lives in
+ * ../player/iframeBridge. This file stays focused on lifecycle.
  */
 
 import { useEffect, useRef, useCallback } from 'react';
 import { usePlayerStore } from '../store/playerStore';
 import { voyoStream, ensureTrackReady } from '../services/voyoStream';
-import { iframeBridge } from '../services/iframeBridge';
-import { supabase } from '../lib/supabase';
+import { useHotSwap } from '../player/useHotSwap';
 import { oyo } from '../services/oyo';
 import { useAudioChain } from '../audio/graph/useAudioChain';
 import { useFrequencyPump } from '../audio/graph/freqPump';
@@ -56,32 +55,13 @@ let errorBurst: number[] = [];
 
 // How long we wait on a stall before skipping forward. The fade cross-over
 // masks the hand-off so the skip reads as a DJ transition, not a bug.
+// (Only triggers on legacy VPS stream — r2/iframe handle stalls natively.)
 const STALL_SKIP_THRESHOLD_MS = 4_000;
-// Hot-swap iframe→R2: poll R2 HEAD this often while iframe is the source so
-// we can bridge the moment the lane lands the opus in R2 mid-play.
-const HOT_SWAP_POLL_MS    = 5_000;
-// Total cross-fade duration when performing the iframe→R2 swap. Matches the
-// existing track-change fade feel so it reads as "DJ transition" not "glitch".
-const HOT_SWAP_FADE_MS    = 450;
 
 export const AudioPlayer = () => {
   const audioRef = useRef<HTMLAudioElement>(null);
   const completionSignaledRef = useRef(false);
-  // Stall-skip guard — if the stream sits in 'waiting' state longer than
-  // STALL_SKIP_THRESHOLD_MS, we trigger nextTrack() so the groove keeps moving.
-  // Cleared on any 'playing' event.
   const stallSkipTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Hot-swap watchers — detect the moment R2 is ready for the current track
-  // so we can cross-fade mid-play. Two mechanisms run in parallel:
-  //   • realtime: Supabase channel on voyo_upload_queue status changes (~instant)
-  //   • polling:  HEAD R2 every 5s (safety net if realtime drops)
-  const hotSwapPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const hotSwapChannelRef = useRef<any>(null);
-  // Last-known iframe currentTime — captured on each tick so that if the
-  // iframe cuts (mobile background, YT glitch) we can resume the audio
-  // element at the right position without needing the dead iframe.
-  const lastIframePosRef = useRef<{ trackId: string; seconds: number } | null>(null);
 
   const {
     currentTrack,
@@ -113,6 +93,11 @@ export const AudioPlayer = () => {
     playbackSource,
   });
 
+  // ── Hot-swap: iframe → R2 cross-fade, snapshot resume, watcher lifecycle ──
+  // Self-contained hook. Activates whenever playbackSource flips to 'iframe'
+  // on a fresh track; idles otherwise. See src/player/useHotSwap.ts.
+  useHotSwap(currentTrack, playbackSource, audioRef);
+
   // ── Frequency visualizer pump ─────────────────────────────────────────
   useFrequencyPump(isPlaying);
 
@@ -125,11 +110,7 @@ export const AudioPlayer = () => {
       voyoStream.onBeforeStreamStart = null;
       voyoStream.onRapidSkip = null;
       voyoStream.endSession();
-      if (hotSwapPollRef.current) { clearInterval(hotSwapPollRef.current); hotSwapPollRef.current = null; }
-      if (hotSwapChannelRef.current && supabase) {
-        supabase.removeChannel(hotSwapChannelRef.current);
-        hotSwapChannelRef.current = null;
-      }
+      // useHotSwap handles its own watcher teardown on unmount + track change.
     };
   }, []);
 
@@ -195,27 +176,10 @@ export const AudioPlayer = () => {
       usePlayerStore.getState().setIsPlaying(true);
     }
 
-    // R2-first playback. HEAD R2 for the track:
-    //   • hit  → audio element plays direct from R2 (Cloudflare CDN, zero VPS).
-    //            YouTubeIframe stays muted (playbackSource='r2').
-    //   • miss → unmute YouTubeIframe as fallback audio source
-    //            (playbackSource='iframe') + bump queue priority=10 so the
-    //            egyptian lanes extract it ASAP for next time.
-    //
-    // No more VPS voyo-stream session — the FFmpeg live pipe is the source of
-    // every "File ended prematurely" stall. Cached tracks play clean; cold
-    // tracks fall back to YouTube's own player until R2 is filled.
-    // Always clear any running hot-swap watcher — a fresh track change starts
-    // its own monitoring if the iframe branch is taken below.
-    if (hotSwapPollRef.current) {
-      clearInterval(hotSwapPollRef.current);
-      hotSwapPollRef.current = null;
-    }
-    if (hotSwapChannelRef.current && supabase) {
-      supabase.removeChannel(hotSwapChannelRef.current);
-      hotSwapChannelRef.current = null;
-    }
-
+    // R2-first probe: either set audio.src directly (cached) or hand audio
+    // to the YouTubeIframe fallback (useHotSwap handles the cross-fade when
+    // the lane catches up). Watcher lifecycle lives in useHotSwap; no refs
+    // to manage here.
     (async () => {
       const cached = await r2HasTrack(currentTrack.trackId);
       if (cached && el) {
@@ -229,8 +193,7 @@ export const AudioPlayer = () => {
         });
       } else {
         // Blank the audio element so the iframe is the sole audio source.
-        // Set intentionalPause BEFORE pausing — handlePause treats it as a
-        // clean teardown and doesn't flip isPlaying to false.
+        // intentionalPause flag prevents handlePause from flipping isPlaying.
         if (el) {
           voyoStream.intentionalPause = true;
           try { el.pause(); } catch {}
@@ -242,71 +205,9 @@ export const AudioPlayer = () => {
           track_id: currentTrack.trackId,
           source: 'iframe',
         });
-        // Fire-and-forget: queue this track for the lanes to extract to R2.
+        // Queue the track so lanes extract to R2 → useHotSwap watchers fire
+        // the cross-fade as soon as it lands.
         void ensureTrackReady(currentTrack, null, { priority: 10 });
-
-        // Hot-swap watcher — two mechanisms feeding the same trigger:
-        //   1. Realtime: subscribe to voyo_upload_queue UPDATE for this track
-        //      and fire the swap when status flips to 'done' (~instant).
-        //   2. Polling: HEAD R2 every HOT_SWAP_POLL_MS as a safety net in case
-        //      the websocket drops or never connects.
-        // Whichever fires first wins — both clear the other.
-        const trackId = currentTrack.trackId;
-        const trigger = (reason: string) => {
-          if (usePlayerStore.getState().currentTrack?.trackId !== trackId) return;
-          if (hotSwapPollRef.current) { clearInterval(hotSwapPollRef.current); hotSwapPollRef.current = null; }
-          if (hotSwapChannelRef.current && supabase) {
-            supabase.removeChannel(hotSwapChannelRef.current);
-            hotSwapChannelRef.current = null;
-          }
-          devLog(`[AudioPlayer] hot-swap trigger (${reason}): ${trackId}`);
-          void hotSwapToR2(trackId);
-        };
-
-        if (supabase) {
-          hotSwapChannelRef.current = supabase
-            .channel(`hotswap:${trackId}`)
-            .on('postgres_changes', {
-              event: 'UPDATE', schema: 'public', table: 'voyo_upload_queue',
-              filter: `youtube_id=eq.${trackId}`,
-            }, (payload: { new?: { status?: string } }) => {
-              logPlaybackEvent({
-                event_type: 'trace', track_id: trackId,
-                meta: { subtype: 'hotswap_rt_event', new_status: payload.new?.status },
-              });
-              if (payload.new?.status === 'done') trigger('realtime');
-            })
-            .subscribe((status: string) => {
-              logPlaybackEvent({
-                event_type: 'trace', track_id: trackId,
-                meta: { subtype: 'hotswap_rt_subscribe', status },
-              });
-            });
-        } else {
-          logPlaybackEvent({
-            event_type: 'trace', track_id: trackId,
-            meta: { subtype: 'hotswap_rt_skip', reason: 'no_supabase_client' },
-          });
-        }
-
-        let pollTicks = 0;
-        hotSwapPollRef.current = setInterval(async () => {
-          if (usePlayerStore.getState().currentTrack?.trackId !== trackId) {
-            if (hotSwapPollRef.current) clearInterval(hotSwapPollRef.current);
-            hotSwapPollRef.current = null;
-            return;
-          }
-          pollTicks++;
-          const has = await r2HasTrack(trackId);
-          // Trace only every 4th tick to limit telemetry volume, plus any hit.
-          if (has || pollTicks % 4 === 0) {
-            logPlaybackEvent({
-              event_type: 'trace', track_id: trackId,
-              meta: { subtype: 'hotswap_poll_tick', ticks: pollTicks, r2_hit: has },
-            });
-          }
-          if (has) trigger('poll');
-        }, HOT_SWAP_POLL_MS);
       }
     })();
 
@@ -468,121 +369,6 @@ export const AudioPlayer = () => {
       } catch {}
     }
   }, [setCurrentTime, setProgress, setDuration]);
-
-  /**
-   * Hot-swap iframe → R2 at the current playback timestamp.
-   *
-   * Reads iframe.currentTime, loads R2 into the audio element, seeks to that
-   * position, waits for canplay, then runs a HOT_SWAP_FADE_MS cross-fade: iframe
-   * volume 100→0 while audio element volume 0→target. Finally pauses iframe and
-   * flips playbackSource='r2' so the YouTubeIframe re-mutes and stays synced
-   * for video only. Exit music fades out, R2 music fades in — same timestamp.
-   */
-  const hotSwapToR2 = useCallback(async (trackId: string) => {
-    const el = audioRef.current;
-    if (!el) return;
-    const storeVol = usePlayerStore.getState().volume;
-
-    // Position priority:
-    //   1. Live iframe currentTime (normal hot-swap while playing)
-    //   2. Last-known iframe tick snapshot (iframe was cut by background/OS)
-    //   3. 0 (cold restart — acceptable graceful degradation)
-    let t = iframeBridge.getCurrentTime();
-    let posSource: 'live' | 'snapshot' | 'cold' = 'live';
-    if (t == null || !isFinite(t)) {
-      const snap = lastIframePosRef.current;
-      if (snap && snap.trackId === trackId && snap.seconds > 0) {
-        t = snap.seconds;
-        posSource = 'snapshot';
-      }
-    }
-    if (t == null || !isFinite(t)) {
-      // Cold restart from 0 — iframe never had a chance to report position.
-      el.src = `${R2_AUDIO}/${trackId}?q=high`;
-      el.volume = storeVol;
-      el.play().catch(() => {});
-      usePlayerStore.getState().setPlaybackSource('r2');
-      iframeBridge.pause();
-      iframeBridge.resetVolume();
-      logPlaybackEvent({ event_type: 'trace', track_id: trackId, meta: { subtype: 'hotswap', mode: 'cold' } });
-      return;
-    }
-
-    // Preload R2 muted at the iframe position.
-    el.src = `${R2_AUDIO}/${trackId}?q=high`;
-    try { el.currentTime = t; } catch {}
-    el.volume = 0;
-    await new Promise<void>((resolve) => {
-      const onReady = () => { el.removeEventListener('canplay', onReady); resolve(); };
-      el.addEventListener('canplay', onReady);
-      // Safety: if canplay doesn't fire in 2.5s, proceed anyway.
-      setTimeout(() => { el.removeEventListener('canplay', onReady); resolve(); }, 2500);
-    });
-    try { el.currentTime = t; } catch {}
-    await el.play().catch(() => {});
-
-    // Cross-fade over HOT_SWAP_FADE_MS: iframe volume 100→0, audio volume 0→storeVol.
-    const steps = 15;
-    const stepMs = Math.max(1, Math.round(HOT_SWAP_FADE_MS / steps));
-    const iframeFade = iframeBridge.fadeOut(HOT_SWAP_FADE_MS);
-    for (let i = 1; i <= steps; i++) {
-      el.volume = Math.min(storeVol, storeVol * (i / steps));
-      await new Promise((r) => setTimeout(r, stepMs));
-    }
-    await iframeFade;
-
-    // Complete the hand-off.
-    iframeBridge.pause();
-    iframeBridge.resetVolume();
-    el.volume = storeVol;
-    usePlayerStore.getState().setPlaybackSource('r2');
-
-    logPlaybackEvent({
-      event_type: 'trace',
-      track_id: trackId,
-      meta: { subtype: 'hotswap', mode: posSource === 'snapshot' ? 'resume_snapshot' : 'faded', at_seconds: Math.round(t) },
-    });
-  }, []);
-
-  /**
-   * Background / iframe-cut handling.
-   *
-   * YouTube iframe audio cuts when the tab goes background on mobile (iOS
-   * Safari is strictest, Android Chrome partial). The R2 <audio> element
-   * keeps playing in background cleanly — so the strategy is:
-   *
-   *   1. While iframe is our source, snapshot its currentTime once a second.
-   *      This gives hotSwapToR2 a "last known" position even if iframe dies.
-   *   2. When iframe reports PAUSED while store.isPlaying is still true, we
-   *      treat it as an involuntary cut. The realtime + poll watchers already
-   *      running will swap to R2 as soon as the lane finishes.
-   *   3. On foregrounding, if we're in iframe mode and R2 still isn't ready
-   *      after a short grace (2s), skip forward + requeue the current track
-   *      at priority=10 so it's cached by the time the user scrolls back.
-   */
-  useEffect(() => {
-    if (playbackSource !== 'iframe' || !currentTrack) return;
-
-    // Snapshot tick — record iframe currentTime while it's actively playing
-    // so hot-swap has a resume point even if iframe gets cut.
-    const snap = setInterval(() => {
-      const t = iframeBridge.getCurrentTime();
-      if (t != null && isFinite(t) && t > 0) {
-        lastIframePosRef.current = { trackId: currentTrack.trackId, seconds: t };
-      }
-    }, 1000);
-
-    // NB: we used to foreground-timeout-skip after 2s if R2 wasn't ready.
-    // That was brutal — any tab switch or app resume during the 90–180s
-    // extraction window yanked the user off their track. The snapshot
-    // ticker above + the realtime/poll watchers already cover the background
-    // cut case: when iframe dies on mobile and R2 later lands, hotSwapToR2
-    // resumes at the saved position. No skip needed.
-
-    return () => {
-      clearInterval(snap);
-    };
-  }, [playbackSource, currentTrack?.trackId]);
 
   const handleEnded = useCallback(() => {
     // R2-direct playback (no VPS session): just advance the queue locally.

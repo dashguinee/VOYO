@@ -14,7 +14,7 @@
 import { useEffect, useRef, useCallback, memo, useState, type Dispatch, type SetStateAction } from 'react';
 import { usePlayerStore } from '../store/playerStore';
 import { voyoStream } from '../services/voyoStream';
-import { iframeBridge } from '../services/iframeBridge';
+import { iframeBridge } from '../player/iframeBridge';
 import { markTrackAsFailed } from '../services/trackVerifier';
 import { devLog } from '../utils/logger';
 
