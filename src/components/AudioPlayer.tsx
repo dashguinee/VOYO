@@ -165,7 +165,10 @@ export const AudioPlayer = () => {
           oyeScore: 0,
           createdAt: new Date().toISOString(),
         };
-        voyoStream.priorityInject(pivot);
+        // Route through playerStore — AudioPlayer's track-change effect then
+        // runs the R2-first flow (iframe fallback + hot-swap). No VPS session.
+        usePlayerStore.getState().setCurrentTrack(pivot);
+        void ensureTrackReady(pivot, null, { priority: 10 });
         devLog(`[OYO] Rapid skip pivot → ${meta.title}`);
       } catch {}
     };
@@ -287,6 +290,19 @@ export const AudioPlayer = () => {
     // taste/curation modules. Player no longer knows about intelligentDJ,
     // poolCurator, personalization, etc.
     oyo.onPlay(currentTrack);
+
+    // Predictive pre-warm (gated on OYE bulb) — fire ensureTrackReady for the
+    // next two queue items so they're cached by the time the user gets there.
+    // Previously tied to voyoStream's SSE now_playing; that path is gone, so
+    // we drive prewarm directly from the track-change boundary now.
+    const store = usePlayerStore.getState();
+    if (store.oyePrewarm) {
+      const upcoming = store.queue.slice(0, 2).map(qi => qi.track);
+      for (const t of upcoming) {
+        if (!t?.trackId) continue;
+        void ensureTrackReady(t, null, { priority: 5 });
+      }
+    }
   }, [currentTrack?.trackId]);
 
   // ── Pause / resume sync ───────────────────────────────────────────────
@@ -627,9 +643,10 @@ export const AudioPlayer = () => {
     navigator.mediaSession.setActionHandler('previoustrack', () => {
       const store = usePlayerStore.getState();
       if ((store.currentTime ?? 0) > 3) {
-        if (!store.currentTrack) return;
-        const queueTracks = store.queue.map(qi => qi.track);
-        voyoStream.startSession(store.currentTrack, queueTracks).catch(() => {});
+        // Seek-to-zero via reload of the same R2 src. Setting currentTrack to
+        // itself doesn't trigger the effect, so seek directly on the audio el.
+        const el = audioRef.current;
+        if (el) { try { el.currentTime = 0; el.play().catch(() => {}); } catch {} }
       } else {
         store.prevTrack();
       }
@@ -725,20 +742,16 @@ export const AudioPlayer = () => {
         // here so we don't open the Empty-src error window.
         if (burstCount >= ERROR_BURST_LIMIT) {
           errorBurst = [];
-          devWarn('[AudioPlayer] error-burst threshold hit — rebuilding session');
+          devWarn('[AudioPlayer] error-burst on current track — advancing');
           logPlaybackEvent({
             event_type: 'trace',
-            track_id: voyoStream.currentTrackId ?? 'unknown',
-            meta: { subtype: 'session_rebuild', reason: 'error_burst' },
+            track_id: usePlayerStore.getState().currentTrack?.trackId ?? 'unknown',
+            meta: { subtype: 'error_burst_skip', burst_count: burstCount },
           });
-          const s = usePlayerStore.getState();
-          if (s.currentTrack) {
-            const queueTracks = s.queue.map(qi => qi.track);
-            // force + skipReadyWait: user is already stuck in an error loop,
-            // skip the 60s R2-wait flow and go straight to VPS (Webshare
-            // fallback) for instant recovery.
-            voyoStream.startSession(s.currentTrack, queueTracks, 'high', { force: true, skipReadyWait: true }).catch(() => {});
-          }
+          // Three audio-element errors in 10s → track is toast. Advance
+          // instead of rebuilding a VPS session (which no longer exists in
+          // the R2-first flow).
+          usePlayerStore.getState().nextTrack();
           return;
         }
 

@@ -443,7 +443,12 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap }: SearchOverlayP
   const handleSelectTrack = useCallback((result: SearchResult) => {
     const track = resultToTrack(result);
     addSearchResultsToPool([track]);
-    voyoStream.searchInject(track);
+    // R2-first flow: setCurrentTrack triggers AudioPlayer's effect which
+    // HEAD-probes R2, plays direct if cached, iframe + hot-swap if not.
+    // No VPS session. searchMusic already queued this for extraction at
+    // priority=10, so the iframe path will swap to R2 within ~90s.
+    usePlayerStore.getState().setCurrentTrack(track);
+    usePlayerStore.getState().setIsPlaying(true);
     oyaPlanSignal('search_play', track.artist ?? '');
     showToast('Playing now', 'queue');
     // Search stays open — user keeps exploring

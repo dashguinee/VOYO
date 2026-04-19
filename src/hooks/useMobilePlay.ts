@@ -71,20 +71,15 @@ export function useMobilePlay() {
           const store = usePlayerStore.getState();
           const currentTrack = store.currentTrack;
           if (!currentTrack) {
-            // Nothing staged — just flip the UI state and let AudioPlayer sort it
             togglePlay();
             return;
           }
-          devLog('[useMobilePlay] No src — starting session from user gesture');
-          // Mark as playing immediately so the UI responds
+          // Fire the R2-first flow by re-asserting currentTrack — AudioPlayer's
+          // track-change effect picks it up, HEAD-probes R2, plays from there
+          // or falls back to iframe. No VPS session.
+          devLog('[useMobilePlay] No src — re-triggering R2-first flow');
           store.setIsPlaying(true);
-          const queueTracks = store.queue.map(qi => qi.track);
-          // startSession calls audioEl.play() internally after setting src.
-          // Since we are in a user gesture context the play() will succeed.
-          voyoStream.startSession(currentTrack, queueTracks).catch(e => {
-            devWarn('[useMobilePlay] startSession failed:', e);
-            store.setIsPlaying(false);
-          });
+          store.setCurrentTrack(currentTrack);
           return;
         }
 
