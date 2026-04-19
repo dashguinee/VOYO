@@ -650,26 +650,39 @@ export const AudioPlayer = () => {
       onEnded={handleEnded}
       onWaiting={() => {
         const el = audioRef.current;
+        const store = usePlayerStore.getState();
+        const curTrack = store.currentTrack?.trackId ?? 'unknown';
         logPlaybackEvent({
           event_type: 'stream_stall',
-          track_id: voyoStream.currentTrackId ?? 'unknown',
-          meta: { sub: 'waiting', ready_state: el?.readyState, network_state: el?.networkState },
+          track_id: curTrack,
+          meta: {
+            sub: 'waiting',
+            source: store.playbackSource,
+            ready_state: el?.readyState,
+            network_state: el?.networkState,
+          },
         });
-        // Start a fade on the master gain so the stall isn't just silence —
-        // it reads as an intentional transition. If the buffer doesn't recover
-        // in STALL_SKIP_THRESHOLD_MS, advance to the next track instead of
-        // hanging forever.
+        // Stall-skip is only meaningful when the audio element is actually
+        // trying to be the source. For 'r2', a transient 'waiting' during
+        // src assignment / network seek is normal and the browser recovers
+        // on its own — auto-skipping here would yank the user off a track
+        // that would have played fine 300ms later.
+        // For 'iframe', the audio element is silent anyway (iframe owns
+        // audio) so a 'waiting' means nothing. Skip logic off.
+        // The original case this was built for — VPS live-stream hangs — no
+        // longer applies since we removed voyoStream session-based playback.
+        if (store.playbackSource === 'r2' || store.playbackSource === 'iframe') {
+          return;
+        }
         voyoStream.onSoftFade?.(STALL_SKIP_THRESHOLD_MS);
         if (stallSkipTimerRef.current) clearTimeout(stallSkipTimerRef.current);
         stallSkipTimerRef.current = setTimeout(() => {
           stallSkipTimerRef.current = null;
           const curEl = audioRef.current;
-          // Don't skip if the browser already recovered — readyState >=3 means
-          // we have at least one frame of data queued.
           if (curEl && curEl.readyState >= 3) return;
           logPlaybackEvent({
             event_type: 'stream_stall',
-            track_id: voyoStream.currentTrackId ?? 'unknown',
+            track_id: curTrack,
             meta: { sub: 'skip_on_stall', waited_ms: STALL_SKIP_THRESHOLD_MS },
           });
           usePlayerStore.getState().nextTrack();
