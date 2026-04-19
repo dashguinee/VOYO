@@ -14,6 +14,7 @@
 import { useEffect, useRef, useCallback, memo, useState, type Dispatch, type SetStateAction } from 'react';
 import { usePlayerStore } from '../store/playerStore';
 import { voyoStream } from '../services/voyoStream';
+import { iframeBridge } from '../services/iframeBridge';
 import { markTrackAsFailed } from '../services/trackVerifier';
 import { devLog } from '../utils/logger';
 
@@ -192,6 +193,7 @@ export const YouTubeIframe = memo(() => {
     if (isBoosted && videoTarget === 'hidden' && playerRef.current) {
       try { playerRef.current.destroy(); } catch {}
       playerRef.current = null;
+      iframeBridge.register(null);
       currentVideoIdRef.current = null;
       if (containerRef.current) containerRef.current.innerHTML = '';
     }
@@ -209,6 +211,7 @@ export const YouTubeIframe = memo(() => {
     if (playerRef.current) {
       try { playerRef.current.destroy(); } catch (e) {}
       playerRef.current = null;
+      iframeBridge.register(null);
     }
 
     containerRef.current.innerHTML = '';
@@ -235,6 +238,9 @@ export const YouTubeIframe = memo(() => {
       events: {
         onReady: (e: any) => {
           initializingRef.current = false;
+          // Register the player on the bridge so AudioPlayer can read
+          // iframe currentTime + fade volume during the iframe→R2 hot-swap.
+          iframeBridge.register(e.target);
           const store = usePlayerStore.getState();
           const psNow = store.playbackSource;
           const isBoostedNow = psNow === 'cached' || psNow === 'r2';
