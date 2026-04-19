@@ -33,6 +33,33 @@ import { onSignal as oyoPlanSignal } from './oyoPlan';
 
 const VPS = 'https://stream.zionsynapse.online:8444';
 
+/**
+ * Fire-and-forget: upsert a search-miss trackId into voyo_upload_queue so
+ * the GH Actions warm-polling worker can pre-cache it into R2 in parallel
+ * with the VPS's real-time Webshare extraction. Non-blocking — the UX
+ * path is unchanged and gets its bytes from the VPS like always.
+ */
+async function queueUpsertForPreWarm(track: Track, sessionId: string | null): Promise<void> {
+  const url = import.meta.env.VITE_SUPABASE_URL;
+  const key = import.meta.env.VITE_SUPABASE_ANON_KEY;
+  if (!url || !key) return;
+  await fetch(`${url}/rest/v1/voyo_upload_queue`, {
+    method: 'POST',
+    headers: {
+      apikey: key,
+      Authorization: `Bearer ${key}`,
+      'Content-Type': 'application/json',
+      Prefer: 'resolution=merge-duplicates',
+    },
+    body: JSON.stringify({
+      youtube_id:           track.trackId,
+      title:                track.title ?? null,
+      artist:               track.artist ?? null,
+      requested_by_session: sessionId,
+    }),
+  }).catch(() => {});
+}
+
 function toQueueItem(t: Track) {
   return {
     trackId:  t.trackId,
@@ -372,6 +399,14 @@ class VoyoStreamService {
   }
 
   async searchInject(track: Track): Promise<void> {
+    // Dual-fire: the VPS path (priorityInject + skip below) serves the user
+    // instantly via Webshare extraction. We ALSO enqueue for the free GH
+    // Actions pre-warm pipeline so if GH Actions happens to succeed first
+    // (~30% hit rate on easy tracks), R2 is populated and Webshare's
+    // bandwidth is saved for the next listener. Non-blocking — the VPS
+    // path proceeds regardless.
+    queueUpsertForPreWarm(track, this.sessionId).catch(() => {});
+
     if (!this.sessionId) {
       return this.startSession(track, []);
     }

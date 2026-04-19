@@ -37,6 +37,9 @@ const { PassThrough } = require("stream");
 const PORT = 8443;
 const R2_BASE = "https://voyo-edge.dash-webtv.workers.dev";
 
+// Cookie bridge in-memory cache — keyed by profile path, 10-min TTL
+let cookiesBridgeCache = null;
+
 
 
 // Telemetry sink — best-effort POST to Supabase voyo_playback_events with
@@ -166,6 +169,88 @@ const server = https.createServer(ssl, async (req, res) => {
     } catch (e) {
       res.writeHead(503, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ error: `bgutil unavailable: ${e.message}` }));
+    }
+    return;
+  }
+
+  // ── Cookie bridge — /voyo/cookies ─────────────────────────────────────
+  //
+  // Dumps fresh Netscape-format cookies from a random persistent Chrome
+  // profile at /opt/voyo/chrome-profile-NN. This is what lets GitHub Actions
+  // workers extract from YouTube without shipping baked (stale) cookies in
+  // the workflow YAML. The VPS's Chrome profiles self-refresh via the live
+  // browser session so cookies stay fresh indefinitely.
+  //
+  // Auth: shared-secret header X-Voyo-Key (VOYO_COOKIES_SECRET env var).
+  // Caching: 10-min TTL per profile in-memory. Rate-limits Chrome disk reads.
+  //
+  // Response headers:
+  //   X-Cookie-Account: which profile was used (for logging/rotation)
+  // Body: Netscape cookie file contents.
+  if (url.pathname === "/voyo/cookies") {
+    const COOKIES_SECRET = process.env.VOYO_COOKIES_SECRET || "";
+    const provided = req.headers["x-voyo-key"] || "";
+    if (!COOKIES_SECRET || provided !== COOKIES_SECRET) {
+      res.writeHead(401, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "unauthorized" }));
+      return;
+    }
+    try {
+      const profiles = fs.readdirSync("/opt/voyo")
+        .filter(f => /^chrome-profile-\d+$/.test(f))
+        .map(f => `/opt/voyo/${f}`);
+      if (!profiles.length) {
+        res.writeHead(503, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "no chrome profiles on VPS" }));
+        return;
+      }
+      // Honor ?account=profile-001 if specified, otherwise random
+      const requested = url.searchParams.get("account");
+      const explicit  = requested && profiles.find(p => p.endsWith(requested));
+      const chosen    = explicit || profiles[Math.floor(Math.random() * profiles.length)];
+      const accountLabel = chosen.split("/").pop();
+
+      // In-memory cache, 10-min TTL per profile. Avoids re-triggering a
+      // yt-dlp call for every worker in a matrix of 3.
+      cookiesBridgeCache = cookiesBridgeCache || new Map();
+      const cached = cookiesBridgeCache.get(chosen);
+      if (cached && Date.now() - cached.at < 10 * 60_000) {
+        res.writeHead(200, {
+          "Content-Type":     "text/plain",
+          "X-Cookie-Account": accountLabel,
+          "X-Cookie-Age-Ms":  String(Date.now() - cached.at),
+        });
+        res.end(cached.body);
+        return;
+      }
+
+      // voyo-dump-cookies uses yt-dlp's cookies module directly — avoids
+      // the YoutubeDL session save_cookies path which hits the immutable
+      // /opt/voyo/cookies.txt. Helper at /usr/local/bin/voyo-dump-cookies.
+      const tmpFile = `/tmp/voyo-cookies-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.txt`;
+      const cmd = `/usr/local/bin/voyo-dump-cookies "${chosen}" "${tmpFile}" 2>&1`;
+      exec(cmd, { timeout: 20_000 }, (err) => {
+        let body = "";
+        try { body = fs.readFileSync(tmpFile, "utf8"); } catch {}
+        try { fs.unlinkSync(tmpFile); } catch {}
+        if (!body || body.length < 200) {
+          console.error(`[VOYO] cookie dump failed for ${accountLabel}: ${err?.message || "empty"}`);
+          res.writeHead(500, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: "dump failed", account: accountLabel }));
+          return;
+        }
+        cookiesBridgeCache.set(chosen, { body, at: Date.now() });
+        console.log(`[VOYO] served fresh cookies from ${accountLabel} (${body.length}B)`);
+        res.writeHead(200, {
+          "Content-Type":     "text/plain",
+          "X-Cookie-Account": accountLabel,
+          "X-Cookie-Age-Ms":  "0",
+        });
+        res.end(body);
+      });
+    } catch (e) {
+      res.writeHead(500, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: e.message }));
     }
     return;
   }
