@@ -846,6 +846,12 @@ function _nodeProxyUrl(node) {
   return `http://${node.host}:${node.port}`;
 }
 
+// TIER D — Dash's home tunnel (residential exit, insurance layer).
+// Set VOYO_HOME_TUNNEL env var to the Cloudflare Quick Tunnel URL emitted
+// by scripts/home-proxy/start-home-proxy.sh. Empty string = tier skipped.
+const HOME_TUNNEL_URL = process.env.VOYO_HOME_TUNNEL || "";
+if (HOME_TUNNEL_URL) console.log(`[VOYO] Home tunnel fallback: ${HOME_TUNNEL_URL}`);
+
 function openUpstream(trackId) {
   // TIER A — PRIMARY: nightly yt-dlp + live browser cookies, NO PROXY.
   // Proven 2026-04-19 to work for all tested tracks from VPS datacenter IP
@@ -859,7 +865,7 @@ function openUpstream(trackId) {
     .catch(noProxyErr => {
       console.warn(`[VOYO] noproxy failed: ${trackId} — ${noProxyErr.message}`);
 
-      // TIER B — FALLBACK: pool nodes if configured
+      // TIER B — pool nodes if configured
       const node = _pickPoolNode();
       if (node) {
         return openUpstreamViaEndpoint(trackId, _nodeProxyUrl(node), node)
@@ -870,22 +876,38 @@ function openUpstream(trackId) {
           })
           .catch(err => {
             _markPoolFailure(node, err.message);
-            if (PROXY_CFG) return openUpstreamViaProxy(trackId).then(s => {
-              postTelemetry("trace", trackId, { subtype: "vps_extract_source", source: "webshare" });
-              return s;
-            });
-            throw err;
+            return tryHomeOrWebshare(trackId, noProxyErr);
           });
       }
 
-      // TIER C — LAST RESORT: Webshare if configured
-      if (PROXY_CFG) return openUpstreamViaProxy(trackId).then(s => {
-        if (!s) throw new Error('Track not available');
-        postTelemetry("trace", trackId, { subtype: "vps_extract_source", source: "webshare" });
-        return s;
-      });
-      throw noProxyErr;
+      return tryHomeOrWebshare(trackId, noProxyErr);
     });
+}
+
+// TIER C + D — home tunnel (residential insurance) → Webshare (paid fallback).
+function tryHomeOrWebshare(trackId, originalErr) {
+  if (HOME_TUNNEL_URL) {
+    return openUpstreamViaEndpoint(trackId, HOME_TUNNEL_URL, null)
+      .then(s => {
+        postTelemetry("trace", trackId, { subtype: "vps_extract_source", source: "home_tunnel" });
+        console.log(`[VOYO] home tunnel served: ${trackId}`);
+        return s;
+      })
+      .catch(homeErr => {
+        console.warn(`[VOYO] home tunnel failed: ${trackId} — ${homeErr.message}`);
+        if (PROXY_CFG) return openUpstreamViaProxy(trackId).then(s => {
+          postTelemetry("trace", trackId, { subtype: "vps_extract_source", source: "webshare" });
+          return s;
+        });
+        throw homeErr;
+      });
+  }
+  if (PROXY_CFG) return openUpstreamViaProxy(trackId).then(s => {
+    if (!s) throw new Error('Track not available');
+    postTelemetry("trace", trackId, { subtype: "vps_extract_source", source: "webshare" });
+    return s;
+  });
+  throw originalErr;
 }
 
 /**
