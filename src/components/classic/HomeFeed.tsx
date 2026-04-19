@@ -1382,76 +1382,57 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
   const currentTrack = usePlayerStore((state) => state.currentTrack);
 
   // PERSONALIZED SECTIONS - Uses behavior (40%) + intent (60%) scoring
-  // Made For You: YOUR top tracks based on listens, completions, reactions
-  // PLUS OYO DJ favorite-artist tier so the "one brain" doesn't lose to the
-  // local re-sort. Two-tier stable sort: favorites first (by behavior within),
-  // non-favorites second (also by behavior within). Preserves both signals.
-  const madeForYou = useMemo(() => {
-    // Pull a WIDER candidate pool (60) then seeded-shuffle to pick 15 — so
-    // every reload surfaces different tracks from the 324K Supabase pool.
-    const personalizedHot = getPoolAwareHotTracks(60);
-    if (hotTracks.length > 0) {
-      // OYO DJ tier: artists the user has reacted to before. Empty for new users
-      // (set.size === 0 → falls through to plain behavior sort, no change).
-      const oyoFavorites = new Set(
-        getOyoInsights().favoriteArtists.map(a => a.toLowerCase())
-      );
-      const scored = hotTracks.map(track => ({
-        track,
-        isFavorite: oyoFavorites.has((track.artist ?? '').toLowerCase()),
-        score: calculateBehaviorScore(track, trackPreferences) + (track.oyeScore || 0) * 0.0001,
-      }));
-      scored.sort((a, b) => {
-        // Tier 1: OYO favorites bubble to the top
-        if (a.isFavorite !== b.isFavorite) return a.isFavorite ? -1 : 1;
-        // Tier 2 (within): behavior score wins
-        return b.score - a.score;
-      });
-      // Keep the top 30 personalized picks, then seed-shuffle within that band
-      // so favorites still lead but the exact order rotates across sessions.
-      const topBand = scored.map(s => s.track).slice(0, 30);
-      return seededShuffle(topBand, sessionSeed).slice(0, 15);
-    }
-    return seededShuffle(personalizedHot, sessionSeed).slice(0, 15);
-  }, [hotTracks, trackPreferences, sessionSeed]);
+  // "Made For You" shelf removed — felt too Spotify-ish, not VOYO's DNA. OYO's
+  // taste signals still feed every other shelf via OYO intelligence; we just
+  // don't surface a dedicated "made for you" row that implies algorithmic
+  // gift-wrapping. OYO's Picks below carries that energy with our own voice.
 
-  // Discover More: Personalized discovery based on current track context
+  // Keep Expanding Horizons: Personalized discovery based on current track context.
   const discoverMoreTracks = useMemo(() => {
     // Use discovery engine with user context — pull a wider slate (45) then
     // seed-shuffle so the "discover" shelf actually rotates every reload.
     if (currentTrack) {
-      const excludeIds = [...madeForYou.map(t => t.id), currentTrack.id];
-      const candidates = getPoolAwareDiscoveryTracks(currentTrack, 45, excludeIds);
+      const candidates = getPoolAwareDiscoveryTracks(currentTrack, 45, [currentTrack.id]);
       return seededShuffle(candidates, sessionSeed).slice(0, 15);
     }
-    // Fallback: Use discovery pool scored by behavior, offset from madeForYou
+    // Fallback: Use discovery pool scored by behavior.
     if (discoverTracks.length > 0) {
-      const madeForYouIds = new Set(madeForYou.map(t => t.id));
-      const unique = discoverTracks.filter(t => !madeForYouIds.has(t.id));
-      const scored = unique.map(track => ({
+      const scored = discoverTracks.map(track => ({
         track,
         score: calculateBehaviorScore(track, trackPreferences)
       }));
       scored.sort((a, b) => b.score - a.score);
-      // Keep the top 30 best-scoring candidates, then seed-shuffle for rotation.
       const topBand = scored.map(s => s.track).slice(0, 30);
       return seededShuffle(topBand, sessionSeed).slice(0, 15);
     }
-    // Last resort: different slice from pool — seed-shuffle so each reload rotates.
     const allHot = getPoolAwareHotTracks(60);
     return seededShuffle(allHot, sessionSeed).slice(0, 15);
-  }, [discoverTracks, currentTrack, madeForYou, trackPreferences, sessionSeed]);
+  }, [discoverTracks, currentTrack, trackPreferences, sessionSeed]);
 
-  // New Releases: Date-sorted, excluding what's already shown
-  const newReleases = useMemo(() => {
-    const usedIds = new Set([
-      ...madeForYou.map(t => t.id),
-      ...discoverMoreTracks.map(t => t.id),
-    ]);
-    const allNew = getNewReleases(hotPool, 30);
-    const unique = allNew.filter(t => !usedIds.has(t.id));
-    return unique.slice(0, 15);
-  }, [hotPool, madeForYou, discoverMoreTracks]);
+  // OYO's Picks: OYO-curated surface. Was "New Releases" (date-sorted) — now
+  // carries the "here's what OYO wants you on" energy by combining behavior
+  // score + OYO favorite-artist tier + fresh seed-shuffle per session.
+  const oyosPicks = useMemo(() => {
+    const pool = hotTracks.length > 0 ? hotTracks : getPoolAwareHotTracks(60);
+    const oyoFavorites = new Set(
+      getOyoInsights().favoriteArtists.map(a => a.toLowerCase())
+    );
+    const scored = pool.map(track => ({
+      track,
+      isFavorite: oyoFavorites.has((track.artist ?? '').toLowerCase()),
+      score: calculateBehaviorScore(track, trackPreferences) + (track.oyeScore || 0) * 0.0001,
+    }));
+    scored.sort((a, b) => {
+      if (a.isFavorite !== b.isFavorite) return a.isFavorite ? -1 : 1;
+      return b.score - a.score;
+    });
+    const topBand = scored.map(s => s.track).slice(0, 30);
+    // Exclude what's already in the expanding-horizons row so there's no
+    // duplication between adjacent shelves.
+    const usedIds = new Set(discoverMoreTracks.map(t => t.id));
+    const filtered = topBand.filter(t => !usedIds.has(t.id));
+    return seededShuffle(filtered, sessionSeed).slice(0, 15);
+  }, [hotTracks, hotPool, discoverMoreTracks, trackPreferences, sessionSeed]);
 
   // African Vibes: West African tags + user's afro-heat preference weighting
   const africanVibes = useMemo(() => {
@@ -1491,12 +1472,10 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
     return seededShuffle(curated, sessionSeed).slice(0, 15);
   }, [hotPool, sessionSeed]);
 
-  // Top 10 on VOYO: Trending tracks, excluding what's in personalized sections.
-  // Pulls a wider trending slate then seed-shuffles so the "Top 10" rotates
-  // through the real top ~50 every reload — still trending, just fresh faces.
+  // Top 10 on VOYO: Trending tracks, excluding what's in other shelves.
   const trending = useMemo(() => {
     const usedIds = new Set([
-      ...madeForYou.map(t => t.id),
+      ...oyosPicks.map(t => t.id),
       ...discoverMoreTracks.map(t => t.id),
       ...africanVibes.map(t => t.id),
     ]);
@@ -1505,10 +1484,9 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
     if (available.length >= 5) {
       return seededShuffle(available, sessionSeed).slice(0, 10);
     }
-    // Fallback to poolScore sorted, excluding used
     const fallback = getTrendingTracks(hotPool, 50).filter(t => !usedIds.has(t.id));
     return seededShuffle(fallback, sessionSeed).slice(0, 10);
-  }, [hotPool, madeForYou, discoverMoreTracks, africanVibes, sessionSeed]);
+  }, [hotPool, oyosPicks, discoverMoreTracks, africanVibes, sessionSeed]);
 
   const greeting = getGreeting();
 
@@ -1687,24 +1665,11 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
         </div>
       </div>
 
-      {/* Made For You - bold, sits on cards, no hesitation */}
-      <div className="mb-10">
-        <div className="flex items-center gap-2 px-4 mb-1.5">
-          <h2 className="text-white font-semibold text-base">Made For You</h2>
-          <div className="h-[2px] w-6 rounded-full" style={{ background: '#8b5cf6', opacity: 0.6 }} />
-        </div>
-        <div className="flex gap-3 px-4 overflow-x-auto scrollbar-hide">
-          {madeForYou.slice(0, 12).map((track) => (
-            <TrackCard key={track.id} track={track} onPlay={() => onTrackPlay(track)} />
-          ))}
-        </div>
-      </div>
-
-      {/* Artists You Love - individuality with breathing room */}
+      {/* Your Artist Radar — individuality with breathing room */}
       {hasArtists && (
         <div className="mb-10">
           <div className="px-4 mb-5">
-            <h2 className="text-white font-semibold text-base">Artists You Love</h2>
+            <h2 className="text-white font-semibold text-base">Your Artist Radar</h2>
           </div>
           <div className="flex gap-6 px-4 overflow-x-auto scrollbar-hide">
             {artistsYouLove.map((artist) => (
@@ -1714,9 +1679,9 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
         </div>
       )}
 
-      {/* Discover More - LLM curated expansion beyond comfort zone */}
+      {/* Keep Expanding Horizons — LLM curated expansion beyond comfort zone */}
       {hasDiscoverMore && (
-        <ShelfWithRefresh title="Discover More" onRefresh={handleRefresh} isRefreshing={isRefreshing}>
+        <ShelfWithRefresh title="Keep Expanding Horizons" onRefresh={handleRefresh} isRefreshing={isRefreshing}>
           {discoverMoreTracks.slice(0, 12).map((track) => (
             <TrackCard key={track.id} track={track} onPlay={() => onTrackPlay(track, { openFull: true })} />
           ))}
@@ -1949,13 +1914,13 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
 
       {/* TIVI+ moved to DaHub */}
 
-      {/* New Releases - Center-focused carousel → PERSONAL (entry point to VOYO player) */}
+      {/* OYO's Picks — OYO-curated surface, the app's voice in the feed */}
       <div className="mb-12">
         <div className="px-4 mb-5 flex items-center gap-2">
-          <h2 className="text-white font-semibold text-base">New Releases</h2>
+          <h2 className="text-white font-semibold text-base">OYO's Picks</h2>
           <div className="h-[2px] w-6 rounded-full" style={{ background: '#8b5cf6', opacity: 0.6 }} />
         </div>
-        <CenterFocusedCarousel tracks={newReleases} onPlay={(track) => onTrackPlay(track)} />
+        <CenterFocusedCarousel tracks={oyosPicks} onPlay={(track) => onTrackPlay(track)} />
       </div>
 
       {/* Empty State */}
