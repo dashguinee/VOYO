@@ -1,0 +1,15 @@
+[Unit]
+Description=VOYO home-proxy — Tier C residential exit (tinyproxy + Cloudflare tunnel)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/home/dash/voyo-music/scripts/home-proxy/voyo-home-daemon.sh
+Restart=always
+RestartSec=10
+StandardOutput=append:/tmp/voyo-home-daemon.log
+StandardError=append:/tmp/voyo-home-daemon.log
+
+[Install]
+WantedBy=default.target
