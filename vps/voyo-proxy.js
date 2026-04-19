@@ -255,6 +255,83 @@ const server = https.createServer(ssl, async (req, res) => {
     return;
   }
 
+  // ── Chrome profile snapshot — /voyo/chrome-snap ──────────────────────
+  //
+  // Serves a tarball of just the files yt-dlp needs for
+  // `--cookies-from-browser chrome:<dir>`:
+  //   - Default/Cookies       (SQLite cookie store)
+  //   - Default/Network/Cookies (newer Chrome location)
+  //   - Local State           (encryption key for cookies)
+  //
+  // Experiment: does shipping the live browser profile state (not just
+  // a Netscape cookie dump) bypass YouTube's IP-class rejection that
+  // happens when file cookies are replayed from datacenter IPs?
+  //
+  // Auth: same X-Voyo-Key header as /voyo/cookies.
+  // ?account= param optional (random profile if omitted).
+  if (url.pathname === "/voyo/chrome-snap") {
+    const COOKIES_SECRET = process.env.VOYO_COOKIES_SECRET || "";
+    const provided = req.headers["x-voyo-key"] || "";
+    if (!COOKIES_SECRET || provided !== COOKIES_SECRET) {
+      res.writeHead(401, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "unauthorized" }));
+      return;
+    }
+    try {
+      const profiles = fs.readdirSync("/opt/voyo")
+        .filter(f => /^chrome-profile-\d+$/.test(f))
+        .map(f => `/opt/voyo/${f}`);
+      if (!profiles.length) {
+        res.writeHead(503, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "no chrome profiles" }));
+        return;
+      }
+      const requested = url.searchParams.get("account");
+      const explicit  = requested && profiles.find(p => p.endsWith(requested));
+      const chosen    = explicit || profiles[Math.floor(Math.random() * profiles.length)];
+      const accountLabel = chosen.split("/").pop();
+
+      // Build tarball of the minimal file set into a temp location, stream it.
+      // -h dereferences symlinks (some Chrome profiles symlink Default).
+      // Redirecting stderr to /dev/null avoids "file changed as we read it"
+      // warnings from Chrome's live writes.
+      const tmp = `/tmp/chrome-snap-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.tar`;
+      const { execSync } = require("child_process");
+      try {
+        execSync(
+          `tar -cf "${tmp}" -C "${chosen}" --ignore-failed-read ` +
+          `"Default/Cookies" "Default/Cookies-journal" ` +
+          `"Default/Network/Cookies" "Default/Network/Cookies-journal" ` +
+          `"Local State" 2>/dev/null || true`,
+          { timeout: 10_000 }
+        );
+      } catch (e) {
+        console.error(`[VOYO] tar failed for ${accountLabel}: ${e.message}`);
+      }
+      let size = 0;
+      try { size = fs.statSync(tmp).size; } catch {}
+      if (!size) {
+        res.writeHead(500, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "snapshot empty", account: accountLabel }));
+        try { fs.unlinkSync(tmp); } catch {}
+        return;
+      }
+      res.writeHead(200, {
+        "Content-Type":     "application/x-tar",
+        "Content-Length":   size,
+        "X-Cookie-Account": accountLabel,
+      });
+      const stream = fs.createReadStream(tmp);
+      stream.pipe(res);
+      stream.on("close", () => { try { fs.unlinkSync(tmp); } catch {} });
+      console.log(`[VOYO] served chrome-snap from ${accountLabel} (${size}B)`);
+    } catch (e) {
+      res.writeHead(500, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: e.message }));
+    }
+    return;
+  }
+
   if (url.pathname === "/health" || url.pathname === "/voyo/health") {
     const jobs = Object.fromEntries([...activeJobs.entries()].map(([k, v]) => [k, v.status]));
     let cacheStats = null;
@@ -770,24 +847,121 @@ function _nodeProxyUrl(node) {
 }
 
 function openUpstream(trackId) {
-  // 1. Try a pool node (round-robin, skip cooldowned).
-  const node = _pickPoolNode();
-  if (node) {
-    return openUpstreamViaEndpoint(trackId, _nodeProxyUrl(node), node)
-      .then(stream => { _markPoolSuccess(node); return stream; })
-      .catch(err => {
-        _markPoolFailure(node, err.message);
-        // Fallback to Webshare if still configured
-        if (PROXY_CFG) {
-          console.warn(`[VOYO] pool miss → webshare fallback: ${trackId}`);
-          return openUpstreamViaProxy(trackId);
-        }
-        throw err;
+  // TIER A — PRIMARY: nightly yt-dlp + live browser cookies, NO PROXY.
+  // Proven 2026-04-19 to work for all tested tracks from VPS datacenter IP
+  // when yt-dlp is nightly (2026.04.10+) and cookies come from the live
+  // Chrome profile (not a stale file export). Zero Webshare bandwidth.
+  return openUpstreamNoProxy(trackId)
+    .then(stream => {
+      postTelemetry("trace", trackId, { subtype: "vps_extract_source", source: "noproxy" });
+      return stream;
+    })
+    .catch(noProxyErr => {
+      console.warn(`[VOYO] noproxy failed: ${trackId} — ${noProxyErr.message}`);
+
+      // TIER B — FALLBACK: pool nodes if configured
+      const node = _pickPoolNode();
+      if (node) {
+        return openUpstreamViaEndpoint(trackId, _nodeProxyUrl(node), node)
+          .then(stream => {
+            _markPoolSuccess(node);
+            postTelemetry("trace", trackId, { subtype: "vps_extract_source", source: "pool" });
+            return stream;
+          })
+          .catch(err => {
+            _markPoolFailure(node, err.message);
+            if (PROXY_CFG) return openUpstreamViaProxy(trackId).then(s => {
+              postTelemetry("trace", trackId, { subtype: "vps_extract_source", source: "webshare" });
+              return s;
+            });
+            throw err;
+          });
+      }
+
+      // TIER C — LAST RESORT: Webshare if configured
+      if (PROXY_CFG) return openUpstreamViaProxy(trackId).then(s => {
+        if (!s) throw new Error('Track not available');
+        postTelemetry("trace", trackId, { subtype: "vps_extract_source", source: "webshare" });
+        return s;
       });
-  }
-  // 2. No healthy pool node — fall back to Webshare if configured
-  if (PROXY_CFG) return openUpstreamViaProxy(trackId).then(s => { if (!s) throw new Error('Track not available'); return s; });
-  return Promise.reject(new Error('No extraction path — pool drained, no Webshare'));
+      throw noProxyErr;
+    });
+}
+
+/**
+ * TIER A extraction — no proxy, live Chrome cookies.
+ *
+ * yt-dlp on the VPS with --cookies-from-browser "chrome:PROFILE" and NO
+ * --proxy. Works because:
+ *   - Cookies come from a live Chrome session whose visitor_data YouTube
+ *     has validated. Session state is current (Chrome keeps it fresh).
+ *   - Nightly yt-dlp (2026.04.10+) has the current JS-challenge / PoT
+ *     handling that stable 2026.03.17 regressed on.
+ *   - VPS IP receives the signed URL with ip= parameter set to VPS IP,
+ *     and curl fetches from VPS, so IPs match. No proxy needed for byte
+ *     download either.
+ *
+ * Chrome profiles live at /opt/voyo/chrome-profile-NNN. We pick randomly
+ * to rotate across accounts; one profile rate-limited doesn't break us.
+ */
+function openUpstreamNoProxy(trackId) {
+  return new Promise((resolve, reject) => {
+    const profiles = fs.readdirSync("/opt/voyo")
+      .filter(f => /^chrome-profile-\d+$/.test(f))
+      .map(f => `/opt/voyo/${f}`);
+    if (!profiles.length) return reject(new Error('noproxy: no chrome profiles'));
+    const profile = profiles[Math.floor(Math.random() * profiles.length)];
+
+    // Step 1: extract signed audio URL (no proxy)
+    const cmd = `/usr/local/bin/yt-dlp -f "bestaudio[vcodec=none]/bestaudio" --get-url --no-warnings --cookies-from-browser "chrome:${profile}" "https://www.youtube.com/watch?v=${trackId}"`;
+    exec(cmd, { timeout: 40_000 }, (err, stdout, stderr) => {
+      const stderrStr = (stderr || '').toString();
+      if (stderrStr.includes('Sign in to confirm')) return reject(new Error('noproxy: bot_challenge'));
+      if (err) return reject(new Error(`noproxy yt-dlp: ${err.message}`));
+      const lines = (stdout || '').split('\n').map(l => l.trim()).filter(l => l.startsWith('http'));
+      if (!lines.length) return reject(new Error('noproxy: no URL extracted'));
+      const ITAG_RE = /[?&]itag=(25[012]|140|141|139|233|234|599|600)(&|$)/;
+      const audioUrl = lines.find(l => ITAG_RE.test(l))
+        || lines.find(l => l.includes('mime=audio%2F') || l.includes('mime=audio/'))
+        || lines[lines.length - 1];
+
+      // Step 2: download directly (no proxy). Signed URL's ip= matches VPS IP.
+      const curl = spawn('curl', [
+        '--range', '0-',
+        '--silent',
+        '--location',
+        '--max-time', '180',
+        audioUrl,
+      ]);
+
+      let resolved = false;
+      const bt = setTimeout(() => {
+        if (!resolved) { curl.kill('SIGKILL'); reject(new Error('noproxy curl: no first byte in 20s')); }
+      }, 20_000);
+
+      const pass = new PassThrough();
+      curl.stdout.pipe(pass);
+
+      pass.once('readable', () => {
+        if (!resolved) {
+          resolved = true;
+          clearTimeout(bt);
+          console.log(`[VOYO] noproxy piping: ${trackId} (${profile.split('/').pop()})`);
+          resolve(pass);
+        }
+      });
+
+      curl.stderr.on('data', (d) => {
+        const s = d.toString().trim();
+        if (s) console.error(`[VOYO] noproxy curl stderr (${trackId}): ${s}`);
+      });
+      curl.on('error', (e) => { clearTimeout(bt); if (!resolved) reject(new Error(`noproxy curl spawn: ${e.message}`)); });
+      curl.on('close', (code) => {
+        clearTimeout(bt);
+        if (!resolved) reject(new Error(`noproxy curl exited ${code} before first byte`));
+      });
+    });
+  });
 }
 
 // Residential proxy — set VOYO_RESIDENTIAL_PROXY env var (http://user:pass@host:port)
