@@ -184,6 +184,14 @@ export const AudioPlayer = () => {
     const el = audioRef.current;
     const setSource = usePlayerStore.getState().setPlaybackSource;
 
+    // Track change = intent to play. Set the play-flag now so the play/pause
+    // button flips to the pause icon immediately, even while we're still
+    // HEAD-probing R2 / waiting for iframe to mount. The actual audio.play()
+    // happens below; this just keeps the UI synced with intent.
+    if (!usePlayerStore.getState().isPlaying) {
+      usePlayerStore.getState().setIsPlaying(true);
+    }
+
     // R2-first playback. HEAD R2 for the track:
     //   • hit  → audio element plays direct from R2 (Cloudflare CDN, zero VPS).
     //            YouTubeIframe stays muted (playbackSource='r2').
@@ -218,7 +226,13 @@ export const AudioPlayer = () => {
         });
       } else {
         // Blank the audio element so the iframe is the sole audio source.
-        if (el) { try { el.pause(); } catch {} el.removeAttribute('src'); }
+        // Set intentionalPause BEFORE pausing — handlePause treats it as a
+        // clean teardown and doesn't flip isPlaying to false.
+        if (el) {
+          voyoStream.intentionalPause = true;
+          try { el.pause(); } catch {}
+          el.removeAttribute('src');
+        }
         setSource('iframe');
         logPlaybackEvent({
           event_type: 'play_start',
@@ -361,6 +375,12 @@ export const AudioPlayer = () => {
   }, [setIsPlaying]);
 
   const handlePause = useCallback(() => {
+    // When iframe is the audio source, the audio element pausing is expected
+    // (we intentionally silenced it). Don't let it flip isPlaying — the real
+    // playback is happening through the iframe.
+    if (usePlayerStore.getState().playbackSource === 'iframe') {
+      return;
+    }
     // Intentional pause (user tap, MediaSession) — honour it
     if (voyoStream.intentionalPause) {
       voyoStream.intentionalPause = false;
