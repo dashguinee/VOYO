@@ -572,31 +572,15 @@ export const AudioPlayer = () => {
       }
     }, 1000);
 
-    // Foreground handler — when the user comes back, if we're still on iframe
-    // and R2 isn't ready imminently, abandon this track and let the next one
-    // take over. The original gets requeued with priority=10 for a clean replay.
-    const onVisible = () => {
-      if (document.hidden) return;
-      if (usePlayerStore.getState().playbackSource !== 'iframe') return;
-      const trackId = currentTrack.trackId;
-      setTimeout(async () => {
-        if (usePlayerStore.getState().playbackSource !== 'iframe') return;
-        if (usePlayerStore.getState().currentTrack?.trackId !== trackId) return;
-        // Give the watchers 2s to swap. If they don't, skip + requeue.
-        logPlaybackEvent({
-          event_type: 'trace',
-          track_id: trackId,
-          meta: { subtype: 'foreground_timeout_skip' },
-        });
-        void ensureTrackReady(currentTrack, null, { priority: 10 });
-        usePlayerStore.getState().nextTrack();
-      }, 2000);
-    };
-    document.addEventListener('visibilitychange', onVisible);
+    // NB: we used to foreground-timeout-skip after 2s if R2 wasn't ready.
+    // That was brutal — any tab switch or app resume during the 90–180s
+    // extraction window yanked the user off their track. The snapshot
+    // ticker above + the realtime/poll watchers already cover the background
+    // cut case: when iframe dies on mobile and R2 later lands, hotSwapToR2
+    // resumes at the saved position. No skip needed.
 
     return () => {
       clearInterval(snap);
-      document.removeEventListener('visibilitychange', onVisible);
     };
   }, [playbackSource, currentTrack?.trackId]);
 
