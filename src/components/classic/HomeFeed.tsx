@@ -1616,7 +1616,7 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
         <div className="px-4 mb-5 flex items-center gap-3">
           <AfricaIcon size={32} />
           <div className="flex-1">
-            <h2 className="text-white font-semibold text-base">African Vibes</h2>
+            <h2 className="text-white font-semibold text-base">OYÉ Africa</h2>
             <p
               className="text-[9px] font-medium tracking-wider uppercase"
               style={{
