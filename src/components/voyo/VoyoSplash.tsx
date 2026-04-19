@@ -20,7 +20,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useDownloadStore } from '../../store/downloadStore';
 import { usePreferenceStore } from '../../store/preferenceStore';
 import { TRACKS } from '../../data/tracks';
-import { mediaCache } from '../../services/mediaCache';
+// mediaCache removed — R2 CDN + service worker handle asset caching now.
 import { devLog, devWarn } from '../../utils/logger';
 
 interface VoyoSplashProps {
@@ -54,31 +54,14 @@ export const VoyoSplash = ({ onComplete, minDuration = 1500 }: VoyoSplashProps) 
         });
         devLog('🎵 BOOT: ✅ IndexedDB ready');
 
-        // 2. Cache first 5 track thumbnails (2s timeout)
-        const firstTracks = TRACKS.slice(0, 5);
-        const cachePromises = firstTracks.map((track) =>
-          mediaCache.cacheTrack(track.trackId, { thumbnail: true }).catch(() => null),
-        );
-        await Promise.race([
-          Promise.all(cachePromises),
-          new Promise((resolve) => setTimeout(resolve, 2000)),
-        ]);
-        devLog('🎵 BOOT: ✅ first 5 thumbnails cached');
-
-        // 3. Touch preference store
+        // Thumbnails + audio now served directly from the Cloudflare edge
+        // worker (voyo-edge) with its own cache headers. No IndexedDB blob
+        // pre-cache layer needed — the service worker handles offline.
         devLog(
           '🎵 BOOT: ✅ preferences loaded',
           Object.keys(preferenceStore.trackPreferences).length,
           'tracks',
         );
-
-        // 4. Background pre-cache audio for first track (non-blocking)
-        if (firstTracks[0]) {
-          mediaCache
-            .cacheTrack(firstTracks[0].trackId, { audio: true, thumbnail: true })
-            .then(() => devLog('🎵 BOOT: ✅ first track audio pre-cached'))
-            .catch(() => {});
-        }
 
         isDataReadyRef.current = true;
         setIsDataReady(true);
