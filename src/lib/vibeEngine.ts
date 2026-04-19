@@ -424,9 +424,13 @@ export const vibeEngine = {
     }
 
     const rules = vibe.query_rules;
+    // R2-cached-only: vibe cards must be instantly playable. The over-fetch
+    // already built into this function (`limit * 2`) compensates for the
+    // cached set being smaller than total catalog.
     let query = supabase
       .from('video_intelligence')
-      .select('youtube_id, title, artist, thumbnail_url, artist_tier, matched_artist, era');
+      .select('youtube_id, title, artist, thumbnail_url, artist_tier, matched_artist, era')
+      .eq('r2_cached', true);
 
     // Apply tier filter
     if (rules.prefer_tiers && rules.prefer_tiers.length > 0) {

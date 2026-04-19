@@ -258,19 +258,44 @@ export function useArtist(artistName: string): UseArtistReturn {
 async function fetchTracks(artistName: string): Promise<ArtistTrack[]> {
   if (!supabase) return [];
 
+  // R2-cached-first: artist page shows only instantly-playable cards.
+  // We over-fetch (100) and filter — typical artists have <50 tracks cached
+  // but enough to fill a page. Uncached candidates get queued in the
+  // background so they become available on future visits.
   const { data, error } = await supabase
     .from('video_intelligence')
-    .select('youtube_id, title, artist, thumbnail_url, duration_seconds, voyo_play_count, genres, moods')
+    .select('youtube_id, title, artist, thumbnail_url, duration_seconds, voyo_play_count, genres, moods, r2_cached')
     .eq('matched_artist', artistName.toLowerCase())
     .order('voyo_play_count', { ascending: false })
-    .limit(50);
+    .limit(100);
 
   if (error) {
     console.error('[useArtist] fetchTracks error:', error.message);
     throw error;
   }
 
-  return (data || []).map((row) => ({
+  const rows = (data || []);
+  const cached = rows.filter(r => r.r2_cached === true);
+  const uncached = rows.filter(r => r.r2_cached !== true);
+
+  // Fire-and-forget: kick uncached artist tracks onto the lanes so they
+  // become cached over time. priority=5 (predicted taste, not urgent).
+  if (uncached.length) {
+    void (async () => {
+      const { queueForExtraction } = await import('../services/r2Gate');
+      await queueForExtraction(
+        uncached.slice(0, 20).map(r => ({
+          id: r.youtube_id, trackId: r.youtube_id, title: r.title || '',
+          artist: r.artist || '', coverUrl: r.thumbnail_url || '',
+          duration: r.duration_seconds || 0, tags: [], oyeScore: 0,
+          createdAt: new Date().toISOString(),
+        })),
+        5, `artist-prefetch:${artistName}`.slice(0, 60),
+      );
+    })();
+  }
+
+  return cached.map((row) => ({
     youtube_id: row.youtube_id,
     title: row.title || '',
     artist: row.artist || null,

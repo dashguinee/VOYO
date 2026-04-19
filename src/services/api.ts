@@ -51,8 +51,7 @@ export async function searchMusic(query: string, limit: number = 10): Promise<Se
 
   const data = await response.json();
 
-  // Transform to VOYO format (backend returns VOYO IDs)
-  return ((data.items || data.results) || []).map((item: any) => ({
+  const results: SearchResult[] = ((data.items || data.results) || []).map((item: any) => ({
     voyoId: item.id || item.voyoId,
     title: item.title,
     artist: item.artist || 'Unknown Artist',
@@ -61,6 +60,27 @@ export async function searchMusic(query: string, limit: number = 10): Promise<Se
     views: item.views || 0,
     source: 'youtube' as const,
   }));
+
+  // Search is explicit user intent — proactively queue every result at a
+  // high-ish priority so by the time the user actually taps one, the lane
+  // likely has it in R2 already. First three at priority=10 (most-likely
+  // taps), rest at 7 (search-context prefetch).
+  if (results.length) {
+    void (async () => {
+      const { queueForExtraction } = await import('./r2Gate');
+      const toTrack = (r: SearchResult) => ({
+        id: r.voyoId, trackId: r.voyoId, title: r.title, artist: r.artist,
+        coverUrl: r.thumbnail, duration: r.duration, tags: [], oyeScore: 0,
+        createdAt: new Date().toISOString(),
+      });
+      await queueForExtraction(results.slice(0, 3).map(toTrack), 10, `search-top3:${query}`.slice(0, 60));
+      if (results.length > 3) {
+        await queueForExtraction(results.slice(3).map(toTrack), 7, `search-rest:${query}`.slice(0, 60));
+      }
+    })();
+  }
+
+  return results;
 }
 
 // Alias for backward compatibility
