@@ -1560,9 +1560,9 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
       {/* VoyoLiveCard - "Vibes on Vibes" → Opens VOYO Player */}
       <SignInPrompt onSwitchToVOYO={onSwitchToVOYO} />
 
-      {/* Continue Listening — always show OYE badge, brighter if boosted */}
+      {/* Back in the Mix — always show OYE badge, brighter if boosted */}
       {hasHistory && (
-        <ShelfWithRefresh title="Continue Listening" onRefresh={handleRefresh} isRefreshing={isRefreshing}>
+        <ShelfWithRefresh title="Back in the Mix" onRefresh={handleRefresh} isRefreshing={isRefreshing}>
           {recentlyPlayed.slice(0, 12).map((track) => (
             <WideTrackCard key={track.id} track={track} onPlay={() => onTrackPlay(track)} showBoostBadge isBoosted={boostedIds.has(track.trackId)} />
           ))}
