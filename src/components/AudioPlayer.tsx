@@ -417,7 +417,10 @@ export const AudioPlayer = () => {
           const s = usePlayerStore.getState();
           if (s.currentTrack) {
             const queueTracks = s.queue.map(qi => qi.track);
-            voyoStream.startSession(s.currentTrack, queueTracks, 'high', { force: true }).catch(() => {});
+            // force + skipReadyWait: user is already stuck in an error loop,
+            // skip the 60s R2-wait flow and go straight to VPS (Webshare
+            // fallback) for instant recovery.
+            voyoStream.startSession(s.currentTrack, queueTracks, 'high', { force: true, skipReadyWait: true }).catch(() => {});
           }
           return;
         }

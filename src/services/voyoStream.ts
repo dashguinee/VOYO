@@ -85,6 +85,35 @@ async function waitForR2(trackId: string, timeoutMs: number = SEARCH_WAIT_MS): P
   return false;
 }
 
+/**
+ * "No music deserves to be aborted brutally" — the unified handoff pattern.
+ *
+ * Before any track plays through the VPS session, make sure R2 has it (or
+ * accept the fallback after a bounded wait). Upserts to voyo_upload_queue
+ * (GH Actions primary path) and polls R2 via HEAD. Callers can then invoke
+ * the normal VPS priorityInject/startSession with confidence that either:
+ *   - R2 hit → VPS serves from cache instantly, zero Webshare
+ *   - Wait ran its course → VPS priorityInject extracts via Webshare (fallback)
+ *
+ * Applied globally (priorityInject + startSession's first track) so every
+ * track entry respects flow over interruption.
+ */
+async function ensureTrackReady(track: Track, sessionId: string | null): Promise<void> {
+  // Fire queue upsert (primary free path) — non-blocking, fire-and-forget.
+  queueUpsertForPreWarm(track, sessionId).catch(() => {});
+
+  // Probe R2 — if already cached, skip the wait entirely.
+  try {
+    const res = await fetch(`${R2_EDGE}/${track.trackId}?q=high`, { method: 'HEAD' });
+    if (res.ok) return;
+  } catch { /* offline probe, fall through to wait */ }
+
+  // Wait up to SEARCH_WAIT_MS for GH Actions to populate R2. Current audio
+  // keeps playing during this time — that's the "flow" promise. Webshare
+  // stays as the eventual fallback via the VPS priorityInject that follows.
+  await waitForR2(track.trackId).catch(() => {});
+}
+
 function toQueueItem(t: Track) {
   return {
     trackId:  t.trackId,
@@ -138,11 +167,25 @@ class VoyoStreamService {
 
   // ── Start / end session ─────────────────────────────────────────────────
 
+  /**
+   * Start a fresh VPS session.
+   *
+   * opts.force          — bypass the 3s cooldown / in-flight guard. Used by
+   *                       AudioPlayer's circuit breaker when rebuilding.
+   * opts.skipReadyWait  — don't wait for R2 on the first track. Used by
+   *                       paths where the user needs instant response and
+   *                       a bounded-Webshare fallback is acceptable:
+   *                         - circuit breaker rebuild (force=true)
+   *                         - onRapidSkip pivot (user is frustrated)
+   *                       Default: wait for R2 like everywhere else, flowing
+   *                       the current audio into the new one instead of
+   *                       cutting off.
+   */
   async startSession(
     firstTrack: Track,
     queue: Track[],
     quality = 'high',
-    opts: { force?: boolean } = {}
+    opts: { force?: boolean; skipReadyWait?: boolean } = {}
   ): Promise<void> {
     if (this.isCreatingSession && !opts.force) {
       devWarn('[VoyoStream] startSession already in progress — ignoring');
@@ -164,6 +207,13 @@ class VoyoStreamService {
 
     const tracks = [firstTrack, ...queue].slice(0, 20);
     this.trackMap = new Map(tracks.map(t => [t.trackId, t]));
+
+    // Globally-applied "flow over interruption" pattern: unless the caller
+    // explicitly opted out (circuit breaker rebuild, rapid-skip pivot), wait
+    // for R2 on the first track. GH Actions is primary, Webshare fallback.
+    if (!opts.skipReadyWait && !opts.force) {
+      await ensureTrackReady(firstTrack, null);
+    }
 
     // Fire BEFORE the first await — if called from a user gesture this keeps us
     // inside the gesture's synchronous stack, so AudioContext.resume() is allowed.
@@ -409,11 +459,26 @@ class VoyoStreamService {
     } catch {}
   }
 
+  /**
+   * Jump a track to the front of the session queue. This is the "user
+   * requested this specific track now" path — searchInject + rapid-skip
+   * pivot both land here.
+   *
+   * ensureTrackReady runs first to let current audio flow to completion
+   * while GH Actions lands the track in R2. The VPS then serves from
+   * cache (free) or extracts via Webshare (fallback). Either way the
+   * handoff is a gentle cross-fade, never an abrupt cut.
+   */
   async priorityInject(track: Track): Promise<void> {
     if (!this.sessionId) {
       return this.startSession(track, []);
     }
     this.trackMap.set(track.trackId, track);
+
+    // "No music deserves to be aborted brutally" — let current track breathe
+    // while the next one gets ready. Bounded by SEARCH_WAIT_MS (60s).
+    await ensureTrackReady(track, this.sessionId);
+
     try {
       await fetch(`${VPS}/voyo/session/${this.sessionId}/queue`, {
         method: 'POST',
@@ -424,29 +489,7 @@ class VoyoStreamService {
   }
 
   async searchInject(track: Track): Promise<void> {
-    // PRIMARY: queue for GH Actions extraction (free path; verified 100%
-    // success on live tracks 2026-04-19 once deno + yt-dlp-ejs were wired).
-    queueUpsertForPreWarm(track, this.sessionId).catch(() => {});
-
-    // If already in R2 (cached from past extraction) — skip the wait and
-    // play immediately via the normal VPS session.
-    let r2Hit = false;
-    try {
-      const res = await fetch(`${R2_EDGE}/${track.trackId}?q=high`, { method: 'HEAD' });
-      r2Hit = res.ok;
-    } catch { /* offline probe — treat as miss, fall through to wait */ }
-
-    if (!r2Hit) {
-      // Not in R2. Give GH Actions up to SEARCH_WAIT_MS to produce it.
-      // Current track keeps playing during the wait (no dead air).
-      //
-      // FALLBACK path: if the wait times out, priorityInject below still
-      // fires; the VPS will extract via Webshare like the pre-fix flow.
-      // Worst case = today's latency + Webshare bandwidth. Best case =
-      // zero Webshare for this extraction.
-      await waitForR2(track.trackId).catch(() => {});
-    }
-
+    // priorityInject now handles queue upsert + R2 wait internally.
     if (!this.sessionId) {
       return this.startSession(track, []);
     }
