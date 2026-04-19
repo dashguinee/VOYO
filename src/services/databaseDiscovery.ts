@@ -156,28 +156,60 @@ function getPlayedTrackIds(): string[] {
  * Returns [] if Supabase is down — callers fall back to the RPC path which
  * may return uncached tracks (iframe path), still functional, less silky.
  */
+type OrderCol =
+  | 'heat_score' | 'vibe_afro_heat' | 'vibe_chill_vibes'
+  | 'vibe_party_mode' | 'vibe_late_night' | 'vibe_workout';
+
+// In-memory cache of the cached-tracks pool. R2 coverage grows slowly (lanes
+// add ~1 track per few minutes), so re-querying for every shelf refresh is
+// wasteful — we fetch once per TTL and sort/slice in-memory per caller.
+let _cachedPoolCache: { rows: (DiscoveryTrack & Record<string, unknown>)[]; at: number } | null = null;
+const CACHED_POOL_TTL_MS = 60_000;
+
+/**
+ * R2-cached-only tracks, sorted by the caller's chosen signal.
+ *
+ * Implementation note: a server-side ORDER BY on video_intelligence (324k rows)
+ * times out without a compound index on (r2_cached, <sort_col>). We can't
+ * create that index from the client side, so we fetch the ~575 r2_cached rows
+ * unsorted (fast, uses the partial index on r2_cached alone) and sort
+ * in-memory. 575 * 7 bytes * 7 cols is tiny — JS sort is microseconds.
+ */
 async function getCachedTracks(
   limit: number,
-  orderBy: 'heat_score' | 'vibe_afro_heat' | 'vibe_chill_vibes' | 'vibe_party_mode' | 'vibe_late_night' | 'vibe_workout',
+  orderBy: OrderCol,
   excludeIds: string[] = [],
 ): Promise<DiscoveryTrack[]> {
   if (!supabaseConfigured) return [];
-  try {
-    let q = getSupabase()
-      .from('video_intelligence')
-      .select('youtube_id,title,artist,thumbnail_url,artist_tier,primary_genre,cultural_tags,heat_score')
-      .eq('r2_cached', true)
-      .not('youtube_id', 'is', null)
-      .order(orderBy, { ascending: false, nullsFirst: false })
-      .limit(limit);
-    if (excludeIds.length) q = q.not('youtube_id', 'in', `(${excludeIds.map(id => `"${id}"`).join(',')})`);
-    const { data, error } = await q;
-    if (error) { devWarn('[Discovery] cached query error:', error); return []; }
-    return ((data || []) as DiscoveryTrack[]).map(r => ({ ...r, vibe_match_score: (r as any).heat_score ?? 0 }));
-  } catch (err) {
-    devWarn('[Discovery] cached query exception:', err);
-    return [];
+
+  const now = Date.now();
+  if (!_cachedPoolCache || now - _cachedPoolCache.at > CACHED_POOL_TTL_MS) {
+    try {
+      const { data, error } = await getSupabase()
+        .from('video_intelligence')
+        .select('youtube_id,title,artist,thumbnail_url,artist_tier,primary_genre,cultural_tags,heat_score,vibe_afro_heat,vibe_chill_vibes,vibe_party_mode,vibe_late_night,vibe_workout')
+        .eq('r2_cached', true)
+        .not('youtube_id', 'is', null)
+        .limit(1500); // headroom for growth
+      if (error) { devWarn('[Discovery] cached pool fetch error:', error); return []; }
+      _cachedPoolCache = { rows: (data || []) as unknown as (DiscoveryTrack & Record<string, unknown>)[], at: now };
+    } catch (err) {
+      devWarn('[Discovery] cached pool exception:', err);
+      return [];
+    }
   }
+
+  const excludeSet = new Set(excludeIds);
+  const filtered = _cachedPoolCache.rows.filter(r => !excludeSet.has(r.youtube_id));
+  const sorted = filtered.slice().sort((a, b) => {
+    const av = typeof a[orderBy] === 'number' ? (a[orderBy] as number) : -Infinity;
+    const bv = typeof b[orderBy] === 'number' ? (b[orderBy] as number) : -Infinity;
+    return bv - av;
+  });
+  return sorted.slice(0, limit).map(r => ({
+    ...(r as unknown as DiscoveryTrack),
+    vibe_match_score: (r.heat_score as number | undefined) ?? 0,
+  }));
 }
 
 export async function getHotTracks(limit: number = 30): Promise<Track[]> {
