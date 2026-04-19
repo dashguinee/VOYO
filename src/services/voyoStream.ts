@@ -448,38 +448,22 @@ class VoyoStreamService {
   // ── Controls ────────────────────────────────────────────────────────────
 
   skip(): void {
-    if (!this.sessionId) return;
-    this.isSkipping = true;
-
+    // Rapid-skip tracking stays (OYO learning signal + onRapidSkip pivot).
     const now = Date.now();
     this.recentSkipTimes = this.recentSkipTimes.filter(t => now - t < 10_000);
     this.recentSkipTimes.push(now);
-
-    // Track skipped ID for deck evolution signals
-    if (this.currentTrackId) this.sessionSkippedIds.push(this.currentTrackId);
-
+    const storeTrackId = usePlayerStore.getState().currentTrack?.trackId;
+    if (storeTrackId) this.sessionSkippedIds.push(storeTrackId);
     if (this.recentSkipTimes.length >= 3) {
       this.recentSkipTimes = [];
       this.onRapidSkip?.();
     }
 
-    // Safety net: if now_playing SSE doesn't arrive within 12s, clear isSkipping
-    if (this.skipStuckTimer) clearTimeout(this.skipStuckTimer);
-    this.skipStuckTimer = setTimeout(() => {
-      this.skipStuckTimer = null;
-      if (this.isSkipping) {
-        devWarn('[VoyoStream] isSkipping stuck >12s — clearing');
-        this.isSkipping = false;
-        logPlaybackEvent({
-          event_type: 'skip_stuck',
-          track_id: this.currentTrackId ?? 'unknown',
-          meta: { session_id: this.sessionId },
-        });
-      }
-    }, 12_000);
-
-    fetch(`${VPS}/voyo/session/${this.sessionId}/skip`, { method: 'POST' }).catch(() => {});
+    // Emit the OYO signal then delegate to the player store's nextTrack —
+    // same path that every other skip entry point (media keys, keyboard,
+    // fade-skip, stream_ended) now uses. No VPS session path anymore.
     oyoPlanSignal('skip');
+    usePlayerStore.getState().nextTrack();
   }
 
   async addToQueue(tracks: Track[]): Promise<void> {
