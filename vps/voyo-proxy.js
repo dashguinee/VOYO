@@ -858,7 +858,10 @@ function openUpstreamNoProxy(trackId) {
     const profile = profiles[Math.floor(Math.random() * profiles.length)];
 
     // Step 1: extract signed audio URL (no proxy)
-    const cmd = `/usr/local/bin/yt-dlp -f "bestaudio[vcodec=none]/bestaudio" --get-url --no-warnings --cookies-from-browser "chrome:${profile}" "https://www.youtube.com/watch?v=${trackId}"`;
+    // Force player_client=default,mweb,web_safari — the auto-picked tv_downgraded
+    // returns "playability: ERROR" → "Video unavailable" on cookie-authed tracks
+    // (regressed 2026-04-19). The explicit clients still succeed.
+    const cmd = `/usr/local/bin/yt-dlp -f "bestaudio[vcodec=none]/bestaudio" --get-url --no-warnings --cookies-from-browser "chrome:${profile}" --extractor-args "youtube:player_client=default,mweb,web_safari" "https://www.youtube.com/watch?v=${trackId}"`;
     exec(cmd, { timeout: 40_000 }, (err, stdout, stderr) => {
       const stderrStr = (stderr || '').toString();
       if (stderrStr.includes('Sign in to confirm')) return reject(new Error('noproxy: bot_challenge'));

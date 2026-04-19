@@ -23,6 +23,7 @@ VPS_HOST="${VPS_HOST:-vps}"
 VALIDATE_EXISTING="${VALIDATE_EXISTING:-0}"
 DRY_RUN="${DRY_RUN:-0}"
 LIMIT="${LIMIT:-0}"
+OFFSET="${OFFSET:-0}"
 
 [ -z "$SUPABASE_KEY" ] && { echo "ERROR: VOYO_SUPABASE_KEY not set and not found in .env" >&2; exit 2; }
 [ ! -f "$SEED_FILE" ] && { echo "ERROR: seed file not found: $SEED_FILE" >&2; exit 2; }
@@ -36,7 +37,7 @@ echo "mode     : $([ "$VALIDATE_EXISTING" = "1" ] && echo 're-resolve all' || ec
 [ "$LIMIT" != "0" ] && echo "limit    : $LIMIT"
 echo
 
-export SEED_FILE SUPABASE_URL SUPABASE_KEY VPS_HOST VALIDATE_EXISTING DRY_RUN LIMIT
+export SEED_FILE SUPABASE_URL SUPABASE_KEY VPS_HOST VALIDATE_EXISTING DRY_RUN LIMIT OFFSET
 python3 <<'PY'
 import json, os, re, subprocess, sys, urllib.request
 
@@ -47,9 +48,12 @@ VPS    = os.environ['VPS_HOST']
 VALID  = os.environ['VALIDATE_EXISTING'] == '1'
 DRY    = os.environ['DRY_RUN'] == '1'
 LIMIT  = int(os.environ['LIMIT'])
+OFFSET = int(os.environ['OFFSET'])
 
 with open(SEED) as f:
     tracks = json.load(f)
+if OFFSET > 0:
+    tracks = tracks[OFFSET:]
 if LIMIT > 0:
     tracks = tracks[:LIMIT]
 
