@@ -55,20 +55,22 @@ async function queueUpsertForPreWarm(
   const url = import.meta.env.VITE_SUPABASE_URL;
   const key = import.meta.env.VITE_SUPABASE_ANON_KEY;
   if (!url || !key) return;
-  await fetch(`${url}/rest/v1/voyo_upload_queue`, {
+  // Use bump_queue_priority RPC (migration 022) — atomic GREATEST escalation
+  // so user clicks at p=10 beat any prior prefetch at p=7. Also resets
+  // failed rows back to pending on user intent.
+  await fetch(`${url}/rest/v1/rpc/bump_queue_priority`, {
     method: 'POST',
     headers: {
       apikey: key,
       Authorization: `Bearer ${key}`,
       'Content-Type': 'application/json',
-      Prefer: 'resolution=merge-duplicates',
     },
     body: JSON.stringify({
-      youtube_id:           track.trackId,
-      title:                track.title ?? null,
-      artist:               track.artist ?? null,
-      requested_by_session: sessionId,
-      priority,
+      p_youtube_id: track.trackId,
+      p_priority:   priority,
+      p_title:      track.title ?? null,
+      p_artist:     track.artist ?? null,
+      p_session:    sessionId,
     }),
   }).catch(() => {});
 }
