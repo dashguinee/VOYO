@@ -58,10 +58,20 @@ let errorBurst: number[] = [];
 // (Only triggers on legacy VPS stream — r2/iframe handle stalls natively.)
 const STALL_SKIP_THRESHOLD_MS = 4_000;
 
+// How long a `waiting` event must persist before it counts as a real stall
+// (vs. the normal initial-buffer pause on src assignment). If readyState
+// reaches HAVE_FUTURE_DATA (>=3) within this window, skip logging.
+const STALL_LOG_DELAY_MS = 800;
+
 export const AudioPlayer = () => {
   const audioRef = useRef<HTMLAudioElement>(null);
   const completionSignaledRef = useRef(false);
   const stallSkipTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Debounce the `waiting` → stream_stall telemetry. The browser fires
+  // 'waiting' once immediately on src assignment (readyState 0, normal
+  // initial-buffer state) — NOT a real stall. Only log if the audio
+  // hasn't recovered within STALL_LOG_DELAY_MS.
+  const stallLogTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const {
     currentTrack,
@@ -292,6 +302,11 @@ export const AudioPlayer = () => {
     if (el && usePlayerStore.getState().isPlaying) {
       el.play().catch(() => {});
     }
+    // Recovered — cancel any pending stall-log.
+    if (stallLogTimerRef.current) {
+      clearTimeout(stallLogTimerRef.current);
+      stallLogTimerRef.current = null;
+    }
     if (!document.hidden && voyoStream.currentTrackId) {
       logPlaybackEvent({
         event_type: 'bg_reconnect',
@@ -308,10 +323,14 @@ export const AudioPlayer = () => {
   // onPlaying catches buffer-stall auto-resumes — browser fires 'playing' not 'play'
   const handlePlaying = useCallback(() => {
     setIsPlaying(true);
-    // Audio recovered — cancel any pending stall-skip.
+    // Audio recovered — cancel any pending stall-skip + stall-log.
     if (stallSkipTimerRef.current) {
       clearTimeout(stallSkipTimerRef.current);
       stallSkipTimerRef.current = null;
+    }
+    if (stallLogTimerRef.current) {
+      clearTimeout(stallLogTimerRef.current);
+      stallLogTimerRef.current = null;
     }
   }, [setIsPlaying]);
 
@@ -463,16 +482,28 @@ export const AudioPlayer = () => {
         const el = audioRef.current;
         const store = usePlayerStore.getState();
         const curTrack = store.currentTrack?.trackId ?? 'unknown';
-        logPlaybackEvent({
-          event_type: 'stream_stall',
-          track_id: curTrack,
-          meta: {
-            sub: 'waiting',
-            source: store.playbackSource,
-            ready_state: el?.readyState,
-            network_state: el?.networkState,
-          },
-        });
+        // Debounce telemetry: a 'waiting' event that resolves within
+        // STALL_LOG_DELAY_MS is normal initial-buffer pause, not a stall.
+        // 86% of our "stalls" in prod were this noise (ready_state 0 on
+        // src assignment). Only log if the element is still underbuffered
+        // after the delay.
+        if (stallLogTimerRef.current) clearTimeout(stallLogTimerRef.current);
+        stallLogTimerRef.current = setTimeout(() => {
+          stallLogTimerRef.current = null;
+          const curEl = audioRef.current;
+          if (!curEl || curEl.readyState >= 3) return; // recovered — not a stall
+          logPlaybackEvent({
+            event_type: 'stream_stall',
+            track_id: curTrack,
+            meta: {
+              sub: 'waiting',
+              source: store.playbackSource,
+              ready_state: curEl.readyState,
+              network_state: curEl.networkState,
+              waited_ms: STALL_LOG_DELAY_MS,
+            },
+          });
+        }, STALL_LOG_DELAY_MS);
         // Stall-skip is only meaningful when the audio element is actually
         // trying to be the source. For 'r2', a transient 'waiting' during
         // src assignment / network seek is normal and the browser recovers
