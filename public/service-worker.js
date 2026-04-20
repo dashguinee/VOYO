@@ -4,7 +4,7 @@
  * BACKGROUND PLAYBACK: Enhanced to cache audio streams
  */
 
-const CACHE_NAME = 'voyo-v102';
+const CACHE_NAME = 'voyo-v103';
 const AUDIO_CACHE_NAME = 'voyo-audio-v2';
 const STATIC_ASSETS = [
   '/',
@@ -15,13 +15,43 @@ const STATIC_ASSETS = [
   '/offline.html'
 ];
 
-// Install event - cache static assets
+/**
+ * Precache the hashed JS/CSS chunks referenced by the current index.html.
+ * Without this, first-time users download the main bundle + every lazy
+ * chunk from network on first use — only cached on SECOND fetch. With
+ * this, the SW pulls them all into cache during install, so the first
+ * navigation after install (and every cold boot after) is instant.
+ *
+ * Failures are swallowed per-asset so a single 404 doesn't abort the
+ * whole install (which would leave the SW stuck in 'installing' limbo).
+ */
+async function precacheFromIndex(cache) {
+  try {
+    const res = await fetch('/index.html', { cache: 'no-cache' });
+    if (!res.ok) return;
+    const html = await res.text();
+    // Match /assets/*.js, *.css, *.woff2, *.svg, *.png referenced in the HTML
+    const urls = Array.from(new Set(
+      (html.match(/\/assets\/[a-zA-Z0-9._-]+\.(?:js|css|woff2?|svg|png|webp)/g) || [])
+    ));
+    await Promise.all(urls.map(async (url) => {
+      try {
+        const r = await fetch(url, { cache: 'no-cache' });
+        if (r.ok) await cache.put(url, r);
+      } catch { /* single asset failed — don't break precache */ }
+    }));
+  } catch { /* index fetch failed — next visit will retry */ }
+}
+
+// Install event - cache static assets + hashed chunks from index.html
 self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(STATIC_ASSETS);
-    })
-  );
+  event.waitUntil((async () => {
+    const cache = await caches.open(CACHE_NAME);
+    await cache.addAll(STATIC_ASSETS).catch(() => {});
+    // Parse index.html → precache its hashed asset references. Runs in
+    // parallel with the static addAll above via the waitUntil boundary.
+    await precacheFromIndex(cache);
+  })());
   self.skipWaiting();
 });
 
