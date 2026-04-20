@@ -1434,19 +1434,18 @@ function App() {
   const handleVideoModeEnter = () => setAppMode('video');
   const handleVideoModeExit = () => setAppMode('voyo');
 
-  // Search-triggered video: the iframe renders at videoTarget='landscape'
-  // (z:40) UNDER the search overlay (z:50 with bg-black/80 + blur). User
-  // sees the video playing blurred behind the translucent search while
-  // still being able to scroll / tap search tracks. No overlay, no eaten
-  // gestures — search owns the foreground, iframe is pure atmosphere.
+  // Search-triggered video: use the existing 'portrait' target — a
+  // 208×208 floating mini-player rendered by the global YouTubeIframe.
+  // Search stays on top of (or alongside) a draggable mini video, no
+  // new component, no custom overlay, no gestures eaten.
   const openVideoOverlay = useCallback(() => {
-    usePlayerStore.getState().setVideoTarget('landscape');
+    usePlayerStore.getState().setVideoTarget('portrait');
   }, []);
-  // Restore hidden when search closes (below) so the iframe doesn't
-  // linger as fullscreen after the user dismisses search.
+  // Restore hidden on search close so the mini iframe doesn't linger.
   const closeSearch = useCallback(() => {
     setIsSearchOpen(false);
-    if (usePlayerStore.getState().videoTarget === 'landscape') {
+    const vt = usePlayerStore.getState().videoTarget;
+    if (vt === 'portrait' || vt === 'landscape') {
       usePlayerStore.getState().setVideoTarget('hidden');
     }
   }, []);
