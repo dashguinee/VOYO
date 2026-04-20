@@ -307,15 +307,51 @@ export const StationHero = ({ station }: StationHeroProps) => {
           <p className="text-white/75 text-sm font-medium">{station.tagline}</p>
         )}
         {station.tracklist && station.tracklist.length > 0 && (
-          <p className="text-white/50 text-[11px] font-medium">
-            {station.tracklist.length} tracks
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-white/45 text-[11px] font-medium">
+              {station.tracklist.length} tracks
+            </span>
             {station.tracklist[0]?.artist && (
-              <span className="text-white/35"> · opens with {station.tracklist[0].artist}</span>
+              <>
+                <span className="text-white/25 text-[11px]">·</span>
+                <span className="text-white/45 text-[11px]">opens with</span>
+                {/* Frosted glass pill — premium, unambiguous "this is an
+                    artist name" tag. Subtle white gradient, backdrop-blur
+                    so the bronze wash reads through without drowning the
+                    text. Visually distinct from plain metadata copy. */}
+                <span
+                  className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold text-white/95"
+                  style={{
+                    background: 'linear-gradient(135deg, rgba(255,255,255,0.14) 0%, rgba(255,255,255,0.06) 100%)',
+                    border: '1px solid rgba(255,255,255,0.16)',
+                    backdropFilter: 'blur(8px) saturate(140%)',
+                    WebkitBackdropFilter: 'blur(8px) saturate(140%)',
+                    boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.12)',
+                    letterSpacing: '0.01em',
+                  }}
+                >
+                  {station.tracklist[0].artist}
+                </span>
+              </>
             )}
-          </p>
+          </div>
         )}
-        <div className="flex items-center gap-3 text-white/60 text-[11px]">
-          {station.curator && <span>{station.curator}</span>}
+        <div className="flex items-center gap-2 flex-wrap text-[11px] text-white/60">
+          {station.curator && (
+            <span
+              className="inline-flex items-center px-2 py-0.5 rounded-full font-semibold text-white/90"
+              style={{
+                background: 'linear-gradient(135deg, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0.05) 100%)',
+                border: '1px solid rgba(255,255,255,0.14)',
+                backdropFilter: 'blur(8px) saturate(140%)',
+                WebkitBackdropFilter: 'blur(8px) saturate(140%)',
+                boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.10)',
+                letterSpacing: '0.01em',
+              }}
+            >
+              {station.curator}
+            </span>
+          )}
           {station.location_label && (
             <>
               <span className="text-white/25">•</span>
@@ -336,25 +372,33 @@ export const StationHero = ({ station }: StationHeroProps) => {
         </div>
 
         <div className="flex items-center gap-2 pt-3">
-          {/* Single-action row — "Join" with a play glyph. Replaces the
-              old "Play station" + side heart combo: one clear intent,
-              less visual clutter. Shows "Joined" once the user is
-              subscribed so the affordance stays in place without
-              duplicating a separate heart button. */}
+          {/* Join — silver/platinum metallic pill. Reads as a precious
+              object against the bronze/brown frame, not a busy accent
+              piece. Multi-stop gradient with a warm-white highlight on
+              the 30% band gives it dimensional "pressed metal" feel.
+              Inner inset ring + soft shadow = frame, not flatness. */}
           <button
             onClick={(e) => { e.stopPropagation(); commit(); }}
-            className="flex items-center gap-2 pl-2 pr-4 py-2 rounded-full text-white text-sm font-bold transition-transform active:scale-95"
+            className="flex items-center gap-2 pl-2 pr-4 py-2 rounded-full text-[13px] font-bold transition-transform active:scale-95"
             style={{
-              background: `linear-gradient(135deg, ${accentSecondary} 0%, ${accentPrimary} 100%)`,
-              boxShadow: `0 4px 16px ${accentPrimary}55`,
+              color: '#1b1b22',
+              background:
+                'linear-gradient(135deg, #f7f7fa 0%, #e4e4ea 28%, #b9b9c1 55%, #d8d8df 78%, #f1f1f4 100%)',
+              boxShadow:
+                '0 6px 18px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.9), inset 0 -1px 0 rgba(0,0,0,0.18)',
+              border: '1px solid rgba(255,255,255,0.35)',
+              letterSpacing: '0.02em',
             }}
             aria-label={subscribed ? 'Enter joined station' : 'Join station'}
           >
             <span
               className="w-7 h-7 rounded-full flex items-center justify-center"
-              style={{ background: 'rgba(0,0,0,0.22)' }}
+              style={{
+                background: 'linear-gradient(135deg, #1b1b22 0%, #2a2a33 100%)',
+                boxShadow: 'inset 0 1px 1px rgba(255,255,255,0.12), 0 1px 2px rgba(0,0,0,0.4)',
+              }}
             >
-              <Play className="w-3.5 h-3.5" fill="white" />
+              <Play className="w-3.5 h-3.5" fill="#f7f7fa" style={{ color: '#f7f7fa' }} />
             </span>
             {subscribed ? 'Joined' : 'Join'}
           </button>
