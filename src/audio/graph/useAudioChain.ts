@@ -243,11 +243,14 @@ export function useAudioChain(params: UseAudioChainParams): AudioChainApi {
     armGainWatchdog('mute-before-load');
   }, [armGainWatchdog]);
 
-  // 3ms micro-ramp from near-silence to target. Called after .play() on a
-  // fresh track. Context.resume() first — on cold start the context may
-  // still be suspended, and scheduling a ramp against a frozen clock puts
+  // Ramp master gain from current value to the computed target over
+  // `durationMs`. Called on every canplay — for buffer recoveries pass a
+  // short value (~80ms, anti-click). For real track-change transitions
+  // pass longer (~400ms) so the incoming track eases in instead of
+  // punching through. Context.resume() first — on cold start the context
+  // may still be suspended, scheduling a ramp against a frozen clock puts
   // the end time in the past (ramp "completes" instantly = gain jump).
-  const fadeInMasterGain = useCallback((_durationMs: number = 80) => {
+  const fadeInMasterGain = useCallback((durationMs: number = 80) => {
     disarmGainWatchdog();
     if (!gainNodeRef.current || !audioContextRef.current) return;
     const ctx = audioContextRef.current;
@@ -261,9 +264,10 @@ export function useAudioChain(params: UseAudioChainParams): AudioChainApi {
     // Use param.value (actual current gain) not hardcoded 0.0001.
     // If pauseOutgoing() ran and left gain mid-ramp (e.g. 0.12), starting
     // the fade-in ramp from 0.0001 would cause an instant jump → audible pop.
-    // Starting from the real current value → smooth 3ms ramp to target.
+    // Starting from the real current value → smooth ramp to target.
     param.setValueAtTime(param.value, now);
-    param.linearRampToValueAtTime(target, now + 0.003);
+    const seconds = Math.max(0.003, durationMs / 1000);
+    param.linearRampToValueAtTime(target, now + seconds);
   }, [computeMasterTarget, disarmGainWatchdog]);
 
   /**

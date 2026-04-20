@@ -368,8 +368,16 @@ export default {
     // R2 AUDIO STREAMING - Primary path (95%)
     // ========================================
 
-    // Check if audio exists - Supabase first, R2 fallback
-    // Zero-gap: Supabase is source of truth
+    // Check if audio exists — R2 bucket is GROUND TRUTH.
+    //
+    // Previous version queried voyo_tracks.r2_cached first, which lags R2
+    // by hours (reconcile cron writes the flag asynchronously). Result:
+    // tracks were in the bucket but /exists reported false, killing the
+    // DISCO badge AND causing OYO prefetch to re-queue tracks already
+    // cached — burning lane compute on cookie-walled re-extractions.
+    //
+    // New order: HEAD R2 directly (binding-level, ~10ms, always correct),
+    // Supabase only as a defensive fallback if R2 throws. Zero sync lag.
     if (url.pathname.startsWith('/exists/')) {
       const videoId = url.pathname.split('/')[2];
       if (!videoId || !/^[a-zA-Z0-9_-]{11}$/.test(videoId)) {
@@ -380,48 +388,7 @@ export default {
       }
 
       try {
-        // TRY SUPABASE FIRST (source of truth)
-        if (env.SUPABASE_URL && env.SUPABASE_KEY) {
-          const supabaseResponse = await fetch(
-            `${env.SUPABASE_URL}/rest/v1/voyo_tracks?youtube_id=eq.${videoId}&select=r2_cached,r2_quality,r2_size`,
-            {
-              headers: {
-                'apikey': env.SUPABASE_KEY,
-                'Authorization': `Bearer ${env.SUPABASE_KEY}`,
-              }
-            }
-          );
-
-          if (supabaseResponse.ok) {
-            const rows = await supabaseResponse.json();
-            if (rows.length > 0 && rows[0].r2_cached !== null) {
-              const track = rows[0];
-              if (track.r2_cached) {
-                return new Response(JSON.stringify({
-                  exists: true,
-                  high: track.r2_quality === '128',
-                  low: track.r2_quality === '64',
-                  size: track.r2_size || 0,
-                  source: 'supabase'
-                }), {
-                  headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-                });
-              } else {
-                return new Response(JSON.stringify({
-                  exists: false,
-                  high: false,
-                  low: false,
-                  size: 0,
-                  source: 'supabase'
-                }), {
-                  headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-                });
-              }
-            }
-          }
-        }
-
-        // FALLBACK: Check R2 directly (for tracks not yet in Supabase or migration pending)
+        // GROUND TRUTH: two R2 HEAD calls in parallel.
         const [high, low] = await Promise.all([
           env.VOYO_AUDIO.head(`128/${videoId}.opus`),
           env.VOYO_AUDIO.head(`64/${videoId}.opus`)
@@ -437,6 +404,36 @@ export default {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
       } catch (err) {
+        // DEFENSIVE FALLBACK: R2 binding failed (extremely rare). Ask
+        // Supabase as a best-effort signal rather than hard-failing.
+        try {
+          if (env.SUPABASE_URL && env.SUPABASE_KEY) {
+            const supabaseResponse = await fetch(
+              `${env.SUPABASE_URL}/rest/v1/voyo_tracks?youtube_id=eq.${videoId}&select=r2_cached,r2_quality,r2_size&limit=1`,
+              {
+                headers: {
+                  'apikey': env.SUPABASE_KEY,
+                  'Authorization': `Bearer ${env.SUPABASE_KEY}`,
+                }
+              }
+            );
+            if (supabaseResponse.ok) {
+              const rows = await supabaseResponse.json();
+              if (rows.length > 0 && rows[0].r2_cached) {
+                const track = rows[0];
+                return new Response(JSON.stringify({
+                  exists: true,
+                  high: track.r2_quality === '128',
+                  low: track.r2_quality === '64',
+                  size: track.r2_size || 0,
+                  source: 'supabase-fallback'
+                }), {
+                  headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+                });
+              }
+            }
+          }
+        } catch {}
         return new Response(JSON.stringify({ exists: false, error: err.message }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });

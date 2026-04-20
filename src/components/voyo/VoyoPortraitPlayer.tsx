@@ -32,7 +32,7 @@ import { voyoStream } from '../../services/voyoStream';
 import { pipService } from '../../services/pipService';
 // TiviPlusCrossPromo moved to HomeFeed.tsx (classic homepage)
 import { useAuth } from '../../hooks/useAuth';
-import { getCurrentSegment, type EnrichedLyrics, type LyricsGenerationProgress } from '../../services/lyricsEngine';
+import { getCurrentSegment, fetchLyricsSimple, type EnrichedLyrics, type LyricsGenerationProgress } from '../../services/lyricsEngine';
 import { findLyrics } from '../../services/lyricsAgent';
 // getVideoStreamUrl removed — no longer needed after LyricsAgent replaced Whisper pipeline
 import { translateWord, type TranslationMatch } from '../../services/lexiconService';
@@ -3233,26 +3233,39 @@ const LyricsOverlay = memo(({ track, isOpen, onClose, currentTime }: LyricsOverl
     const loadLyrics = async () => {
       try {
         setError(null);
-        setProgress({ stage: 'fetching', progress: 20, message: 'Finding lyrics...' });
+        setProgress({ stage: 'fetching', progress: 10, message: 'Finding lyrics...' });
 
-        // NEW: LyricsAgent — checks Supabase cache, then asks Gemini.
-        // No audio URL needed. No Whisper transcription. One API call
-        // covers African music that LRCLIB/Musixmatch can't find.
-        const result = await findLyrics(
+        // TIER 1: LRCLIB — free, public, ~3M synced tracks, no API key.
+        // Covers every major Western + French rap + Afrobeats hit we tested
+        // (Damso, Ninho, Wizkid, Central Cee all had SYNCED lyrics). Returns
+        // in ~200-500ms. Progress callback keeps the UI state in sync.
+        const lrcResult = await fetchLyricsSimple(track, (p) => setProgress(p));
+        if (lrcResult.enriched) {
+          setLyrics(lrcResult.enriched);
+          setProgress({ stage: 'complete', progress: 100, message: 'Found! (LRCLIB)' });
+          setTimeout(() => setProgress(null), 1000);
+          return;
+        }
+
+        // TIER 2: LyricsAgent — Supabase cache → Gemini. For LRCLIB misses
+        // (mostly older African catalogue, Soussou/Wolof/Lingala). Slower,
+        // but catches what LRCLIB doesn't.
+        setProgress({ stage: 'fetching', progress: 60, message: 'Searching deeper...' });
+        const agentResult = await findLyrics(
           track.trackId,
           track.title,
           track.artist,
           track.duration,
         );
-
-        if (result.lyrics) {
-          setLyrics(result.lyrics);
-          setProgress({ stage: 'complete', progress: 100, message: `Found! (${result.source})` });
+        if (agentResult.lyrics) {
+          setLyrics(agentResult.lyrics);
+          setProgress({ stage: 'complete', progress: 100, message: `Found! (${agentResult.source})` });
           setTimeout(() => setProgress(null), 1000);
-        } else {
-          setError('No lyrics found for this track');
-          setProgress(null);
+          return;
         }
+
+        setError('No lyrics found for this track');
+        setProgress(null);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load lyrics');
         setProgress(null);

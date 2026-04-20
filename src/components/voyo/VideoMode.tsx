@@ -3,58 +3,25 @@
  *
  * Uses the global YouTubeIframe (videoTarget='landscape') for the actual
  * video layer — so hot-swap + R2 audio-sync + lifecycle is all centralised.
- * This component only renders controls + reactions on top, and falls back
- * to an album-art backdrop ONLY when the embed is blocked (region /
- * age-gate / embedding-disabled), in which case the R2 audio keeps playing.
+ * This component only renders controls + real actions (Like, Boost) on top.
+ * Falls back to an album-art backdrop ONLY when the embed is blocked
+ * (region / age-gate / embedding-disabled), in which case the R2 audio
+ * keeps playing.
  *
  * Features:
  * - Full-screen iframe video (global, never remounts)
  * - Overlay controls fade after ~3 seconds
- * - Floating reactions (hearts, fire, thumbs up) rise
+ * - Right rail: Like (explicit preference) + Boost (offline cache + EQ)
  * - Swipe up/down for next/prev
- * - Double-tap for reaction storm
  * - Triple-tap to exit
  */
 
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Play, Pause, SkipBack, SkipForward, X, Volume2, VolumeX } from 'lucide-react';
+import { Play, Pause, SkipBack, SkipForward, X, Volume2, VolumeX, Heart } from 'lucide-react';
 import { usePlayerStore } from '../../store/playerStore';
+import { usePreferenceStore } from '../../store/preferenceStore';
 import { getYouTubeThumbnail } from '../../data/tracks';
-
-// Floating Reaction Component
-interface FloatingReaction {
-  id: number;
-  emoji: string;
-  startY: number;
-  yOffset: number;  // Pre-computed random offset
-  xOffset: number;  // Pre-computed random offset
-}
-
-const FloatingReactionEmoji = ({ emoji, startY, xOffset, onComplete }: {
-  emoji: string;
-  startY: number;
-  yOffset: number;
-  xOffset: number;
-  onComplete: () => void;
-}) => {
-  // Auto-remove after animation
-  useEffect(() => {
-    const timer = setTimeout(onComplete, 2000);
-    return () => clearTimeout(timer);
-  }, [onComplete]);
-
-  return (
-    <div
-      className="fixed text-3xl pointer-events-none z-50"
-      style={{ left: `${xOffset}%`, bottom: `${startY}%` }}
-    >
-      {emoji}
-    </div>
-  );
-};
-
-// Reaction storm emojis
-const REACTION_EMOJIS = ['❤️', '🔥', '👍', '👏', '✨', '💜', '🎵', '⚡'];
+import { BoostButton } from '../ui/BoostButton';
 
 interface VideoModeProps {
   onExit: () => void;
@@ -82,7 +49,10 @@ export const VideoMode = ({ onExit }: VideoModeProps) => {
   }, [setVideoTarget]);
 
   const [showControls, setShowControls] = useState(true);
-  const [floatingReactions, setFloatingReactions] = useState<FloatingReaction[]>([]);
+  // Explicit like — toggles a persisted preference flag, not a moment-reaction.
+  const trackPreferences = usePreferenceStore(s => s.trackPreferences);
+  const setExplicitLike = usePreferenceStore(s => s.setExplicitLike);
+  const isLiked = !!(currentTrack && trackPreferences[currentTrack.id]?.explicitLike === true);
   // FIX: Derive mute state from volume instead of separate state
   const isMuted = volume === 0;
   const previousVolume = useRef(volume > 0 ? volume : 80); // Default to 80 if currently muted
@@ -115,60 +85,11 @@ export const VideoMode = ({ onExit }: VideoModeProps) => {
     };
   }, []);
 
-  // Add a single floating reaction
-  const addReaction = useCallback((emoji?: string) => {
-    const newReaction: FloatingReaction = {
-      id: Date.now() + Math.random(),
-      emoji: emoji || REACTION_EMOJIS[Math.floor(Math.random() * REACTION_EMOJIS.length)],
-      startY: 10 + Math.random() * 20,
-      // Pre-compute random values for animation at creation time
-      yOffset: Math.random() * 200,
-      xOffset: (Math.random() - 0.5) * 100,
-    };
-    setFloatingReactions(prev => [...prev, newReaction]);
-  }, []);
-
-  // Trigger reaction storm (double-tap)
-  const triggerReactionStorm = useCallback(() => {
-    // Add 10-20 reactions in quick succession
-    const count = 10 + Math.floor(Math.random() * 10);
-    for (let i = 0; i < count; i++) {
-      setTimeout(() => addReaction(), i * 100);
-    }
-  }, [addReaction]);
-
-  // Remove completed reaction
-  const removeReaction = useCallback((id: number) => {
-    setFloatingReactions(prev => prev.filter(r => r.id !== id));
-  }, []);
-
-  // Handle tap (single: show controls, double: reaction storm, triple: exit)
-  const handleTap = useCallback(() => {
-    const now = Date.now();
-    const timeSinceLastTap = now - lastTapTime.current;
-    lastTapTime.current = now;
-
-    if (timeSinceLastTap < 300) {
-      tapCountRef.current += 1;
-    } else {
-      tapCountRef.current = 1;
-    }
-
-    if (tapTimeoutRef.current) {
-      clearTimeout(tapTimeoutRef.current);
-    }
-
-    tapTimeoutRef.current = setTimeout(() => {
-      if (tapCountRef.current >= 3) {
-        onExit();
-      } else if (tapCountRef.current === 2) {
-        triggerReactionStorm();
-      } else {
-        setShowControls(true);
-      }
-      tapCountRef.current = 0;
-    }, 300);
-  }, [onExit, triggerReactionStorm]);
+  // Toggle the explicit like on the current track (persisted).
+  const handleLikeToggle = useCallback(() => {
+    if (!currentTrack) return;
+    setExplicitLike(currentTrack.id, !isLiked);
+  }, [currentTrack, isLiked, setExplicitLike]);
 
   // Handle swipe
   const handleDragEnd = useCallback((event: any, info: { offset: { x: number; y: number } }) => {
@@ -198,55 +119,39 @@ export const VideoMode = ({ onExit }: VideoModeProps) => {
 
   return (
     <div
-      className="fixed inset-0 z-50"
+      // `pointer-events: none` on the root so only the actual control
+      // buttons below capture taps. The rest of the inset-0 area — tap
+      // surface, gradient, track info, progress bar — are decorative /
+      // passive and must NOT absorb touches: underlying buttons (search
+      // tabs, scroll, inputs) stay fully interactive through the overlay.
+      className="fixed inset-0 z-50 pointer-events-none"
       style={{ background: 'transparent' }}
     >
-      {/* Tap surface — covers the iframe area. Transparent so the global
-          YouTubeIframe (videoTarget='landscape') shows THROUGH this layer.
-          When the embed is blocked (videoBlocked = true), we render the
-          album-art fallback here instead — R2 audio continues regardless. */}
-      <div
-        className="absolute inset-0"
-        onClick={handleTap}
-      >
-        {videoBlocked && (
-          <>
-            <img
-              src={getYouTubeThumbnail(currentTrack.trackId, 'high')}
-              alt=""
-              className="absolute inset-0 w-full h-full object-cover"
-            />
-            <div
-              className="absolute inset-0"
-              style={{
-                background: 'linear-gradient(45deg, rgba(139,92,246,0.25), rgba(212,160,83,0.20), rgba(139,92,246,0.15))',
-              }}
-            />
-          </>
-        )}
-        {/* Subtle readability gradient at the edges so controls / title pop.
-            Thin enough that the iframe video remains the star of the frame. */}
-        <div
-          className="absolute inset-0 pointer-events-none"
-          style={{
-            background: 'linear-gradient(180deg, rgba(0,0,0,0.35) 0%, rgba(0,0,0,0) 22%, rgba(0,0,0,0) 62%, rgba(0,0,0,0.55) 100%)',
-          }}
-        />
-      </div>
-
-      {/* Floating Reactions */}
-      
-        {floatingReactions.map((reaction) => (
-          <FloatingReactionEmoji
-            key={reaction.id}
-            emoji={reaction.emoji}
-            startY={reaction.startY}
-            yOffset={reaction.yOffset}
-            xOffset={reaction.xOffset}
-            onComplete={() => removeReaction(reaction.id)}
+      {/* Video-blocked fallback (album-art backdrop) — only renders when
+          the YouTube embed is blocked. Passive visual, no pointer events. */}
+      {videoBlocked && (
+        <div className="absolute inset-0 pointer-events-none">
+          <img
+            src={getYouTubeThumbnail(currentTrack.trackId, 'high')}
+            alt=""
+            className="absolute inset-0 w-full h-full object-cover"
           />
-        ))}
-      
+          <div
+            className="absolute inset-0"
+            style={{
+              background: 'linear-gradient(45deg, rgba(139,92,246,0.25), rgba(212,160,83,0.20), rgba(139,92,246,0.15))',
+            }}
+          />
+        </div>
+      )}
+
+      {/* Readability gradient — decorative only, passes through touches. */}
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          background: 'linear-gradient(180deg, rgba(0,0,0,0.35) 0%, rgba(0,0,0,0) 22%, rgba(0,0,0,0) 62%, rgba(0,0,0,0.55) 100%)',
+        }}
+      />
 
       {/* Track Info (always visible) */}
       <div
@@ -266,20 +171,40 @@ export const VideoMode = ({ onExit }: VideoModeProps) => {
         </div>
       </div>
 
-      {/* Reaction Buttons (right side, always visible) */}
+      {/* Right rail — real functional actions only. Like (persistent
+          preference) + Boost (offline cache + EQ engage). pointer-events-auto
+          on each so the root's 'none' doesn't swallow these taps. */}
       <div className="absolute right-4 bottom-32 flex flex-col gap-3">
-        {['❤️', '🔥', '👏', '✨'].map((emoji) => (
-          <button
-            key={emoji}
-            className="w-12 h-12 rounded-full bg-black/30 backdrop-blur-sm flex items-center justify-center text-xl"
-            onClick={(e) => {
-              e.stopPropagation();
-              addReaction(emoji);
-              }}
-          >
-            {emoji}
-          </button>
-        ))}
+        {/* LIKE — toggles explicitLike on preferenceStore. Persisted, shows
+            in Library's liked filter, feeds behavior rerank. */}
+        <button
+          className="w-12 h-12 rounded-full backdrop-blur-sm flex items-center justify-center pointer-events-auto transition-colors"
+          style={{
+            background: isLiked ? 'rgba(236,72,153,0.35)' : 'rgba(0,0,0,0.35)',
+            border: `1px solid ${isLiked ? 'rgba(236,72,153,0.7)' : 'rgba(255,255,255,0.1)'}`,
+            boxShadow: isLiked ? '0 0 16px -4px rgba(236,72,153,0.5)' : 'none',
+          }}
+          onClick={(e) => {
+            e.stopPropagation();
+            handleLikeToggle();
+          }}
+          aria-label={isLiked ? 'Unlike' : 'Like'}
+        >
+          <Heart
+            className="w-5 h-5"
+            style={{
+              color: isLiked ? '#f472b6' : 'rgba(255,255,255,0.85)',
+              fill: isLiked ? '#f472b6' : 'none',
+            }}
+          />
+        </button>
+
+        {/* BOOST — download to local cache (offline) + engage EQ profile.
+            Uses the existing floating variant so visuals match the rest of
+            the app (priming ring, completion burst, sparks). */}
+        <div className="pointer-events-auto">
+          <BoostButton variant="floating" />
+        </div>
       </div>
 
       {/* Overlay Controls (fade in/out) */}
@@ -314,11 +239,14 @@ export const VideoMode = ({ onExit }: VideoModeProps) => {
               )}
             </button>
 
-            {/* Center Controls */}
-            <div className="absolute inset-0 flex items-center justify-center gap-8 pointer-events-auto">
+            {/* Center Controls — wrapper is pointer-events-none (covers inset-0
+                for layout, NOT for hit-testing), each button re-enables auto
+                so only the visible circles capture taps. Rest of the center
+                area stays transparent to underlying search controls. */}
+            <div className="absolute inset-0 flex items-center justify-center gap-8 pointer-events-none">
               {/* Previous */}
               <button
-                className="p-4 rounded-full bg-black/30 backdrop-blur-sm"
+                className="p-4 rounded-full bg-black/30 backdrop-blur-sm pointer-events-auto"
                 onClick={(e) => {
                   e.stopPropagation();
                   prevTrack();
@@ -329,7 +257,7 @@ export const VideoMode = ({ onExit }: VideoModeProps) => {
 
               {/* Play/Pause */}
               <button
-                className="w-20 h-20 rounded-full bg-white/90 flex items-center justify-center"
+                className="w-20 h-20 rounded-full bg-white/90 flex items-center justify-center pointer-events-auto"
                 onClick={(e) => {
                   e.stopPropagation();
                   togglePlay();
@@ -344,7 +272,7 @@ export const VideoMode = ({ onExit }: VideoModeProps) => {
 
               {/* Next */}
               <button
-                className="p-4 rounded-full bg-black/30 backdrop-blur-sm"
+                className="p-4 rounded-full bg-black/30 backdrop-blur-sm pointer-events-auto"
                 onClick={(e) => {
                   e.stopPropagation();
                   nextTrack();

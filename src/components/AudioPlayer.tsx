@@ -63,6 +63,13 @@ const STALL_SKIP_THRESHOLD_MS = 4_000;
 // reaches HAVE_FUTURE_DATA (>=3) within this window, skip logging.
 const STALL_LOG_DELAY_MS = 800;
 
+// Track-to-track transition fades. Outgoing eases down, new track eases in.
+// Sequential (one audio element) — perceived length = out + in. Values tuned
+// so auto-advance doesn't feel like a hard cut, but user skips still feel
+// responsive (620ms total = DJ blend, not sluggish).
+const TRACK_CHANGE_FADE_OUT_MS = 220;
+const TRACK_CHANGE_FADE_IN_MS  = 400;
+
 export const AudioPlayer = () => {
   const audioRef = useRef<HTMLAudioElement>(null);
   const completionSignaledRef = useRef(false);
@@ -72,6 +79,10 @@ export const AudioPlayer = () => {
   // initial-buffer state) — NOT a real stall. Only log if the audio
   // hasn't recovered within STALL_LOG_DELAY_MS.
   const stallLogTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Carries the fade-in duration the next canplay should use. Track-change
+  // sets this to TRACK_CHANGE_FADE_IN_MS so the incoming track eases in;
+  // buffer recoveries (no set) get the default short anti-click ramp.
+  const nextFadeInMsRef = useRef<number | null>(null);
 
   const {
     currentTrack,
@@ -186,6 +197,16 @@ export const AudioPlayer = () => {
       usePlayerStore.getState().setIsPlaying(true);
     }
 
+    // Ease the OUTGOING track down before we swap src — otherwise the old
+    // audio clips off mid-ring-out the instant el.src changes. Sequential
+    // with the incoming fade-in on canplay below → DJ-style blend, not a
+    // hard cut. Natural stream_ended paths are already silent at the end,
+    // so the fade-out is a no-op there (gain already ~0).
+    if (el && playbackSource === 'r2') {
+      softFadeOut(TRACK_CHANGE_FADE_OUT_MS);
+    }
+    nextFadeInMsRef.current = TRACK_CHANGE_FADE_IN_MS;
+
     // R2-first probe: either set audio.src directly (cached) or hand audio
     // to the YouTubeIframe fallback (useHotSwap handles the cross-fade when
     // the lane catches up). Watcher lifecycle lives in useHotSwap; no refs
@@ -193,6 +214,10 @@ export const AudioPlayer = () => {
     (async () => {
       const cached = await r2HasTrack(currentTrack.trackId);
       if (cached && el) {
+        // Small defer so the fade-out has time to breathe before we yank
+        // the src. ~same duration as the fade-out so audio reaches near-
+        // silence right before the swap (no audible tail-cut).
+        await new Promise(r => setTimeout(r, TRACK_CHANGE_FADE_OUT_MS));
         el.src = `${R2_AUDIO}/${currentTrack.trackId}?q=high`;
         el.play().catch(() => {});
         setSource('r2');
@@ -297,7 +322,11 @@ export const AudioPlayer = () => {
 
   const handleCanPlay = useCallback(() => {
     setupAudioEnhancement(boostProfile as BoostPreset);
-    fadeInMasterGain(100);
+    // Track-change sets nextFadeInMsRef to TRACK_CHANGE_FADE_IN_MS — real
+    // ease-in. Buffer recoveries leave it null → short anti-click default.
+    const fadeMs = nextFadeInMsRef.current ?? 100;
+    nextFadeInMsRef.current = null;
+    fadeInMasterGain(fadeMs);
     const el = audioRef.current;
     if (el && usePlayerStore.getState().isPlaying) {
       el.play().catch(() => {});
