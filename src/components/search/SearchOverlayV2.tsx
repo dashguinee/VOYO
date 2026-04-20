@@ -196,11 +196,30 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap, onEnterVideoMode
   // back up — common pattern in music apps.
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [scrollPct, setScrollPct] = useState(0);
+  // rAF-throttle + quantize scroll state: without this, onScroll fires
+  // at ~60fps and every tick triggered a full SearchOverlayV2 re-render
+  // (TrackItem is memoized but the parent cascade still janked). Now we
+  // at most one state update per frame, and only when the rounded value
+  // actually changed (2% bins) — drops scroll-time renders by ~20x.
+  const scrollRafRef = useRef<number | null>(null);
+  const scrollPctRef = useRef(0);
   const handleResultsScroll = useCallback(() => {
-    const el = scrollContainerRef.current;
-    if (!el) return;
-    const max = Math.max(1, el.scrollHeight - el.clientHeight);
-    setScrollPct(Math.min(1, Math.max(0, el.scrollTop / max)));
+    if (scrollRafRef.current != null) return;
+    scrollRafRef.current = requestAnimationFrame(() => {
+      scrollRafRef.current = null;
+      const el = scrollContainerRef.current;
+      if (!el) return;
+      const max = Math.max(1, el.scrollHeight - el.clientHeight);
+      const raw = Math.min(1, Math.max(0, el.scrollTop / max));
+      // Round to 2% bins to avoid state updates on sub-pixel jitter.
+      const binned = Math.round(raw * 50) / 50;
+      if (Math.abs(binned - scrollPctRef.current) < 0.0001) return;
+      scrollPctRef.current = binned;
+      setScrollPct(binned);
+    });
+  }, []);
+  useEffect(() => () => {
+    if (scrollRafRef.current != null) cancelAnimationFrame(scrollRafRef.current);
   }, []);
   const sectionHeaderOpacity = Math.max(0, 1 - Math.max(0, (scrollPct - 0.15)) / 0.10);
   const searchAtBottom = scrollPct >= 0.45;
