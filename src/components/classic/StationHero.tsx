@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { Play, Heart } from 'lucide-react';
+import { Play } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { app } from '../../services/oyo';
 import { getUserHash } from '../../services/centralDJ';
@@ -196,7 +196,10 @@ export const StationHero = ({ station }: StationHeroProps) => {
       {/* Iframe only mounts when the card is within proximity of the
           viewport (rootMargin 150%). Far-offscreen stations render as a
           static thumbnail poster until they get close, saving a YouTube
-          player instance + video decode + bandwidth per station. */}
+          player instance + video decode + bandwidth per station.
+          scale 1.22 overscans YT UI bleed; translateY 7% drops the
+          video so the native YouTube title (when it flashes) falls
+          into the top fade instead of being clipped. */}
       {isNearby ? (
         <iframe
           ref={iframeRef}
@@ -204,10 +207,10 @@ export const StationHero = ({ station }: StationHeroProps) => {
           className="absolute inset-0 w-full h-full"
           style={{
             border: 0,
-            filter: isPreviewingAudio ? 'brightness(0.85)' : 'brightness(0.55) blur(0.4px)',
+            filter: isPreviewingAudio ? 'brightness(0.82)' : 'brightness(0.52) blur(0.4px)',
             transition: 'filter 500ms ease',
-            transform: 'scale(1.12)', // overscan so YT UI bleed is hidden
-            pointerEvents: 'none',    // taps go to card
+            transform: 'scale(1.22) translateY(7%)',
+            pointerEvents: 'none',
           }}
           allow="autoplay; encrypted-media; picture-in-picture"
           title={station.title}
@@ -218,35 +221,66 @@ export const StationHero = ({ station }: StationHeroProps) => {
           alt=""
           className="absolute inset-0 w-full h-full object-cover"
           style={{
-            filter: 'brightness(0.55) blur(0.4px)',
-            transform: 'scale(1.12)',
+            filter: 'brightness(0.52) blur(0.4px)',
+            transform: 'scale(1.22) translateY(7%)',
             pointerEvents: 'none',
           }}
         />
       )}
 
+      {/* Top fade — bronze-tinted darkening catches the YT title flash
+          and keeps the card calm. Short (22% height), strong near the
+          edge, vanishes into the mid-frame. */}
       <div
-        className="absolute inset-0 pointer-events-none"
+        className="absolute inset-x-0 top-0 pointer-events-none"
         style={{
-          background: 'linear-gradient(180deg, transparent 0%, rgba(0,0,0,0.15) 40%, rgba(0,0,0,0.80) 100%)',
+          height: '22%',
+          background:
+            'linear-gradient(180deg, rgba(18,12,6,0.78) 0%, rgba(40,26,14,0.45) 40%, rgba(0,0,0,0) 100%)',
         }}
       />
 
+      {/* Bottom fade — bronze wash that blends into the title block.
+          Darker than the old pure-black gradient, pulled warmer so the
+          whole card reads as "lit-by-firelight" rather than "movie
+          poster". */}
+      <div
+        className="absolute inset-x-0 bottom-0 pointer-events-none"
+        style={{
+          height: '62%',
+          background:
+            'linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(22,14,8,0.38) 32%, rgba(30,18,8,0.72) 62%, rgba(14,8,4,0.92) 100%)',
+        }}
+      />
+
+      {/* Soft bronze wash over the full frame — very low opacity (4-5%)
+          unifies iframe color temperature with the rest of the card so
+          the video stops fighting the VOYO palette. */}
+      <div
+        className="absolute inset-0 pointer-events-none mix-blend-overlay"
+        style={{
+          background:
+            'radial-gradient(120% 80% at 50% 45%, rgba(212,175,110,0.10) 0%, rgba(212,175,110,0.04) 50%, transparent 80%)',
+        }}
+      />
+
+      {/* Top-left bronze corner flourish — kept subtler than before. */}
       <div
         className="absolute top-0 left-0 pointer-events-none"
         style={{
-          width: '44px',
-          height: '44px',
-          background: `linear-gradient(135deg, ${accentPrimary}66 0%, transparent 62%)`,
+          width: '40px',
+          height: '40px',
+          background: `linear-gradient(135deg, ${accentPrimary}44 0%, transparent 62%)`,
           clipPath: 'polygon(0 0, 100% 0, 0 100%)',
         }}
       />
 
+      {/* Top-right rotating bronze halo — unchanged, just toned down. */}
       <div
-        className="absolute top-3 right-3 w-9 h-9 rounded-full pointer-events-none"
+        className="absolute top-3 right-3 w-8 h-8 rounded-full pointer-events-none"
         style={{
-          background: `radial-gradient(circle, ${accentSecondary}55 0%, ${accentPrimary}22 60%, transparent 100%)`,
-          border: `1px solid ${accentSecondary}66`,
+          background: `radial-gradient(circle, ${accentSecondary}40 0%, ${accentPrimary}18 60%, transparent 100%)`,
+          border: `1px solid ${accentSecondary}4D`,
           animation: 'voyoSpin 14s linear infinite',
         }}
       />
@@ -302,31 +336,27 @@ export const StationHero = ({ station }: StationHeroProps) => {
         </div>
 
         <div className="flex items-center gap-2 pt-3">
+          {/* Single-action row — "Join" with a play glyph. Replaces the
+              old "Play station" + side heart combo: one clear intent,
+              less visual clutter. Shows "Joined" once the user is
+              subscribed so the affordance stays in place without
+              duplicating a separate heart button. */}
           <button
             onClick={(e) => { e.stopPropagation(); commit(); }}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-full text-white text-sm font-bold transition-transform active:scale-95"
+            className="flex items-center gap-2 pl-2 pr-4 py-2 rounded-full text-white text-sm font-bold transition-transform active:scale-95"
             style={{
               background: `linear-gradient(135deg, ${accentSecondary} 0%, ${accentPrimary} 100%)`,
-              boxShadow: `0 4px 16px ${accentPrimary}66`,
+              boxShadow: `0 4px 16px ${accentPrimary}55`,
             }}
+            aria-label={subscribed ? 'Enter joined station' : 'Join station'}
           >
-            <Play className="w-4 h-4" fill="white" />
-            Play station
-          </button>
-          <button
-            onClick={(e) => { e.stopPropagation(); commit(); }}
-            className="flex items-center justify-center w-10 h-10 rounded-full transition-all active:scale-95"
-            style={{
-              background: subscribed ? `${accentPrimary}66` : 'rgba(255,255,255,0.08)',
-              border: `1px solid ${subscribed ? accentPrimary : 'rgba(255,255,255,0.15)'}`,
-            }}
-            aria-label={subscribed ? 'Subscribed' : 'Add to deck'}
-          >
-            <Heart
-              className="w-4 h-4"
-              fill={subscribed ? accentSecondary : 'transparent'}
-              color={subscribed ? accentSecondary : 'white'}
-            />
+            <span
+              className="w-7 h-7 rounded-full flex items-center justify-center"
+              style={{ background: 'rgba(0,0,0,0.22)' }}
+            >
+              <Play className="w-3.5 h-3.5" fill="white" />
+            </span>
+            {subscribed ? 'Joined' : 'Join'}
           </button>
         </div>
       </div>
