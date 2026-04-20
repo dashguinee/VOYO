@@ -25,6 +25,7 @@ import { recordTrackInSession } from '../poolCurator';
 import { recordPoolEngagement } from '../personalization';
 import { gateToR2, queueForExtraction } from '../r2Gate';
 import * as pools from './pools';
+export { usePools } from './usePools';
 
 // Supabase record_signal RPC cooldown — if it returns 401 or 42501 (RLS
 // denied), we stop retrying to avoid flooding console with errors.

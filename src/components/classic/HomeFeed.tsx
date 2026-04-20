@@ -18,6 +18,7 @@ import { LottieIcon } from '../ui/LottieIcon';
 import { getUserTopTracks, getPoolAwareHotTracks, getPoolAwareDiscoveryTracks, calculateBehaviorScore, recordPoolEngagement } from '../../services/personalization';
 import { curateAllSections } from '../../services/poolCurator';
 import { getInsights as getOyoInsights } from '../../services/oyoDJ';
+import { usePools } from '../../services/oyo';
 import { usePreferenceStore } from '../../store/preferenceStore';
 import { usePlayerStore } from '../../store/playerStore';
 import { useTrackPoolStore } from '../../store/trackPoolStore';
@@ -1377,62 +1378,34 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
   const artistsYouLove = useMemo(() => getArtistsYouLove(history, hotPool, 8), [history, hotPool]);
   const vibes = VIBES;
 
-  // Get user preferences for personalized scoring
+  // Get user preferences for personalized scoring (still used by tag-rows)
   const trackPreferences = usePreferenceStore((state) => state.trackPreferences);
-  const currentTrack = usePlayerStore((state) => state.currentTrack);
 
-  // PERSONALIZED SECTIONS - Uses behavior (40%) + intent (60%) scoring
-  // "Made For You" shelf removed — felt too Spotify-ish, not VOYO's DNA. OYO's
-  // taste signals still feed every other shelf via OYO intelligence; we just
-  // don't surface a dedicated "made for you" row that implies algorithmic
-  // gift-wrapping. OYO's Picks below carries that energy with our own voice.
+  // Unified pools — hot + discovery, fetched once via oyo facade. Each
+  // already behavior-reranked + session-shuffled inside the pool loader.
+  const pools = usePools(sessionSeed);
 
-  // Keep Expanding Horizons: Personalized discovery based on current track context.
-  const discoverMoreTracks = useMemo(() => {
-    // Use discovery engine with user context — pull a wider slate (45) then
-    // seed-shuffle so the "discover" shelf actually rotates every reload.
-    if (currentTrack) {
-      const candidates = getPoolAwareDiscoveryTracks(currentTrack, 45, [currentTrack.id]);
-      return seededShuffle(candidates, sessionSeed).slice(0, 15);
-    }
-    // Fallback: Use discovery pool scored by behavior.
-    if (discoverTracks.length > 0) {
-      const scored = discoverTracks.map(track => ({
-        track,
-        score: calculateBehaviorScore(track, trackPreferences)
-      }));
-      scored.sort((a, b) => b.score - a.score);
-      const topBand = scored.map(s => s.track).slice(0, 30);
-      return seededShuffle(topBand, sessionSeed).slice(0, 15);
-    }
-    const allHot = getPoolAwareHotTracks(60);
-    return seededShuffle(allHot, sessionSeed).slice(0, 15);
-  }, [discoverTracks, currentTrack, trackPreferences, sessionSeed]);
+  // Keep Expanding Horizons = top slice of the discovery stream.
+  // (Was 25 lines of inline fallbacks; now the pool does the lifting.)
+  const discoverMoreTracks = useMemo(
+    () => pools.discovery.slice(0, 15),
+    [pools.discovery],
+  );
 
-  // OYO's Picks: OYO-curated surface. Was "New Releases" (date-sorted) — now
-  // carries the "here's what OYO wants you on" energy by combining behavior
-  // score + OYO favorite-artist tier + fresh seed-shuffle per session.
+  // OYO's Picks = hot stream with favorite-artist bubble + de-dup vs the
+  // row above. Compact because pools.hot already did the behavior rerank.
   const oyosPicks = useMemo(() => {
-    const pool = hotTracks.length > 0 ? hotTracks : getPoolAwareHotTracks(60);
-    const oyoFavorites = new Set(
-      getOyoInsights().favoriteArtists.map(a => a.toLowerCase())
+    const favs = new Set(
+      getOyoInsights().favoriteArtists.map(a => a.toLowerCase()),
     );
-    const scored = pool.map(track => ({
-      track,
-      isFavorite: oyoFavorites.has((track.artist ?? '').toLowerCase()),
-      score: calculateBehaviorScore(track, trackPreferences) + (track.oyeScore || 0) * 0.0001,
-    }));
-    scored.sort((a, b) => {
-      if (a.isFavorite !== b.isFavorite) return a.isFavorite ? -1 : 1;
-      return b.score - a.score;
-    });
-    const topBand = scored.map(s => s.track).slice(0, 30);
-    // Exclude what's already in the expanding-horizons row so there's no
-    // duplication between adjacent shelves.
     const usedIds = new Set(discoverMoreTracks.map(t => t.id));
-    const filtered = topBand.filter(t => !usedIds.has(t.id));
-    return seededShuffle(filtered, sessionSeed).slice(0, 15);
-  }, [hotTracks, hotPool, discoverMoreTracks, trackPreferences, sessionSeed]);
+    const filtered = pools.hot.filter(t => !usedIds.has(t.id));
+    // Favorite-artist tracks float to top, rest hold their existing order.
+    return [
+      ...filtered.filter(t => favs.has((t.artist ?? '').toLowerCase())),
+      ...filtered.filter(t => !favs.has((t.artist ?? '').toLowerCase())),
+    ].slice(0, 15);
+  }, [pools.hot, discoverMoreTracks]);
 
   // African Vibes: West African tags + user's afro-heat preference weighting
   const africanVibes = useMemo(() => {

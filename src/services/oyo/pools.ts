@@ -19,6 +19,7 @@
 import type { Track } from '../../types';
 import { getHotTracks, getDiscoveryTracks } from '../databaseDiscovery';
 import { usePreferenceStore } from '../../store/preferenceStore';
+import { useTrackPoolStore } from '../../store/trackPoolStore';
 import { calculateBehaviorScore } from '../personalization';
 
 // ── TTL cache ─────────────────────────────────────────────────────────────
@@ -55,21 +56,36 @@ function seededShuffle<T extends Track>(tracks: T[], seed: number): T[] {
 /**
  * HOT pool — R2-cached, vibe-matched, behavior-reranked, session-shuffled.
  * All rows that surface "what the user wants right now" share this pool.
+ *
+ * Source preference:
+ *   1. Local trackPoolStore.hotPool — already enriched with poolCurator
+ *      tags ('west-african', 'classic', 'trending', 'amapiano', ...) so
+ *      tag-filter rows work. Also has poolScore for local ranking.
+ *   2. Fallback to server getHotTracks if local pool is thin (<20 tracks
+ *      — first visit or after clearStalePool).
  */
 export async function hot(): Promise<Track[]> {
   const now = Date.now();
   if (_hotCache && now - _hotCache.at < TTL_MS) return _hotCache.tracks;
 
-  const raw = await getHotTracks(60); // over-fetch for filter headroom
+  // Prefer local pool — has curator tags + poolScore + accumulates over time.
+  const localPool = useTrackPoolStore.getState().hotPool;
+  let raw: Track[] = [];
+  if (localPool && localPool.length >= 20) {
+    raw = localPool as Track[];
+  } else {
+    raw = await getHotTracks(60); // server fallback, first visit
+  }
+
   const prefs = usePreferenceStore.getState().trackPreferences;
-  // Re-rank locally: server already vibe-matched; we add the personal
-  // behavior layer (time-decayed skip penalty, completion rate, reactions).
+  // Re-rank locally: server vibe-match was first pass; behavior score adds
+  // the personal layer (time-decayed skip penalty, completion rate, reactions).
   const scored = raw.map(t => ({
     track: t,
     score: calculateBehaviorScore(t, prefs) + (t.oyeScore || 0) * 0.0001,
   }));
   scored.sort((a, b) => b.score - a.score);
-  const topBand = scored.map(s => s.track).slice(0, 50);
+  const topBand = scored.map(s => s.track).slice(0, 60);
   const shuffled = seededShuffle(topBand, _sessionSeed);
 
   _hotCache = { tracks: shuffled, at: now, sessionSeed: _sessionSeed };
