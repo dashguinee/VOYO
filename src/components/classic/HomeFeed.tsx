@@ -1654,23 +1654,12 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
         </div>
       </div>
 
-      {/* Your Artist Radar — individuality with breathing room */}
-      {hasArtists && (
-        <div className="mb-10">
-          <div className="px-4 mb-5">
-            <h2 className="text-white font-semibold text-base">Your Artist Radar</h2>
-          </div>
-          <div className="flex gap-6 px-4 overflow-x-auto scrollbar-hide">
-            {artistsYouLove.map((artist) => (
-              <ArtistCard key={artist.name} artist={artist} onPlay={onTrackPlay} />
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Keep Expanding Horizons — LLM curated expansion beyond comfort zone */}
+      {/* Your Next Voyage — state-aware discovery. Pool re-ranks around the
+          last click + time-of-session context (sessionSeed + OYO behavior
+          rerank). Name carries VOYO DNA (voyage = VOYO root) while "next"
+          keeps it relative-to-now. */}
       {hasDiscoverMore && (
-        <ShelfWithRefresh title="Keep Expanding Horizons" onRefresh={handleRefresh} isRefreshing={isRefreshing}>
+        <ShelfWithRefresh title="Your Next Voyage" onRefresh={handleRefresh} isRefreshing={isRefreshing}>
           {discoverMoreTracks.slice(0, 12).map((track) => (
             <TrackCard key={track.id} track={track} onPlay={() => onTrackPlay(track, { openFull: true })} />
           ))}
@@ -1929,6 +1918,22 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
         </div>
         <CenterFocusedCarousel tracks={oyosPicks} onPlay={(track) => onTrackPlay(track)} />
       </div>
+
+      {/* Your Artist Radar — personal-history shelf, lives at the bottom as
+          a closing beat. Not the first thing users see; the discovery /
+          communal shelves lead, this is the quieter personal reveal. */}
+      {hasArtists && (
+        <div className="mb-10">
+          <div className="px-4 mb-5">
+            <h2 className="text-white font-semibold text-base">Your Artist Radar</h2>
+          </div>
+          <div className="flex gap-6 px-4 overflow-x-auto scrollbar-hide">
+            {artistsYouLove.map((artist) => (
+              <ArtistCard key={artist.name} artist={artist} onPlay={onTrackPlay} />
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Empty State */}
       {!hasHistory && !hasPreferences && (
