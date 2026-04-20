@@ -101,24 +101,6 @@ export const AudioPlayer = () => {
   // ── Frequency visualizer pump ─────────────────────────────────────────
   useFrequencyPump(isPlaying);
 
-  // ── Auto-resume on app reopen if user was playing ────────────────────
-  // Persisted `wasPlaying` survives page reloads. If it was true AND we have
-  // a track loaded, flip isPlaying so the play icon primes. Real audio.play()
-  // happens in the track-change effect (via R2 probe / iframe path). Mobile
-  // browsers may block silent autoplay without user gesture — the intent is
-  // set but the user may still need to tap play.
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem('voyo-player-state');
-      const parsed = saved ? JSON.parse(saved) : null;
-      if (parsed?.wasPlaying && currentTrack) {
-        usePlayerStore.getState().setIsPlaying(true);
-      }
-    } catch { /* ignore */ }
-    // One-shot on mount
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   // ── Bind audio element on mount, end session on unmount ──────────────
   useEffect(() => {
     const el = audioRef.current;
