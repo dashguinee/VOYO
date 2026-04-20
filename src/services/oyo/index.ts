@@ -45,17 +45,62 @@ function maybeRefreshPools(): void {
   _lastRefreshAt = now;
   pools.refreshPools();
 }
-async function recordRemoteSignal(trackId: string, action: 'play' | 'skip' | 'complete' | 'react'): Promise<void> {
-  if (_rpcSignalBlocked) return;
+// Batch record_signal RPCs. Previously 3 roundtrips per track lifecycle
+// (play/skip/complete + optional oye). On a typical 3-track/min session
+// that's 9+ RPCs/min = main-thread jitter + battery cost over time.
+// Queue and flush once per SIGNAL_FLUSH_MS, or on page unload so nothing
+// is lost. Keeps the taste-graph write cadence but kills the chatter.
+const SIGNAL_FLUSH_MS = 10_000;
+type SignalAction = 'play' | 'skip' | 'complete' | 'react';
+interface QueuedSignal { track_id: string; action: SignalAction; at: number }
+let _signalQueue: QueuedSignal[] = [];
+let _signalFlushTimer: ReturnType<typeof setTimeout> | null = null;
+
+async function flushSignals(): Promise<void> {
+  if (_rpcSignalBlocked || _signalQueue.length === 0) {
+    _signalFlushTimer = null;
+    return;
+  }
+  const batch = _signalQueue;
+  _signalQueue = [];
+  _signalFlushTimer = null;
   try {
     const { supabase } = await import('../../lib/supabase');
-    const r = await supabase?.rpc('record_signal', { p_youtube_id: trackId, p_action: action });
+    // record_signal RPC accepts a single row. Fire them in parallel — one
+    // RTT per row but they share the HTTP/2 connection, no new handshakes.
+    // If the server adds a batched variant later, swap this to one call.
+    const results = await Promise.all(
+      batch.map(s =>
+        supabase?.rpc('record_signal', { p_youtube_id: s.track_id, p_action: s.action })
+      ),
+    );
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const err = (r as any)?.error;
-    if (err && (err.status === 401 || err.code === '42501')) {
-      _rpcSignalBlocked = true;
+    for (const r of results) {
+      const err = (r as any)?.error;
+      if (err && (err.status === 401 || err.code === '42501')) {
+        _rpcSignalBlocked = true;
+        break;
+      }
     }
-  } catch { /* non-fatal; just local learning */ }
+  } catch { /* non-fatal; local learning keeps going */ }
+}
+
+function recordRemoteSignal(trackId: string, action: SignalAction): void {
+  if (_rpcSignalBlocked) return;
+  _signalQueue.push({ track_id: trackId, action, at: Date.now() });
+  if (_signalFlushTimer == null) {
+    _signalFlushTimer = setTimeout(() => { void flushSignals(); }, SIGNAL_FLUSH_MS);
+  }
+}
+
+// Flush on page-hide / unload so nothing queued gets lost when the user
+// closes the tab or backgrounds the PWA.
+if (typeof window !== 'undefined') {
+  const onExit = () => { void flushSignals(); };
+  window.addEventListener('pagehide', onExit);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') onExit();
+  });
 }
 
 // ── Signals in ────────────────────────────────────────────────────────────

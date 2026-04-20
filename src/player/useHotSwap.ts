@@ -23,27 +23,21 @@ import { supabase } from '../lib/supabase';
 import { logPlaybackEvent } from '../services/telemetry';
 import { devLog } from '../utils/logger';
 import { iframeBridge } from './iframeBridge';
+import { r2HasTrack, R2_AUDIO_BASE as R2_AUDIO } from './r2Probe';
 import type { Track } from '../types';
 
-const R2_AUDIO = 'https://voyo-edge.dash-webtv.workers.dev/audio';
-const HOT_SWAP_POLL_MS = 5_000;
+// Tightened from 5s → 2s. The Realtime channel TIMED_OUT repeatedly in
+// prod, leaving poll as the sole detector. At 5s the perceived gap
+// between R2 landing and the crossfade firing was up to 5s — users
+// skipped before it caught. 2s keeps the HEAD budget light (~30 per
+// 60s track max if the track never gets extracted) while making the
+// swap feel near-instant when R2 does land.
+const HOT_SWAP_POLL_MS = 2_000;
 // One unified swap: always position-matched (no rewind), equal-power curve
 // (constant perceived loudness, no dip), 2s fade. Iframe fades out on
 // cos(p·π/2), R2 fades in on sin(p·π/2) — sum of squares stays ≈1.
 const HOT_SWAP_FADE_MS = 2_000;
 const HOT_SWAP_STEPS   = 40;
-
-/**
- * Probe R2 for a track. 200 = cached, anything else = not yet.
- */
-async function r2HasTrack(trackId: string): Promise<boolean> {
-  try {
-    const res = await fetch(`${R2_AUDIO}/${trackId}?q=high`, { method: 'HEAD' });
-    return res.ok;
-  } catch {
-    return false;
-  }
-}
 
 /**
  * Perform the cross-fade. Pure-ish — reads the iframe bridge, mutates the
@@ -160,6 +154,10 @@ export function useHotSwap(
     };
 
     // Realtime subscription — primary path, ~instant when queue row flips.
+    // Previously logged every subscribe status change + every RT event
+    // (CLOSED / TIMED_OUT / SUBSCRIBED) which spammed the trace table.
+    // Now silent except for outright RT errors and the actual swap
+    // trigger (logged inside performHotSwap as subtype:'hotswap').
     if (supabase) {
       channelRef.current = supabase
         .channel(`hotswap:${trackId}`)
@@ -167,41 +165,20 @@ export function useHotSwap(
           event: 'UPDATE', schema: 'public', table: 'voyo_upload_queue',
           filter: `youtube_id=eq.${trackId}`,
         }, (payload: { new?: { status?: string } }) => {
-          logPlaybackEvent({
-            event_type: 'trace', track_id: trackId,
-            meta: { subtype: 'hotswap_rt_event', new_status: payload.new?.status },
-          });
           if (payload.new?.status === 'done') trigger('realtime');
         })
-        .subscribe((status: string) => {
-          logPlaybackEvent({
-            event_type: 'trace', track_id: trackId,
-            meta: { subtype: 'hotswap_rt_subscribe', status },
-          });
-        });
-    } else {
-      logPlaybackEvent({
-        event_type: 'trace', track_id: trackId,
-        meta: { subtype: 'hotswap_rt_skip', reason: 'no_supabase_client' },
-      });
+        .subscribe();
     }
 
-    // 5s poll — safety net in case realtime drops or never fires.
-    let pollTicks = 0;
+    // Poll safety net — fires if realtime drops or never subscribes.
+    // Silent: success = performHotSwap's 'hotswap' trace covers it.
     pollRef.current = setInterval(async () => {
       if (usePlayerStore.getState().currentTrack?.trackId !== trackId) {
         if (pollRef.current) clearInterval(pollRef.current);
         pollRef.current = null;
         return;
       }
-      pollTicks++;
       const has = await r2HasTrack(trackId);
-      if (has || pollTicks % 4 === 0) {
-        logPlaybackEvent({
-          event_type: 'trace', track_id: trackId,
-          meta: { subtype: 'hotswap_poll_tick', ticks: pollTicks, r2_hit: has },
-        });
-      }
       if (has) trigger('poll');
     }, HOT_SWAP_POLL_MS);
 

@@ -262,25 +262,40 @@ const CenterFocusedCarousel = ({ tracks, onPlay }: CenterCarouselProps) => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [centerIndex, setCenterIndex] = useState(1);
   const [scrollState, setScrollState] = useState<'left-end' | 'scrolling' | 'right-end'>('scrolling');
+  // rAF-throttle + cached last-values so we only fire setState when the
+  // computed bucket actually changed. Previously firing at ~60fps during
+  // scroll = re-render storm on the entire carousel.
+  const scrollRafRef = useRef<number | null>(null);
+  const lastIndexRef = useRef(1);
+  const lastStateRef = useRef<'left-end' | 'scrolling' | 'right-end'>('scrolling');
 
   const handleScroll = () => {
-    if (!scrollRef.current) return;
-    const container = scrollRef.current;
-    const { scrollLeft, scrollWidth, clientWidth } = container;
-    const cardWidth = 140;
-    const newIndex = Math.round(scrollLeft / cardWidth);
-    setCenterIndex(Math.min(Math.max(newIndex + 1, 0), tracks.length - 1));
-
-    // Determine scroll position state
-    const maxScroll = scrollWidth - clientWidth;
-    if (scrollLeft < 50) {
-      setScrollState('left-end');
-    } else if (scrollLeft > maxScroll - 50) {
-      setScrollState('right-end');
-    } else {
-      setScrollState('scrolling');
-    }
+    if (scrollRafRef.current != null) return;
+    scrollRafRef.current = requestAnimationFrame(() => {
+      scrollRafRef.current = null;
+      const container = scrollRef.current;
+      if (!container) return;
+      const { scrollLeft, scrollWidth, clientWidth } = container;
+      const cardWidth = 140;
+      const newIndex = Math.min(Math.max(Math.round(scrollLeft / cardWidth) + 1, 0), tracks.length - 1);
+      if (newIndex !== lastIndexRef.current) {
+        lastIndexRef.current = newIndex;
+        setCenterIndex(newIndex);
+      }
+      const maxScroll = scrollWidth - clientWidth;
+      const nextState: 'left-end' | 'scrolling' | 'right-end' =
+        scrollLeft < 50 ? 'left-end'
+          : scrollLeft > maxScroll - 50 ? 'right-end'
+          : 'scrolling';
+      if (nextState !== lastStateRef.current) {
+        lastStateRef.current = nextState;
+        setScrollState(nextState);
+      }
+    });
   };
+  useEffect(() => () => {
+    if (scrollRafRef.current != null) cancelAnimationFrame(scrollRafRef.current);
+  }, []);
 
   return (
     <div className="relative">

@@ -193,11 +193,27 @@ export const Library = ({ onTrackClick }: LibraryProps) => {
   // slides to bottom (thumb zone) past 45% so refining stays one-handed.
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [scrollPct, setScrollPct] = useState(0);
+  // rAF + 2% bins — same pattern as search. Previously fired setState at
+  // ~60fps, forcing search-bar position recalcs + header-opacity re-renders
+  // every frame during scroll.
+  const scrollRafRef = useRef<number | null>(null);
+  const scrollPctRef = useRef(0);
   const handleScroll = useCallback(() => {
-    const el = scrollContainerRef.current;
-    if (!el) return;
-    const max = Math.max(1, el.scrollHeight - el.clientHeight);
-    setScrollPct(Math.min(1, Math.max(0, el.scrollTop / max)));
+    if (scrollRafRef.current != null) return;
+    scrollRafRef.current = requestAnimationFrame(() => {
+      scrollRafRef.current = null;
+      const el = scrollContainerRef.current;
+      if (!el) return;
+      const max = Math.max(1, el.scrollHeight - el.clientHeight);
+      const raw = Math.min(1, Math.max(0, el.scrollTop / max));
+      const binned = Math.round(raw * 50) / 50;
+      if (Math.abs(binned - scrollPctRef.current) < 0.0001) return;
+      scrollPctRef.current = binned;
+      setScrollPct(binned);
+    });
+  }, []);
+  useEffect(() => () => {
+    if (scrollRafRef.current != null) cancelAnimationFrame(scrollRafRef.current);
   }, []);
   const headerOpacity = Math.max(0, 1 - Math.max(0, (scrollPct - 0.15)) / 0.10);
   const searchAtBottom = scrollPct >= 0.45;

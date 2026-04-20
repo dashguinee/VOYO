@@ -28,24 +28,13 @@ import { onSignal as oyaPlanSignal } from '../services/oyoPlan';
 import type { Track } from '../types';
 
 import type { BoostPreset } from '../audio/graph/boostPresets';
+// r2Probe is the shared probe — useHotSwap imports the same function,
+// so one fix = both paths. R2_AUDIO stays here for the src-assignment URL.
+import { r2HasTrack, R2_AUDIO_BASE as R2_AUDIO } from '../player/r2Probe';
 export type { BoostPreset };
 
 const EDGE_ART = 'https://voyo-edge.dash-webtv.workers.dev/cdn/art';
 const YT_ART   = 'https://i.ytimg.com/vi';
-const R2_AUDIO = 'https://voyo-edge.dash-webtv.workers.dev/audio';
-
-/**
- * Probe R2 for a track. Returns true if the object is served (200), false if
- * the edge reports 404 or the request fails.
- */
-async function r2HasTrack(trackId: string): Promise<boolean> {
-  try {
-    const res = await fetch(`${R2_AUDIO}/${trackId}?q=high`, { method: 'HEAD' });
-    return res.ok;
-  } catch {
-    return false;
-  }
-}
 
 // Circuit breaker — 3 errors within 10s on the same session = tear down
 // and rebuild instead of looping el.src assignments. Module-scope so it
