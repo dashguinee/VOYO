@@ -92,14 +92,17 @@ export async function ensureTrackReady(
   sessionId: string | null,
   opts: { priority?: number } = {},
 ): Promise<void> {
-  // HEAD first — 99% of clicks on populated catalogue hit R2, skip the DB write.
+  // Every click registers with the lanes via bump_queue_priority RPC.
+  // For R2-cached tracks it's a no-op (GREATEST, done rows ignored by claim).
+  // For cold tracks it forces p>=10 so the lane jumps it to front.
+  queueUpsertForPreWarm(track, sessionId, opts.priority ?? 10).catch(() => {});
+
+  // Fast path: R2 already has it → return immediately (caller plays via
+  // audio.src = R2 URL or lets iframe start first with hot-swap later).
   try {
     const res = await fetch(`${R2_EDGE}/${track.trackId}?q=high`, { method: 'HEAD' });
     if (res.ok) return;
-  } catch { /* fall through to upsert + poll */ }
-
-  // Cold track → enqueue for extraction.
-  queueUpsertForPreWarm(track, sessionId, opts.priority ?? 0).catch(() => {});
+  } catch { /* fall through to poll */ }
 
   // Bounded poll — R2 hit wins immediately; queue row going 'failed' wins too
   // (early abort so callers don't wait the full 30s on a known-dead ID).
