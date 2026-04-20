@@ -24,6 +24,7 @@ import { recordPlay as djRecordPlay } from '../intelligentDJ';
 import { recordTrackInSession } from '../poolCurator';
 import { recordPoolEngagement } from '../personalization';
 import { gateToR2, queueForExtraction } from '../r2Gate';
+import * as pools from './pools';
 
 // Supabase record_signal RPC cooldown — if it returns 401 or 42501 (RLS
 // denied), we stop retrying to avoid flooding console with errors.
@@ -133,13 +134,24 @@ export async function prefetch(tracks: Track[], priority: number = 5): Promise<v
 // ── Namespaced default export ─────────────────────────────────────────────
 
 export const oyo = {
-  onPlay,
-  onSkip,
-  onComplete,
-  onOye,
-  getHot,
-  getDiscovery,
+  // Signals in
+  onPlay, onSkip, onComplete, onOye,
+  // Tracks out — legacy single-row getters (still used by some surfaces)
+  getHot, getDiscovery,
+  // Two-stream model (new, preferred): HomeFeed rows are filter chains on these
+  pools: {
+    hot:         pools.hot,
+    discovery:   pools.discovery,
+    refresh:     pools.refreshPools,
+    byTag:             pools.byTag,
+    byArtist:          pools.byArtist,
+    byFavoriteArtists: pools.byFavoriteArtists,
+    recentlyPlayed:    pools.recentlyPlayed,
+    excludeIds:        pools.excludeIds,
+    newest:            pools.newest,
+    topN:              pools.topN,
+  },
+  // Prefetch
   prefetch,
-  /** Convenience: alias so callers that pass a whole list can still hit it. */
   prefetchMany: prefetch,
 };
