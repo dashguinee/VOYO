@@ -122,17 +122,34 @@ export function resume(): void {
 
 /**
  * User OYÉ'd a track. Fires the full signal graph (djRecordPlay + oyoPlan
- * reaction + recordPoolEngagement + record_signal RPC) AND spawns the
- * visual burst on screen.
+ * reaction + recordPoolEngagement + record_signal RPC) AND creates the
+ * reaction row — which, crucially, carries the playback position so the
+ * reactionStore computes a hotspot for this second of the track.
+ *
+ * Auto-fills position from playerStore.currentTime when the caller doesn't
+ * pass one, so every OYÉ (no matter which UI surface fires it) contributes
+ * to hotspots — not just the NowPlaying scrubber.
  */
-export function oye(track: Track, opts: { position?: number; emoji?: string } = {}): void {
+export function oye(
+  track: Track,
+  opts: { position?: number; emoji?: string; username?: string } = {},
+): void {
   onOye(track);
+  // Auto-resolve position from player state when the caller didn't pass one.
+  // Only attaches a position when it's non-zero — trackPosition on a
+  // just-loaded track (currentTime=0) would compute a hotspot at the
+  // intro every time, which isn't what we want.
+  const storePos = usePlayerStore.getState().currentTime ?? 0;
+  const isCurrent =
+    usePlayerStore.getState().currentTrack?.trackId === track.trackId ||
+    usePlayerStore.getState().currentTrack?.id === track.id;
+  const position = opts.position ?? (isCurrent && storePos > 1 ? storePos : undefined);
+
   const reactionStore = useReactionStore.getState();
-  // Visual burst (if the store supports it — reactionStore API varies).
-  // Non-fatal if the call shape mismatches in a given build.
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (reactionStore as any).createReaction?.({
+      username: opts.username ?? 'anonymous',
       trackId: track.id,
       trackTitle: track.title,
       trackArtist: track.artist,
@@ -140,7 +157,7 @@ export function oye(track: Track, opts: { position?: number; emoji?: string } = 
       category: 'afro-heat',
       emoji: opts.emoji ?? '⚡',
       reactionType: 'oye',
-      trackPosition: opts.position,
+      trackPosition: position,
     });
   } catch { /* non-fatal */ }
 }

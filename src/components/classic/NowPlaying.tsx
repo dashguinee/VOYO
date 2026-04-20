@@ -37,7 +37,7 @@ import {
   Image
 } from 'lucide-react';
 import { usePlayerStore } from '../../store/playerStore';
-import { oyo } from '../../services/oyo';
+import { oyo, app } from '../../services/oyo';
 import { usePreferenceStore } from '../../store/preferenceStore';
 import { getTrackThumbnailUrl } from '../../utils/imageHelpers';
 import { useMobilePlay } from '../../hooks/useMobilePlay';
@@ -320,25 +320,18 @@ export const NowPlaying = ({ isOpen, onClose }: NowPlayingProps) => {
     }, 3000);
   }, []);
 
-  // Handle OYÉ reaction
+  // Handle OYÉ reaction — single call does signal fanout + reaction row
+  // + hotspot recompute. Position is auto-resolved from playerStore so we
+  // don't pass it explicitly here.
   const handleOye = useCallback(() => {
     spawnReaction('⚡');
-    if (currentTrack) {
-      // Fan out through OYO facade — updates taste, pool, global signal.
-      oyo.onOye(currentTrack);
-      createReaction({
-        username: dashId || 'anonymous',
-        trackId: currentTrack.id,
-        trackTitle: currentTrack.title,
-        trackArtist: currentTrack.artist,
-        trackThumbnail: currentTrack.coverUrl,
-        category: 'afro-heat',
-        emoji: '⚡',
-        reactionType: 'oye',
-        trackPosition, // Include position for hotspot detection
-      });
-    }
-  }, [currentTrack, dashId, createReaction, spawnReaction, trackPosition]);
+    if (!currentTrack) return;
+    app.oye(currentTrack, {
+      username: dashId || 'anonymous',
+      position: trackPosition,
+      emoji: '⚡',
+    });
+  }, [currentTrack, dashId, spawnReaction, trackPosition]);
 
   // Handle comment
   const handleAddComment = useCallback(async (text: string) => {
