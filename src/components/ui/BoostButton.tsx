@@ -14,7 +14,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { usePlayerStore } from '../../store/playerStore';
 import { useDownloadStore } from '../../store/downloadStore';
-import { getThumbnailUrl } from '../../utils/imageHelpers';
+import { getThumbnailUrl } from '../../utils/thumbnail';
 import { devLog } from '../../utils/logger';
 
 interface BoostButtonProps {

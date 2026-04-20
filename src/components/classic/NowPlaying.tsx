@@ -39,7 +39,7 @@ import {
 import { usePlayerStore } from '../../store/playerStore';
 import { oyo, app } from '../../services/oyo';
 import { usePreferenceStore } from '../../store/preferenceStore';
-import { getTrackThumbnailUrl } from '../../utils/imageHelpers';
+import { getTrackThumbnailUrl } from '../../utils/thumbnail';
 import { useMobilePlay } from '../../hooks/useMobilePlay';
 import { PlaylistModal } from '../playlist/PlaylistModal';
 import { useReactionStore, Reaction, TrackStats } from '../../store/reactionStore';

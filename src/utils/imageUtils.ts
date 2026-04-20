@@ -1,15 +1,8 @@
-/**
- * VOYO Music - Image Utilities
- * Re-exports from unified thumbnail utility
- * @deprecated Use utils/thumbnail.ts directly
- */
+// Preload + fallback-chain helpers used by SmartImage + useThumbnailCache.
+// Core URL generation lives in thumbnail.ts — this file adds runtime probing.
 
-import { ThumbnailQuality, getThumb, getThumbWithFallback, generatePlaceholder } from './thumbnail';
-
-// Re-export for backward compatibility
+import { ThumbnailQuality, getThumbWithFallback } from './thumbnail';
 export type { ThumbnailQuality };
-export { generatePlaceholder };
-export const getYouTubeThumbnail = getThumb;
 
 // Get fallback chain as array (for SmartImage compatibility)
 export const getThumbnailFallbackChain = (trackId: string): string[] => {

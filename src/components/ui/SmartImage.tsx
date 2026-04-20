@@ -5,11 +5,8 @@
  */
 
 import { useState, useEffect, useRef, useCallback, memo } from 'react';
-import {
-  getThumbnailFallbackChain,
-  generatePlaceholder,
-  preloadImage,
-} from '../../utils/imageUtils';
+import { getThumbnailFallbackChain, preloadImage } from '../../utils/imageUtils';
+import { generatePlaceholder } from '../../utils/thumbnail';
 import { getCachedThumbnail, cacheThumbnail } from '../../hooks/useThumbnailCache';
 import { devWarn } from '../../utils/logger';
 

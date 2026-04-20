@@ -90,13 +90,14 @@ export async function ensureTrackReady(
   sessionId: string | null,
   opts: { priority?: number } = {},
 ): Promise<void> {
-  queueUpsertForPreWarm(track, sessionId, opts.priority ?? 0).catch(() => {});
-
-  // Fast path: already in R2.
+  // HEAD first — 99% of clicks on populated catalogue hit R2, skip the DB write.
   try {
     const res = await fetch(`${R2_EDGE}/${track.trackId}?q=high`, { method: 'HEAD' });
     if (res.ok) return;
-  } catch { /* fall through to poll */ }
+  } catch { /* fall through to upsert + poll */ }
+
+  // Cold track → enqueue for extraction.
+  queueUpsertForPreWarm(track, sessionId, opts.priority ?? 0).catch(() => {});
 
   // Bounded poll — R2 hit wins immediately; queue row going 'failed' wins too
   // (early abort so callers don't wait the full 30s on a known-dead ID).

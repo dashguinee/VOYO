@@ -17,7 +17,7 @@ import {
 import { usePlayerStore } from '../../store/playerStore';
 import { useIntentStore, VibeMode } from '../../store/intentStore';
 import { usePreferenceStore } from '../../store/preferenceStore';
-import { getThumbnailUrl, getTrackThumbnailUrl } from '../../utils/imageHelpers';
+import { getThumbnailUrl, getTrackThumbnailUrl } from '../../utils/thumbnail';
 import { Track, ReactionType } from '../../types';
 import { SmartImage } from '../ui/SmartImage';
 // eslint-disable-next-line @typescript-eslint/no-unused-vars

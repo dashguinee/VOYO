@@ -87,7 +87,7 @@ let userHash: string | null = null;
  * - Anonymous usage (no login required)
  * - Account-linked data when logged in (syncs across devices)
  */
-function getUserHash(): string {
+export function getUserHash(): string {
   // Try to get logged-in account ID first
   try {
     const accountData = localStorage.getItem('voyo-account');
@@ -378,44 +378,17 @@ export async function saveVerifiedTracks(
 // SIGNAL RECORDING
 // ============================================
 
-// Circuit breaker: if voyo_signals is blocked by RLS (anon not permitted),
-// stop making requests — each failed fetch shows as red in Chrome console.
-let _signalsBlocked = false;
-
-/**
- * Record a user signal (play, love, skip, complete, queue)
- * This is how the collective learns!
- */
 export async function recordSignal(signal: SignalData): Promise<boolean> {
-  if (!supabase || !isSupabaseConfigured || _signalsBlocked) return false;
-
-  try {
-    const { error } = await supabase.from('voyo_signals').upsert({
-      track_id: signal.trackId,
-      user_hash: getUserHash(),
-      action: signal.action,
-      session_vibe: signal.sessionVibe || null,
-      time_of_day: getTimeOfDay(),
-      listen_duration: signal.listenDuration || 0,
-    }, { ignoreDuplicates: true });
-
-    if (error) {
-      // FK = track not in DB yet — skip silently
-      if (error.message?.includes('foreign key')) return false;
-      // RLS blocks anon — disable future requests to stop console noise
-      if (error.code === 'PGRST301' || (error as { status?: number }).status === 401 || error.code === '42501') {
-        _signalsBlocked = true;
-        return false;
-      }
-      devLog('[Central DJ] Signal error:', error.message);
-      return false;
-    }
-
-    devLog(`[Central DJ] 📊 Signal: ${signal.action} on ${signal.trackId.substring(0, 10)}...`);
-    return true;
-  } catch {
-    return false;
-  }
+  if (!supabase || !isSupabaseConfigured) return false;
+  const { error } = await supabase.from('voyo_signals').upsert({
+    track_id: signal.trackId,
+    user_hash: getUserHash(),
+    action: signal.action,
+    session_vibe: signal.sessionVibe || null,
+    time_of_day: getTimeOfDay(),
+    listen_duration: signal.listenDuration || 0,
+  }, { ignoreDuplicates: true });
+  return !error;
 }
 
 /**

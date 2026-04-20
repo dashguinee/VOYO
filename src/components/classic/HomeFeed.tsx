@@ -27,6 +27,8 @@ import { useDownloadStore } from '../../store/downloadStore';
 import { Track } from '../../types';
 // TiviPlusCrossPromo moved to DaHub
 import { SignInPrompt } from '../social/SignInPrompt';
+import { StationHero, type Station } from './StationHero';
+import { supabase } from '../../lib/supabase';
 
 // ============================================
 // HELPER FUNCTIONS
@@ -1328,6 +1330,24 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
   // without losing stability WITHIN a single session.
   const [sessionSeed, setSessionSeed] = useState(() => Date.now());
 
+  // Stations — curator-led vibe hubs, shown as a horizontal snap-scroll rail
+  // above the shelves. Rail animates parallax on scroll when >1 station.
+  const [stations, setStations] = useState<Station[]>([]);
+  useEffect(() => {
+    if (!supabase) return;
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase
+        .from('voyo_stations')
+        .select('*')
+        .eq('is_featured', true)
+        .not('hero_r2_key', 'is', null)
+        .order('sort_order', { ascending: true });
+      if (!cancelled && data) setStations(data as Station[]);
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
   // Ref for TIVI+ immersive section (nav hides when in view)
   const tiviBreakRef = useRef<HTMLDivElement>(null);
 
@@ -1525,6 +1545,24 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
       <div className="px-4 pt-4 pb-6">
         <h1 className="text-2xl font-bold text-white">{greeting}, Dash</h1>
       </div>
+
+      {/* Stations rail — curator-led hubs anchored by a DJ mix.
+          Horizontal snap-scroll. Cards autoplay muted portrait; 7s dwell
+          fades audio in (iOS = tap cue); tap commits to deck + R2 audio. */}
+      {stations.length > 0 && (
+        <div className="mb-8 -mx-1">
+          <div className="flex gap-3 overflow-x-auto snap-x snap-mandatory scrollbar-hide px-4 pb-2">
+            {stations.map((station) => (
+              <div
+                key={station.id}
+                className="snap-center flex-shrink-0 w-[82vw] max-w-[420px]"
+              >
+                <StationHero station={station} />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* VoyoLiveCard - "Vibes on Vibes" → Opens VOYO Player */}
       <SignInPrompt onSwitchToVOYO={onSwitchToVOYO} />

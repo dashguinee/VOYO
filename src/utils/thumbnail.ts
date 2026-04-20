@@ -100,3 +100,10 @@ export const generatePlaceholder = (title: string, size: number = 400): string =
 // Aliases for backward compatibility
 export const getThumbnailUrl = getThumb;
 export const getYouTubeThumbnail = getThumb;
+
+// Track-aware helper — uses coverUrl when present, else falls back to YT thumb.
+import type { Track } from '../types';
+export function getTrackThumbnailUrl(track: Track, quality: ThumbnailQuality = 'high'): string {
+  if (track.coverUrl && track.coverUrl.startsWith('http')) return track.coverUrl;
+  return getThumb(track.trackId, quality);
+}
