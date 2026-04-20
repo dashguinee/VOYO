@@ -102,6 +102,9 @@ interface PersistedState {
   voyoActiveTab?: VoyoTab;
   queue?: PersistedQueueItem[];
   history?: PersistedHistoryItem[];
+  // Playback intent at last snapshot. On rehydrate, AudioPlayer uses this to
+  // decide whether to attempt auto-resume (subject to browser autoplay policy).
+  wasPlaying?: boolean;
 }
 
 function loadPersistedState(): PersistedState {
@@ -634,6 +637,11 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       }
       return { isPlaying: value };
     });
+    // Persist intent so a reopen can auto-resume where the user left off.
+    try {
+      const current = loadPersistedState();
+      savePersistedState({ ...current, wasPlaying: value });
+    } catch { /* storage blocked */ }
   },
 
   togglePlay: () => {
