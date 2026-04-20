@@ -1051,11 +1051,6 @@ function App() {
   const [bgError, setBgError] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [artistPageName, setArtistPageName] = useState<string | null>(null);
-  // VideoMode as a float-over-everything overlay (opened from search results,
-  // MiniPlayer, or explicit entry). Independent of appMode so the underlying
-  // context (Classic + MiniPlayer, or Search) stays mounted — audio never
-  // breaks during the transition, and exit reveals prior state smoothly.
-  const [isVideoOverlayOpen, setIsVideoOverlayOpen] = useState(false);
   // VOYO PLAYER FIRST - Default to player, but remember user preference
   const [appMode, setAppMode] = useState<AppMode>(() => {
     // One-time migration: reset to voyo player as new default (v1.2)
@@ -1439,24 +1434,21 @@ function App() {
   const handleVideoModeEnter = () => setAppMode('video');
   const handleVideoModeExit = () => setAppMode('voyo');
 
-  // Float-over-everything VideoMode — opened from search, MiniPlayer, etc.
-  // Preserves prior surface (Search/Classic/VOYO) underneath. Audio is global
-  // so nothing breaks during enter/exit; only the visual overlay fades.
-  const [isVideoOverlayExiting, setIsVideoOverlayExiting] = useState(false);
+  // Search-triggered video: the iframe renders at videoTarget='landscape'
+  // (z:40) UNDER the search overlay (z:50 with bg-black/80 + blur). User
+  // sees the video playing blurred behind the translucent search while
+  // still being able to scroll / tap search tracks. No overlay, no eaten
+  // gestures — search owns the foreground, iframe is pure atmosphere.
   const openVideoOverlay = useCallback(() => {
-    setIsVideoOverlayExiting(false);
-    setIsVideoOverlayOpen(true);
+    usePlayerStore.getState().setVideoTarget('landscape');
   }, []);
-  // Coordinated exit: mark "exiting" so CSS fades the controls AND the
-  // iframe (via videoTarget→hidden) in parallel, then unmount after 280ms.
-  // Prevents the janky "controls pop / iframe still fullscreen" flash.
-  const closeVideoOverlay = useCallback(() => {
-    setIsVideoOverlayExiting(true);
-    usePlayerStore.getState().setVideoTarget('hidden');
-    setTimeout(() => {
-      setIsVideoOverlayOpen(false);
-      setIsVideoOverlayExiting(false);
-    }, 280);
+  // Restore hidden when search closes (below) so the iframe doesn't
+  // linger as fullscreen after the user dismisses search.
+  const closeSearch = useCallback(() => {
+    setIsSearchOpen(false);
+    if (usePlayerStore.getState().videoTarget === 'landscape') {
+      usePlayerStore.getState().setVideoTarget('hidden');
+    }
   }, []);
 
   // Handle mode switching
@@ -1680,42 +1672,17 @@ function App() {
       {/* YouTube Iframe - GLOBAL for all modes (Classic needs it for streaming) */}
       <YouTubeIframe />
 
-      {/* Search Overlay - Powered by Piped API */}
+      {/* Search Overlay — when a result is tapped, openVideoOverlay flips
+          videoTarget to 'landscape' so the global iframe renders BEHIND the
+          search backdrop (z:40 under search's z:50 + bg-black/80 blur).
+          User sees the video blurred in the back, search stays fully
+          scrollable and tappable. closeSearch restores videoTarget=hidden. */}
       <SearchOverlay
         isOpen={isSearchOpen}
-        onClose={() => setIsSearchOpen(false)}
-        onArtistTap={(name) => { setArtistPageName(name); setIsSearchOpen(false); }}
+        onClose={closeSearch}
+        onArtistTap={(name) => { setArtistPageName(name); closeSearch(); }}
         onEnterVideoMode={openVideoOverlay}
       />
-
-      {/* Float VideoMode overlay — mounts ON TOP of search / classic / voyo.
-          Underlying surface stays mounted. Opacity animates on both enter
-          (240ms in) and exit (280ms out, coordinated with iframe slide-back
-          to 'hidden' via closeVideoOverlay). Audio is global (AudioPlayer)
-          so playback is never interrupted — only the visual layer fades. */}
-      {isVideoOverlayOpen && (
-        <Suspense fallback={null}>
-          <div
-            className="fixed inset-0"
-            style={{
-              zIndex: 60,
-              opacity: isVideoOverlayExiting ? 0 : 1,
-              transition: isVideoOverlayExiting
-                ? 'opacity 280ms ease-in'
-                : 'opacity 240ms ease-out',
-              animation: isVideoOverlayExiting ? 'none' : 'voyo-video-overlay-in 240ms ease-out both',
-            }}
-          >
-            <VideoMode onExit={closeVideoOverlay} />
-          </div>
-          <style>{`
-            @keyframes voyo-video-overlay-in {
-              from { opacity: 0; }
-              to   { opacity: 1; }
-            }
-          `}</style>
-        </Suspense>
-      )}
 
       {/* Artist Page Overlay */}
       {artistPageName && (
