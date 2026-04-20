@@ -7,6 +7,7 @@ import { useState, useRef, useEffect, useCallback, memo } from 'react';
 import { Search, X, Loader2, Music2, Clock, Play, ListPlus, Compass, Disc3, Radio, User } from 'lucide-react';
 import { VoyoIcon, VoyoIconName } from '../ui/VoyoIcon';
 import { usePlayerStore } from '../../store/playerStore';
+import { app } from '../../services/oyo';
 import { Track } from '../../types';
 import { searchMusic, SearchResult, prefetchTrack } from '../../services/api';
 import { getThumb } from '../../utils/thumbnail';
@@ -443,15 +444,10 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap }: SearchOverlayP
   const handleSelectTrack = useCallback((result: SearchResult) => {
     const track = resultToTrack(result);
     addSearchResultsToPool([track]);
-    // R2-first flow: setCurrentTrack triggers AudioPlayer's effect which
-    // HEAD-probes R2, plays direct if cached, iframe + hot-swap if not.
-    // No VPS session. searchMusic already queued this for extraction at
-    // priority=10, so the iframe path will swap to R2 within ~90s.
-    usePlayerStore.getState().setCurrentTrack(track);
-    usePlayerStore.getState().setIsPlaying(true);
+    // Central orchestrator: plays, signals, telemetry, prefetch — all routed.
+    app.playTrack(track, 'search');
     oyaPlanSignal('search_play', track.artist ?? '');
     showToast('Playing now', 'queue');
-    // Search stays open — user keeps exploring
   }, [resultToTrack, showToast]);
 
   const handleAddToQueue = useCallback((result: SearchResult) => {

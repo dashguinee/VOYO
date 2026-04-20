@@ -18,7 +18,7 @@ import { LottieIcon } from '../ui/LottieIcon';
 import { getUserTopTracks, getPoolAwareHotTracks, getPoolAwareDiscoveryTracks, calculateBehaviorScore, recordPoolEngagement } from '../../services/personalization';
 import { curateAllSections } from '../../services/poolCurator';
 import { getInsights as getOyoInsights } from '../../services/oyoDJ';
-import { usePools } from '../../services/oyo';
+import { usePools, app } from '../../services/oyo';
 import { usePreferenceStore } from '../../store/preferenceStore';
 import { usePlayerStore } from '../../store/playerStore';
 import { useTrackPoolStore } from '../../store/trackPoolStore';
@@ -1464,18 +1464,14 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
   const greeting = getGreeting();
 
   const handleVibeSelect = (vibe: Vibe) => {
-    const { hotPool } = useTrackPoolStore.getState();
-    const matchingTracks = hotPool
-      .filter(t => t.detectedMode === vibe.id)
-      .sort((a, b) => b.poolScore - a.poolScore)
-      .slice(0, 10);
-    if (matchingTracks.length > 0) {
-      onTrackPlay(matchingTracks[0]);
-      const { addToQueue } = usePlayerStore.getState();
-      matchingTracks.slice(1).forEach(track => addToQueue(track));
-    } else {
+    // Central orchestrator picks the pool, plays the top, enqueues the rest.
+    // Falls back to generic hot tracks if that vibe's slice is empty.
+    app.playFromVibe(vibe.id);
+    // If playFromVibe found nothing, fall back so the user isn't stranded.
+    const still = usePlayerStore.getState().currentTrack;
+    if (!still || still.trackId !== usePlayerStore.getState().currentTrack?.trackId) {
       const fallback = getPoolAwareHotTracks(10);
-      if (fallback.length > 0) onTrackPlay(fallback[0]);
+      if (fallback.length > 0) app.playTrack(fallback[0], 'vibe');
     }
   };
 
