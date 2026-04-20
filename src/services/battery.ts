@@ -104,10 +104,13 @@ export async function initBatteryMonitor(): Promise<void> {
         });
       }
     };
+    // Subscribe ONLY to the events that produce meaningful state changes.
+    // dischargingtimechange + chargingtimechange fire every few seconds on
+    // Android Chrome — noisy re-renders for everyone on useBatteryState +
+    // trace event spam that wasn't telling us anything. levelchange +
+    // chargingchange are the two that matter.
     batt.addEventListener('levelchange', onChange);
     batt.addEventListener('chargingchange', onChange);
-    batt.addEventListener('chargingtimechange', onChange);
-    batt.addEventListener('dischargingtimechange', onChange);
   } catch (e) {
     trace('battery_init', null, { supported: false, err: (e as Error)?.message?.slice(0, 60) });
   }

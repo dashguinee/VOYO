@@ -17,6 +17,7 @@ import { useEffect, useRef, useCallback } from 'react';
 import { usePlayerStore } from '../store/playerStore';
 import { voyoStream, ensureTrackReady } from '../services/voyoStream';
 import { useHotSwap } from '../player/useHotSwap';
+import { iframeBridge } from '../player/iframeBridge';
 import { oyo, app } from '../services/oyo';
 import { useAudioChain } from '../audio/graph/useAudioChain';
 import { useFrequencyPump } from '../audio/graph/freqPump';
@@ -64,11 +65,19 @@ const STALL_SKIP_THRESHOLD_MS = 4_000;
 const STALL_LOG_DELAY_MS = 800;
 
 // Track-to-track transition fades. Outgoing eases down, new track eases in.
-// Sequential (one audio element) — perceived length = out + in. Values tuned
-// so auto-advance doesn't feel like a hard cut, but user skips still feel
-// responsive (620ms total = DJ blend, not sluggish).
-const TRACK_CHANGE_FADE_OUT_MS = 220;
-const TRACK_CHANGE_FADE_IN_MS  = 400;
+// Sequential (one audio element) — perceived length = out + in.
+// Tighter than a classic DJ blend because Dash's rule is "snappy + smooth":
+// fast enough that a quick card-tap feels instant, smooth enough that a
+// long listen transitions without ever cutting harsh.
+const TRACK_CHANGE_FADE_OUT_MS = 150;
+const TRACK_CHANGE_FADE_IN_MS  = 280;
+
+// Only fade the OUTGOING track when it's actually been playing long enough
+// to deserve a wind-down. If the user is exploring (tapping through cards
+// at 5-10s in), they want snap — no fade, instant swap, zero perceived
+// latency. Past this threshold they're listening, so the transition earns
+// the DJ treatment.
+const FADE_OUT_MIN_ELAPSED_S = 30;
 
 export const AudioPlayer = () => {
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -199,14 +208,28 @@ export const AudioPlayer = () => {
       usePlayerStore.getState().setIsPlaying(true);
     }
 
-    // Fire fade-out + HEAD probe IN PARALLEL so the src swap lands at
-    // exactly the fade-out bottom. Previously HEAD ran first then a
-    // separate 220ms timer, leaving a silence gap that sounded like a
-    // brief restart. Now the silence window is ~0 — old track dips to
-    // zero, src swaps, new track eases in. DJ-smooth.
-    const shouldFade = !!el && playbackSource === 'r2';
-    if (shouldFade) softFadeOut(TRACK_CHANGE_FADE_OUT_MS);
-    nextFadeInMsRef.current = TRACK_CHANGE_FADE_IN_MS;
+    // DASH-STYLE TRANSITION — nothing harsh ever, nothing delayed ever.
+    // Outgoing ramp only when: (a) there's audio playing (r2 or iframe),
+    // (b) we're not in a hidden tab (JS timers throttle → silence gap),
+    // (c) the current track has been playing ≥30s (early skips stay
+    // snappy with an instant swap). Covers all four source transitions:
+    // r2→r2, r2→iframe, iframe→r2, iframe→iframe.
+    const isHidden = typeof document !== 'undefined' && document.hidden;
+    const wasIframe = playbackSource === 'iframe';
+    const wasR2 = playbackSource === 'r2';
+    const elapsedS = el?.currentTime ?? 0;
+    const earnedFade = elapsedS >= FADE_OUT_MIN_ELAPSED_S;
+    const shouldFade = !!el && !isHidden && earnedFade && (wasR2 || wasIframe);
+    if (shouldFade) {
+      if (wasR2) softFadeOut(TRACK_CHANGE_FADE_OUT_MS);
+      if (wasIframe) void iframeBridge.fadeOut(TRACK_CHANGE_FADE_OUT_MS);
+    }
+    // Incoming ramp — shorter in BG (user can't see; long ease-in just
+    // reads as a pause). Web Audio clock isn't throttled in BG, so this
+    // fires reliably even when the tab is hidden.
+    nextFadeInMsRef.current = isHidden
+      ? Math.min(TRACK_CHANGE_FADE_IN_MS, 180)
+      : TRACK_CHANGE_FADE_IN_MS;
 
     // R2-first probe: either set audio.src directly (cached) or hand audio
     // to the YouTubeIframe fallback (useHotSwap handles the cross-fade when
@@ -218,6 +241,13 @@ export const AudioPlayer = () => {
         ? new Promise<void>(r => setTimeout(r, TRACK_CHANGE_FADE_OUT_MS))
         : Promise.resolve();
       const [cached] = await Promise.all([headPromise, fadePromise]);
+      // If outgoing was iframe, silence it hard now — the bridge ramp
+      // reached 0 by this point; pause+mute ensures it doesn't resume
+      // accidentally while the new R2/iframe track takes over.
+      if (wasIframe) {
+        iframeBridge.pause();
+        iframeBridge.resetVolume();
+      }
       if (cached && el) {
         el.src = `${R2_AUDIO}/${currentTrack.trackId}?q=high`;
         el.play().catch(() => {});
