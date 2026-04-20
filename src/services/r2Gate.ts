@@ -1,14 +1,8 @@
-/**
- * r2Gate — single source of truth for "is this track displayable right now?".
- *
- * Display rule: tracks with r2_cached=true leak through to UI cards.
- * Curation rule: anything that misses the gate gets pushed into
- * voyo_upload_queue so the lanes fill it in for next refresh.
- *
- * This is the abstraction Dash wanted: the UI only ever shows what's
- * instantly playable. Curation (OYO) works behind it to keep R2 populated
- * with the right taste.
- */
+// r2Gate — pure R2-cached filter. No background queueing.
+//
+// Rule: UI only ever shows tracks with r2_cached=true. Uncached candidates
+// are silently dropped; nothing auto-queues. Workers only fire on user click
+// via ensureTrackReady. Mass-populating R2 is a separate deliberate flow.
 
 import { supabase } from '../lib/supabase';
 import type { Track } from '../types';
@@ -17,31 +11,19 @@ const VITE_SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string | undefine
 const VITE_SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
 
 export interface GateOptions {
-  /** If true, uncached candidates are upserted to voyo_upload_queue so they
-   *  become displayable next time. Default true. */
+  /** Ignored — kept for source-compat with old callers. gateToR2 is now pure filter. */
   queueUncached?: boolean;
-  /** Priority bucket for the prefetch upsert. 10 = user-waiting, 5 = predicted
-   *  taste, 0 = background. Default 5. */
+  /** Ignored. */
   prefetchPriority?: number;
-  /** Session tag for the upsert, lands in requested_by_session. */
+  /** Ignored. */
   sessionTag?: string;
 }
 
-/**
- * Filter a candidate list to R2-cached tracks. Returns the instantly-playable
- * subset. Side effect: non-cached candidates get queued so lanes extract them.
- *
- * Safe default on error: returns [] — showing nothing is better than showing
- * broken cards.
- */
 export async function gateToR2(
   candidates: Track[],
-  opts: GateOptions = {},
+  _opts: GateOptions = {},
 ): Promise<Track[]> {
   if (!candidates.length || !supabase) return [];
-  const queueUncached = opts.queueUncached ?? true;
-  const prefetchPriority = opts.prefetchPriority ?? 5;
-
   const ids = candidates.map(t => t.trackId).filter(Boolean);
   if (!ids.length) return [];
 
@@ -54,14 +36,6 @@ export async function gateToR2(
   const cachedSet = new Set(
     data.filter(r => r.r2_cached === true).map(r => r.youtube_id),
   );
-
-  if (queueUncached) {
-    const uncached = candidates.filter(t => !cachedSet.has(t.trackId));
-    if (uncached.length) {
-      void queueForExtraction(uncached, prefetchPriority, opts.sessionTag ?? 'r2gate');
-    }
-  }
-
   return candidates.filter(t => cachedSet.has(t.trackId));
 }
 

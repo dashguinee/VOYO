@@ -23,7 +23,7 @@ import { onTrackPlay as oyoDJOnTrackPlay, onTrackSkip as oyoDJOnTrackSkip } from
 import { recordPlay as djRecordPlay } from '../intelligentDJ';
 import { recordTrackInSession } from '../poolCurator';
 import { recordPoolEngagement } from '../personalization';
-import { gateToR2, queueForExtraction } from '../r2Gate';
+import { gateToR2 } from '../r2Gate';
 import * as pools from './pools';
 export { usePools } from './usePools';
 export { app, type PlaySource } from './app';
@@ -123,14 +123,12 @@ export async function getDiscovery(limit: number = 30): Promise<Track[]> {
 }
 
 // ── Prefetch ───────────────────────────────────────────────────────────────
+// Disabled: uncontrolled prefetch burns YT signals. Workers only fire on user
+// clicks (p=10 via ensureTrackReady). Mass-populating R2 is a separate flow.
+// Keep stub for source-compat with existing callers.
 
-/**
- * Push a batch of tracks to the upload queue so the lanes extract them to R2.
- * Use when OYO has a taste signal it wants to capitalize on — e.g. "if the
- * user loves this Burna Boy track they'll probably love these 5 others".
- */
-export async function prefetch(tracks: Track[], priority: number = 5): Promise<void> {
-  await queueForExtraction(tracks, priority, 'oyo-prefetch');
+export async function prefetch(_tracks: Track[], _priority: number = 5): Promise<void> {
+  return;
 }
 
 // ── Namespaced default export ─────────────────────────────────────────────
