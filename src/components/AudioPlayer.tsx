@@ -84,18 +84,20 @@ export const AudioPlayer = () => {
   // buffer recoveries (no set) get the default short anti-click ramp.
   const nextFadeInMsRef = useRef<number | null>(null);
 
-  const {
-    currentTrack,
-    isPlaying,
-    volume,
-    boostProfile,
-    voyexSpatial,
-    playbackSource,
-    setProgress,
-    setCurrentTime,
-    setDuration,
-    setIsPlaying,
-  } = usePlayerStore();
+  // Fine-grained selectors — destructuring the full store re-ran this whole
+  // component on every progress / currentTime tick (4Hz) during playback,
+  // cascading through the audio chain hooks. Now only the dep that changed
+  // triggers a re-render.
+  const currentTrack    = usePlayerStore(s => s.currentTrack);
+  const isPlaying       = usePlayerStore(s => s.isPlaying);
+  const volume          = usePlayerStore(s => s.volume);
+  const boostProfile    = usePlayerStore(s => s.boostProfile);
+  const voyexSpatial    = usePlayerStore(s => s.voyexSpatial);
+  const playbackSource  = usePlayerStore(s => s.playbackSource);
+  const setProgress     = usePlayerStore(s => s.setProgress);
+  const setCurrentTime  = usePlayerStore(s => s.setCurrentTime);
+  const setDuration     = usePlayerStore(s => s.setDuration);
+  const setIsPlaying    = usePlayerStore(s => s.setIsPlaying);
 
   // ── Web Audio chain (VOYEX EQ + spatial effects) ──────────────────────
   const {
@@ -197,14 +199,13 @@ export const AudioPlayer = () => {
       usePlayerStore.getState().setIsPlaying(true);
     }
 
-    // Ease the OUTGOING track down before we swap src — otherwise the old
-    // audio clips off mid-ring-out the instant el.src changes. Sequential
-    // with the incoming fade-in on canplay below → DJ-style blend, not a
-    // hard cut. Natural stream_ended paths are already silent at the end,
-    // so the fade-out is a no-op there (gain already ~0).
-    if (el && playbackSource === 'r2') {
-      softFadeOut(TRACK_CHANGE_FADE_OUT_MS);
-    }
+    // Fire fade-out + HEAD probe IN PARALLEL so the src swap lands at
+    // exactly the fade-out bottom. Previously HEAD ran first then a
+    // separate 220ms timer, leaving a silence gap that sounded like a
+    // brief restart. Now the silence window is ~0 — old track dips to
+    // zero, src swaps, new track eases in. DJ-smooth.
+    const shouldFade = !!el && playbackSource === 'r2';
+    if (shouldFade) softFadeOut(TRACK_CHANGE_FADE_OUT_MS);
     nextFadeInMsRef.current = TRACK_CHANGE_FADE_IN_MS;
 
     // R2-first probe: either set audio.src directly (cached) or hand audio
@@ -212,12 +213,12 @@ export const AudioPlayer = () => {
     // the lane catches up). Watcher lifecycle lives in useHotSwap; no refs
     // to manage here.
     (async () => {
-      const cached = await r2HasTrack(currentTrack.trackId);
+      const headPromise = r2HasTrack(currentTrack.trackId);
+      const fadePromise = shouldFade
+        ? new Promise<void>(r => setTimeout(r, TRACK_CHANGE_FADE_OUT_MS))
+        : Promise.resolve();
+      const [cached] = await Promise.all([headPromise, fadePromise]);
       if (cached && el) {
-        // Small defer so the fade-out has time to breathe before we yank
-        // the src. ~same duration as the fade-out so audio reaches near-
-        // silence right before the swap (no audible tail-cut).
-        await new Promise(r => setTimeout(r, TRACK_CHANGE_FADE_OUT_MS));
         el.src = `${R2_AUDIO}/${currentTrack.trackId}?q=high`;
         el.play().catch(() => {});
         setSource('r2');

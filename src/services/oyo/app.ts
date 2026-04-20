@@ -54,15 +54,16 @@ export function playTrack(track: Track, source: PlaySource = 'unknown'): void {
   store.setCurrentTrack(track);
   store.setIsPlaying(true);
   void ensureTrackReady(track, null, { priority: 10 });
-  // signal fanout happens inside AudioPlayer's effect (oyo.onPlay), but for
-  // explicit user-intent surfaces we can also pre-record the intent here
-  // so telemetry+curation reflect the ACTION, not just the eventual playback.
-  onPlay(track);
+  // Signal fanout (oyo.onPlay) + play_start telemetry fire from
+  // AudioPlayer's track-change effect — the canonical boundary that
+  // knows the real source ('r2' vs 'iframe'). Previously we fired both
+  // here AND in AudioPlayer → 2x fanout + 2x telemetry rows per click.
+  // Only the ui_source hint is logged here so we can attribute the
+  // click surface; the play_start proper fires once, from AudioPlayer.
   logPlaybackEvent({
-    event_type: 'play_start',
+    event_type: 'trace',
     track_id: track.trackId,
-    source: 'r2', // routed through the R2-first probe path
-    meta: { ui_source: source },
+    meta: { subtype: 'play_intent', ui_source: source },
   });
 }
 

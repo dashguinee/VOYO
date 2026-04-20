@@ -31,6 +31,20 @@ export { app, type PlaySource } from './app';
 // Supabase record_signal RPC cooldown — if it returns 401 or 42501 (RLS
 // denied), we stop retrying to avoid flooding console with errors.
 let _rpcSignalBlocked = false;
+
+// Pool-refresh throttle. refreshPools() drops the 60s hot/discovery cache
+// → next shelf render re-ranks. Firing it on every play (user clicks 4
+// tracks/min → cache rebuilds every 15s) defeats the TTL. Debounce to
+// once per REFRESH_POOLS_COOLDOWN_MS so the session adapts meaningfully
+// (3-5 engagements worth) without thrashing the pool compute.
+const REFRESH_POOLS_COOLDOWN_MS = 30_000;
+let _lastRefreshAt = 0;
+function maybeRefreshPools(): void {
+  const now = Date.now();
+  if (now - _lastRefreshAt < REFRESH_POOLS_COOLDOWN_MS) return;
+  _lastRefreshAt = now;
+  pools.refreshPools();
+}
 async function recordRemoteSignal(trackId: string, action: 'play' | 'skip' | 'complete' | 'react'): Promise<void> {
   if (_rpcSignalBlocked) return;
   try {
@@ -55,9 +69,8 @@ export function onPlay(track: Track): void {
   djRecordPlay(track);
   recordTrackInSession(track);
   recordPoolEngagement(track.trackId, 'play');
-  // Bump pool session seed → next shelf render re-ranks around this click
-  // (drops the 60s cache so the user sees the session adapt immediately).
-  pools.refreshPools();
+  // Throttled pool re-rank. Session still adapts, but not 4x/minute.
+  maybeRefreshPools();
 }
 
 /**
