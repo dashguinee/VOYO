@@ -61,19 +61,14 @@ export const VideoMode = ({ onExit }: VideoModeProps) => {
   const tapTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const lastTapTime = useRef(0);
 
-  // Auto-hide controls
-  useEffect(() => {
-    if (showControls) {
-      controlsTimeoutRef.current = setTimeout(() => {
-        setShowControls(false);
-      }, 3000);
-    }
-    return () => {
-      if (controlsTimeoutRef.current) {
-        clearTimeout(controlsTimeoutRef.current);
-      }
-    };
-  }, [showControls]);
+  // Controls stay always visible. We removed the full-screen tap surface
+  // (it was covering search buttons beneath the overlay), which means
+  // there's no way to summon hidden controls back — so "auto-hide + tap
+  // anywhere to reveal" is no longer safe. Keep them on: the controls are
+  // quiet enough (semi-transparent circles) that they don't steal the
+  // video, and the user can actually, you know, use them.
+  void controlsTimeoutRef;
+  void setShowControls;
 
   // Cleanup tap timeout on unmount to prevent memory leaks
   useEffect(() => {
