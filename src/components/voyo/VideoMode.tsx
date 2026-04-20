@@ -148,12 +148,42 @@ export const VideoMode = ({ onExit }: VideoModeProps) => {
         }}
       />
 
-      {/* Track Info (always visible) */}
-      <div
-        className="absolute bottom-24 left-6"
-      >
-        <h2 className="text-white text-2xl font-bold shadow-lg">{currentTrack.title}</h2>
-        <p className="text-white/70 text-lg">{currentTrack.artist}</p>
+      {/* Track Info + inline actions — tucked into one bottom-left cluster.
+          Title / artist / actions all read as a single block, so the right
+          rail is gone and the video frame stays clean. Actions are small
+          subtle chips, not floating circles — they feel like part of the
+          title card, not a control surface fighting the video for space. */}
+      <div className="absolute bottom-24 left-6 right-6 flex items-end justify-between gap-4 pointer-events-none">
+        <div className="min-w-0 flex-1">
+          <h2 className="text-white text-2xl font-bold shadow-lg truncate">{currentTrack.title}</h2>
+          <div className="flex items-center gap-2 mt-1">
+            <p className="text-white/70 text-sm truncate">{currentTrack.artist}</p>
+            <span className="text-white/25 text-xs flex-shrink-0">·</span>
+            {/* LIKE — small inline chip. Pink fill when liked, faint outline
+                otherwise. Toggles preferenceStore.explicitLike (persisted). */}
+            <button
+              className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 pointer-events-auto transition-colors active:scale-90"
+              style={{
+                background: isLiked ? 'rgba(236,72,153,0.30)' : 'rgba(255,255,255,0.08)',
+                border: `1px solid ${isLiked ? 'rgba(236,72,153,0.55)' : 'rgba(255,255,255,0.10)'}`,
+              }}
+              onClick={(e) => { e.stopPropagation(); handleLikeToggle(); }}
+              aria-label={isLiked ? 'Unlike' : 'Like'}
+            >
+              <Heart
+                className="w-3.5 h-3.5"
+                style={{
+                  color: isLiked ? '#f472b6' : 'rgba(255,255,255,0.75)',
+                  fill: isLiked ? '#f472b6' : 'none',
+                }}
+              />
+            </button>
+            {/* BOOST — existing mini variant (w-8 h-8) fits the inline chip row. */}
+            <div className="pointer-events-auto flex-shrink-0">
+              <BoostButton variant="mini" />
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Progress Bar (always visible) */}
@@ -163,42 +193,6 @@ export const VideoMode = ({ onExit }: VideoModeProps) => {
             className="h-full bg-white"
             style={{ width: `${progress}%` }}
           />
-        </div>
-      </div>
-
-      {/* Right rail — real functional actions only. Like (persistent
-          preference) + Boost (offline cache + EQ engage). pointer-events-auto
-          on each so the root's 'none' doesn't swallow these taps. */}
-      <div className="absolute right-4 bottom-32 flex flex-col gap-3">
-        {/* LIKE — toggles explicitLike on preferenceStore. Persisted, shows
-            in Library's liked filter, feeds behavior rerank. */}
-        <button
-          className="w-12 h-12 rounded-full backdrop-blur-sm flex items-center justify-center pointer-events-auto transition-colors"
-          style={{
-            background: isLiked ? 'rgba(236,72,153,0.35)' : 'rgba(0,0,0,0.35)',
-            border: `1px solid ${isLiked ? 'rgba(236,72,153,0.7)' : 'rgba(255,255,255,0.1)'}`,
-            boxShadow: isLiked ? '0 0 16px -4px rgba(236,72,153,0.5)' : 'none',
-          }}
-          onClick={(e) => {
-            e.stopPropagation();
-            handleLikeToggle();
-          }}
-          aria-label={isLiked ? 'Unlike' : 'Like'}
-        >
-          <Heart
-            className="w-5 h-5"
-            style={{
-              color: isLiked ? '#f472b6' : 'rgba(255,255,255,0.85)',
-              fill: isLiked ? '#f472b6' : 'none',
-            }}
-          />
-        </button>
-
-        {/* BOOST — download to local cache (offline) + engage EQ profile.
-            Uses the existing floating variant so visuals match the rest of
-            the app (priming ring, completion burst, sparks). */}
-        <div className="pointer-events-auto">
-          <BoostButton variant="floating" />
         </div>
       </div>
 
