@@ -1051,6 +1051,11 @@ function App() {
   const [bgError, setBgError] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [artistPageName, setArtistPageName] = useState<string | null>(null);
+  // VideoMode as a float-over-everything overlay (opened from search results,
+  // MiniPlayer, or explicit entry). Independent of appMode so the underlying
+  // context (Classic + MiniPlayer, or Search) stays mounted — audio never
+  // breaks during the transition, and exit reveals prior state smoothly.
+  const [isVideoOverlayOpen, setIsVideoOverlayOpen] = useState(false);
   // VOYO PLAYER FIRST - Default to player, but remember user preference
   const [appMode, setAppMode] = useState<AppMode>(() => {
     // One-time migration: reset to voyo player as new default (v1.2)
@@ -1430,9 +1435,29 @@ function App() {
     return currentTrack.coverUrl;
   };
 
-  // Handle video mode entry/exit
+  // Handle video mode entry/exit (legacy appMode route, used by VOYO + Landscape)
   const handleVideoModeEnter = () => setAppMode('video');
   const handleVideoModeExit = () => setAppMode('voyo');
+
+  // Float-over-everything VideoMode — opened from search, MiniPlayer, etc.
+  // Preserves prior surface (Search/Classic/VOYO) underneath. Audio is global
+  // so nothing breaks during enter/exit; only the visual overlay fades.
+  const [isVideoOverlayExiting, setIsVideoOverlayExiting] = useState(false);
+  const openVideoOverlay = useCallback(() => {
+    setIsVideoOverlayExiting(false);
+    setIsVideoOverlayOpen(true);
+  }, []);
+  // Coordinated exit: mark "exiting" so CSS fades the controls AND the
+  // iframe (via videoTarget→hidden) in parallel, then unmount after 280ms.
+  // Prevents the janky "controls pop / iframe still fullscreen" flash.
+  const closeVideoOverlay = useCallback(() => {
+    setIsVideoOverlayExiting(true);
+    usePlayerStore.getState().setVideoTarget('hidden');
+    setTimeout(() => {
+      setIsVideoOverlayOpen(false);
+      setIsVideoOverlayExiting(false);
+    }, 280);
+  }, []);
 
   // Handle mode switching
   const handleSwitchToVOYO = (tab?: 'music' | 'feed' | 'upload' | 'dahub') => {
@@ -1660,7 +1685,37 @@ function App() {
         isOpen={isSearchOpen}
         onClose={() => setIsSearchOpen(false)}
         onArtistTap={(name) => { setArtistPageName(name); setIsSearchOpen(false); }}
+        onEnterVideoMode={openVideoOverlay}
       />
+
+      {/* Float VideoMode overlay — mounts ON TOP of search / classic / voyo.
+          Underlying surface stays mounted. Opacity animates on both enter
+          (240ms in) and exit (280ms out, coordinated with iframe slide-back
+          to 'hidden' via closeVideoOverlay). Audio is global (AudioPlayer)
+          so playback is never interrupted — only the visual layer fades. */}
+      {isVideoOverlayOpen && (
+        <Suspense fallback={null}>
+          <div
+            className="fixed inset-0"
+            style={{
+              zIndex: 60,
+              opacity: isVideoOverlayExiting ? 0 : 1,
+              transition: isVideoOverlayExiting
+                ? 'opacity 280ms ease-in'
+                : 'opacity 240ms ease-out',
+              animation: isVideoOverlayExiting ? 'none' : 'voyo-video-overlay-in 240ms ease-out both',
+            }}
+          >
+            <VideoMode onExit={closeVideoOverlay} />
+          </div>
+          <style>{`
+            @keyframes voyo-video-overlay-in {
+              from { opacity: 0; }
+              to   { opacity: 1; }
+            }
+          `}</style>
+        </Suspense>
+      )}
 
       {/* Artist Page Overlay */}
       {artistPageName && (

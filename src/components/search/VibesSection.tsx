@@ -5,7 +5,7 @@
  */
 
 import { useState, useCallback, useEffect, useMemo } from 'react';
-import { Play, Loader2, ChevronLeft, Music2, Zap } from 'lucide-react';
+import { Play, ChevronLeft, Music2, Zap } from 'lucide-react';
 import { VoyoIcon } from '../ui/VoyoIcon';
 import { usePlayerStore } from '../../store/playerStore';
 import { app } from '../../services/oyo';

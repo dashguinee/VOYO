@@ -4,7 +4,8 @@
  */
 
 import { useState, useCallback, useEffect } from 'react';
-import { Disc3, Play, Loader2, ChevronLeft } from 'lucide-react';
+import { Disc3, Play, ChevronLeft } from 'lucide-react';
+import { VinylLoader } from '../ui/VinylLoader';
 import { PipedPlaylist, PipedTrack, searchAlbums, getAlbumTracks } from '../../services/piped';
 import { pipedTrackToVoyoTrack } from '../../data/tracks';
 import { usePlayerStore } from '../../store/playerStore';
@@ -110,10 +111,10 @@ export const AlbumSection = ({ query, isVisible }: AlbumSectionProps) => {
         <h3 className="text-white/80 text-sm font-semibold">Albums</h3>
       </div>
 
-      {/* Loading state */}
+      {/* Loading state — seamless vinyl, no attention-grabbing spin */}
       {isLoading && (
         <div className="flex items-center justify-center py-8">
-          <Loader2 className="w-6 h-6 text-purple-400 animate-spin" />
+          <VinylLoader size={24} />
         </div>
       )}
 

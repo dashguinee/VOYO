@@ -4,8 +4,9 @@
  */
 
 import { useState, useRef, useEffect, useCallback, memo } from 'react';
-import { Search, X, Loader2, Music2, Clock, Play, ListPlus, Compass, Disc3, Radio, User } from 'lucide-react';
+import { Search, X, Music2, Clock, Play, ListPlus, Compass, Disc3, Radio, User } from 'lucide-react';
 import { VoyoIcon, VoyoIconName } from '../ui/VoyoIcon';
+import { VinylLoader } from '../ui/VinylLoader';
 import { usePlayerStore } from '../../store/playerStore';
 import { app } from '../../services/oyo';
 import { Track } from '../../types';
@@ -27,6 +28,13 @@ interface SearchOverlayProps {
   isOpen: boolean;
   onClose: () => void;
   onArtistTap?: (artistName: string) => void;
+  /**
+   * Optional — fires after handleSelectTrack has kicked off the pipeline
+   * (app.playTrack + R2 gate). Parent opens a float-over-everything
+   * VideoMode so the user sees the iframe video immediately, even before
+   * R2 caching completes. The search overlay stays mounted underneath.
+   */
+  onEnterVideoMode?: () => void;
 }
 
 const SEARCH_HISTORY_KEY = 'voyo_search_history';
@@ -164,7 +172,7 @@ const COUNTRY_FLAGS: Record<string, string> = {
   US: '\u{1F1FA}\u{1F1F8}', FR: '\u{1F1EB}\u{1F1F7}', JM: '\u{1F1EF}\u{1F1F2}',
 };
 
-export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap }: SearchOverlayProps) => {
+export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap, onEnterVideoMode }: SearchOverlayProps) => {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
@@ -447,8 +455,10 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap }: SearchOverlayP
     // Central orchestrator: plays, signals, telemetry, prefetch — all routed.
     app.playTrack(track, 'search');
     oyaPlanSignal('search_play', track.artist ?? '');
-    showToast('Playing now', 'queue');
-  }, [resultToTrack, showToast]);
+    // Float VideoMode over search so the user sees the iframe immediately
+    // (buys time while R2 catches up). Parent keeps search mounted underneath.
+    onEnterVideoMode?.();
+  }, [resultToTrack, onEnterVideoMode]);
 
   const handleAddToQueue = useCallback((result: SearchResult) => {
     const track = resultToTrack(result);
@@ -553,7 +563,7 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap }: SearchOverlayP
                     }}
                     className="flex-1 bg-transparent text-white placeholder:text-white/30 focus:outline-none text-[15px]"
                   />
-                  {isSearching && <Loader2 className="w-4 h-4 text-purple-400 animate-spin flex-shrink-0" />}
+                  {isSearching && <VinylLoader size={16} opacity={0.35} colorClass="text-white/70" className="flex-shrink-0" />}
                   {query && !isSearching && (
                     <button onClick={() => { setQuery(''); setResults([]); }} className="text-white/30 p-1" aria-label="Clear search">
                       <X className="w-4 h-4" />

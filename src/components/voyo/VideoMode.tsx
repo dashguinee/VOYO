@@ -1,11 +1,16 @@
 /**
  * VOYO Music - Video Mode (Full Immersion)
- * Reference: Livre reactiosn example.jpg for floating reactions
+ *
+ * Uses the global YouTubeIframe (videoTarget='landscape') for the actual
+ * video layer — so hot-swap + R2 audio-sync + lifecycle is all centralised.
+ * This component only renders controls + reactions on top, and falls back
+ * to an album-art backdrop ONLY when the embed is blocked (region /
+ * age-gate / embedding-disabled), in which case the R2 audio keeps playing.
  *
  * Features:
- * - Full screen video/visualizer
- * - Overlay controls fade after 2 seconds
- * - Floating reactions (hearts, fire, thumbs up) rise like TikTok Live
+ * - Full-screen iframe video (global, never remounts)
+ * - Overlay controls fade after ~3 seconds
+ * - Floating reactions (hearts, fire, thumbs up) rise
  * - Swipe up/down for next/prev
  * - Double-tap for reaction storm
  * - Triple-tap to exit
@@ -65,6 +70,16 @@ export const VideoMode = ({ onExit }: VideoModeProps) => {
   const progress = usePlayerStore(s => s.progress);
   const volume = usePlayerStore(s => s.volume);
   const setVolume = usePlayerStore(s => s.setVolume);
+  const videoBlocked = usePlayerStore(s => s.videoBlocked);
+  const setVideoTarget = usePlayerStore(s => s.setVideoTarget);
+
+  // Promote the global YouTubeIframe into landscape (full-screen) on mount,
+  // restore to hidden on unmount. Audio is driven by AudioPlayer regardless
+  // of this flag — this controls visual layer only, so exit is seamless.
+  useEffect(() => {
+    setVideoTarget('landscape');
+    return () => { setVideoTarget('hidden'); };
+  }, [setVideoTarget]);
 
   const [showControls, setShowControls] = useState(true);
   const [floatingReactions, setFloatingReactions] = useState<FloatingReaction[]>([]);
@@ -183,29 +198,40 @@ export const VideoMode = ({ onExit }: VideoModeProps) => {
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-black"
+      className="fixed inset-0 z-50"
+      style={{ background: 'transparent' }}
     >
-      {/* Video/Visualizer Background */}
+      {/* Tap surface — covers the iframe area. Transparent so the global
+          YouTubeIframe (videoTarget='landscape') shows THROUGH this layer.
+          When the embed is blocked (videoBlocked = true), we render the
+          album-art fallback here instead — R2 audio continues regardless. */}
       <div
         className="absolute inset-0"
         onClick={handleTap}
       >
-        {/* Album art as background with blur effect */}
-        <img
-          src={getYouTubeThumbnail(currentTrack.trackId, 'high')}
-          alt=""
-          className="absolute inset-0 w-full h-full object-cover"
-        />
-        {/* Animated gradient overlay */}
+        {videoBlocked && (
+          <>
+            <img
+              src={getYouTubeThumbnail(currentTrack.trackId, 'high')}
+              alt=""
+              className="absolute inset-0 w-full h-full object-cover"
+            />
+            <div
+              className="absolute inset-0"
+              style={{
+                background: 'linear-gradient(45deg, rgba(139,92,246,0.25), rgba(212,160,83,0.20), rgba(139,92,246,0.15))',
+              }}
+            />
+          </>
+        )}
+        {/* Subtle readability gradient at the edges so controls / title pop.
+            Thin enough that the iframe video remains the star of the frame. */}
         <div
-          className="absolute inset-0"
+          className="absolute inset-0 pointer-events-none"
           style={{
-            background: 'linear-gradient(45deg, rgba(168,85,247,0.3), rgba(236,72,153,0.3), rgba(59,130,246,0.3))',
-            backgroundSize: '200% 200%',
-            }}
+            background: 'linear-gradient(180deg, rgba(0,0,0,0.35) 0%, rgba(0,0,0,0) 22%, rgba(0,0,0,0) 62%, rgba(0,0,0,0.55) 100%)',
+          }}
         />
-        {/* Dark gradient for text readability */}
-        <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-transparent to-black/60" />
       </div>
 
       {/* Floating Reactions */}
