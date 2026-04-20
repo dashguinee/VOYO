@@ -13,6 +13,7 @@ import { useState, useEffect, useRef, useCallback, lazy, Suspense, Component } f
 import type { ReactNode, ErrorInfo } from 'react';
 import { User, Search } from 'lucide-react';
 import { usePlayerStore } from './store/playerStore';
+import { app } from './services/oyo';
 import { getYouTubeThumbnail } from './data/tracks';
 import { setupMobileAudioUnlock } from './utils/mobileAudioUnlock';
 import { AnimatedBackground, BackgroundPicker, BackgroundType, ReactionCanvas } from './components/backgrounds/AnimatedBackgrounds';
@@ -1127,9 +1128,9 @@ function App() {
         oyeScore: 0,
       };
 
-      // Play the track - consolidated playTrack for reliable playback
+      // Route through app.playTrack → registers with lanes at p=10
       devLog('[VOYO] Playing cross-promo track:', title);
-      usePlayerStore.getState().playTrack(track as any);
+      app.playTrack(track as any, 'unknown');
     };
 
     const listener = (e: Event) => { handlePlayTrack(e as CustomEvent); };
@@ -1213,13 +1214,13 @@ function App() {
   // who already have a saved track.
   useEffect(() => {
     const tid = setTimeout(() => {
-      const { currentTrack, queue, playTrack, setIsPlaying } = usePlayerStore.getState();
+      const { currentTrack, queue, setIsPlaying } = usePlayerStore.getState();
       if (!currentTrack && queue.length === 0) {
         const primer = TRACKS.find(t => t.trackId === 'WcIcVapfqXw') || TRACKS[0];
         if (primer) {
-          playTrack(primer);
-          // Immediately pause — playTrack sets isPlaying=true, but we want the
-          // player primed and ready, not playing.
+          // Primer isn't a user click — use store.setCurrentTrack to prime without
+          // registering at p=10 (this is a boot-time placeholder, not an upload request).
+          usePlayerStore.getState().setCurrentTrack(primer);
           setIsPlaying(false);
           devLog('[VOYO] First-time primer: loaded', primer.title, '(deferred)');
         }
@@ -1667,8 +1668,7 @@ function App() {
           artistName={artistPageName}
           onClose={() => setArtistPageName(null)}
           onPlayTrack={(trackId, title, artist) => {
-            const { playTrack } = usePlayerStore.getState();
-            playTrack({
+            app.playTrack({
               id: trackId,
               trackId,
               title,
@@ -1678,7 +1678,7 @@ function App() {
               oyeScore: 0,
               duration: 0,
               createdAt: new Date().toISOString(),
-            });
+            }, 'artist');
           }}
         />
       )}

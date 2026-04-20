@@ -8,6 +8,7 @@ import { useState, useCallback, useEffect, useMemo } from 'react';
 import { Play, Loader2, ChevronLeft, Music2, Zap } from 'lucide-react';
 import { VoyoIcon } from '../ui/VoyoIcon';
 import { usePlayerStore } from '../../store/playerStore';
+import { app } from '../../services/oyo';
 import { Track } from '../../types';
 import { getThumb } from '../../utils/thumbnail';
 import { vibeEngine, VIBES, Vibe as VibeDefinition, VibeTrack as EngineTrack } from '../../lib/vibeEngine';
@@ -159,9 +160,9 @@ export const VibesSection = ({ query, isVisible }: VibesSectionProps) => {
       createdAt: new Date().toISOString(),
     }));
 
-    // Play first, queue rest
-    usePlayerStore.getState().playTrack(tracks[0]);
-    tracks.slice(1).forEach(track => addToQueue(track));
+    // Play first (registers with lanes via app.playTrack), queue rest
+    app.playTrack(tracks[0], 'vibe');
+    tracks.slice(1).forEach(track => app.addToQueue(track));
   }, [vibeTracks, selectedVibe, addToQueue]);
 
   // Play individual track
@@ -180,7 +181,7 @@ export const VibesSection = ({ query, isVisible }: VibesSectionProps) => {
       duration: 0,
       createdAt: new Date().toISOString(),
     };
-    usePlayerStore.getState().playTrack(voyoTrack);
+    app.playTrack(voyoTrack, 'vibe');
   }, [selectedVibe]);
 
   // Get tier badge color

@@ -28,6 +28,7 @@ import {
   type TranslatedSegment,
 } from '../../services/lyricsEngine';
 import { usePlayerStore } from '../../store/playerStore';
+import { app } from '../../services/oyo';
 import { searchAlbums, getAlbumTracks } from '../../services/piped';
 import { pipedTrackToVoyoTrack } from '../../data/tracks';
 
@@ -196,7 +197,7 @@ export function OyoIsland({ visible, onHide, onActivity }: OyoIslandProps) {
             const voyoTrack = pipedTrackToVoyoTrack(tracks[0], match.thumbnail);
 
             // Play the track! (setCurrentTrack triggers playback)
-            usePlayerStore.getState().setCurrentTrack(voyoTrack);
+            app.playTrack(voyoTrack, 'search');
 
             setChatHistory(prev => [
               ...prev.slice(0, -1),
@@ -295,7 +296,7 @@ export function OyoIsland({ visible, onHide, onActivity }: OyoIslandProps) {
           const tracks = await getAlbumTracks(match.id);
           if (tracks.length > 0) {
             const voyoTrack = pipedTrackToVoyoTrack(tracks[0], match.thumbnail);
-            usePlayerStore.getState().setCurrentTrack(voyoTrack);
+            app.playTrack(voyoTrack, 'search');
 
             setChatHistory(prev => [
               ...prev.slice(0, -1),

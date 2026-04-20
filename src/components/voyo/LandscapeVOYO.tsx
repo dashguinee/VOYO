@@ -512,7 +512,8 @@ export const LandscapeVOYO = ({ onVideoMode }: LandscapeVOYOProps) => {
   const hotTracks = usePlayerStore(s => s.hotTracks);
   const discoverTracks = usePlayerStore(s => s.discoverTracks);
   const prevTrack = usePlayerStore(s => s.prevTrack);
-  const playTrack = usePlayerStore(s => s.playTrack);
+  // Route through app.playTrack so every queue pick registers with lanes at p=10.
+  const playTrack = useCallback((track: Track) => app.playTrack(track, 'queue'), []);
   const addToQueue = usePlayerStore(s => s.addToQueue);
   const addReaction = usePlayerStore(s => s.addReaction);
   const volume = usePlayerStore(s => s.volume);

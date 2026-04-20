@@ -2307,7 +2307,7 @@ const ReactionBar = memo(({
           const tracks = await getAlbumTracks(match.id);
           if (tracks.length > 0) {
             const voyoTrack = pipedTrackToVoyoTrack(tracks[0], match.thumbnail);
-            usePlayerStore.getState().playTrack(voyoTrack);
+            app.playTrack(voyoTrack, 'search');
             setChatResponse(`🔥 Playing "${match.name}" by ${match.artist}`);
           } else {
             setChatResponse(`Found "${match.name}" - search to play!`);
@@ -3474,7 +3474,8 @@ export const VoyoPortraitPlayer = ({
   const discoverTracks = usePlayerStore(s => s.discoverTracks);
   const refreshRecommendations = usePlayerStore(s => s.refreshRecommendations);
   const prevTrack = usePlayerStore(s => s.prevTrack);
-  const playTrack = usePlayerStore(s => s.playTrack);
+  // All in-player taps go through app.playTrack → registers with lanes at p=10.
+  const playTrack = useCallback((track: Track) => app.playTrack(track, 'queue'), []);
   const addReaction = usePlayerStore(s => s.addReaction);
   const reactions = usePlayerStore(s => s.reactions);
   const seekTo = usePlayerStore(s => s.seekTo);

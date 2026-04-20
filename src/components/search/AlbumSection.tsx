@@ -8,6 +8,7 @@ import { Disc3, Play, Loader2, ChevronLeft } from 'lucide-react';
 import { PipedPlaylist, PipedTrack, searchAlbums, getAlbumTracks } from '../../services/piped';
 import { pipedTrackToVoyoTrack } from '../../data/tracks';
 import { usePlayerStore } from '../../store/playerStore';
+import { app } from '../../services/oyo';
 import { Track } from '../../types';
 
 interface AlbumSectionProps {
@@ -73,18 +74,17 @@ export const AlbumSection = ({ query, isVisible }: AlbumSectionProps) => {
       pipedTrackToVoyoTrack(track, selectedAlbum.name)
     );
 
-    // Play first track, add rest to queue
-    usePlayerStore.getState().playTrack(voyoTracks[0]);
+    // Play first track (registers with lanes via app.playTrack), queue rest
+    app.playTrack(voyoTracks[0], 'search');
     if (voyoTracks.length > 1) {
-      // Add tracks one by one to the queue
-      voyoTracks.slice(1).forEach(track => addToQueue(track));
+      voyoTracks.slice(1).forEach(track => app.addToQueue(track));
     }
   }, [albumTracks, selectedAlbum, addToQueue]);
 
   // Play individual track
   const handleTrackClick = useCallback((track: PipedTrack) => {
     const voyoTrack = pipedTrackToVoyoTrack(track, selectedAlbum?.name);
-    usePlayerStore.getState().playTrack(voyoTrack);
+    app.playTrack(voyoTrack, 'search');
   }, [selectedAlbum]);
 
   // Add track to queue

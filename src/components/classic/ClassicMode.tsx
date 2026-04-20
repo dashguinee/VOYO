@@ -515,8 +515,8 @@ export const ClassicMode = ({ onSwitchToVOYO, onSearch }: ClassicModeProps) => {
       setShowNowPlaying(true);
     }
 
-    // CONSOLIDATED: One atomic call - no delays, no fragmentation
-    usePlayerStore.getState().playTrack(track);
+    // Route through app.playTrack → registers with lanes (bump_queue_priority p=10)
+    app.playTrack(track, 'feed');
   };
 
   const handleArtistClick = (artist: { name: string; tracks: Track[] }) => {
