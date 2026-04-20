@@ -49,6 +49,7 @@ import {
 } from '../../services/centralDJ';
 
 import { onSignal as oyaPlanSignal } from '../../services/oyoPlan';
+import { app } from '../../services/oyo';
 
 // OYO Island - DJ Voice Search & Chat
 import { OyoIsland } from './OyoIsland';
@@ -4057,7 +4058,7 @@ export const VoyoPortraitPlayer = ({
       el.style.opacity = '0';
     }
     setTimeout(() => {
-      if (dir > 0) prevTrack(); else { voyoStream.skip(); }
+      if (dir > 0) app.prev(); else { app.skip(); }
       // Reset wrapper to center instantly — next track's artwork will
       // fade in via BigCenterCard's own mount animation.
       setTimeout(() => {
@@ -4643,10 +4644,10 @@ export const VoyoPortraitPlayer = ({
   const handleNextTrack = useCallback(() => {
     if (wasSkeeping.current && Date.now() - wasSkeepingClearedAt.current < 250) return;
     wasSkeeping.current = false;
-    // voyoStream.skip() delegates to playerStore.nextTrack(), which fans out
-    // oyo.onSkip (position-aware) to the whole signal graph. No redundant
-    // oyoOnTrackSkip call needed here.
-    voyoStream.skip();
+    // Central orchestrator — app.skip fires OYO skip signal with position
+    // then delegates to playerStore.nextTrack, which runs the full signal
+    // fanout and advance.
+    app.skip();
   }, []);
 
   // Cleanup on unmount

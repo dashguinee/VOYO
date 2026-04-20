@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import { usePlayerStore } from '../../store/playerStore';
+import { app } from '../../services/oyo';
 import { profileAPI, friendsAPI, NowPlaying } from '../../lib/voyo-api';
 import { openCommandCenterForSSO } from '../../lib/dash-auth';
 import type { VoyoProfile } from '../../lib/voyo-api';
@@ -173,8 +174,9 @@ export const ProfilePage = () => {
       coverUrl: nowPlaying.thumbnail,
     };
 
-    // Set as current track and play
-    setCurrentTrack(track as any);
+    // Set as current track and play — central orchestrator handles
+    // signals, telemetry, and prefetch priority.
+    app.playTrack(track as any, 'library');
 
     // Mark as joined - enables auto-sync for future track changes
     setHasJoinedPortal(true);

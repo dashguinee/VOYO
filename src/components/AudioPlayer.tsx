@@ -17,7 +17,7 @@ import { useEffect, useRef, useCallback } from 'react';
 import { usePlayerStore } from '../store/playerStore';
 import { voyoStream, ensureTrackReady } from '../services/voyoStream';
 import { useHotSwap } from '../player/useHotSwap';
-import { oyo } from '../services/oyo';
+import { oyo, app } from '../services/oyo';
 import { useAudioChain } from '../audio/graph/useAudioChain';
 import { useFrequencyPump } from '../audio/graph/freqPump';
 import { devLog, devWarn } from '../utils/logger';
@@ -432,7 +432,7 @@ export const AudioPlayer = () => {
 
     navigator.mediaSession.setActionHandler('play',      () => { voyoStream.resume(); });
     navigator.mediaSession.setActionHandler('pause',     () => { voyoStream.pause(); });
-    navigator.mediaSession.setActionHandler('nexttrack', () => { voyoStream.skip(); });
+    navigator.mediaSession.setActionHandler('nexttrack', () => { app.skip(); });
 
     navigator.mediaSession.setActionHandler('previoustrack', () => {
       const store = usePlayerStore.getState();

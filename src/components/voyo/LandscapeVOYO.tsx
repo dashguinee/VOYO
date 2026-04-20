@@ -18,6 +18,7 @@ import { useRef, useEffect, useState, useCallback, memo } from 'react';
 import { SkipBack, SkipForward, Play, Pause, Plus, Volume2, Smartphone, Loader2 } from 'lucide-react';
 import { usePlayerStore } from '../../store/playerStore';
 import { voyoStream } from '../../services/voyoStream';
+import { app } from '../../services/oyo';
 import { getThumb } from '../../utils/thumbnail';
 import { BoostButton } from '../ui/BoostButton';
 import { getYouTubeThumbnail, TRACKS } from '../../data/tracks';
@@ -762,7 +763,7 @@ export const LandscapeVOYO = ({ onVideoMode }: LandscapeVOYOProps) => {
               {/* Skip Next */}
               <button
                 className="p-3 rounded-full bg-white/10 backdrop-blur-sm"
-                onClick={() => { voyoStream.skip(); startHideTimer(); }}
+                onClick={() => { app.skip(); startHideTimer(); }}
               >
                 <SkipForward className="w-6 h-6 text-white" />
               </button>

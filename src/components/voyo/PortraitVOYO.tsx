@@ -12,6 +12,7 @@
 import { useState, useRef, useEffect, lazy, Suspense } from 'react';
 import { X, Send } from 'lucide-react';
 import { usePlayerStore } from '../../store/playerStore';
+import { app } from '../../services/oyo';
 import { DJMode, Track } from '../../types';
 import { useAuth } from '../../hooks/useAuth';
 import { APP_CODES } from '../../lib/dahub/dahub-api';
@@ -290,7 +291,7 @@ export const PortraitVOYO = ({ onSearch, onDahub, onHome }: PortraitVOYOProps) =
                 oyeScore: 0,
                 createdAt: new Date().toISOString(),
               };
-              playTrack(track);
+              app.playTrack(track, 'moment');
               setVoyoTab('music');
             }}
             onArtistTap={(name) => setArtistPageName(name)}
@@ -380,7 +381,7 @@ export const PortraitVOYO = ({ onSearch, onDahub, onHome }: PortraitVOYOProps) =
               oyeScore: 0,
               createdAt: new Date().toISOString(),
             };
-            playTrack(track);
+            app.playTrack(track, 'artist');
           }}
         />
         </Suspense>

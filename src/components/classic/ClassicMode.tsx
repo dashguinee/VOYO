@@ -16,6 +16,7 @@ import { Dahub } from '../dahub/Dahub';
 import { APP_CODES } from '../../lib/dahub/dahub-api';
 import { NowPlaying } from './NowPlaying';
 import { usePlayerStore } from '../../store/playerStore';
+import { app } from '../../services/oyo';
 import { getYouTubeThumbnail } from '../../data/tracks';
 import { SmartImage } from '../ui/SmartImage';
 import { Track } from '../../types';
@@ -77,20 +78,13 @@ const MiniPlayer = ({ onVOYOClick, onOpenFull }: { onVOYOClick: () => void; onOp
     }
   }, [onOpenFull]);
 
-  // Handle OYE reaction
+  // Handle OYE reaction — routed through the central orchestrator so the
+  // full signal graph (djRecordPlay + oyoPlan reaction + recordPoolEngagement
+  // + remote record_signal) fires alongside the visual burst.
   const handleOye = useCallback(() => {
     if (!currentTrack) return;
-    createReaction({
-      username: dashId || 'anonymous',
-      trackId: currentTrack.trackId || currentTrack.id,
-      trackTitle: currentTrack.title,
-      trackArtist: currentTrack.artist,
-      trackThumbnail: currentTrack.coverUrl,
-      category: 'afro-heat',
-      emoji: '⚡',
-      reactionType: 'oye',
-    });
-  }, [currentTrack, dashId, createReaction]);
+    app.oye(currentTrack, { emoji: '⚡' });
+  }, [currentTrack]);
 
   // Check if title needs scrolling (longer than container)
   useEffect(() => {
