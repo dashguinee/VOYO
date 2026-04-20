@@ -58,6 +58,10 @@ export const StationHero = ({ station }: StationHeroProps) => {
   const dwellTimerRef = useRef<number | null>(null);
 
   const [isInView, setIsInView] = useState(false);
+  // `isNearby`: card is within ~1.5 viewport-heights of the visible area.
+  // Iframe only mounts when nearby — off-screen stations don't load video
+  // at all (massive battery + bandwidth win when the rail has 5+ stations).
+  const [isNearby, setIsNearby] = useState(false);
   const [isPreviewingAudio, setIsPreviewingAudio] = useState(false);
   const [subscribed, setSubscribed] = useState(false);
   const [showIosHint, setShowIosHint] = useState(false);
@@ -82,15 +86,24 @@ export const StationHero = ({ station }: StationHeroProps) => {
     return () => { cancelled = true; };
   }, [station.id]);
 
+  // Two observers with different thresholds:
+  //   - proximity (rootMargin 150% 0): iframe mount gate. Only loads when
+  //     the card is within ~1.5 viewport-heights of the visible region.
+  //   - visibility (>0.6 intersectionRatio): preview / dwell / pause gate.
   useEffect(() => {
     const el = cardRef.current;
     if (!el) return;
-    const obs = new IntersectionObserver(
+    const nearObs = new IntersectionObserver(
+      (entries) => setIsNearby(entries[0].isIntersecting),
+      { rootMargin: '150% 0px 150% 0px' }
+    );
+    const viewObs = new IntersectionObserver(
       (entries) => setIsInView(entries[0].isIntersecting && entries[0].intersectionRatio > 0.6),
       { threshold: [0.3, 0.6, 0.85] }
     );
-    obs.observe(el);
-    return () => obs.disconnect();
+    nearObs.observe(el);
+    viewObs.observe(el);
+    return () => { nearObs.disconnect(); viewObs.disconnect(); };
   }, []);
 
   useEffect(() => {
@@ -99,9 +112,15 @@ export const StationHero = ({ station }: StationHeroProps) => {
       dwellTimerRef.current = null;
       setIsPreviewingAudio(false);
       setShowIosHint(false);
+      // PAUSE (not just mute) — a muted iframe still decodes video +
+      // streams bytes, which was the station rail's main battery hit.
+      // pauseVideo stops decode entirely until the card returns to view.
+      postYTMessage('pauseVideo');
       postYTMessage('mute');
       return;
     }
+    // Returning to view: resume playback before starting the dwell timer.
+    postYTMessage('playVideo');
     dwellTimerRef.current = window.setTimeout(() => {
       if (IS_IOS) setShowIosHint(true);
       else fadeInAudio();
@@ -111,7 +130,7 @@ export const StationHero = ({ station }: StationHeroProps) => {
     };
   }, [isInView]);
 
-  const postYTMessage = useCallback((func: 'mute' | 'unMute' | 'setVolume' | 'playVideo', arg?: number) => {
+  const postYTMessage = useCallback((func: 'mute' | 'unMute' | 'setVolume' | 'playVideo' | 'pauseVideo', arg?: number) => {
     const iframe = iframeRef.current?.contentWindow;
     if (!iframe) return;
     const args = arg !== undefined ? [arg] : [];
@@ -174,20 +193,37 @@ export const StationHero = ({ station }: StationHeroProps) => {
         boxShadow: `inset 0 0 32px rgba(212,175,110,0.08), 0 8px 32px ${accentPrimary}22`,
       }}
     >
-      <iframe
-        ref={iframeRef}
-        src={muxYTUrl(station.hero_video_id)}
-        className="absolute inset-0 w-full h-full"
-        style={{
-          border: 0,
-          filter: isPreviewingAudio ? 'brightness(0.85)' : 'brightness(0.55) blur(0.4px)',
-          transition: 'filter 500ms ease',
-          transform: 'scale(1.12)', // overscan so YT UI bleed is hidden
-          pointerEvents: 'none',    // taps go to card
-        }}
-        allow="autoplay; encrypted-media; picture-in-picture"
-        title={station.title}
-      />
+      {/* Iframe only mounts when the card is within proximity of the
+          viewport (rootMargin 150%). Far-offscreen stations render as a
+          static thumbnail poster until they get close, saving a YouTube
+          player instance + video decode + bandwidth per station. */}
+      {isNearby ? (
+        <iframe
+          ref={iframeRef}
+          src={muxYTUrl(station.hero_video_id)}
+          className="absolute inset-0 w-full h-full"
+          style={{
+            border: 0,
+            filter: isPreviewingAudio ? 'brightness(0.85)' : 'brightness(0.55) blur(0.4px)',
+            transition: 'filter 500ms ease',
+            transform: 'scale(1.12)', // overscan so YT UI bleed is hidden
+            pointerEvents: 'none',    // taps go to card
+          }}
+          allow="autoplay; encrypted-media; picture-in-picture"
+          title={station.title}
+        />
+      ) : (
+        <img
+          src={getThumb(station.hero_video_id)}
+          alt=""
+          className="absolute inset-0 w-full h-full object-cover"
+          style={{
+            filter: 'brightness(0.55) blur(0.4px)',
+            transform: 'scale(1.12)',
+            pointerEvents: 'none',
+          }}
+        />
+      )}
 
       <div
         className="absolute inset-0 pointer-events-none"
