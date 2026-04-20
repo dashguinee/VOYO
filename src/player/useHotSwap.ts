@@ -27,7 +27,11 @@ import type { Track } from '../types';
 
 const R2_AUDIO = 'https://voyo-edge.dash-webtv.workers.dev/audio';
 const HOT_SWAP_POLL_MS = 5_000;
-const HOT_SWAP_FADE_MS = 450;
+// One unified swap: always position-matched (no rewind), equal-power curve
+// (constant perceived loudness, no dip), 2s fade. Iframe fades out on
+// cos(p·π/2), R2 fades in on sin(p·π/2) — sum of squares stays ≈1.
+const HOT_SWAP_FADE_MS = 2_000;
+const HOT_SWAP_STEPS   = 40;
 
 /**
  * Probe R2 for a track. 200 = cached, anything else = not yet.
@@ -49,30 +53,25 @@ async function performHotSwap(
   trackId: string,
   el: HTMLAudioElement,
   snapshot: { trackId: string; seconds: number } | null,
+  iframeStartedAt: number,
 ): Promise<void> {
   const storeVol = usePlayerStore.getState().volume;
+  const elapsed = Date.now() - iframeStartedAt;
 
-  // Position priority: live iframe → snapshot → cold restart.
+  // Position priority: live iframe → snapshot → fall back to 0 (cold).
   let t = iframeBridge.getCurrentTime();
   let posSource: 'live' | 'snapshot' | 'cold' = 'live';
   if (t == null || !isFinite(t)) {
     if (snapshot && snapshot.trackId === trackId && snapshot.seconds > 0) {
       t = snapshot.seconds;
       posSource = 'snapshot';
+    } else {
+      t = 0;
+      posSource = 'cold';
     }
   }
-  if (t == null || !isFinite(t)) {
-    el.src = `${R2_AUDIO}/${trackId}?q=high`;
-    el.volume = storeVol;
-    el.play().catch(() => {});
-    usePlayerStore.getState().setPlaybackSource('r2');
-    iframeBridge.pause();
-    iframeBridge.resetVolume();
-    logPlaybackEvent({ event_type: 'trace', track_id: trackId, meta: { subtype: 'hotswap', mode: 'cold' } });
-    return;
-  }
 
-  // Preload R2 silently at the iframe's timestamp.
+  // Preload R2 silently at the matched position.
   el.src = `${R2_AUDIO}/${trackId}?q=high`;
   try { el.currentTime = t; } catch {}
   el.volume = 0;
@@ -84,12 +83,14 @@ async function performHotSwap(
   try { el.currentTime = t; } catch {}
   await el.play().catch(() => {});
 
-  // Cross-fade: iframe volume 100→0 while audio element volume 0→storeVol.
-  const steps = 15;
-  const stepMs = Math.max(1, Math.round(HOT_SWAP_FADE_MS / steps));
+  // Equal-power crossfade. Linear fades briefly dip ~3dB mid-swap (perceived
+  // quieter); sin/cos preserves constant perceived loudness — no audible dip.
+  const stepMs = Math.max(1, Math.round(HOT_SWAP_FADE_MS / HOT_SWAP_STEPS));
   const iframeFade = iframeBridge.fadeOut(HOT_SWAP_FADE_MS);
-  for (let i = 1; i <= steps; i++) {
-    el.volume = Math.min(storeVol, storeVol * (i / steps));
+  for (let i = 1; i <= HOT_SWAP_STEPS; i++) {
+    const p = i / HOT_SWAP_STEPS;          // 0 → 1
+    const r2Gain = Math.sin((p * Math.PI) / 2); // 0 → 1 (equal-power in)
+    el.volume = Math.min(storeVol, storeVol * r2Gain);
     await new Promise((r) => setTimeout(r, stepMs));
   }
   await iframeFade;
@@ -100,9 +101,11 @@ async function performHotSwap(
   usePlayerStore.getState().setPlaybackSource('r2');
 
   logPlaybackEvent({
-    event_type: 'trace',
-    track_id: trackId,
-    meta: { subtype: 'hotswap', mode: posSource === 'snapshot' ? 'resume_snapshot' : 'faded', at_seconds: Math.round(t) },
+    event_type: 'trace', track_id: trackId,
+    meta: {
+      subtype: 'hotswap', mode: posSource,
+      elapsed_ms: elapsed, fade_ms: HOT_SWAP_FADE_MS, at_seconds: Math.round(t),
+    },
   });
 }
 
@@ -124,11 +127,15 @@ export function useHotSwap(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const channelRef = useRef<any>(null);
   const snapRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Timestamp of when iframe playback started — logged in telemetry so we
+  // can see how long each track spent on iframe before the R2 swap landed.
+  const iframeStartedAtRef = useRef<number>(0);
 
   // Watcher setup — fires on every iframe-mode track.
   useEffect(() => {
     if (playbackSource !== 'iframe' || !currentTrack) return;
     const trackId = currentTrack.trackId;
+    iframeStartedAtRef.current = Date.now();
 
     // Start snapshot ticker — 1s cadence, writes last-known iframe position.
     snapRef.current = setInterval(() => {
@@ -149,7 +156,7 @@ export function useHotSwap(
       devLog(`[useHotSwap] trigger (${reason}) for ${trackId}`);
       const el = audioRef.current;
       if (!el) return;
-      void performHotSwap(trackId, el, lastIframePosRef.current);
+      void performHotSwap(trackId, el, lastIframePosRef.current, iframeStartedAtRef.current);
     };
 
     // Realtime subscription — primary path, ~instant when queue row flips.
