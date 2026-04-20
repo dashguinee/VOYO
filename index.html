@@ -73,6 +73,13 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="preconnect" href="https://api.fontshare.com" crossorigin>
+    <!-- Warm-start TCP/TLS to the hosts the very first mount will hit:
+         Supabase REST (pools + tracks), R2 edge worker (audio HEAD +
+         thumbnail probe), YouTube thumbnail CDN. Saves ~100-300ms per
+         host vs. opening each connection on the first fetch. -->
+    <link rel="preconnect" href="https://anmgyxhnyhbyxzpjhxgx.supabase.co" crossorigin>
+    <link rel="preconnect" href="https://voyo-edge.dash-webtv.workers.dev" crossorigin>
+    <link rel="preconnect" href="https://i.ytimg.com" crossorigin>
     <!-- Satoshi (primary — Wakanda-tier geometric sans) + Space Grotesk (display) + Italianno (luxury script). -->
     <link href="https://api.fontshare.com/v2/css?f[]=satoshi@300,400,500,700,900&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Italianno&display=swap" rel="stylesheet">
