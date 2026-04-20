@@ -1546,24 +1546,6 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
         <h1 className="text-2xl font-bold text-white">{greeting}, Dash</h1>
       </div>
 
-      {/* Stations rail — curator-led hubs anchored by a DJ mix.
-          Horizontal snap-scroll. Cards autoplay muted portrait; 7s dwell
-          fades audio in (iOS = tap cue); tap commits to deck + R2 audio. */}
-      {stations.length > 0 && (
-        <div className="mb-8 -mx-1">
-          <div className="flex gap-3 overflow-x-auto snap-x snap-mandatory scrollbar-hide px-4 pb-2">
-            {stations.map((station) => (
-              <div
-                key={station.id}
-                className="snap-center flex-shrink-0 w-[82vw] max-w-[420px]"
-              >
-                <StationHero station={station} />
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
       {/* VoyoLiveCard - "Vibes on Vibes" → Opens VOYO Player */}
       <SignInPrompt onSwitchToVOYO={onSwitchToVOYO} />
 
@@ -1918,6 +1900,24 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
           ))}
         </div>
       </div>
+
+      {/* Stations rail — DJ-curated vibes (deeper commitment than Vibes buttons).
+          Horizontal snap-scroll. Cards autoplay muted; 7s dwell fades audio in
+          (iOS shows "Tap to hear"); tap commits to deck + R2 audio. */}
+      {stations.length > 0 && (
+        <div className="mb-8 -mx-1">
+          <div className="flex gap-3 overflow-x-auto snap-x snap-mandatory scrollbar-hide px-4 pb-2">
+            {stations.map((station) => (
+              <div
+                key={station.id}
+                className="snap-center flex-shrink-0 w-[82vw] max-w-[420px]"
+              >
+                <StationHero station={station} />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* TIVI+ moved to DaHub */}
 
