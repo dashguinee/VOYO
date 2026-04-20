@@ -72,6 +72,11 @@ export const AudioPlayer = () => {
   const audioRef = useRef<HTMLAudioElement>(null);
   const completionSignaledRef = useRef(false);
   const stallSkipTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // True during track-change (between src swap and the new track's canplay).
+  // Prevents handlePause from flipping isPlaying=false on the transient
+  // 'pause' event browsers fire when el.src is reassigned — which was
+  // the reason BG auto-advance left the app "paused" until manual resume.
+  const trackSwapInProgressRef = useRef(false);
   // Debounce the `waiting` → stream_stall telemetry. The browser fires
   // 'waiting' once immediately on src assignment (readyState 0, normal
   // initial-buffer state) — NOT a real stall. Only log if the audio
@@ -224,6 +229,7 @@ export const AudioPlayer = () => {
     // to the YouTubeIframe fallback (useHotSwap handles the cross-fade when
     // the lane catches up). Watcher lifecycle lives in useHotSwap; no refs
     // to manage here.
+    trackSwapInProgressRef.current = true;
     (async () => {
       const headPromise = r2HasTrack(currentTrack.trackId);
       const fadePromise = shouldFade
@@ -239,7 +245,14 @@ export const AudioPlayer = () => {
       }
       if (cached && el) {
         el.src = `${R2_AUDIO}/${currentTrack.trackId}?q=high`;
-        el.play().catch(() => {});
+        // Transient 'pause' fires on src reassign; handlePause sees the
+        // flag and skips the setIsPlaying(false). The flag clears in
+        // handleCanPlay once the new track has data ready. If play() is
+        // blocked by autoplay policy (rare, since audio was just live),
+        // we retry once on the next tick.
+        el.play().catch(() => {
+          setTimeout(() => { el.play().catch(() => {}); }, 80);
+        });
         setSource('r2');
         logPlaybackEvent({
           event_type: 'play_start',
@@ -296,6 +309,24 @@ export const AudioPlayer = () => {
     }
   }, [isPlaying]);
 
+  // ── AudioContext power gate ──────────────────────────────────────────
+  // When paused for a while, suspend the Web Audio graph so it stops
+  // running the scheduler / tick loop on the audio thread. Resume on
+  // next play (canplay's fadeInMasterGain already calls ctx.resume()).
+  // Saves measurable battery on mobile during long pauses.
+  useEffect(() => {
+    if (isPlaying) return;
+    const ctx = audioContextRef.current;
+    if (!ctx || ctx.state !== 'running') return;
+    const t = setTimeout(() => {
+      const ctxNow = audioContextRef.current;
+      if (ctxNow && ctxNow.state === 'running' && !usePlayerStore.getState().isPlaying) {
+        ctxNow.suspend().catch(() => {});
+      }
+    }, 30_000);
+    return () => clearTimeout(t);
+  }, [isPlaying, audioContextRef]);
+
   // ── Background recovery ───────────────────────────────────────────────
   useEffect(() => {
     let wentHiddenAt: number | null = null;
@@ -347,6 +378,9 @@ export const AudioPlayer = () => {
     const fadeMs = nextFadeInMsRef.current ?? 100;
     nextFadeInMsRef.current = null;
     fadeInMasterGain(fadeMs);
+    // New track has data ready → track-change is fully committed. Clear
+    // the guard so subsequent user-initiated pauses actually pause.
+    trackSwapInProgressRef.current = false;
     const el = audioRef.current;
     if (el && usePlayerStore.getState().isPlaying) {
       el.play().catch(() => {});
@@ -384,6 +418,13 @@ export const AudioPlayer = () => {
   }, [setIsPlaying]);
 
   const handlePause = useCallback(() => {
+    // Mid-track-change: browser fires 'pause' on the audio element when
+    // we reassign el.src. This is transient — the new track's play() is
+    // about to fire. Don't flip isPlaying=false or BG auto-advance will
+    // leave the app "paused" until the user opens it and resumes.
+    if (trackSwapInProgressRef.current) {
+      return;
+    }
     // When iframe is the audio source, the audio element pausing is expected
     // (we intentionally silenced it). Don't let it flip isPlaying — the real
     // playback is happening through the iframe.
@@ -408,6 +449,26 @@ export const AudioPlayer = () => {
   const handleTimeUpdate = useCallback(() => {
     const el = audioRef.current;
     if (!el) return;
+
+    // Freeze the store/UI tick when the tab is hidden. MediaSession
+    // position still updates below (lock-screen UI needs it), and the
+    // completion signal still fires — but Zustand setState at 4Hz on
+    // an invisible UI is pure battery cost with zero benefit. Tick
+    // resumes naturally on the next visible timeupdate event.
+    if (document.hidden) {
+      // Still check for the 80% completion signal — it's the taste
+      // graph's strongest input and must not miss a BG listen-through.
+      if (!completionSignaledRef.current) {
+        const elDur = isFinite(el.duration) ? el.duration : 0;
+        const dur = voyoStream.currentDuration || elDur;
+        const position = voyoStream.getPosition();
+        if (dur > 0 && position / dur >= 0.8) {
+          completionSignaledRef.current = true;
+          oyaPlanSignal('completion');
+        }
+      }
+      return;
+    }
 
     const position = voyoStream.getPosition();
     const elDur = isFinite(el.duration) ? el.duration : 0;

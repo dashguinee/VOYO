@@ -3381,17 +3381,27 @@ const LyricsOverlay = memo(({ track, isOpen, onClose, currentTime }: LyricsOverl
               </div>
             )}
 
-            {/* All segments */}
+            {/* All segments — tap a line to seek playback to that moment.
+                Uses playerStore.seekTo which AudioPlayer + iframe both
+                honor via their seekPosition effect. Premium UX detail:
+                users treat lyrics as a timeline, not just a readout. */}
             <div className="space-y-4 max-h-[50vh] overflow-y-auto">
               {lyrics.translated.map((segment, i) => {
                 const isCurrent = currentSegment?.startTime === segment.startTime;
                 return (
-                  <div
+                  <button
                     key={segment.startTime ?? i}
-                    className={`p-4 rounded-xl transition-all ${
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (typeof segment.startTime === 'number' && isFinite(segment.startTime)) {
+                        usePlayerStore.getState().seekTo(segment.startTime);
+                      }
+                    }}
+                    className={`w-full text-left p-4 rounded-xl transition-all active:scale-[0.98] ${
                       isCurrent
                         ? 'bg-purple-500/30 border border-purple-500/50'
-                        : 'bg-white/5'
+                        : 'bg-white/5 hover:bg-white/[0.08]'
                     }`}
                   >
                     <p className={`text-white ${isCurrent ? 'text-lg font-semibold' : 'text-sm'}`}>
@@ -3400,7 +3410,7 @@ const LyricsOverlay = memo(({ track, isOpen, onClose, currentTime }: LyricsOverl
                     {segment.english && (
                       <p className="text-white/50 text-xs mt-1">{segment.english}</p>
                     )}
-                  </div>
+                  </button>
                 );
               })}
             </div>

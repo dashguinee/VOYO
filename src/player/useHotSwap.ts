@@ -153,21 +153,38 @@ export function useHotSwap(
       void performHotSwap(trackId, el, lastIframePosRef.current, iframeStartedAtRef.current);
     };
 
-    // Realtime subscription — primary path, ~instant when queue row flips.
-    // Previously logged every subscribe status change + every RT event
-    // (CLOSED / TIMED_OUT / SUBSCRIBED) which spammed the trace table.
-    // Now silent except for outright RT errors and the actual swap
-    // trigger (logged inside performHotSwap as subtype:'hotswap').
+    // Realtime subscription — only subscribe if the queue row is still
+    // pending. If it's already 'done', R2 just hasn't propagated yet —
+    // the poll below will catch it within HOT_SWAP_POLL_MS, no reason
+    // to open a WebSocket channel we'll close seconds later. If it's
+    // 'failed', no point subscribing at all.
     if (supabase) {
-      channelRef.current = supabase
-        .channel(`hotswap:${trackId}`)
-        .on('postgres_changes', {
-          event: 'UPDATE', schema: 'public', table: 'voyo_upload_queue',
-          filter: `youtube_id=eq.${trackId}`,
-        }, (payload: { new?: { status?: string } }) => {
-          if (payload.new?.status === 'done') trigger('realtime');
-        })
-        .subscribe();
+      const checkAndSubscribe = async () => {
+        try {
+          const { data } = await supabase!
+            .from('voyo_upload_queue')
+            .select('status')
+            .eq('youtube_id', trackId)
+            .limit(1);
+          const rowStatus = data?.[0]?.status;
+          // Only RT-subscribe for pending / in-flight rows. 'done' →
+          // poll alone handles the quick R2-propagation window.
+          // 'failed' → RT won't fire anyway.
+          if (rowStatus && rowStatus !== 'pending' && rowStatus !== 'extracting') {
+            return;
+          }
+        } catch { /* non-fatal, fall through to RT */ }
+        channelRef.current = supabase!
+          .channel(`hotswap:${trackId}`)
+          .on('postgres_changes', {
+            event: 'UPDATE', schema: 'public', table: 'voyo_upload_queue',
+            filter: `youtube_id=eq.${trackId}`,
+          }, (payload: { new?: { status?: string } }) => {
+            if (payload.new?.status === 'done') trigger('realtime');
+          })
+          .subscribe();
+      };
+      void checkAndSubscribe();
     }
 
     // Poll safety net — fires if realtime drops or never subscribes.
