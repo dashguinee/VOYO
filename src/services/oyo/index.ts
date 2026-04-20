@@ -55,6 +55,9 @@ export function onPlay(track: Track): void {
   djRecordPlay(track);
   recordTrackInSession(track);
   recordPoolEngagement(track.trackId, 'play');
+  // Bump pool session seed → next shelf render re-ranks around this click
+  // (drops the 60s cache so the user sees the session adapt immediately).
+  pools.refreshPools();
 }
 
 /**
