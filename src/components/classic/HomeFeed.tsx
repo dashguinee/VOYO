@@ -13,6 +13,7 @@ import { Search, Bell, Play, Zap } from 'lucide-react';
 import { AfricaIcon } from '../ui/AfricaIcon';
 import { getThumb } from '../../utils/thumbnail';
 import { SmartImage } from '../ui/SmartImage';
+import { TrackCardGestures } from '../ui/TrackCardGestures';
 import { VIBES, Vibe } from '../../data/tracks';
 import { LottieIcon } from '../ui/LottieIcon';
 import { getUserTopTracks, getPoolAwareHotTracks, getPoolAwareDiscoveryTracks, calculateBehaviorScore, recordPoolEngagement } from '../../services/personalization';
@@ -352,10 +353,12 @@ const CenterFocusedCarousel = ({ tracks, onPlay }: CenterCarouselProps) => {
           const opacity = isCenter ? 1 : Math.max(0.5, 1 - distance * 0.25);
 
           return (
-            <button
+            <TrackCardGestures
               key={track.id}
-              className="flex-shrink-0"
-              onClick={() => onPlay(track)}
+              track={track}
+              onTap={() => onPlay(track)}
+              className="flex-shrink-0 cursor-pointer"
+            ><div
               style={{
                 scrollSnapAlign: 'center',
                 width: 130,
@@ -404,7 +407,7 @@ const CenterFocusedCarousel = ({ tracks, onPlay }: CenterCarouselProps) => {
               <p className={`text-xs truncate ${isCenter ? 'text-white/70' : 'text-white/40'}`}>
                 {track.artist}
               </p>
-            </button>
+            </div></TrackCardGestures>
           );
         })}
       </div>

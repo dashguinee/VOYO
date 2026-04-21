@@ -25,9 +25,12 @@ import type { Track, VoyoTab } from '../../types';
 import { usePlayerStore } from '../../store/playerStore';
 import { useReactionStore } from '../../store/reactionStore';
 import { useTrackPoolStore } from '../../store/trackPoolStore';
+import { usePreferenceStore } from '../../store/preferenceStore';
+import { useDownloadStore } from '../../store/downloadStore';
 import { voyoStream, ensureTrackReady } from '../voyoStream';
 import { onPlay, onSkip, onOye, prefetch } from './index';
 import { logPlaybackEvent } from '../telemetry';
+import { getThumb } from '../../utils/thumbnail';
 
 // ── Play / navigate ───────────────────────────────────────────────────────
 
@@ -164,6 +167,36 @@ export function oye(
 }
 
 /**
+ * OYÉ + boost + like — the "I love this track" combo gesture.
+ *
+ * Wired to the global double-tap behavior. One intent, three effects:
+ *   1. app.oye — moment-reaction signal (hotspot + taste graph)
+ *   2. explicitLike=true — persisted preference (shows in Liked filter,
+ *      demotes this track's skip-weight in behavior rerank)
+ *   3. boost download — cache for offline / lockscreen reliability,
+ *      engage EQ profile if not already on
+ *
+ * Idempotent: tapping again just re-fires the signals (cheap) and the
+ * boost download short-circuits if already cached.
+ */
+export function oyeAndBoost(track: Track): void {
+  oye(track);
+  try {
+    usePreferenceStore.getState().setExplicitLike(track.id, true);
+  } catch { /* non-fatal */ }
+  try {
+    const ds = useDownloadStore.getState();
+    void ds.boostTrack(
+      track.trackId,
+      track.title,
+      track.artist,
+      track.duration || 0,
+      getThumb(track.trackId, 'medium'),
+    );
+  } catch { /* non-fatal */ }
+}
+
+/**
  * User skipped via explicit gesture/button. Same as skip() — exposed as a
  * distinct name for telemetry + UI dispatch clarity.
  */
@@ -201,6 +234,7 @@ export const app = {
   resume,
   // Signals
   oye,
+  oyeAndBoost,
   skipAndSignal,
   // Navigation
   switchTab,
