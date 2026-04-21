@@ -248,12 +248,38 @@ export const VoyoLiveCard = ({ onSwitchToVOYO }: VoyoLiveCardProps = {}) => {
 
   return (
     <div className="mb-6">
-      {/* Header */}
+      {/* Header — live dot is a jewel-toned emerald with a gently
+          breathing halo, replacing the generic flat green-500. */}
       <div className="flex items-center gap-2 mb-3 px-4">
-        <div
-          className="w-2 h-2 rounded-full bg-green-500"
-        />
+        <div className="relative w-2.5 h-2.5 flex items-center justify-center">
+          <div
+            className="absolute inset-0 rounded-full voyo-live-halo"
+            style={{
+              background:
+                'radial-gradient(circle, rgba(61,220,151,0.55) 0%, transparent 70%)',
+            }}
+          />
+          <div
+            className="relative w-1.5 h-1.5 rounded-full"
+            style={{
+              background: 'linear-gradient(135deg, #4FE8A7 0%, #2DB785 100%)',
+              boxShadow: '0 0 6px rgba(61,220,151,0.55)',
+            }}
+          />
+        </div>
         <h2 className="text-white/90 font-bold text-lg">Oyé! We Live</h2>
+        <style>{`
+          @keyframes voyo-live-halo-pulse {
+            0%, 100% { opacity: 0.35; transform: scale(1); }
+            50%      { opacity: 0.8;  transform: scale(1.35); }
+          }
+          .voyo-live-halo {
+            animation: voyo-live-halo-pulse 2.4s ease-in-out infinite;
+          }
+          @media (prefers-reduced-motion: reduce) {
+            .voyo-live-halo { animation: none; opacity: 0.5; }
+          }
+        `}</style>
       </div>
 
       {/* Card */}

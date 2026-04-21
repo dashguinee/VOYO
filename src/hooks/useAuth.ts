@@ -13,8 +13,26 @@
  * For profile data, use useAuthContext() from providers/AuthProvider.
  */
 
-import { useState, useCallback, useContext } from 'react';
+import { useState, useCallback, useContext, useEffect } from 'react';
 import { useDashCitizen, signInWithDashId, signOutDash, getDashSession } from '../lib/dash-auth';
+
+// Local-only name saved by the first-time loader for users who haven't
+// signed in via DASH Auth. Acts as a fallback under the real citizen name
+// so the greeting banner + profile icon still feel personal on day one.
+export const LOCAL_NAME_KEY = 'voyo-user-name';
+const NAME_CHANGE_EVENT = 'voyo-user-name-changed';
+
+function readLocalName(): string | null {
+  try { return localStorage.getItem(LOCAL_NAME_KEY) || null; }
+  catch { return null; }
+}
+
+// Dispatch after writing the local name so every useAuth consumer re-renders
+// in the same tick. Plain `storage` event only fires cross-tab, so we need
+// a custom event for same-tab subscribers.
+export function notifyLocalNameChange() {
+  try { window.dispatchEvent(new Event(NAME_CHANGE_EVENT)); } catch {}
+}
 
 export interface AuthState {
   isLoggedIn: boolean;
@@ -29,6 +47,17 @@ export function useAuth() {
 
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [localName, setLocalName] = useState<string | null>(() => readLocalName());
+
+  useEffect(() => {
+    const onChange = () => setLocalName(readLocalName());
+    window.addEventListener(NAME_CHANGE_EVENT, onChange);
+    window.addEventListener('storage', onChange);
+    return () => {
+      window.removeEventListener(NAME_CHANGE_EVENT, onChange);
+      window.removeEventListener('storage', onChange);
+    };
+  }, []);
 
   // Sign in with DASH ID + PIN
   const signIn = useCallback(async (dashId: string, pin: string): Promise<boolean> => {
@@ -65,13 +94,18 @@ export function useAuth() {
     openCommandCenter();
   }, [openCommandCenter]);
 
+  // Real citizen name wins; local loader-captured name is the fallback.
+  const resolvedDisplayName = citizen?.fullName || localName || null;
+  const resolvedInitials = citizen?.initials
+    || (localName ? localName.charAt(0).toUpperCase() : null);
+
   return {
     // Auth state
     isLoggedIn: isAuthenticated,
     dashId: coreId,               // "0046AAD"
     voyoId: displayId,            // "V0046AAD"
-    displayName: citizen?.fullName || null,
-    initials: citizen?.initials || null,
+    displayName: resolvedDisplayName,
+    initials: resolvedInitials,
 
     // Auth actions
     signIn,

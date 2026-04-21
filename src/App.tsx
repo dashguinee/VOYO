@@ -29,6 +29,7 @@ import { DynamicIsland } from './components/ui/DynamicIsland';
 import { PushBell } from './components/ui/PushBell';
 import { Safe } from './components/ui/Safe';
 import { VoyoSplash } from './components/voyo/VoyoSplash';
+import { FirstTimeLoader } from './components/voyo/FirstTimeLoader';
 import { usePullToRefresh } from './hooks/usePullToRefresh';
 
 // Lazy-loaded mode components (code splitting — only load active mode)
@@ -558,7 +559,17 @@ function App() {
     const tid = setTimeout(() => {
       const { currentTrack, queue, setIsPlaying } = usePlayerStore.getState();
       if (!currentTrack && queue.length === 0) {
-        const primer = TRACKS.find(t => t.trackId === 'WcIcVapfqXw') || TRACKS[0];
+        // Pick a random primer from the top oyeScore tracks instead of
+        // hardcoding Calm Down every boot. "Slight random often falls
+        // good" — top 15 by score keeps quality high while breaking the
+        // one-track monotony on cold boots.
+        const topPicks = [...TRACKS]
+          .filter(t => (t.oyeScore || 0) >= 50_000_000)
+          .sort((a, b) => (b.oyeScore || 0) - (a.oyeScore || 0))
+          .slice(0, 15);
+        const primer = topPicks.length > 0
+          ? topPicks[Math.floor(Math.random() * topPicks.length)]
+          : TRACKS[0];
         if (primer) {
           // Primer isn't a user click — use store.setCurrentTrack to prime without
           // registering at p=10 (this is a boot-time placeholder, not an upload request).
@@ -832,6 +843,11 @@ function App() {
   return (
     <AppErrorBoundary>
     <AuthProvider>
+    {/* First-time overlay — captures name + unlocks audio gesture, then
+        fades. Renders null for returning users (localStorage gate). Sits
+        OUTSIDE Suspense so it paints immediately while lazy chunks + SW
+        precache warm up underneath. */}
+    <FirstTimeLoader />
     {/*
       Suspense fallback shares the same VOYO wordmark + 3-dots aesthetic as
       the BootLoader (formerly VoyoSplash) so the user sees ONE continuous

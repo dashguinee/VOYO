@@ -40,14 +40,23 @@ export const GreetingBanner = ({ onComplete }: GreetingBannerProps = {}) => {
     const hour = new Date().getHours();
     return {
       greeting: greetingFor(hour),
-      // Fallback to "Dash" (the brand/owner) so first-time / logged-out
-      // users still get a personal moment instead of a generic "Friend".
       // Split at first space so long names get clean first-name only.
-      name: (displayName || 'Dash').split(' ')[0],
+      // Guaranteed non-empty here — the effect below bails out if
+      // displayName hasn't arrived yet.
+      name: (displayName || '').split(' ')[0],
     };
   }, [displayName]);
 
   useEffect(() => {
+    // Wait for a real name. FirstTimeLoader captures one on brand-new
+    // sessions and useAuth propagates it via NAME_CHANGE_EVENT; this
+    // effect re-runs when displayName fills in so the greeting lands
+    // WITH the user's name, not a generic fallback.
+    if (!displayName) {
+      setPhase('hidden');
+      return;
+    }
+
     const key = todayKey();
     try {
       if (localStorage.getItem(key)) {
@@ -75,7 +84,7 @@ export const GreetingBanner = ({ onComplete }: GreetingBannerProps = {}) => {
       clearTimeout(leaveTimer);
       clearTimeout(doneTimer);
     };
-  }, [onComplete]);
+  }, [displayName, onComplete]);
 
   if (phase === 'done') return null;
 
