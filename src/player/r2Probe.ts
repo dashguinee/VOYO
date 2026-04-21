@@ -28,9 +28,17 @@ export async function r2HasTrack(trackId: string): Promise<boolean> {
     const ctrl = new AbortController();
     const t = setTimeout(() => ctrl.abort(), HEAD_TIMEOUT_MS);
     try {
-      const res = await fetch(`${R2_AUDIO_BASE}/${trackId}?q=high`, {
+      // Cache-buster — the edge worker and any intermediary CDN may
+      // cache 404 responses longer than the 2s dedup window. Without
+      // this, once a track 404s the probe keeps returning false even
+      // AFTER the R2 upload completes, because we're reading a stale
+      // cached 404. The _v= query param changes per-request so caches
+      // treat each HEAD as a unique URL.
+      const bust = Date.now();
+      const res = await fetch(`${R2_AUDIO_BASE}/${trackId}?q=high&_v=${bust}`, {
         method: 'HEAD',
         signal: ctrl.signal,
+        cache: 'no-store',
       });
       return res.ok;
     } catch {

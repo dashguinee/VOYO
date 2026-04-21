@@ -131,12 +131,23 @@ async function performHotSwap(
     }
 
     try { el.currentTime = t; } catch {}
+    let playRejected = false;
     await el.play().catch((err: Error) => {
+      playRejected = true;
       logPlaybackEvent({
         event_type: 'trace', track_id: trackId,
         meta: { subtype: 'hotswap_play_reject', err: err?.message?.slice(0, 80) },
       });
     });
+
+    // If play() was rejected OR the element still reports paused after
+    // await, bail before the crossfade — otherwise iframe fades to 0
+    // while the R2 element sits silent, leaving the user in dead air.
+    // This was the "feels like it tried to swap and paused" failure
+    // mode. The iframe keeps playing; the next poll retries cleanly.
+    if (playRejected || el.paused) {
+      return bail('hotswap_play_stalled', { paused: el.paused });
+    }
 
     // Guard 3 — user could have skipped during play() await.
     if (!stillCurrent()) return bail('hotswap_abort_stale', { stage: 'post_play' });
@@ -237,6 +248,18 @@ export function useHotSwap(
     const trackId = currentTrack.trackId;
     iframeStartedAtRef.current = Date.now();
 
+    // Diagnostic — confirms useHotSwap actually mounted its watchers.
+    // Without this trace, a silent activation failure (import error,
+    // early return) is indistinguishable from the happy path where
+    // R2 just never lands.
+    logPlaybackEvent({
+      event_type: 'trace', track_id: trackId,
+      meta: {
+        subtype: 'hotswap_watcher_mount',
+        hidden: typeof document !== 'undefined' ? document.hidden : false,
+      },
+    });
+
     // Start snapshot ticker — 1s cadence, writes last-known iframe position.
     snapRef.current = setInterval(() => {
       const t = iframeBridge.getCurrentTime();
@@ -301,20 +324,29 @@ export function useHotSwap(
     // 'failed', no point subscribing at all.
     if (supabase) {
       const checkAndSubscribe = async () => {
+        let rowStatus: string | null = null;
         try {
           const { data } = await supabase!
             .from('voyo_upload_queue')
             .select('status')
             .eq('youtube_id', trackId)
             .limit(1);
-          const rowStatus = data?.[0]?.status;
+          rowStatus = data?.[0]?.status ?? null;
           // Only RT-subscribe for pending / in-flight rows. 'done' →
           // poll alone handles the quick R2-propagation window.
           // 'failed' → RT won't fire anyway.
           if (rowStatus && rowStatus !== 'pending' && rowStatus !== 'extracting') {
+            logPlaybackEvent({
+              event_type: 'trace', track_id: trackId,
+              meta: { subtype: 'hotswap_rt_skip', rowStatus },
+            });
             return;
           }
         } catch { /* non-fatal, fall through to RT */ }
+        logPlaybackEvent({
+          event_type: 'trace', track_id: trackId,
+          meta: { subtype: 'hotswap_rt_subscribe', rowStatus },
+        });
         channelRef.current = supabase!
           .channel(`hotswap:${trackId}`)
           .on('postgres_changes', {
@@ -323,7 +355,12 @@ export function useHotSwap(
           }, (payload: { new?: { status?: string } }) => {
             if (payload.new?.status === 'done') trigger('realtime');
           })
-          .subscribe();
+          .subscribe((status: string) => {
+            logPlaybackEvent({
+              event_type: 'trace', track_id: trackId,
+              meta: { subtype: 'hotswap_rt_channel_status', status },
+            });
+          });
       };
       void checkAndSubscribe();
     }
@@ -335,13 +372,30 @@ export function useHotSwap(
     // re-arms the interval and catches any lane completion from the gap.
     const startPoll = () => {
       if (pollRef.current != null) return;
+      let pollCount = 0;
+      logPlaybackEvent({
+        event_type: 'trace', track_id: trackId,
+        meta: { subtype: 'hotswap_poll_start' },
+      });
       pollRef.current = setInterval(async () => {
         if (usePlayerStore.getState().currentTrack?.trackId !== trackId) {
           if (pollRef.current) clearInterval(pollRef.current);
           pollRef.current = null;
           return;
         }
+        pollCount++;
         const has = await r2HasTrack(trackId);
+        // Heartbeat every 5 polls (~10s) so we can confirm the poll is
+        // alive in production telemetry even when R2 never lands. Also
+        // trace the FIRST hit that comes back true — separate from
+        // 'hotswap_trigger' which fires after the inFlight gate, so we
+        // know whether the delay is probe-side or trigger-side.
+        if (pollCount % 5 === 0 || has) {
+          logPlaybackEvent({
+            event_type: 'trace', track_id: trackId,
+            meta: { subtype: 'hotswap_poll_tick', n: pollCount, has },
+          });
+        }
         if (has) trigger('poll');
       }, HOT_SWAP_POLL_MS);
     };
