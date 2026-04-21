@@ -246,11 +246,23 @@ export const AudioPlayer = () => {
         // Transient 'pause' fires on src reassign; handlePause sees the
         // flag and skips the setIsPlaying(false). The flag clears in
         // handleCanPlay once the new track has data ready. If play() is
-        // blocked by autoplay policy (rare, since audio was just live),
-        // we retry once on the next tick.
-        el.play().catch(() => {
-          setTimeout(() => { el.play().catch(() => {}); }, 80);
-        });
+        // blocked (autoplay policy hiccup in BG, iOS Safari lock, etc.)
+        // we escalate the retry ladder rather than silently failing —
+        // the previous single-retry wasn't enough for some BG transitions.
+        const tryPlay = async () => {
+          const delays = [0, 120, 500, 1500];
+          for (const d of delays) {
+            if (d > 0) await new Promise(r => setTimeout(r, d));
+            const e = audioRef.current;
+            if (!e || e.src === '' || !e.paused) return; // already playing or torn down
+            try { await e.play(); return; } catch { /* retry */ }
+          }
+          logPlaybackEvent({
+            event_type: 'trace', track_id: currentTrack.trackId,
+            meta: { subtype: 'play_retry_exhausted', hidden: document.hidden },
+          });
+        };
+        void tryPlay();
         setSource('r2');
         logPlaybackEvent({
           event_type: 'play_start',
@@ -463,6 +475,25 @@ export const AudioPlayer = () => {
         if (dur > 0 && position / dur >= 0.8) {
           completionSignaledRef.current = true;
           oyaPlanSignal('completion');
+        }
+      }
+      // BG auto-advance watchdog. Chrome Android / iOS Safari throttle
+      // the 'ended' event in hidden tabs — sometimes it fires late, sometimes
+      // not at all. If we're within 0.3s of duration and the audio element
+      // is already paused (natural end), force the advance ourselves.
+      // Prevents "app just stops after one track" in BG.
+      if (!trackSwapInProgressRef.current) {
+        const elDur = isFinite(el.duration) ? el.duration : 0;
+        if (elDur > 0 && el.currentTime >= elDur - 0.3 && el.paused) {
+          const ps = usePlayerStore.getState().playbackSource;
+          if (ps === 'r2' || !voyoStream.sessionId) {
+            logPlaybackEvent({
+              event_type: 'trace',
+              track_id: usePlayerStore.getState().currentTrack?.trackId ?? 'unknown',
+              meta: { subtype: 'bg_auto_advance_watchdog' },
+            });
+            usePlayerStore.getState().nextTrack();
+          }
         }
       }
       return;
