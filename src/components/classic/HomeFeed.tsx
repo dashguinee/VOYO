@@ -25,8 +25,8 @@ import { usePools, app } from '../../services/oyo';
 import { usePreferenceStore } from '../../store/preferenceStore';
 import { usePlayerStore } from '../../store/playerStore';
 import { useTrackPoolStore } from '../../store/trackPoolStore';
-import { useReactionStore } from '../../store/reactionStore';
 import { useDownloadStore } from '../../store/downloadStore';
+import { OyeButton } from '../oye/OyeButton';
 import { Track } from '../../types';
 // TiviPlusCrossPromo moved to DaHub
 import { SignInPrompt } from '../social/SignInPrompt';
@@ -449,9 +449,6 @@ interface TrackCardProps {
 
 const TrackCard = memo(({ track, onPlay, showBoostBadge = false }: TrackCardProps) => {
   const [isHovered, setIsHovered] = useState(false);
-  const [oyeActive, setOyeActive] = useState(false);
-  const createReaction = useReactionStore(s => s.createReaction);
-  const boostTrack = useDownloadStore(s => s.boostTrack);
 
   // ── HOLD-TO-PREFERENCE + SWIPE-UP-TO-BUCKET GESTURE ─────────────
   // Hold 400ms → card enters preference mode. Two shimmers appear:
@@ -552,22 +549,6 @@ const TrackCard = memo(({ track, onPlay, showBoostBadge = false }: TrackCardProp
     swipeAxisRef.current = null;
   };
 
-  const handleOye = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    createReaction({
-      username: 'dash',
-      trackId: track.trackId,
-      trackTitle: track.title,
-      trackArtist: track.artist,
-      trackThumbnail: getThumb(track.trackId),
-      category: 'afro-heat',
-      reactionType: 'oye',
-    });
-    boostTrack(track.trackId, track.title, track.artist, track.duration || 180, getThumb(track.trackId));
-    setOyeActive(true);
-    setTimeout(() => setOyeActive(false), 600);
-  };
-
   return (
     <button
       className="flex-shrink-0 w-32 relative group"
@@ -648,21 +629,9 @@ const TrackCard = memo(({ track, onPlay, showBoostBadge = false }: TrackCardProp
           </div>
         )}
         {showBoostBadge && !prefMode && (
-          <button
-            className="absolute top-2 right-2 z-10"
-            onClick={handleOye}
-            aria-label="OYÉ this track"
-          >
-            <div
-              className="w-7 h-7 rounded-full flex items-center justify-center"
-              style={{
-                background: 'linear-gradient(135deg, #D4A053, #C4943D)',
-                boxShadow: oyeActive ? '0 0 15px rgba(212, 160, 83, 0.6)' : '0 2px 8px rgba(0,0,0,0.3)',
-              }}
-            >
-              <Zap className="w-4 h-4 text-white" style={{ fill: 'white' }} />
-            </div>
-          </button>
+          <div className="absolute top-2 right-2 z-10">
+            <OyeButton track={track} size="sm" />
+          </div>
         )}
       </div>
       <p className="text-white text-sm font-medium truncate">{track.title}</p>
@@ -676,28 +645,9 @@ TrackCard.displayName = 'TrackCard';
 // WIDE TRACK CARD - 16:9 for Continue Listening
 // ============================================
 
-const WideTrackCard = memo(({ track, onPlay, showBoostBadge = false, isBoosted = false }: TrackCardProps) => {
+const WideTrackCard = memo(({ track, onPlay, showBoostBadge = false }: TrackCardProps) => {
   const [isHovered, setIsHovered] = useState(false);
-  const [oyeActive, setOyeActive] = useState(false);
-  const createReaction = useReactionStore(s => s.createReaction);
-  const boostTrack = useDownloadStore(s => s.boostTrack);
   const thumbnailUrl = getThumb(track.trackId, 'high');
-
-  const handleOye = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    createReaction({
-      username: 'dash',
-      trackId: track.trackId,
-      trackTitle: track.title,
-      trackArtist: track.artist,
-      trackThumbnail: getThumb(track.trackId),
-      category: 'afro-heat',
-      reactionType: 'oye',
-    });
-    boostTrack(track.trackId, track.title, track.artist, track.duration || 180, getThumb(track.trackId));
-    setOyeActive(true);
-    setTimeout(() => setOyeActive(false), 600);
-  };
 
   return (
     <div
@@ -731,25 +681,13 @@ const WideTrackCard = memo(({ track, onPlay, showBoostBadge = false, isBoosted =
             </div>
           </div>
         )}
-        {/* OYE Button - Top Right — full when boosted, faded+smaller when not */}
+        {/* Unified Oye badge — state visuals (purple/bubbling/gold-faded/
+            gold-filled) are driven by downloadStore + preferenceStore, so
+            the old isBoosted opacity+size toggle is handled automatically. */}
         {showBoostBadge && (
-          <button
-            className="absolute top-2 right-2 z-10"
-            onClick={handleOye}
-          >
-            <div
-              className={`${isBoosted ? 'w-7 h-7' : 'w-5.5 h-5.5'} rounded-full flex items-center justify-center`}
-              style={{
-                width: isBoosted ? 28 : 22,
-                height: isBoosted ? 28 : 22,
-                background: 'linear-gradient(135deg, #D4A053, #C4943D)',
-                opacity: isBoosted ? 1 : 0.45,
-                boxShadow: oyeActive ? '0 0 15px rgba(212, 160, 83, 0.6)' : isBoosted ? '0 2px 8px rgba(0,0,0,0.3)' : 'none',
-              }}
-            >
-              <Zap className={isBoosted ? 'w-4 h-4' : 'w-3 h-3'} style={{ color: 'white', fill: 'white' }} />
-            </div>
-          </button>
+          <div className="absolute top-2 right-2 z-10">
+            <OyeButton track={track} size="sm" />
+          </div>
         )}
         <div className="absolute bottom-0 left-0 right-0 p-2">
           <p className="text-white text-xs font-semibold truncate drop-shadow-lg">{track.title}</p>

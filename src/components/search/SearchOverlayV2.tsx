@@ -4,7 +4,8 @@
  */
 
 import { useState, useRef, useEffect, useCallback, memo } from 'react';
-import { Search, X, Music2, Clock, Play, Zap, Compass, Disc3, Radio, User } from 'lucide-react';
+import { Search, X, Music2, Clock, Play, Compass, Disc3, Radio, User } from 'lucide-react';
+import { OyeButton } from '../oye/OyeButton';
 import { VoyoIcon, VoyoIconName } from '../ui/VoyoIcon';
 import { VinylLoader } from '../ui/VinylLoader';
 import { usePlayerStore } from '../../store/playerStore';
@@ -43,11 +44,16 @@ const MAX_HISTORY = 10;
 // Track item - clean, no drag, just tap to play + action buttons
 interface TrackItemProps {
   result: SearchResult;
+  // Pre-resolved Track for the OyeButton state machine + commit action.
+  // Parent computes via resultToTrack so we don't duplicate here.
+  track: Track;
   index: number;
   isActive: boolean;
   isCached: boolean;
   onSelect: (result: SearchResult) => void;
-  onAddToQueue: (result: SearchResult) => void;
+  // Fires on Oye tap. Parent adds the track to the personalization pool
+  // + syncs collective brain before the oyeCommit fires.
+  onOye: (track: Track) => void;
   onAddToDiscovery: (result: SearchResult) => void;
   formatDuration: (seconds: number) => string;
   formatViews: (views: number) => string;
@@ -55,20 +61,16 @@ interface TrackItemProps {
 
 const TrackItem = memo(({
   result,
+  track,
   index,
   isActive,
   isCached,
   onSelect,
-  onAddToQueue,
+  onOye,
   onAddToDiscovery,
   formatDuration,
   formatViews,
 }: TrackItemProps) => {
-  const handleQueueClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    onAddToQueue(result);
-  };
-
   const handleDiscoveryClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     onAddToDiscovery(result);
@@ -139,14 +141,7 @@ const TrackItem = memo(({
           still accessible at touch sizes because the whole row is the
           primary tap surface (plays the track). */}
       <div className="flex items-center gap-2.5 ml-1">
-        <button
-          className="w-8 h-8 rounded-full bg-[#D4A053]/12 border border-[#D4A053]/30 active:scale-90 transition-transform flex items-center justify-center"
-          onClick={handleQueueClick}
-          aria-label="Oye this track — warm it up and carry Oyo offline"
-          title="Oye"
-        >
-          <Zap className="w-3.5 h-3.5 text-[#D4A053]" fill="currentColor" />
-        </button>
+        <OyeButton track={track} size="sm" onClick={onOye} />
         <button
           className="w-8 h-8 rounded-full bg-[#D4A053]/12 border border-[#D4A053]/20 active:scale-90 transition-transform flex items-center justify-center"
           onClick={handleDiscoveryClick}
@@ -482,16 +477,16 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap, onEnterVideoMode
     onEnterVideoMode?.();
   }, [resultToTrack, onEnterVideoMode]);
 
-  const handleAddToQueue = useCallback((result: SearchResult) => {
-    const track = resultToTrack(result);
+
+  // Called from OyeButton's onClick override. Pool sync + collective brain
+  // sync happen here (search-specific concerns); the actual Oye action
+  // still flows through app.oyeCommit for single-source truth on the
+  // boost/queue/signal fanout.
+  const handleOyeCommit = useCallback((track: Track) => {
     addSearchResultsToPool([track]);
-    // Oye = boost + queue + reaction signal (see app.oyeCommit). The old
-    // plain addToQueue skipped the R2 warmup, so every "+ to queue" from
-    // search landed cold and blocked BG playback until hotswap eventually
-    // caught up. Now it warms on commit.
     app.oyeCommit(track);
     showToast('Oye — warming up', 'queue');
-  }, [resultToTrack, showToast]);
+  }, [showToast]);
 
   const handleAddToDiscovery = useCallback((result: SearchResult) => {
     const track = resultToTrack(result);
@@ -818,11 +813,12 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap, onEnterVideoMode
                         <TrackItem
                           key={result.voyoId}
                           result={result}
+                          track={resultToTrack(result)}
                           index={idx}
                           isActive={idx === activeIndex}
                           isCached={cachedSet.has(result.voyoId)}
                           onSelect={handleSelectTrack}
-                          onAddToQueue={handleAddToQueue}
+                          onOye={handleOyeCommit}
                           onAddToDiscovery={handleAddToDiscovery}
                           formatDuration={formatDuration}
                           formatViews={formatViews}

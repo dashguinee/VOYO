@@ -268,9 +268,9 @@ const MiniPlayer = ({ onVOYOClick, onOpenFull }: { onVOYOClick: () => void; onOp
           </button>
 
           {/* Unified Oye button — four-state visual, purple (cold/bubbling)
-              → gold (ready/committed). escape=true arms PiP on this tap so
-              the user can safely background the app afterwards. */}
-          <OyeButton track={currentTrack} size="lg" escape />
+              → gold (ready/committed). PiP arming defaults on via OyeButton,
+              so this tap is also the takeout gesture. */}
+          <OyeButton track={currentTrack} size="lg" />
 
 
           {/* Play/Pause */}

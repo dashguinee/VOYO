@@ -34,10 +34,10 @@ import type { Track } from '../../types';
 export type OyeButtonSize = 'sm' | 'md' | 'lg';
 export type OyeVisualState = 'purple-faded' | 'bubbling' | 'gold-faded' | 'gold-filled';
 
-const SIZE_MAP: Record<OyeButtonSize, { px: number; icon: number; ring: number }> = {
-  sm: { px: 28, icon: 14, ring: 2 },
-  md: { px: 40, icon: 18, ring: 2 },
-  lg: { px: 44, icon: 20, ring: 3 },
+const SIZE_MAP: Record<OyeButtonSize, { px: number; icon: number }> = {
+  sm: { px: 28, icon: 14 },
+  md: { px: 40, icon: 18 },
+  lg: { px: 44, icon: 20 },
 };
 
 const STYLE_BY_STATE: Record<OyeVisualState, {
@@ -47,14 +47,21 @@ const STYLE_BY_STATE: Record<OyeVisualState, {
   iconFill: string;
   boxShadow: string;
   animation: string;
+  /** Faded outer ring, 1px. Present on every state except bubbling (which
+   *  draws its own brighter pulsing ring) and gold-filled (already glows). */
+  ring: string | 'none';
 }> = {
   'purple-faded': {
-    background: 'rgba(139, 92, 246, 0.12)',
-    border: '1px solid rgba(139, 92, 246, 0.35)',
-    iconColor: 'rgba(196, 181, 253, 0.65)',
+    // Softer than before — feels like a resting state. Background nearly
+    // transparent, border low-opacity, icon at 50%. The faded ring reads
+    // as "there's something here but it's asleep."
+    background: 'rgba(139, 92, 246, 0.05)',
+    border: '1px solid rgba(139, 92, 246, 0.22)',
+    iconColor: 'rgba(196, 181, 253, 0.50)',
     iconFill: 'none',
     boxShadow: 'none',
     animation: 'none',
+    ring: '1px solid rgba(196, 181, 253, 0.15)',
   },
   'bubbling': {
     background: 'rgba(139, 92, 246, 0.25)',
@@ -63,14 +70,18 @@ const STYLE_BY_STATE: Record<OyeVisualState, {
     iconFill: 'none',
     boxShadow: '0 0 12px rgba(139, 92, 246, 0.55), 0 0 22px rgba(139, 92, 246, 0.28)',
     animation: 'voyo-iframe-pulse 1.6s ease-in-out infinite',
+    // Brighter pulsing ring (thicker) — this is the active "cooking" signal.
+    ring: '2px solid rgba(196, 181, 253, 0.45)',
   },
   'gold-faded': {
-    background: 'rgba(212, 160, 83, 0.16)',
-    border: '1px solid rgba(212, 160, 83, 0.50)',
+    background: 'rgba(212, 160, 83, 0.14)',
+    border: '1px solid rgba(212, 160, 83, 0.45)',
     iconColor: 'rgba(212, 160, 83, 0.85)',
     iconFill: 'none',
-    boxShadow: '0 0 8px rgba(212, 160, 83, 0.20)',
+    boxShadow: 'none',
     animation: 'none',
+    // Gold-tinted faded ring, mirrors the purple-faded treatment.
+    ring: '1px solid rgba(212, 160, 83, 0.18)',
   },
   'gold-filled': {
     background: 'linear-gradient(135deg, #D4A053, #C4943D)',
@@ -79,6 +90,8 @@ const STYLE_BY_STATE: Record<OyeVisualState, {
     iconFill: '#FFFFFF',
     boxShadow: '0 2px 10px rgba(212, 160, 83, 0.50), 0 0 20px rgba(212, 160, 83, 0.25)',
     animation: 'none',
+    // No outline — the glow box-shadow already reads as the "aura."
+    ring: 'none',
   },
 };
 
@@ -105,7 +118,14 @@ interface OyeButtonProps {
   track: Track;
   /** 'md' default. sm for tight rows, lg for primary surfaces. */
   size?: OyeButtonSize;
-  /** When true, oyeCommit also arms PiP (mini-player + player contexts). */
+  /**
+   * When true, oyeCommit also arms PiP so the user can carry Oyo offline
+   * after backgrounding. Defaults to true — per Dash's spec, every Oye is
+   * a takeout gesture ("if you click the oye button at anytime it does
+   * its action and allows takeout"). Opt-out via escape={false} for
+   * contexts where PiP is already guaranteed (e.g. playlist builders
+   * that don't intend to play the track immediately).
+   */
   escape?: boolean;
   /** Extra className passthrough for layout. */
   className?: string;
@@ -113,7 +133,7 @@ interface OyeButtonProps {
   onClick?: (track: Track) => void;
 }
 
-export const OyeButton = memo(({ track, size = 'md', escape = false, className = '', onClick }: OyeButtonProps) => {
+export const OyeButton = memo(({ track, size = 'md', escape = true, className = '', onClick }: OyeButtonProps) => {
   // Subscribe narrowly so the button re-renders only when its own track's
   // state changes. Keying on trackId means track objects with the same id
   // still share state across surfaces.
@@ -125,8 +145,9 @@ export const OyeButton = memo(({ track, size = 'md', escape = false, className =
     [download?.status, preference?.explicitLike],
   );
 
-  const { px, icon, ring } = SIZE_MAP[size];
+  const { px, icon } = SIZE_MAP[size];
   const style = STYLE_BY_STATE[state];
+  const hasRing = style.ring !== 'none';
 
   const handleClick = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -157,9 +178,11 @@ export const OyeButton = memo(({ track, size = 'md', escape = false, className =
         border: style.border,
         boxShadow: style.boxShadow,
         animation: style.animation,
-        // Bubbling state: add a second ring for the "pulse ring" treatment
-        outline: state === 'bubbling' ? `${ring}px solid rgba(196, 181, 253, 0.35)` : 'none',
-        outlineOffset: state === 'bubbling' ? '1px' : '0',
+        // Outer ring per state: faded on idle/faded states, bright on
+        // bubbling, absent on gold-filled (solid fill already reads as
+        // anchored). Consistent offset so the ring never crowds the border.
+        outline: hasRing ? style.ring : 'none',
+        outlineOffset: hasRing ? '2px' : '0',
       }}
     >
       <Zap

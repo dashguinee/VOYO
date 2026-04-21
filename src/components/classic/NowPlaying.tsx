@@ -31,7 +31,6 @@ import {
   X,
   Share2,
   ListMusic,
-  Zap,
   Lightbulb,
   Video,
   Image
@@ -43,6 +42,7 @@ import { getTrackThumbnailUrl } from '../../utils/thumbnail';
 import { useMobilePlay } from '../../hooks/useMobilePlay';
 import { PlaylistModal } from '../playlist/PlaylistModal';
 import { useReactionStore, Reaction, TrackStats } from '../../store/reactionStore';
+import { OyeButton } from '../oye/OyeButton';
 import { useAuth } from '../../hooks/useAuth';
 
 // ============================================
@@ -320,19 +320,6 @@ export const NowPlaying = ({ isOpen, onClose }: NowPlayingProps) => {
     }, 3000);
   }, []);
 
-  // Handle OYÉ reaction — single call does signal fanout + reaction row
-  // + hotspot recompute. Position is auto-resolved from playerStore so we
-  // don't pass it explicitly here.
-  const handleOye = useCallback(() => {
-    spawnReaction('⚡');
-    if (!currentTrack) return;
-    app.oye(currentTrack, {
-      username: dashId || 'anonymous',
-      position: trackPosition,
-      emoji: '⚡',
-    });
-  }, [currentTrack, dashId, spawnReaction, trackPosition]);
-
   // Handle comment
   const handleAddComment = useCallback(async (text: string) => {
     if (!currentTrack) return;
@@ -584,14 +571,11 @@ export const NowPlaying = ({ isOpen, onClose }: NowPlayingProps) => {
 
             {/* SECONDARY CONTROLS */}
             <div className="flex items-center justify-between px-6 py-2">
-              {/* OYÉ Button */}
-              <button
-                className="flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-purple-500 to-violet-600"
-                onClick={handleOye}
-              >
-                <Zap className="w-4 h-4 text-white" fill="white" />
-                <span className="text-white text-sm font-bold">OYÉ</span>
-              </button>
+              {/* OYÉ Button — unified four-state visual. Replaces the prior
+                  purple pill so state (purple faded → bubbling → gold faded
+                  → gold filled) is legible here the same way it is on every
+                  card, mini-player, and search row. */}
+              {currentTrack && <OyeButton track={currentTrack} size="lg" />}
 
               {/* OYÉ Lightning Bulb — predictive pre-warm toggle. Glows when on
                   (workers warm N+1/N+2 ahead), dim when off (reactive only). */}

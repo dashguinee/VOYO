@@ -10,7 +10,7 @@
  */
 
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { Search, Heart, Clock, MoreVertical, Play, ListPlus, Plus, Shuffle } from 'lucide-react';
+import { Search, Heart, Clock, MoreVertical, Play, Plus, Shuffle } from 'lucide-react';
 import { VoyoIcon } from '../ui/VoyoIcon';
 import { usePlayerStore } from '../../store/playerStore';
 import { useDownloadStore } from '../../store/downloadStore';
@@ -20,7 +20,7 @@ import { getYouTubeThumbnail, TRACKS } from '../../data/tracks';
 import { SmartImage } from '../ui/SmartImage';
 import { Track } from '../../types';
 import { PlaylistModal } from '../playlist/PlaylistModal';
-import { app } from '../../services/oyo';
+import { OyeButton } from '../oye/OyeButton';
 
 // Base filter tabs — VOYO Disco DNA palette: bronze-gold for active states,
 // platform purple as accent. Consistent with Search overlay tabs (v161+).
@@ -41,7 +41,6 @@ const SongRow = ({
   cacheQuality,
   onClick,
   onLike,
-  onAddToQueue,
   onAddToPlaylist
 }: {
   track: Track;
@@ -50,7 +49,6 @@ const SongRow = ({
   cacheQuality?: 'standard' | 'boosted' | null; // null = not cached
   onClick: () => void;
   onLike: () => void;
-  onAddToQueue: () => void;
   onAddToPlaylist: () => void;
 }) => {
   const [isHovered, setIsHovered] = useState(false);
@@ -62,11 +60,6 @@ const SongRow = ({
   // Tap = play the full track immediately. (30s teaser preview removed.)
   const handleClick = () => {
     onClick();
-  };
-
-  const handleAddToQueue = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    onAddToQueue();
   };
 
   const isCurrentTrack = currentTrack?.id === track.id;
@@ -104,12 +97,8 @@ const SongRow = ({
                 >
                   <Play className="w-3 h-3 text-white fill-white ml-0.5" />
                 </button>
-                <button
-                  className="w-7 h-7 rounded-full bg-white/20 flex items-center justify-center"
-                  onClick={handleAddToQueue}
-                >
-                  <ListPlus className="w-3 h-3 text-white" />
-                </button>
+                <OyeButton track={track} size="sm" />
+
               </div>
             )}
           </>
@@ -535,7 +524,6 @@ export const Library = ({ onTrackClick }: LibraryProps) => {
               cacheQuality={trackQualityMap.get(track.trackId) || null}
               onClick={() => handleTrackClick(track)}
               onLike={() => handleLike(track.id)}
-              onAddToQueue={() => app.oyeCommit(track)}
               onAddToPlaylist={() => setPlaylistModalTrack(track)}
             />
           ))
