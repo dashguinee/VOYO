@@ -4,7 +4,7 @@
  */
 
 import { useState, useRef, useEffect, useCallback, memo } from 'react';
-import { Search, X, Music2, Clock, Play, ListPlus, Compass, Disc3, Radio, User } from 'lucide-react';
+import { Search, X, Music2, Clock, Play, Zap, Compass, Disc3, Radio, User } from 'lucide-react';
 import { VoyoIcon, VoyoIconName } from '../ui/VoyoIcon';
 import { VinylLoader } from '../ui/VinylLoader';
 import { usePlayerStore } from '../../store/playerStore';
@@ -140,12 +140,12 @@ const TrackItem = memo(({
           primary tap surface (plays the track). */}
       <div className="flex items-center gap-2.5 ml-1">
         <button
-          className="w-8 h-8 rounded-full bg-purple-500/12 border border-purple-500/20 active:scale-90 transition-transform flex items-center justify-center"
+          className="w-8 h-8 rounded-full bg-[#D4A053]/12 border border-[#D4A053]/30 active:scale-90 transition-transform flex items-center justify-center"
           onClick={handleQueueClick}
-          aria-label="Add to bucket"
-          title="Add to Bucket"
+          aria-label="Oye this track — warm it up and carry Oyo offline"
+          title="Oye"
         >
-          <ListPlus className="w-3.5 h-3.5 text-purple-300" />
+          <Zap className="w-3.5 h-3.5 text-[#D4A053]" fill="currentColor" />
         </button>
         <button
           className="w-8 h-8 rounded-full bg-[#D4A053]/12 border border-[#D4A053]/20 active:scale-90 transition-transform flex items-center justify-center"
@@ -192,7 +192,6 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap, onEnterVideoMode
   const inputRef = useRef<HTMLInputElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const searchIdRef = useRef(0); // Monotonic counter to ignore stale results
-  const addToQueue = usePlayerStore(s => s.addToQueue);
   const updateDiscoveryForTrack = usePlayerStore(s => s.updateDiscoveryForTrack);
 
   // Scroll-driven UX: section header fades 15-25%, search bar slides to
@@ -486,9 +485,13 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap, onEnterVideoMode
   const handleAddToQueue = useCallback((result: SearchResult) => {
     const track = resultToTrack(result);
     addSearchResultsToPool([track]);
-    addToQueue(track);
-    showToast('Added to bucket', 'queue');
-  }, [resultToTrack, addToQueue, showToast]);
+    // Oye = boost + queue + reaction signal (see app.oyeCommit). The old
+    // plain addToQueue skipped the R2 warmup, so every "+ to queue" from
+    // search landed cold and blocked BG playback until hotswap eventually
+    // caught up. Now it warms on commit.
+    app.oyeCommit(track);
+    showToast('Oye — warming up', 'queue');
+  }, [resultToTrack, showToast]);
 
   const handleAddToDiscovery = useCallback((result: SearchResult) => {
     const track = resultToTrack(result);
