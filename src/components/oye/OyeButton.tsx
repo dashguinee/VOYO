@@ -24,7 +24,7 @@
  * + player button, skip it on feed/search cards (nothing to escape from).
  */
 
-import { memo, useMemo } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Zap } from 'lucide-react';
 import { useDownloadStore } from '../../store/downloadStore';
 import { usePreferenceStore } from '../../store/preferenceStore';
@@ -72,9 +72,14 @@ const STYLE_BY_STATE: Record<OyeVisualState, {
     iconColor: 'rgba(224, 211, 255, 0.95)',
     iconFill: 'none',
     boxShadow: '0 0 12px rgba(139, 92, 246, 0.55), 0 0 22px rgba(139, 92, 246, 0.28)',
-    animation: 'voyo-iframe-pulse 1.6s ease-in-out infinite',
-    // Brighter pulsing ring (thicker) — this is the active "cooking" signal.
-    ring: '2px solid rgba(196, 181, 253, 0.45)',
+    // Combined scale + glow pulse so the button breathes visibly, not just
+    // glows. Paired with the rotating lightning-ring overlay rendered below
+    // (state === 'bubbling' branch in JSX) for the full "cooking" effect.
+    animation: 'voyo-oye-bubble 1.6s ease-in-out infinite',
+    // outline here is intentionally 'none' — the bubbling state draws its
+    // own brighter, rotating conic-gradient ring as a separate element so
+    // we can animate rotation independently of the button's scale pulse.
+    ring: 'none',
   },
   'gold-faded': {
     // Same glass base as purple-faded — the gold accent only lives on the
@@ -186,14 +191,61 @@ export const OyeButton = memo(({ track, size = 'md', escape = true, className = 
   const style = STYLE_BY_STATE[state];
   const hasRing = style.ring !== 'none';
 
-  const handleClick = (e: React.MouseEvent) => {
+  // Charging phase — the bright lightning ring right after a tap. Phase 1
+  // of the 3-phase choreography (ring → bubble → glow). Sync with REAL
+  // pipeline events so the visual never lies:
+  //
+  //   • Latch opens on tap
+  //   • Latch closes when (a) real download status flips to
+  //     downloading/queued/complete OR (b) 600ms fallback fires — whichever
+  //     comes first. 300ms minimum so the user always sees a charge flash
+  //     even when the pipeline is instant (e.g. boostTrack short-circuits
+  //     on already-cached track).
+  //   • Bubble (phase 2) only plays once latch is closed, never concurrent.
+  //
+  // Effect: charge always reflects a real handoff, never a hardcoded timer.
+  const [isCharging, setIsCharging] = useState(false);
+  const chargeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const chargeStartRef = useRef<number>(0);
+  const CHARGE_MIN_MS = 300;
+  const CHARGE_MAX_MS = 600;
+
+  useEffect(() => () => {
+    if (chargeTimerRef.current) clearTimeout(chargeTimerRef.current);
+  }, []);
+
+  // Close the charge latch as soon as real status moves (respecting the
+  // 300ms minimum so we never flash below the perceptual threshold).
+  useEffect(() => {
+    if (!isCharging) return;
+    const advanced =
+      download?.status === 'downloading' ||
+      download?.status === 'queued' ||
+      download?.status === 'complete';
+    if (!advanced) return;
+    const elapsed = Date.now() - chargeStartRef.current;
+    if (elapsed >= CHARGE_MIN_MS) {
+      setIsCharging(false);
+      if (chargeTimerRef.current) clearTimeout(chargeTimerRef.current);
+    } else {
+      // Too soon — schedule the close at the 300ms mark.
+      if (chargeTimerRef.current) clearTimeout(chargeTimerRef.current);
+      chargeTimerRef.current = setTimeout(() => setIsCharging(false), CHARGE_MIN_MS - elapsed);
+    }
+  }, [isCharging, download?.status]);
+
+  const handleClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
+    setIsCharging(true);
+    chargeStartRef.current = Date.now();
+    if (chargeTimerRef.current) clearTimeout(chargeTimerRef.current);
+    chargeTimerRef.current = setTimeout(() => setIsCharging(false), CHARGE_MAX_MS);
     if (onClick) {
       onClick(track);
       return;
     }
     app.oyeCommit(track, { escape });
-  };
+  }, [track, escape, onClick]);
 
   // ARIA label rotates with state so screen readers surface the right context.
   const ariaLabel =
@@ -202,34 +254,107 @@ export const OyeButton = memo(({ track, size = 'md', escape = true, className = 
     : state === 'gold-faded' ? 'Oye this track'
     : 'Oye — warm it up and carry Oyo offline';
 
+  // Sequential "ring → bubble" choreography (never overlap):
+  //
+  //   Phase 1 — IDLE at rest:
+  //     State is purple-faded or gold-faded, not charging. Ring spins
+  //     slowly + faintly in the state's accent color (purple or gold).
+  //     Low-key ambient electricity.
+  //
+  //   Phase 2 — CHARGE on tap (~600ms):
+  //     Ring opacity jumps, rotation accelerates. No bubble yet. Gives
+  //     instant tap feedback and "buys time" for the pipeline to start.
+  //     Timer in handleClick flips isCharging off after 600ms.
+  //
+  //   Phase 3 — BUBBLE while cooking:
+  //     Ring drops out. Button itself runs voyo-oye-bubble (scale +
+  //     glow pulse). Single focal animation — no competing motion.
+  //
+  //   Phase 4 — GOLD-FILLED (arrived):
+  //     No ring, no bubble. Solid gold gradient + soft glow box-shadow
+  //     reads as anchored.
+  //
+  // The isCharging latch sits ON TOP of state so the bubble animation
+  // only runs when cooking AND not in the brief charge window. This is
+  // what Dash meant by "smooth non cringe sequence, buys time."
+  const isBubblingState = state === 'bubbling';
+  const showRing = state !== 'gold-filled' && (!isBubblingState || isCharging);
+  const runBubble = isBubblingState && !isCharging;
+  const isGoldAccent = state === 'gold-faded';
+  const ringAccent = isGoldAccent ? 'rgba(212,160,83,0.85)' : 'rgba(196,181,253,0.85)';
+  const ringFaint  = isGoldAccent ? 'rgba(212,160,83,0.15)' : 'rgba(196,181,253,0.12)';
+  const ringDuration = isCharging ? '0.5s' : '4.5s';
+  const ringOpacity  = isCharging ? 0.95 : 0.55;
+  // Ring thickness scales with button size so the conic segments stay
+  // proportional across sm/md/lg.
+  const ringInset = Math.max(2, Math.round(px * 0.06));
+
+  // Final animation choice for the button itself — only run bubble when
+  // we're ACTUALLY in phase 3 (not during the charge latch).
+  const buttonAnimation = runBubble ? style.animation : 'none';
+
   return (
-    <button
-      onClick={handleClick}
-      aria-label={ariaLabel}
-      title={ariaLabel}
-      className={`flex items-center justify-center rounded-full backdrop-blur-md active:scale-95 transition-all ${className}`}
-      style={{
-        width: px,
-        height: px,
-        background: style.background,
-        border: style.border,
-        boxShadow: style.boxShadow,
-        animation: style.animation,
-        // Outer ring per state: faded on idle/faded states, bright on
-        // bubbling, absent on gold-filled (solid fill already reads as
-        // anchored). Consistent offset so the ring never crowds the border.
-        outline: hasRing ? style.ring : 'none',
-        outlineOffset: hasRing ? '2px' : '0',
-      }}
+    <span
+      className={`relative inline-flex items-center justify-center ${className}`}
+      style={{ width: px, height: px }}
     >
-      <Zap
-        size={icon}
+      {showRing && (
+        <span
+          aria-hidden
+          className="absolute inset-0 rounded-full pointer-events-none"
+          style={{
+            // Conic-gradient creates 4 lightning-like arcs with transparent
+            // gaps so it reads as "electricity arcing" rather than a solid
+            // ring. mask-image carves out the centre so only the outer
+            // band renders.
+            background: `conic-gradient(from 0deg, ${ringFaint} 0deg, ${ringAccent} 20deg, ${ringFaint} 50deg, ${ringAccent} 110deg, ${ringFaint} 140deg, ${ringAccent} 200deg, ${ringFaint} 230deg, ${ringAccent} 290deg, ${ringFaint} 320deg)`,
+            WebkitMask: `radial-gradient(circle, transparent calc(50% - ${ringInset + 1}px), black calc(50% - ${ringInset}px), black 50%, transparent calc(50% + 1px))`,
+            mask:       `radial-gradient(circle, transparent calc(50% - ${ringInset + 1}px), black calc(50% - ${ringInset}px), black 50%, transparent calc(50% + 1px))`,
+            opacity: ringOpacity,
+            animation: `voyo-oye-ring-spin ${ringDuration} linear infinite`,
+            // Opacity + duration changes use transitions so the idle→charge
+            // handoff doesn't snap. 200ms is fast enough to feel immediate
+            // on tap, slow enough to not flicker.
+            transition: 'opacity 200ms ease, filter 200ms ease',
+            filter: isCharging ? 'blur(0.4px) saturate(1.3)' : 'blur(0.6px)',
+          }}
+        />
+      )}
+
+      <button
+        onClick={handleClick}
+        aria-label={ariaLabel}
+        title={ariaLabel}
+        className="relative flex items-center justify-center rounded-full backdrop-blur-md active:scale-95"
         style={{
-          color: style.iconColor,
-          fill: style.iconFill,
+          width: px,
+          height: px,
+          background: style.background,
+          border: style.border,
+          boxShadow: style.boxShadow,
+          animation: buttonAnimation,
+          // Explicit transition list — "transition-all" doesn't handle
+          // gradient backgrounds cleanly, but border + shadow + color
+          // transitions DO morph, giving phase 2 → phase 3 a smooth
+          // handoff even though the gradient itself will snap.
+          transition: 'background-color 280ms ease, border 280ms ease, box-shadow 280ms ease',
+          // Outer halo only on faded states AND only when the rotating
+          // ring isn't competing for the same real estate. Suppressed
+          // during bubble phase (bubble owns the motion) and during
+          // charge phase (ring owns it).
+          outline: hasRing && !isCharging && !runBubble ? style.ring : 'none',
+          outlineOffset: hasRing && !isCharging && !runBubble ? '2px' : '0',
         }}
-      />
-    </button>
+      >
+        <Zap
+          size={icon}
+          style={{
+            color: style.iconColor,
+            fill: style.iconFill,
+          }}
+        />
+      </button>
+    </span>
   );
 });
 

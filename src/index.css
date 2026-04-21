@@ -768,6 +768,25 @@ input[type="range"]:focus::-moz-range-thumb {
   100% { box-shadow: 0 0 14px rgba(139,92,246,0.45), 0 0 24px rgba(139,92,246,0.20); }
 }
 
+/* Oye bubbling — combined scale pulse + glow pulse for the "alive, cooking
+   right now" state. The scale component (1.0 → 1.04 → 1.0) makes the
+   button feel like it's breathing, on top of the glow which keeps from
+   voyo-iframe-pulse. 1.6s loop matches the pulse for a synced feel. */
+@keyframes voyo-oye-bubble {
+  0%   { transform: scale(1);    box-shadow: 0 0 14px rgba(139,92,246,0.45), 0 0 24px rgba(139,92,246,0.20); }
+  50%  { transform: scale(1.04); box-shadow: 0 0 22px rgba(139,92,246,0.80), 0 0 40px rgba(139,92,246,0.40); }
+  100% { transform: scale(1);    box-shadow: 0 0 14px rgba(139,92,246,0.45), 0 0 24px rgba(139,92,246,0.20); }
+}
+
+/* Oye lightning ring — the rotating conic-gradient arc that lives behind
+   the button. Idle: slow, faint. Charging (bubbling): fast, bright.
+   Single keyframe — callers differ on duration + opacity to get the two
+   tempos without duplicating animation logic. */
+@keyframes voyo-oye-ring-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
 @keyframes voyo-fade-out {
   from { opacity: 1; }
   to { opacity: 0; }
