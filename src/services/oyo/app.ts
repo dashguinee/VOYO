@@ -31,6 +31,8 @@ import { voyoStream, ensureTrackReady } from '../voyoStream';
 import { onPlay, onSkip, onOye, prefetch } from './index';
 import { logPlaybackEvent } from '../telemetry';
 import { getThumb } from '../../utils/thumbnail';
+import { pipService } from '../pipService';
+import { r2HasTrack } from '../../player/r2Probe';
 
 // ── Play / navigate ───────────────────────────────────────────────────────
 
@@ -179,6 +181,91 @@ export function oye(
  * Idempotent: tapping again just re-fires the signals (cheap) and the
  * boost download short-circuits if already cached.
  */
+/**
+ * OYE COMMIT — the canonical Oye-button gesture.
+ *
+ * Replaces the old "+ add to queue" button across the app. One tap does
+ * everything needed to carry Oyo offline: reaction signal, R2 warmup
+ * (boost), queue persistence, and — for the escape variant — PiP arming
+ * plus an immediate R2 readiness probe.
+ *
+ * Call flavors:
+ *   • From a feed/search card  →  oyeCommit(track)
+ *        "Commit this track." Queue + warmup. No play. No PiP.
+ *   • From the player, user wants to background and keep listening  →
+ *        oyeCommit(track, { escape: true })
+ *        Also arms PiP (first-PiP-of-session requires a user gesture; this
+ *        call IS that gesture) and probes R2 so the hot-swap watcher can
+ *        see the just-landed cache within its next poll tick.
+ *
+ * Side effects (in order):
+ *   1. oye(track)            — reaction signal + hotspot fanout
+ *   2. boostTrack            — R2 warmup via downloadStore
+ *   3. addToQueue            — enqueue (de-duped inside playerStore)
+ *   4. logPlaybackEvent      — 'oye_commit' trace with { escape }
+ *   5. escape only: pipService.enter() + r2HasTrack probe ('oye_escape_probe')
+ *
+ * Does NOT start playback. Card tap remains the "play now" gesture;
+ * Oye is the "commit now, play whenever" gesture.
+ */
+export function oyeCommit(
+  track: Track,
+  opts: { escape?: boolean } = {},
+): void {
+  // (1) Reaction signal — goes through existing oye() so the signal graph
+  // stays a single path.
+  oye(track);
+
+  // (2) R2 warmup. Fire-and-forget; failures don't block the commit.
+  try {
+    const ds = useDownloadStore.getState();
+    void ds.boostTrack(
+      track.trackId,
+      track.title,
+      track.artist,
+      track.duration || 0,
+      getThumb(track.trackId, 'medium'),
+    );
+  } catch { /* non-fatal */ }
+
+  // (3) Enqueue. playerStore.addToQueue de-dups by trackId, so repeat Oyes
+  // don't balloon the queue.
+  try {
+    const store = usePlayerStore.getState();
+    if (typeof store.addToQueue === 'function') {
+      store.addToQueue(track);
+    }
+  } catch { /* non-fatal */ }
+
+  // (4) Telemetry. `escape` flag lets us measure escape-conversion rate
+  // and success (vs cold-exit where audio dies).
+  logPlaybackEvent({
+    event_type: 'trace',
+    track_id: track.trackId,
+    meta: { subtype: 'oye_commit', escape: !!opts.escape },
+  });
+
+  // (5) Escape path.
+  if (opts.escape) {
+    // PiP needs a user gesture for first entry in the session. This
+    // function is invoked inside an onClick, so the gesture chain is
+    // intact here and nowhere later.
+    void pipService.enter().catch(() => { /* MediaSession is the fallback */ });
+    // Probe R2 right now. If the HEAD says ready, useHotSwap's existing
+    // 2s poll will see it on the next tick (<=2s) and fire the swap.
+    // We don't directly invoke performHotSwap from here — that lives
+    // inside the hook and needs its React refs. The probe is telemetry-
+    // oriented here so we can measure how often 'escape' hits a warm R2.
+    void r2HasTrack(track.trackId).then(r2Ready => {
+      logPlaybackEvent({
+        event_type: 'trace',
+        track_id: track.trackId,
+        meta: { subtype: 'oye_escape_probe', r2_ready: r2Ready },
+      });
+    });
+  }
+}
+
 export function oyeAndBoost(track: Track): void {
   oye(track);
   try {
@@ -234,6 +321,7 @@ export const app = {
   resume,
   // Signals
   oye,
+  oyeCommit,
   oyeAndBoost,
   skipAndSignal,
   // Navigation
