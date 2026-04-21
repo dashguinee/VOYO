@@ -19,6 +19,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useDashNotifications, type DashNotification } from '../../hooks/useDashNotifications';
 import { useAuth } from '../../hooks/useAuth';
+import { devLog } from '../../utils/logger';
 
 // Dynamic Island - iPhone-style notification pill
 interface Notification {
