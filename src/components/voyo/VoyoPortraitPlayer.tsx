@@ -1040,35 +1040,42 @@ const BackdropLibrary = ({
 };
 
 // ============================================
-// EXPAND BUTTON / MINI PLAYER — Opens fullscreen video mode.
-// When playbackSource === 'iframe', the button pulses with a purple
-// glow + shows a small "live" dot so the user knows there's iframe
-// audio playing and they can open the mini player for foreground
-// mini-video playback during the hot-swap window.
+// EXPAND BUTTON / OYE ESCAPE — two modes.
+//
+// When playbackSource === 'iframe' (audio is playing through the YT iframe
+// and would die the moment the user backgrounds the app), this button
+// becomes the "Oye to carry Oyo offline" escape. It pulses in Oye gold
+// (#D4A053), flashes a Zap icon, and on tap fires app.oyeCommit with
+// escape=true — which commits the track (boost + queue + signal), arms
+// PiP with the user's gesture, and makes backgrounding safe.
+//
+// When playbackSource is R2/cached/null (no iframe to escape), it stays
+// as the neutral "Video" button that just opens video mode / PiP.
 // ============================================
 const ExpandVideoButton = memo(({ onClick, isIframeAudio }: { onClick: () => void; isIframeAudio: boolean }) => (
   <button
     onClick={onClick}
     className={`absolute top-3 right-3 z-30 px-3 py-1.5 rounded-full backdrop-blur-sm border text-white text-xs font-medium flex items-center gap-1.5 transition-all min-h-[44px] active:scale-95 ${
       isIframeAudio
-        ? 'border-purple-400/60 hover:border-purple-400/80'
+        ? 'border-[#D4A053]/70 hover:border-[#D4A053]/90'
         : 'border-[#28282f] hover:border-purple-500/40'
     }`}
     style={{
-      background: isIframeAudio ? 'rgba(139,92,246,0.22)' : 'rgba(28, 28, 35, 0.65)',
-      boxShadow: isIframeAudio ? '0 0 16px rgba(139,92,246,0.5), 0 0 28px rgba(139,92,246,0.25)' : 'none',
+      background: isIframeAudio ? 'rgba(212,160,83,0.22)' : 'rgba(28, 28, 35, 0.65)',
+      boxShadow: isIframeAudio
+        ? '0 0 16px rgba(212,160,83,0.55), 0 0 28px rgba(212,160,83,0.28)'
+        : 'none',
       animation: isIframeAudio ? 'voyo-iframe-pulse 1.6s ease-in-out infinite' : 'none',
     }}
-    aria-label={isIframeAudio ? 'Open mini player (audio from video)' : 'Expand video'}
+    aria-label={isIframeAudio ? 'Oye — carry Oyo offline' : 'Expand video'}
+    title={isIframeAudio ? 'Still cooking — Oye to carry Oyo offline.' : 'Open video'}
   >
-    {isIframeAudio && (
-      <span
-        className="w-1.5 h-1.5 rounded-full bg-purple-300"
-        style={{ boxShadow: '0 0 6px rgba(196,181,253,0.9)' }}
-      />
+    {isIframeAudio ? (
+      <Zap size={12} fill="currentColor" className="text-[#D4A053]" />
+    ) : (
+      <Play size={12} fill="currentColor" />
     )}
-    <Play size={12} fill="currentColor" />
-    <span>{isIframeAudio ? 'Mini Player' : 'Video'}</span>
+    <span>{isIframeAudio ? 'Oye' : 'Video'}</span>
   </button>
 ));
 
@@ -4976,7 +4983,21 @@ export const VoyoPortraitPlayer = ({
             <BigCenterCard
               track={currentTrack}
               onExpandVideo={async () => {
-                // Try PiP first; fall back to YouTube iframe in portrait card
+                // iframe mode = the button is the Oye escape. Commit the
+                // current track (boost + queue + signal) and arm PiP in one
+                // gesture. oyeCommit with escape=true fires pipService.enter
+                // internally with the gesture chain still intact.
+                if (playbackSource === 'iframe') {
+                  app.oyeCommit(currentTrack, { escape: true });
+                  // PiP may be unsupported or blocked — give the browser a
+                  // tick to react, then fall back to in-app portrait video
+                  // so the user still sees something visual.
+                  setTimeout(() => {
+                    if (!document.pictureInPictureElement) setVideoTarget('portrait');
+                  }, 500);
+                  return;
+                }
+                // Non-iframe mode: plain "open video" — PiP with portrait fallback.
                 const ok = await pipService.enter();
                 if (!ok) setVideoTarget('portrait');
               }}
