@@ -243,6 +243,14 @@ export function oyeCommit(
     }
   } catch { /* non-fatal */ }
 
+  // (3.5) Mark explicit like — this is the per-user "golden filled" signal
+  // the unified Oye button reads for its solid-gold state. Persists to
+  // localStorage via preferenceStore. Idempotent: setting an already-liked
+  // track again is a no-op downstream.
+  try {
+    usePreferenceStore.getState().setExplicitLike(track.id, true);
+  } catch { /* non-fatal */ }
+
   // (4) Telemetry. `escape` flag lets us measure escape-conversion rate
   // and success (vs cold-exit where audio dies).
   logPlaybackEvent({

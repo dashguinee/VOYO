@@ -9,7 +9,7 @@
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Home, Radio, Library as LibraryIcon, Users, Zap, Plus, Shuffle, Repeat, Repeat1 } from 'lucide-react';
+import { Home, Radio, Library as LibraryIcon, Users, Plus, Shuffle, Repeat, Repeat1 } from 'lucide-react';
 import { HomeFeed } from './HomeFeed';
 import { Library } from './Library';
 import { Dahub } from '../dahub/Dahub';
@@ -22,7 +22,7 @@ import { getYouTubeThumbnail } from '../../data/tracks';
 import { SmartImage } from '../ui/SmartImage';
 import { Track } from '../../types';
 import { PlaylistModal } from '../playlist/PlaylistModal';
-import { useReactionStore } from '../../store/reactionStore';
+import { OyeButton } from '../oye/OyeButton';
 import { useAuth } from '../../hooks/useAuth';
 import { useOyoInvocation } from '../../oyo-ui/useOyoInvocation';
 import { useMobilePlay } from '../../hooks/useMobilePlay';
@@ -49,8 +49,6 @@ const MiniPlayer = ({ onVOYOClick, onOpenFull }: { onVOYOClick: () => void; onOp
   const repeatMode = usePlayerStore(s => s.repeatMode);
   const toggleShuffle = usePlayerStore(s => s.toggleShuffle);
   const cycleRepeat = usePlayerStore(s => s.cycleRepeat);
-  const createReaction = useReactionStore(s => s.createReaction);
-  const { dashId } = useAuth();
   const { handlePlayPause } = useMobilePlay();
   const [shouldScroll, setShouldScroll] = useState(false);
   const [swipeDirection, setSwipeDirection] = useState<'left' | 'right' | null>(null);
@@ -78,14 +76,6 @@ const MiniPlayer = ({ onVOYOClick, onOpenFull }: { onVOYOClick: () => void; onOp
       }, DOUBLE_TAP_DELAY);
     }
   }, [onOpenFull]);
-
-  // Handle OYE reaction — routed through the central orchestrator so the
-  // full signal graph (djRecordPlay + oyoPlan reaction + recordPoolEngagement
-  // + remote record_signal) fires alongside the visual burst.
-  const handleOye = useCallback(() => {
-    if (!currentTrack) return;
-    app.oye(currentTrack, { emoji: '⚡' });
-  }, [currentTrack]);
 
   // Check if title needs scrolling (longer than container)
   useEffect(() => {
@@ -277,21 +267,11 @@ const MiniPlayer = ({ onVOYOClick, onOpenFull }: { onVOYOClick: () => void; onOp
             <Plus className="w-3.5 h-3.5 text-white" />
           </button>
 
-          {/* OYE Button — African Gold Bronze */}
-          <button
-            className="w-11 h-11 rounded-full flex items-center justify-center active:scale-95 transition-transform"
-            aria-label="OYE this track"
-            onClick={(e) => {
-              e.stopPropagation();
-              handleOye();
-            }}
-            style={{
-              background: 'linear-gradient(135deg, #D4A053, #C4943D)',
-              boxShadow: '0 2px 8px rgba(212, 160, 83, 0.4)',
-            }}
-          >
-            <Zap className="w-4 h-4 text-white" style={{ fill: 'white' }} />
-          </button>
+          {/* Unified Oye button — four-state visual, purple (cold/bubbling)
+              → gold (ready/committed). escape=true arms PiP on this tap so
+              the user can safely background the app afterwards. */}
+          <OyeButton track={currentTrack} size="lg" escape />
+
 
           {/* Play/Pause */}
           <button
