@@ -56,6 +56,11 @@ export const StationHero = ({ station }: StationHeroProps) => {
   const cardRef = useRef<HTMLDivElement>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const dwellTimerRef = useRef<number | null>(null);
+  // Tracks the fade-in interval so we can cancel it on unmount OR when
+  // the card leaves view before the ramp reaches target. Without this
+  // ref the ramp leaks a setInterval that keeps calling postMessage
+  // into a dead iframe forever.
+  const fadeIntervalRef = useRef<number | null>(null);
 
   const [isInView, setIsInView] = useState(false);
   // `isNearby`: card is within ~1.5 viewport-heights of the visible area.
@@ -110,6 +115,12 @@ export const StationHero = ({ station }: StationHeroProps) => {
     if (!isInView) {
       if (dwellTimerRef.current) window.clearTimeout(dwellTimerRef.current);
       dwellTimerRef.current = null;
+      // Cancel any active audio-ramp — was leaking a setInterval that
+      // kept messaging a paused/dead iframe when the card scrolled away.
+      if (fadeIntervalRef.current != null) {
+        window.clearInterval(fadeIntervalRef.current);
+        fadeIntervalRef.current = null;
+      }
       setIsPreviewingAudio(false);
       setShowIosHint(false);
       // PAUSE (not just mute) — a muted iframe still decodes video +
@@ -127,6 +138,12 @@ export const StationHero = ({ station }: StationHeroProps) => {
     }, DWELL_MS);
     return () => {
       if (dwellTimerRef.current) window.clearTimeout(dwellTimerRef.current);
+      // Defensive cleanup on effect teardown (component unmount or
+      // isInView flip). Mirrors the !isInView branch above.
+      if (fadeIntervalRef.current != null) {
+        window.clearInterval(fadeIntervalRef.current);
+        fadeIntervalRef.current = null;
+      }
     };
   }, [isInView]);
 
@@ -142,10 +159,19 @@ export const StationHero = ({ station }: StationHeroProps) => {
     postYTMessage('unMute');
     let v = 0;
     postYTMessage('setVolume', 0);
-    const iv = window.setInterval(() => {
+    // Cancel any prior ramp before starting a new one (e.g. scroll out
+    // + back in during a single dwell cycle).
+    if (fadeIntervalRef.current != null) {
+      window.clearInterval(fadeIntervalRef.current);
+      fadeIntervalRef.current = null;
+    }
+    fadeIntervalRef.current = window.setInterval(() => {
       v += 4;
       postYTMessage('setVolume', Math.min(v, 55));
-      if (v >= 55) window.clearInterval(iv);
+      if (v >= 55 && fadeIntervalRef.current != null) {
+        window.clearInterval(fadeIntervalRef.current);
+        fadeIntervalRef.current = null;
+      }
     }, 90);
   }, [postYTMessage]);
 

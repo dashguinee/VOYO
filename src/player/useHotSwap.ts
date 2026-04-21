@@ -105,7 +105,10 @@ async function performHotSwap(
 
     iframeBridge.pause();
     iframeBridge.resetVolume();
-    el.volume = storeVol;
+    // Re-read volume at the final assignment — user may have moved the
+    // slider during the 2s fade, and storeVol captured at the top of
+    // performHotSwap is now stale.
+    el.volume = usePlayerStore.getState().volume;
     usePlayerStore.getState().setPlaybackSource('r2');
 
     logPlaybackEvent({

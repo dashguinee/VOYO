@@ -25,17 +25,18 @@ export async function r2HasTrack(trackId: string): Promise<boolean> {
   if (existing) return existing;
 
   const promise = (async () => {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), HEAD_TIMEOUT_MS);
     try {
-      const ctrl = new AbortController();
-      const t = setTimeout(() => ctrl.abort(), HEAD_TIMEOUT_MS);
       const res = await fetch(`${R2_AUDIO_BASE}/${trackId}?q=high`, {
         method: 'HEAD',
         signal: ctrl.signal,
       });
-      clearTimeout(t);
       return res.ok;
     } catch {
       return false;
+    } finally {
+      clearTimeout(t);
     }
   })();
 

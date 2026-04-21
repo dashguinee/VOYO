@@ -94,8 +94,10 @@ function recordRemoteSignal(trackId: string, action: SignalAction): void {
 }
 
 // Flush on page-hide / unload so nothing queued gets lost when the user
-// closes the tab or backgrounds the PWA.
-if (typeof window !== 'undefined') {
+// closes the tab or backgrounds the PWA. Guard against double-registration
+// (Vite HMR re-evaluates this module, which would otherwise stack listeners).
+if (typeof window !== 'undefined' && !(window as unknown as { __voyoSignalFlushBound?: boolean }).__voyoSignalFlushBound) {
+  (window as unknown as { __voyoSignalFlushBound?: boolean }).__voyoSignalFlushBound = true;
   const onExit = () => { void flushSignals(); };
   window.addEventListener('pagehide', onExit);
   document.addEventListener('visibilitychange', () => {
