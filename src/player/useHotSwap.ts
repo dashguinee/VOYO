@@ -43,15 +43,28 @@ const HOT_SWAP_STEPS   = 40;
  * Perform the cross-fade. Pure-ish — reads the iframe bridge, mutates the
  * audio element, flips playbackSource at the end. Every stage logs a
  * trace so we can see exactly where a swap gets stuck if it does.
+ *
+ * Returns `true` on a successful slide-in, `false` on any abort (stale
+ * track, canplay timeout, etc). Callers use the return value to decide
+ * whether the "already triggered" guard should reset so a later poll
+ * can try again — an abort without reset would strand the track on
+ * iframe forever.
  */
 async function performHotSwap(
   trackId: string,
   el: HTMLAudioElement,
   snapshot: { trackId: string; seconds: number } | null,
   iframeStartedAt: number,
-): Promise<void> {
+): Promise<boolean> {
   const storeVol = usePlayerStore.getState().volume;
   const elapsed = Date.now() - iframeStartedAt;
+
+  // Abort if the user skipped — checked at every await boundary. Without
+  // this guard, a mid-flight swap completes against an old trackId and
+  // flips playbackSource='r2' while the NEW track's lifecycle is already
+  // running, causing the old R2 audio to bleed over the new track.
+  const stillCurrent = () =>
+    usePlayerStore.getState().currentTrack?.trackId === trackId;
 
   // Position priority: live iframe → snapshot → fall back to 0 (cold).
   let t = iframeBridge.getCurrentTime();
@@ -71,18 +84,45 @@ async function performHotSwap(
     meta: { subtype: 'hotswap_start', mode: posSource, at_seconds: Math.round(t), elapsed_ms: elapsed },
   });
 
+  // Clean-exit helper — used by every abort path so state is consistent.
+  const bail = (subtype: string, extra: Record<string, unknown> = {}): false => {
+    logPlaybackEvent({
+      event_type: 'trace', track_id: trackId,
+      meta: { subtype, mode: posSource, elapsed_ms: Date.now() - iframeStartedAt, ...extra },
+    });
+    try { el.pause(); } catch {}
+    try { el.removeAttribute('src'); el.load(); } catch {}
+    return false;
+  };
+
   try {
+    // Guard 1 — before touching the element at all.
+    if (!stillCurrent()) return bail('hotswap_abort_stale', { stage: 'pre_src' });
+
     // Preload R2 silently at the matched position.
     el.src = `${R2_AUDIO}/${trackId}?q=high`;
     try { el.currentTime = t; } catch {}
     el.volume = 0;
-    const canplayDeadline = Date.now() + 2500;
-    await new Promise<void>((resolve) => {
-      const onReady = () => { el.removeEventListener('canplay', onReady); resolve(); };
+
+    // Wait for canplay — if it doesn't fire in 2.5s, the HEAD said yes but
+    // the media isn't actually buffered enough. Abort rather than fade
+    // iframe out into silence; the poll will re-fire in HOT_SWAP_POLL_MS
+    // once R2 is genuinely ready.
+    const canplayFired = await new Promise<boolean>((resolve) => {
+      const onReady = () => { el.removeEventListener('canplay', onReady); resolve(true); };
       el.addEventListener('canplay', onReady);
-      setTimeout(() => { el.removeEventListener('canplay', onReady); resolve(); }, 2500);
+      setTimeout(() => { el.removeEventListener('canplay', onReady); resolve(false); }, 2500);
     });
-    const canplayLate = Date.now() > canplayDeadline - 50;
+
+    // Guard 2 — track may have changed during canplay wait.
+    if (!stillCurrent()) return bail('hotswap_abort_stale', { stage: 'post_canplay' });
+
+    if (!canplayFired) {
+      // Silence is the opposite of the slide-in — back out cleanly, iframe
+      // keeps playing, next poll retries.
+      return bail('hotswap_canplay_timeout');
+    }
+
     try { el.currentTime = t; } catch {}
     await el.play().catch((err: Error) => {
       logPlaybackEvent({
@@ -91,17 +131,34 @@ async function performHotSwap(
       });
     });
 
+    // Guard 3 — user could have skipped during play() await.
+    if (!stillCurrent()) return bail('hotswap_abort_stale', { stage: 'post_play' });
+
     // Equal-power crossfade. Linear fades briefly dip ~3dB mid-swap (perceived
     // quieter); sin/cos preserves constant perceived loudness — no audible dip.
     const stepMs = Math.max(1, Math.round(HOT_SWAP_FADE_MS / HOT_SWAP_STEPS));
     const iframeFade = iframeBridge.fadeOut(HOT_SWAP_FADE_MS);
     for (let i = 1; i <= HOT_SWAP_STEPS; i++) {
+      // Guard 4 — bail inside the fade loop. Leaves the new track's
+      // lifecycle to take over cleanly; don't flip playbackSource here.
+      if (!stillCurrent()) {
+        iframeBridge.pause();
+        iframeBridge.resetVolume();
+        return bail('hotswap_abort_stale', { stage: 'fade', step: i });
+      }
       const p = i / HOT_SWAP_STEPS;          // 0 → 1
       const r2Gain = Math.sin((p * Math.PI) / 2); // 0 → 1 (equal-power in)
       el.volume = Math.min(storeVol, storeVol * r2Gain);
       await new Promise((r) => setTimeout(r, stepMs));
     }
     await iframeFade;
+
+    // Final guard — extremely narrow race but cheap to check.
+    if (!stillCurrent()) {
+      iframeBridge.pause();
+      iframeBridge.resetVolume();
+      return bail('hotswap_abort_stale', { stage: 'post_fade' });
+    }
 
     iframeBridge.pause();
     iframeBridge.resetVolume();
@@ -116,12 +173,14 @@ async function performHotSwap(
       meta: {
         subtype: 'hotswap', mode: posSource,
         elapsed_ms: elapsed, fade_ms: HOT_SWAP_FADE_MS, at_seconds: Math.round(t),
-        canplay_late: canplayLate, paused_after: el.paused, el_vol: el.volume,
+        paused_after: el.paused, el_vol: el.volume,
       },
     });
+    return true;
   } catch (err) {
     // Something threw mid-swap. Emergency instant-swap so we don't leave the
-    // user with muted iframe + muted <audio>.
+    // user with muted iframe + muted <audio>. Only safe if the track is
+    // still current — otherwise just bail.
     logPlaybackEvent({
       event_type: 'trace', track_id: trackId,
       meta: {
@@ -129,13 +188,17 @@ async function performHotSwap(
         err: (err as Error)?.message?.slice(0, 120),
       },
     });
+    if (!stillCurrent()) return bail('hotswap_abort_stale', { stage: 'catch' });
     try {
       el.volume = storeVol;
       if (el.paused) await el.play().catch(() => {});
       iframeBridge.pause();
       iframeBridge.resetVolume();
       usePlayerStore.getState().setPlaybackSource('r2');
-    } catch { /* can't recover — user hears silence, will skip */ }
+      return true;
+    } catch {
+      return bail('hotswap_unrecoverable');
+    }
   }
 }
 
@@ -175,10 +238,12 @@ export function useHotSwap(
       }
     }, 1000);
 
-    // Unified trigger — whichever watcher fires first wins, both clear.
-    // Instrumented so we see every (attempted) fire in telemetry, and
-    // can tell stale-track abandonments from real swaps.
-    let triggered = false;
+    // Unified trigger — whichever watcher fires first wins. `inFlight`
+    // (not a one-shot latch) lets a failed swap retry: if performHotSwap
+    // returns false (canplay timeout, stale track, etc) we clear the flag
+    // so the next poll/RT can try again. A one-shot `triggered` flag
+    // would strand the track on iframe after any abort.
+    let inFlight = false;
     const trigger = (reason: string) => {
       const storeTid = usePlayerStore.getState().currentTrack?.trackId;
       if (storeTid !== trackId) {
@@ -188,13 +253,8 @@ export function useHotSwap(
         });
         return;
       }
-      if (triggered) return;
-      triggered = true;
-      if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
-      if (channelRef.current && supabase) {
-        supabase.removeChannel(channelRef.current);
-        channelRef.current = null;
-      }
+      if (inFlight) return;
+      inFlight = true;
       devLog(`[useHotSwap] trigger (${reason}) for ${trackId}`);
       const el = audioRef.current;
       if (!el) {
@@ -202,13 +262,29 @@ export function useHotSwap(
           event_type: 'trace', track_id: trackId,
           meta: { subtype: 'hotswap_no_audio_ref', reason },
         });
+        inFlight = false;
         return;
       }
       logPlaybackEvent({
         event_type: 'trace', track_id: trackId,
         meta: { subtype: 'hotswap_trigger', reason },
       });
-      void performHotSwap(trackId, el, lastIframePosRef.current, iframeStartedAtRef.current);
+      void performHotSwap(trackId, el, lastIframePosRef.current, iframeStartedAtRef.current)
+        .then((success) => {
+          if (success) {
+            // Success — playbackSource='r2'; the useEffect will re-run
+            // with the new source and tear down watchers. Nothing to do.
+            if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+            if (channelRef.current && supabase) {
+              supabase.removeChannel(channelRef.current);
+              channelRef.current = null;
+            }
+          } else {
+            // Abort — reset flag so the NEXT poll/RT fire can retry.
+            // Watchers stay active for exactly this reason.
+            inFlight = false;
+          }
+        });
     };
 
     // Realtime subscription — only subscribe if the queue row is still
