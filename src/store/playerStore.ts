@@ -64,6 +64,11 @@ let _lastPortalSyncSec = -1;
 // a drag. Synchronous localStorage.setItem on every position blocks the
 // main thread (1-5ms each) and causes visible UI lag + audio stutter.
 let _volumePersistTimer: ReturnType<typeof setTimeout> | null = null;
+// Same pattern for the VOYEX spatial slider — previously stored on window
+// and used an `if (!timer)` leading-throttle that silently dropped every
+// drag value after the first one in each 500ms window. User's final
+// slider position never persisted.
+let _voyexPersistTimer: ReturnType<typeof setTimeout> | null = null;
 
 // ============================================
 // PERSISTENCE HELPERS - Remember state on refresh
@@ -1766,13 +1771,15 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   setVoyexSpatial: (value) => {
     const clamped = Math.max(-100, Math.min(100, value));
     set({ voyexSpatial: clamped });
-    // Debounce spatial persist — slider fires rapidly during drag
-    if (!(window as any).__voyexPersistTimer) {
-      (window as any).__voyexPersistTimer = setTimeout(() => {
-        try { localStorage.setItem('voyo-voyex-spatial', String(clamped)); } catch {}
-        (window as any).__voyexPersistTimer = null;
-      }, 500);
-    }
+    // Trailing debounce — drop any pending write and schedule a fresh one
+    // that captures the LATEST clamped value. The prior leading-throttle
+    // (if (!timer) { setTimeout(...) }) saved only the first value of each
+    // 500ms window, so the user's final slider position never persisted.
+    if (_voyexPersistTimer) clearTimeout(_voyexPersistTimer);
+    _voyexPersistTimer = setTimeout(() => {
+      try { localStorage.setItem('voyo-voyex-spatial', String(clamped)); } catch {}
+      _voyexPersistTimer = null;
+    }, 500);
   },
   setOyeBarBehavior: (behavior) => {
     set({ oyeBarBehavior: behavior });
