@@ -14,6 +14,7 @@ import { AfricaIcon } from '../ui/AfricaIcon';
 import { getThumb } from '../../utils/thumbnail';
 import { SmartImage } from '../ui/SmartImage';
 import { TrackCardGestures } from '../ui/TrackCardGestures';
+import { GreetingBanner } from './GreetingBanner';
 import { VIBES, Vibe } from '../../data/tracks';
 import { LottieIcon } from '../ui/LottieIcon';
 import { getUserTopTracks, getPoolAwareHotTracks, getPoolAwareDiscoveryTracks, calculateBehaviorScore, recordPoolEngagement } from '../../services/personalization';
@@ -1560,8 +1561,12 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
         </div>
       </header>
 
+      {/* Greeting banner — fade-rise on session open, bronze shimmer
+          sweep, then fades out. Once per sessionStorage. */}
+      <GreetingBanner />
+
       {/* Notification Hint Popup */}
-      
+
         {showNotificationHint && (
           <div
             className="fixed top-20 right-4 z-50 px-4 py-3 rounded-xl shadow-2xl"

@@ -1,0 +1,124 @@
+/**
+ * GreetingBanner — time-aware welcome that fades + rises into the top
+ * of the feed on session start, shimmers in the VOYO bronze palette,
+ * then fades out. Shows once per session (sessionStorage-gated) so it
+ * feels like an arrival moment, not a permanent chrome element.
+ *
+ * Tone: ambient, premium, not a toast. If the user scrolls or taps
+ * anything, it dismisses itself early — the greeting is never in the
+ * way.
+ */
+
+import { useEffect, useMemo, useState } from 'react';
+import { useAuth } from '../../hooks/useAuth';
+
+const SESSION_KEY = 'voyo-greeting-shown-v1';
+const LIFETIME_MS = 5200; // fade-in 600ms → hold 3400ms → fade-out 1200ms
+
+function greetingFor(hour: number): string {
+  if (hour >= 5 && hour < 12) return 'Good Morning';
+  if (hour >= 12 && hour < 17) return 'Good Afternoon';
+  if (hour >= 17 && hour < 22) return 'Good Evening';
+  return 'Welcome Back';
+}
+
+export const GreetingBanner = () => {
+  const [phase, setPhase] = useState<'hidden' | 'rising' | 'settled' | 'leaving' | 'done'>('hidden');
+  const { displayName } = useAuth();
+
+  const { greeting, name } = useMemo(() => {
+    const hour = new Date().getHours();
+    return {
+      greeting: greetingFor(hour),
+      // Fallback to a warm default so first-time / logged-out users
+      // still get the moment. Split at first space so long names get
+      // a clean first-name-only treatment.
+      name: (displayName || 'Friend').split(' ')[0],
+    };
+  }, [displayName]);
+
+  useEffect(() => {
+    try {
+      if (sessionStorage.getItem(SESSION_KEY)) {
+        setPhase('done');
+        return;
+      }
+      sessionStorage.setItem(SESSION_KEY, String(Date.now()));
+    } catch { /* sessionStorage unavailable — still show once per mount */ }
+
+    // Small delay so the banner lands AFTER the feed's first paint —
+    // reads as a moment that "appears", not a boot artifact.
+    const riseTimer = setTimeout(() => setPhase('rising'), 220);
+    const settleTimer = setTimeout(() => setPhase('settled'), 220 + 600);
+    const leaveTimer = setTimeout(() => setPhase('leaving'), LIFETIME_MS - 1200);
+    const doneTimer = setTimeout(() => setPhase('done'), LIFETIME_MS);
+    return () => {
+      clearTimeout(riseTimer);
+      clearTimeout(settleTimer);
+      clearTimeout(leaveTimer);
+      clearTimeout(doneTimer);
+    };
+  }, []);
+
+  if (phase === 'done') return null;
+
+  const visible = phase === 'rising' || phase === 'settled';
+  const leaving = phase === 'leaving';
+
+  return (
+    <div
+      className="pointer-events-none px-4 pt-3 pb-1"
+      style={{
+        opacity: leaving ? 0 : visible ? 1 : 0,
+        transform: leaving
+          ? 'translateY(-8px)'
+          : visible ? 'translateY(0)' : 'translateY(16px)',
+        transition: leaving
+          ? 'opacity 1200ms ease-in, transform 1200ms ease-in'
+          : 'opacity 600ms cubic-bezier(0.2, 0.8, 0.2, 1), transform 600ms cubic-bezier(0.2, 0.8, 0.2, 1)',
+      }}
+    >
+      <div className="relative inline-block">
+        <h2
+          className="text-[28px] font-bold leading-tight tracking-tight"
+          style={{
+            fontFamily: "'Satoshi', sans-serif",
+            // Bronze → gold → bronze gradient, clipped to text.
+            background:
+              'linear-gradient(90deg, #8B6228 0%, #C4943D 18%, #E6B865 35%, #FFF3D6 50%, #E6B865 65%, #C4943D 82%, #8B6228 100%)',
+            backgroundSize: '240% 100%',
+            WebkitBackgroundClip: 'text',
+            backgroundClip: 'text',
+            WebkitTextFillColor: 'transparent',
+            // Shimmer sweep — the gradient's 240% width slides across the
+            // text so the highlight band travels left→right. 3.2s matches
+            // the banner's settled hold duration for one full pass.
+            animation: visible ? 'voyo-greeting-shimmer 3200ms ease-in-out 1' : undefined,
+            filter: 'drop-shadow(0 0 14px rgba(212,160,83,0.22))',
+          }}
+        >
+          {greeting}, {name}
+        </h2>
+        {/* Thin bronze underline flourish */}
+        <div
+          className="h-[1.5px] mt-1.5 rounded-full"
+          style={{
+            width: visible ? '52%' : '0%',
+            background:
+              'linear-gradient(90deg, rgba(212,160,83,0.85) 0%, rgba(230,184,101,0.6) 50%, rgba(212,160,83,0.08) 100%)',
+            transition: 'width 900ms cubic-bezier(0.2, 0.8, 0.2, 1) 200ms',
+          }}
+        />
+      </div>
+
+      <style>{`
+        @keyframes voyo-greeting-shimmer {
+          0%   { background-position: 100% 50%; }
+          100% { background-position: -100% 50%; }
+        }
+      `}</style>
+    </div>
+  );
+};
+
+export default GreetingBanner;
