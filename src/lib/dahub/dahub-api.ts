@@ -12,10 +12,19 @@ import { createClient } from '@supabase/supabase-js';
 import { supabase } from '../supabase';
 import { devLog, devWarn } from '../../utils/logger';
 
-// Command Center's Supabase credentials (social data)
-// Only create a separate client if CC-specific env vars are set
-const CC_SUPABASE_URL = import.meta.env.VITE_CC_SUPABASE_URL || '';
-const CC_SUPABASE_KEY = import.meta.env.VITE_CC_SUPABASE_ANON_KEY || '';
+// Command Center's Supabase credentials (social + notifications data).
+// Two naming schemes coexist — accept either so legacy deployments and
+// the current .env both resolve without env surgery:
+//   VITE_CC_SUPABASE_URL / VITE_CC_SUPABASE_ANON_KEY   (original)
+//   VITE_COMMAND_CENTER_URL / VITE_COMMAND_CENTER_KEY  (current)
+const CC_SUPABASE_URL =
+  import.meta.env.VITE_CC_SUPABASE_URL ||
+  import.meta.env.VITE_COMMAND_CENTER_URL ||
+  '';
+const CC_SUPABASE_KEY =
+  import.meta.env.VITE_CC_SUPABASE_ANON_KEY ||
+  import.meta.env.VITE_COMMAND_CENTER_KEY ||
+  '';
 
 // Reuse main client when no separate CC credentials are configured
 export const ccSupabase = (CC_SUPABASE_URL && CC_SUPABASE_KEY)
