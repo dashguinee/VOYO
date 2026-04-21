@@ -29,6 +29,7 @@ import { Zap } from 'lucide-react';
 import { useDownloadStore } from '../../store/downloadStore';
 import { usePreferenceStore } from '../../store/preferenceStore';
 import { app } from '../../services/oyo';
+import { getYouTubeId } from '../../utils/voyoId';
 import type { Track } from '../../types';
 
 export type OyeButtonSize = 'sm' | 'md' | 'lg';
@@ -135,9 +136,14 @@ interface OyeButtonProps {
 
 export const OyeButton = memo(({ track, size = 'md', escape = true, className = '', onClick }: OyeButtonProps) => {
   // Subscribe narrowly so the button re-renders only when its own track's
-  // state changes. Keying on trackId means track objects with the same id
-  // still share state across surfaces.
-  const download = useDownloadStore(s => s.downloads.get(track.trackId));
+  // state changes.
+  //
+  // CRITICAL: downloadStore keys its entries by the *decoded* YouTube id
+  // (see downloadStore.boostTrack -> decodeVoyoId). If we look up with a
+  // raw VOYO id (vyo_<base64>), the hit always misses and the button stays
+  // stuck in purple-faded even while the track is actively downloading.
+  // Normalise here — same function boostTrack uses internally.
+  const download = useDownloadStore(s => s.downloads.get(getYouTubeId(track.trackId)));
   const preference = usePreferenceStore(s => s.trackPreferences[track.id]);
 
   const state = useMemo(
