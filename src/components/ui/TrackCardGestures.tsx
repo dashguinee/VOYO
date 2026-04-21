@@ -167,7 +167,11 @@ export const TrackCardGestures = ({
   return (
     <div
       className={className}
-      style={{ position: 'relative', touchAction: 'pan-y', userSelect: 'none', WebkitUserSelect: 'none' }}
+      // 'manipulation' lets the parent carousel receive horizontal pans for
+      // scrolling while we still own tap/double-tap/long-press gestures here.
+      // 'pan-y' (old value) blocked horizontal swipes on cards — users
+      // couldn't scroll OYO's Picks / any other horizontal shelf.
+      style={{ position: 'relative', touchAction: 'manipulation', userSelect: 'none', WebkitUserSelect: 'none' }}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
