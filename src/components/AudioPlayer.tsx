@@ -108,7 +108,6 @@ export const AudioPlayer = () => {
     setupAudioEnhancement,
     applyMasterGain,
     fadeInMasterGain,
-    muteMasterGainInstantly,
     softFadeOut,
   } = useAudioChain({
     audioRef,
@@ -133,26 +132,15 @@ export const AudioPlayer = () => {
     if (!el) return;
     voyoStream.bindAudio(el);
     return () => {
-      voyoStream.onBeforeStreamStart = null;
       voyoStream.onRapidSkip = null;
       voyoStream.endSession();
       // useHotSwap handles its own watcher teardown on unmount + track change.
     };
   }, []);
 
-  // ── Keep voyoStream callbacks current without triggering endSession ───
+  // ── Rapid-skip handler — fires from voyoStream.skip() when the user
+  //    triples in 10s. Pivots the deck to a fresh taste direction.
   useEffect(() => {
-    voyoStream.onBeforeStreamStart = () => {
-      setupAudioEnhancement(boostProfile as BoostPreset);
-      const ctx = audioContextRef.current;
-      if (ctx && (ctx.state === 'suspended' || (ctx as any).state === 'interrupted')) {
-        ctx.resume().catch(() => {});
-      }
-      muteMasterGainInstantly();
-    };
-    voyoStream.onSoftFade = (durationMs: number) => {
-      softFadeOut(durationMs);
-    };
     voyoStream.onRapidSkip = async () => {
       try {
         const { deck } = await loadOyoState();
@@ -179,15 +167,13 @@ export const AudioPlayer = () => {
         devLog(`[OYO] Rapid skip pivot → ${meta.title}`);
       } catch {}
     };
-  }, [muteMasterGainInstantly, setupAudioEnhancement, boostProfile, audioContextRef, softFadeOut]);
+  }, []);
 
   // ── React to currentTrack changes ─────────────────────────────────────
   useEffect(() => {
     if (!currentTrack) return;
     // Reset completion signal on every track change
     completionSignaledRef.current = false;
-    if (voyoStream.isSkipping) return;
-    if (currentTrack.trackId === voyoStream.currentTrackId) return;
 
     devLog(`[AudioPlayer] track change: ${currentTrack.trackId}`);
 
@@ -320,17 +306,6 @@ export const AudioPlayer = () => {
     }
   }, [currentTrack?.trackId]);
 
-  // ── Pause / resume sync ───────────────────────────────────────────────
-  useEffect(() => {
-    const el = audioRef.current;
-    if (!el || !voyoStream.sessionId) return;
-    if (isPlaying && el.paused) {
-      el.play().catch(() => {});
-    } else if (!isPlaying && !el.paused) {
-      el.pause();
-    }
-  }, [isPlaying]);
-
   // ── AudioContext power gate ──────────────────────────────────────────
   // When paused for a while, suspend the Web Audio graph so it stops
   // running the scheduler / tick loop on the audio thread. Resume on
@@ -350,6 +325,12 @@ export const AudioPlayer = () => {
   }, [isPlaying, audioContextRef]);
 
   // ── Background recovery ───────────────────────────────────────────────
+  // When the user returns from a BG state where audio was playing but
+  // got paused mid-track (iOS audio-session yank during a phone call,
+  // aggressive Chrome Android battery throttling, Samsung DeX context
+  // switch), retry play() so they don't come back to dead silence.
+  // Prior gate on voyoStream.streamUrl was always null post-VPS-rip,
+  // so this effect silently did nothing for months.
   useEffect(() => {
     let wentHiddenAt: number | null = null;
 
@@ -359,19 +340,17 @@ export const AudioPlayer = () => {
         return;
       }
       const el = audioRef.current;
-      if (!el || !voyoStream.streamUrl) return;
+      if (!el) return;
       if (!usePlayerStore.getState().isPlaying) return;
       if (el.paused || el.readyState < 2) {
         const bgDurationMs = wentHiddenAt ? Date.now() - wentHiddenAt : null;
-        devLog('[AudioPlayer] back from BG — stream stalled, reconnecting');
+        const trackId = usePlayerStore.getState().currentTrack?.trackId ?? 'unknown';
+        devLog('[AudioPlayer] back from BG — audio paused, resuming');
         logPlaybackEvent({
           event_type: 'bg_disconnect',
-          track_id: voyoStream.currentTrackId ?? 'unknown',
+          track_id: trackId,
           meta: { bg_duration_ms: bgDurationMs, ready_state: el.readyState, paused: el.paused },
         });
-        voyoStream.markAudioRestarted();
-        el.src = voyoStream.streamUrl;
-        el.load();
         el.play().catch(() => {});
       }
     };
@@ -412,12 +391,15 @@ export const AudioPlayer = () => {
       clearTimeout(stallLogTimerRef.current);
       stallLogTimerRef.current = null;
     }
-    if (!document.hidden && voyoStream.currentTrackId) {
-      logPlaybackEvent({
-        event_type: 'bg_reconnect',
-        track_id: voyoStream.currentTrackId,
-        meta: { ready_state: el?.readyState },
-      });
+    if (!document.hidden) {
+      const trackId = usePlayerStore.getState().currentTrack?.trackId;
+      if (trackId) {
+        logPlaybackEvent({
+          event_type: 'bg_reconnect',
+          track_id: trackId,
+          meta: { ready_state: el?.readyState },
+        });
+      }
     }
   }, [boostProfile, setupAudioEnhancement, fadeInMasterGain]);
 
@@ -486,9 +468,8 @@ export const AudioPlayer = () => {
       // graph's strongest input and must not miss a BG listen-through.
       if (!completionSignaledRef.current) {
         const elDur = isFinite(el.duration) ? el.duration : 0;
-        const dur = voyoStream.currentDuration || elDur;
-        const position = voyoStream.getPosition();
-        if (dur > 0 && position / dur >= 0.8) {
+        const dur = isFinite(el.duration) ? el.duration : 0;
+        if (dur > 0 && el.currentTime / dur >= 0.8) {
           completionSignaledRef.current = true;
           oyaPlanSignal('completion');
         }
@@ -501,25 +482,20 @@ export const AudioPlayer = () => {
       if (!trackSwapInProgressRef.current) {
         const elDur = isFinite(el.duration) ? el.duration : 0;
         if (elDur > 0 && el.currentTime >= elDur - 0.3 && el.paused) {
-          const ps = usePlayerStore.getState().playbackSource;
-          if (ps === 'r2' || !voyoStream.sessionId) {
-            logPlaybackEvent({
-              event_type: 'trace',
-              track_id: usePlayerStore.getState().currentTrack?.trackId ?? 'unknown',
-              meta: { subtype: 'bg_auto_advance_watchdog' },
-            });
-            usePlayerStore.getState().nextTrack();
-          }
+          logPlaybackEvent({
+            event_type: 'trace',
+            track_id: usePlayerStore.getState().currentTrack?.trackId ?? 'unknown',
+            meta: { subtype: 'bg_auto_advance_watchdog' },
+          });
+          usePlayerStore.getState().nextTrack();
         }
       }
       return;
     }
 
-    const position = voyoStream.getPosition();
-    const elDur = isFinite(el.duration) ? el.duration : 0;
-    const dur = voyoStream.currentDuration || elDur;
+    const position = el.currentTime;
+    const dur = isFinite(el.duration) ? el.duration : 0;
 
-    // Track ended — VPS is transitioning, wait for next now_playing SSE
     if (dur > 0 && position >= dur) return;
 
     const progress = dur > 0 ? position / dur : 0;
@@ -545,55 +521,23 @@ export const AudioPlayer = () => {
   }, [setCurrentTime, setProgress, setDuration]);
 
   const handleEnded = useCallback(() => {
-    // R2-direct playback (no VPS session): just advance the queue locally.
-    // This is the common case now — the audio element gets a discrete R2 file
-    // per track, so 'ended' means track-over, not stream-broken.
-    const ps = usePlayerStore.getState().playbackSource;
-    if (ps === 'r2' || !voyoStream.sessionId) {
-      // The browser fires 'pause' right after 'ended'. Flip the swap flag
-      // NOW — before nextTrack() runs its state update + before the 'pause'
-      // handler gets a chance to see a stale false. Otherwise handlePause
-      // would see store.isPlaying=true (just set by nextTrack) and retry
-      // play() on the just-ended element, briefly restarting the finished
-      // track before the new track's effect overwrites el.src.
-      trackSwapInProgressRef.current = true;
-      logPlaybackEvent({
-        event_type: 'stream_ended',
-        track_id: voyoStream.currentTrackId ?? 'unknown',
-        meta: { source: ps, advance: 'local_next' },
-      });
-      usePlayerStore.getState().nextTrack();
-      return;
-    }
-
-    // Legacy VPS session path — kept for any code path that still calls
-    // voyoStream.startSession(). Can be removed once all sessions are gone.
-    devWarn('[AudioPlayer] stream ended — reconnecting');
+    // R2-direct playback — the audio element gets a discrete R2 file per
+    // track, so 'ended' means track-over, advance the queue locally.
+    //
+    // The browser fires 'pause' right after 'ended'. Flip the swap flag
+    // NOW — before nextTrack() runs its state update + before the 'pause'
+    // handler gets a chance to see a stale false. Otherwise handlePause
+    // would see store.isPlaying=true (just set by nextTrack) and retry
+    // play() on the just-ended element, briefly restarting the finished
+    // track before the new track's effect overwrites el.src.
+    trackSwapInProgressRef.current = true;
+    const trackId = usePlayerStore.getState().currentTrack?.trackId ?? 'unknown';
     logPlaybackEvent({
       event_type: 'stream_ended',
-      track_id: voyoStream.currentTrackId ?? 'unknown',
-      meta: { session_id: voyoStream.sessionId, has_stream_url: !!voyoStream.streamUrl },
+      track_id: trackId,
+      meta: { source: usePlayerStore.getState().playbackSource, advance: 'local_next' },
     });
-    const el = audioRef.current;
-    if (!el || !voyoStream.streamUrl) return;
-    // Preserve the current playback position so getPosition() stays accurate
-    // after the reconnect. markAudioRestarted() resets trackStartAudioTime to 0,
-    // which would make the progress bar jump to 0s even though the VPS resumes
-    // from the correct byte offset — the user sees a fake "restart".
-    // Snapshot position BEFORE reload. After el.src reload, audioEl.currentTime
-    // resets to 0 but the VPS resumes from the correct byte offset. We offset
-    // trackStartAudioTime so getPosition() = currentTime - trackStartAudioTime
-    // stays accurate (no fake "restart" at 0s on the progress bar).
-    const positionBeforeReload = voyoStream.getPosition();
-    setTimeout(() => {
-      if (el && voyoStream.streamUrl) {
-        // Do NOT call markAudioRestarted() — that resets trackStartAudioTime to 0
-        // and sets _audioRestarted which the SSE handler would clobber on next event.
-        voyoStream.trackStartAudioTime = -positionBeforeReload;
-        el.src = voyoStream.streamUrl;
-        el.play().catch(() => {});
-      }
-    }, 1000);
+    usePlayerStore.getState().nextTrack();
   }, []);
 
   // ── MediaSession ──────────────────────────────────────────────────────
@@ -687,7 +631,7 @@ export const AudioPlayer = () => {
         const el = audioRef.current;
         logPlaybackEvent({
           event_type: 'stream_stall',
-          track_id: voyoStream.currentTrackId ?? 'unknown',
+          track_id: usePlayerStore.getState().currentTrack?.trackId ?? 'unknown',
           meta: { sub: 'stalled', ready_state: el?.readyState, network_state: el?.networkState },
         });
       }}
@@ -699,49 +643,32 @@ export const AudioPlayer = () => {
         errorBurst = errorBurst.filter(t => now - t < ERROR_BURST_WINDOW_MS);
         errorBurst.push(now);
         const burstCount = errorBurst.length;
+        const trackId = usePlayerStore.getState().currentTrack?.trackId ?? 'unknown';
         devWarn('[AudioPlayer] stream error', { code, msg, burst: burstCount });
         logPlaybackEvent({
           event_type: 'stream_error',
-          track_id: voyoStream.currentTrackId ?? 'unknown',
+          track_id: trackId,
           meta: {
             media_error_code: code,
             media_error_msg: msg,
             ready_state: el?.readyState,
             network_state: el?.networkState,
-            has_session: !!voyoStream.sessionId,
             burst_count: burstCount,
           },
         });
 
-        // Circuit breaker — loop detected, rebuild session from scratch.
-        // force:true bypasses the 3s cooldown (error burst can fire within
-        // seconds of last session create). startSession handles cleanup
-        // internally via endSession({keepSrc:true}) — no explicit endSession
-        // here so we don't open the Empty-src error window.
+        // Circuit breaker — three audio-element errors on the current track
+        // in 10s → track is toast. Advance so the user doesn't sit on silence.
         if (burstCount >= ERROR_BURST_LIMIT) {
           errorBurst = [];
           devWarn('[AudioPlayer] error-burst on current track — advancing');
           logPlaybackEvent({
             event_type: 'trace',
-            track_id: usePlayerStore.getState().currentTrack?.trackId ?? 'unknown',
+            track_id: trackId,
             meta: { subtype: 'error_burst_skip', burst_count: burstCount },
           });
-          // Three audio-element errors in 10s → track is toast. Advance
-          // instead of rebuilding a VPS session (which no longer exists in
-          // the R2-first flow).
           usePlayerStore.getState().nextTrack();
-          return;
         }
-
-        setTimeout(() => {
-          const el = audioRef.current;
-          if (el && voyoStream.streamUrl) {
-            voyoStream.markAudioRestarted();
-            el.src = voyoStream.streamUrl;
-            el.load();
-            el.play().catch(() => {});
-          }
-        }, 2000);
       }}
       preload="none"
       crossOrigin="anonymous"

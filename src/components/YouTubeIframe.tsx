@@ -13,7 +13,6 @@
 
 import { useEffect, useRef, useCallback, memo, useState, type Dispatch, type SetStateAction } from 'react';
 import { usePlayerStore } from '../store/playerStore';
-import { voyoStream } from '../services/voyoStream';
 import { iframeBridge } from '../player/iframeBridge';
 import { markTrackAsFailed } from '../services/trackVerifier';
 import { devLog } from '../utils/logger';
@@ -307,13 +306,8 @@ export const YouTubeIframe = memo(() => {
             devLog('[YouTubeIframe] Video not found:', videoId);
             if (videoId) markTrackAsFailed(videoId, errorCode);
             // Re-check on fire: if the hot-swap completed during this
-            // 500ms window, or VPS session is active (VPS owns track advance),
-            // don't skip away from a working track.
+            // 500ms window, don't skip away from a working track.
             setTimeout(() => {
-              if (voyoStream.sessionId) {
-                devLog('[YouTubeIframe] 100 recovery skipped — VPS session active');
-                return;
-              }
               const ps = usePlayerStore.getState().playbackSource;
               if (ps === 'cached' || ps === 'r2') {
                 devLog('[YouTubeIframe] 100 recovery skipped — hot-swap won');
@@ -342,10 +336,6 @@ export const YouTubeIframe = memo(() => {
             // Same re-check as the 100 path: hot-swap may have won the
             // race during the 500ms delay. Don't skip a newly-ready track.
             setTimeout(() => {
-              if (voyoStream.sessionId) {
-                devLog('[YouTubeIframe] embed-blocked recovery skipped — VPS session active');
-                return;
-              }
               const ps = usePlayerStore.getState().playbackSource;
               if (ps === 'cached' || ps === 'r2') {
                 devLog('[YouTubeIframe] embed-blocked recovery skipped — hot-swap won');

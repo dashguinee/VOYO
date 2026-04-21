@@ -28,7 +28,6 @@ import { BoostSettings } from '../ui/BoostSettings';
 import { haptics, getReactionHaptic } from '../../utils/haptics';
 import { useReactionStore, ReactionCategory, initReactionSubscription } from '../../store/reactionStore';
 import { devLog } from '../../utils/logger';
-import { voyoStream } from '../../services/voyoStream';
 import { pipService } from '../../services/pipService';
 // TiviPlusCrossPromo moved to HomeFeed.tsx (classic homepage)
 import { useAuth } from '../../hooks/useAuth';

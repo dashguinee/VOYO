@@ -6,31 +6,28 @@
  * refactor killed that path — audio now plays direct from R2 (Cloudflare
  * edge) or the YouTube iframe fallback, coordinated by src/player/.
  *
- * What's left here:
+ * What survives:
  *
  *   ensureTrackReady(track, sessionId, { priority })
  *     — upserts the track into voyo_upload_queue so the egyptian lanes
  *       extract it to R2. The sole extraction-queue writer outside of
  *       oyo.prefetch (which itself wraps queueForExtraction in r2Gate).
  *
- *   voyoStream  (the instance)
- *     — thin state bag that surviving consumers still poke at:
- *         .bindAudio(el)         mount-time audio ref
- *         .endSession()          unmount cleanup (no-op)
- *         .skip()                delegates to playerStore.nextTrack()
- *         .getPosition()         currentTime minus restart offset
- *         .intentionalPause      flag AudioPlayer sets around src teardown
- *         .isSkipping            flag AudioPlayer reads to gate re-entry
- *         .currentTrackId / .currentDuration / .trackStartAudioTime
- *                                misc state read by VoyoPortraitPlayer
- *         .onRapidSkip           callback registered by AudioPlayer for
- *                                the "3 skips in 10s → deck pivot" pattern
- *     — sessionId / streamUrl stay null forever; any code that still
- *       checks them short-circuits cleanly.
+ *   voyoStream (the instance)
+ *     — tiny state bag for three live concerns:
+ *         .intentionalPause  flag AudioPlayer's handlePause reads to
+ *                            distinguish user-pause from buffer-underrun.
+ *         .onRapidSkip       callback AudioPlayer registers; fires from
+ *                            skip() when the user triples in 10s.
+ *         .skip()            single skip boundary — detector + plan signal
+ *                            + playerStore.nextTrack().
+ *         .bindAudio / .endSession  mount lifecycle bookkeeping (no-ops
+ *                                   kept for call-site compatibility).
  *
- * Next cleanup step (commit D or later): replace remaining external
- * references (isSkipping, intentionalPause, currentTrackId) with playerStore
- * selectors and delete this file entirely.
+ * Every other field (sessionId, streamUrl, currentTrackId, currentDuration,
+ * trackStartAudioTime, isSkipping, onBeforeStreamStart, onSoftFade,
+ * markAudioRestarted, getPosition, pause, resume) belonged to the VPS
+ * session model and was dead read-only state after the rip. Deleted.
  */
 
 import type { Track } from '../types';
@@ -131,41 +128,30 @@ export async function ensureTrackReady(
 }
 
 // ── Thin legacy-compat singleton ──────────────────────────────────────────
+//
+// What's actually live here, post-VPS-rip:
+//   - intentionalPause: AudioPlayer flips this on user-initiated pause so
+//     handlePause knows not to retry play() (buffer-underrun recovery path).
+//   - onRapidSkip: AudioPlayer registers it; skip() fires it on 3-in-10s.
+//   - skip(): the single skip boundary — rapid detector + plan signal +
+//     playerStore.nextTrack().
+//   - bindAudio / endSession: mount lifecycle bookkeeping.
+// Every other field that used to live here was read-only dead state from
+// the VPS session model. Gone.
 
 class VoyoStreamShim {
-  // State bag — null/0 defaults. Consumers that checked these before the
-  // refactor still compile and short-circuit cleanly.
-  sessionId:           string | null = null;
-  streamUrl:           string | null = null;
-  currentTrackId:      string | null = null;
-  currentDuration:     number = 0;
-  trackStartAudioTime: number = 0;
-  isSkipping:          boolean = false;
-  intentionalPause:    boolean = false;
+  intentionalPause: boolean = false;
 
-  // Callback slots still registered by AudioPlayer.
-  onBeforeStreamStart: (() => void) | null = null;
-  onSoftFade:          ((durationMs: number) => void) | null = null;
-  onRapidSkip:         (() => void) | null = null;
+  /** Registered by AudioPlayer; invoked from skip() on 3-in-10s. */
+  onRapidSkip: (() => void) | null = null;
 
-  private audioEl: HTMLAudioElement | null = null;
   private recentSkipTimes: number[] = [];
 
-  bindAudio(el: HTMLAudioElement): void { this.audioEl = el; }
+  /** Mount bookkeeping — no-op, kept so the AudioPlayer call compiles. */
+  bindAudio(_el: HTMLAudioElement): void { /* no-op */ }
 
-  /** No-op now — kept so the AudioPlayer unmount handler still compiles. */
-  endSession(_opts: { keepSrc?: boolean } = {}): void {
-    this.isSkipping = false;
+  endSession(): void {
     this.intentionalPause = false;
-  }
-
-  /** Legacy — Web Audio restart flag. Harmless to leave as a no-op. */
-  markAudioRestarted(): void { /* no-op */ }
-
-  /** Position within the current track, seconds. */
-  getPosition(): number {
-    const cur = this.audioEl?.currentTime ?? 0;
-    return Math.max(0, cur - this.trackStartAudioTime);
   }
 
   /**
@@ -184,11 +170,6 @@ class VoyoStreamShim {
     oyoPlanSignal('skip');
     usePlayerStore.getState().nextTrack();
   }
-
-  // No-op pause/resume for any remaining legacy call sites. Real pause/
-  // resume lives on the <audio> element driven by playerStore.isPlaying.
-  pause(): void { /* no-op */ }
-  resume(): void { /* no-op */ }
 }
 
 export const voyoStream = new VoyoStreamShim();
