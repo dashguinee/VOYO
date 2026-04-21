@@ -12,7 +12,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../../hooks/useAuth';
 
-const SESSION_KEY = 'voyo-greeting-shown-v1';
+// Day-keyed localStorage — "first time today on Home" instead of "first
+// time this tab session". Surviving across PWA relaunches is the whole
+// point: the greeting is a daily arrival moment, not a per-tab toast.
+const STORAGE_KEY_PREFIX = 'voyo-greeting-shown-';
+const todayKey = () => STORAGE_KEY_PREFIX + new Date().toISOString().slice(0, 10);
 const LIFETIME_MS = 5200; // fade-in 600ms → hold 3400ms → fade-out 1200ms
 
 function greetingFor(hour: number): string {
@@ -44,21 +48,27 @@ export const GreetingBanner = ({ onComplete }: GreetingBannerProps = {}) => {
   }, [displayName]);
 
   useEffect(() => {
+    const key = todayKey();
     try {
-      if (sessionStorage.getItem(SESSION_KEY)) {
+      if (localStorage.getItem(key)) {
         setPhase('done');
         onComplete?.();
         return;
       }
-      sessionStorage.setItem(SESSION_KEY, String(Date.now()));
-    } catch { /* sessionStorage unavailable — still show once per mount */ }
+    } catch { /* localStorage unavailable — still show once per mount */ }
 
     // Small delay so the banner lands AFTER the feed's first paint —
     // reads as a moment that "appears", not a boot artifact.
     const riseTimer = setTimeout(() => setPhase('rising'), 220);
     const settleTimer = setTimeout(() => setPhase('settled'), 220 + 600);
     const leaveTimer = setTimeout(() => setPhase('leaving'), LIFETIME_MS - 1200);
-    const doneTimer = setTimeout(() => { setPhase('done'); onComplete?.(); }, LIFETIME_MS);
+    // Mark "shown today" ONLY when the full animation completes — avoids
+    // consuming the flag if the user/tree unmounts before it plays.
+    const doneTimer = setTimeout(() => {
+      try { localStorage.setItem(key, String(Date.now())); } catch {}
+      setPhase('done');
+      onComplete?.();
+    }, LIFETIME_MS);
     return () => {
       clearTimeout(riseTimer);
       clearTimeout(settleTimer);

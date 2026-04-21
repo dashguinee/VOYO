@@ -14,10 +14,14 @@ import { GreetingBanner } from './GreetingBanner';
 import { LiveStatusBar } from './LiveStatusBar';
 
 export const GreetingArea = () => {
-  // Start in "live" mode if we've already seen the greeting this session.
+  // Skip straight to "live" if we've already played the greeting today.
+  // Day-scoped so the banner returns the next calendar day, not on every
+  // PWA relaunch.
   const [bannerDone, setBannerDone] = useState(() => {
-    try { return !!sessionStorage.getItem('voyo-greeting-shown-v1'); }
-    catch { return false; }
+    try {
+      const key = 'voyo-greeting-shown-' + new Date().toISOString().slice(0, 10);
+      return !!localStorage.getItem(key);
+    } catch { return false; }
   });
 
   if (!bannerDone) {
