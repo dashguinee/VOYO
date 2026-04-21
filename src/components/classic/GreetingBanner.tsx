@@ -30,10 +30,10 @@ export const GreetingBanner = () => {
     const hour = new Date().getHours();
     return {
       greeting: greetingFor(hour),
-      // Fallback to a warm default so first-time / logged-out users
-      // still get the moment. Split at first space so long names get
-      // a clean first-name-only treatment.
-      name: (displayName || 'Friend').split(' ')[0],
+      // Fallback to "Dash" (the brand/owner) so first-time / logged-out
+      // users still get a personal moment instead of a generic "Friend".
+      // Split at first space so long names get clean first-name only.
+      name: (displayName || 'Dash').split(' ')[0],
     };
   }, [displayName]);
 

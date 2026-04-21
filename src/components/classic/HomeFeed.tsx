@@ -36,13 +36,6 @@ import { supabase } from '../../lib/supabase';
 // HELPER FUNCTIONS
 // ============================================
 
-const getGreeting = (): string => {
-  const hour = new Date().getHours();
-  if (hour < 12) return 'Good morning';
-  if (hour < 18) return 'Good afternoon';
-  return 'Good evening';
-};
-
 // Pool-based: Get new releases from pool (sorted by when added)
 const getNewReleases = (pool: Track[], limit: number = 15): Track[] => {
   return [...pool]
@@ -1520,8 +1513,6 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
     return seededShuffle(fallback, sessionSeed).slice(0, 10);
   }, [hotPool, oyosPicks, discoverMoreTracks, africanVibes, sessionSeed]);
 
-  const greeting = getGreeting();
-
   const handleVibeSelect = (vibe: Vibe) => {
     // Central orchestrator picks the pool, plays the top, enqueues the rest.
     // Falls back to generic hot tracks if that vibe's slice is empty.
@@ -1561,10 +1552,6 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
         </div>
       </header>
 
-      {/* Greeting banner — fade-rise on session open, bronze shimmer
-          sweep, then fades out. Once per sessionStorage. */}
-      <GreetingBanner />
-
       {/* Notification Hint Popup */}
 
         {showNotificationHint && (
@@ -1584,10 +1571,10 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
         )}
       
 
-      {/* Greeting */}
-      <div className="px-4 pt-4 pb-6">
-        <h1 className="text-2xl font-bold text-white">{greeting}, Dash</h1>
-      </div>
+      {/* Greeting — fade-rise + bronze shimmer, once per session, then
+          the whole block collapses (banner returns null after ~5.2s) so
+          the feed flows straight into the content below. */}
+      <GreetingBanner />
 
       {/* VoyoLiveCard - "Vibes on Vibes" → Opens VOYO Player */}
       <SignInPrompt onSwitchToVOYO={onSwitchToVOYO} />
