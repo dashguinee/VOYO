@@ -41,7 +41,8 @@ const HOT_SWAP_STEPS   = 40;
 
 /**
  * Perform the cross-fade. Pure-ish — reads the iframe bridge, mutates the
- * audio element, flips playbackSource at the end.
+ * audio element, flips playbackSource at the end. Every stage logs a
+ * trace so we can see exactly where a swap gets stuck if it does.
  */
 async function performHotSwap(
   trackId: string,
@@ -65,42 +66,74 @@ async function performHotSwap(
     }
   }
 
-  // Preload R2 silently at the matched position.
-  el.src = `${R2_AUDIO}/${trackId}?q=high`;
-  try { el.currentTime = t; } catch {}
-  el.volume = 0;
-  await new Promise<void>((resolve) => {
-    const onReady = () => { el.removeEventListener('canplay', onReady); resolve(); };
-    el.addEventListener('canplay', onReady);
-    setTimeout(() => { el.removeEventListener('canplay', onReady); resolve(); }, 2500);
-  });
-  try { el.currentTime = t; } catch {}
-  await el.play().catch(() => {});
-
-  // Equal-power crossfade. Linear fades briefly dip ~3dB mid-swap (perceived
-  // quieter); sin/cos preserves constant perceived loudness — no audible dip.
-  const stepMs = Math.max(1, Math.round(HOT_SWAP_FADE_MS / HOT_SWAP_STEPS));
-  const iframeFade = iframeBridge.fadeOut(HOT_SWAP_FADE_MS);
-  for (let i = 1; i <= HOT_SWAP_STEPS; i++) {
-    const p = i / HOT_SWAP_STEPS;          // 0 → 1
-    const r2Gain = Math.sin((p * Math.PI) / 2); // 0 → 1 (equal-power in)
-    el.volume = Math.min(storeVol, storeVol * r2Gain);
-    await new Promise((r) => setTimeout(r, stepMs));
-  }
-  await iframeFade;
-
-  iframeBridge.pause();
-  iframeBridge.resetVolume();
-  el.volume = storeVol;
-  usePlayerStore.getState().setPlaybackSource('r2');
-
   logPlaybackEvent({
     event_type: 'trace', track_id: trackId,
-    meta: {
-      subtype: 'hotswap', mode: posSource,
-      elapsed_ms: elapsed, fade_ms: HOT_SWAP_FADE_MS, at_seconds: Math.round(t),
-    },
+    meta: { subtype: 'hotswap_start', mode: posSource, at_seconds: Math.round(t), elapsed_ms: elapsed },
   });
+
+  try {
+    // Preload R2 silently at the matched position.
+    el.src = `${R2_AUDIO}/${trackId}?q=high`;
+    try { el.currentTime = t; } catch {}
+    el.volume = 0;
+    const canplayDeadline = Date.now() + 2500;
+    await new Promise<void>((resolve) => {
+      const onReady = () => { el.removeEventListener('canplay', onReady); resolve(); };
+      el.addEventListener('canplay', onReady);
+      setTimeout(() => { el.removeEventListener('canplay', onReady); resolve(); }, 2500);
+    });
+    const canplayLate = Date.now() > canplayDeadline - 50;
+    try { el.currentTime = t; } catch {}
+    await el.play().catch((err: Error) => {
+      logPlaybackEvent({
+        event_type: 'trace', track_id: trackId,
+        meta: { subtype: 'hotswap_play_reject', err: err?.message?.slice(0, 80) },
+      });
+    });
+
+    // Equal-power crossfade. Linear fades briefly dip ~3dB mid-swap (perceived
+    // quieter); sin/cos preserves constant perceived loudness — no audible dip.
+    const stepMs = Math.max(1, Math.round(HOT_SWAP_FADE_MS / HOT_SWAP_STEPS));
+    const iframeFade = iframeBridge.fadeOut(HOT_SWAP_FADE_MS);
+    for (let i = 1; i <= HOT_SWAP_STEPS; i++) {
+      const p = i / HOT_SWAP_STEPS;          // 0 → 1
+      const r2Gain = Math.sin((p * Math.PI) / 2); // 0 → 1 (equal-power in)
+      el.volume = Math.min(storeVol, storeVol * r2Gain);
+      await new Promise((r) => setTimeout(r, stepMs));
+    }
+    await iframeFade;
+
+    iframeBridge.pause();
+    iframeBridge.resetVolume();
+    el.volume = storeVol;
+    usePlayerStore.getState().setPlaybackSource('r2');
+
+    logPlaybackEvent({
+      event_type: 'trace', track_id: trackId,
+      meta: {
+        subtype: 'hotswap', mode: posSource,
+        elapsed_ms: elapsed, fade_ms: HOT_SWAP_FADE_MS, at_seconds: Math.round(t),
+        canplay_late: canplayLate, paused_after: el.paused, el_vol: el.volume,
+      },
+    });
+  } catch (err) {
+    // Something threw mid-swap. Emergency instant-swap so we don't leave the
+    // user with muted iframe + muted <audio>.
+    logPlaybackEvent({
+      event_type: 'trace', track_id: trackId,
+      meta: {
+        subtype: 'hotswap_fail', mode: posSource,
+        err: (err as Error)?.message?.slice(0, 120),
+      },
+    });
+    try {
+      el.volume = storeVol;
+      if (el.paused) await el.play().catch(() => {});
+      iframeBridge.pause();
+      iframeBridge.resetVolume();
+      usePlayerStore.getState().setPlaybackSource('r2');
+    } catch { /* can't recover — user hears silence, will skip */ }
+  }
 }
 
 /**
@@ -140,8 +173,20 @@ export function useHotSwap(
     }, 1000);
 
     // Unified trigger — whichever watcher fires first wins, both clear.
+    // Instrumented so we see every (attempted) fire in telemetry, and
+    // can tell stale-track abandonments from real swaps.
+    let triggered = false;
     const trigger = (reason: string) => {
-      if (usePlayerStore.getState().currentTrack?.trackId !== trackId) return;
+      const storeTid = usePlayerStore.getState().currentTrack?.trackId;
+      if (storeTid !== trackId) {
+        logPlaybackEvent({
+          event_type: 'trace', track_id: trackId,
+          meta: { subtype: 'hotswap_trigger_stale', reason, now: storeTid ?? 'none' },
+        });
+        return;
+      }
+      if (triggered) return;
+      triggered = true;
       if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
       if (channelRef.current && supabase) {
         supabase.removeChannel(channelRef.current);
@@ -149,7 +194,17 @@ export function useHotSwap(
       }
       devLog(`[useHotSwap] trigger (${reason}) for ${trackId}`);
       const el = audioRef.current;
-      if (!el) return;
+      if (!el) {
+        logPlaybackEvent({
+          event_type: 'trace', track_id: trackId,
+          meta: { subtype: 'hotswap_no_audio_ref', reason },
+        });
+        return;
+      }
+      logPlaybackEvent({
+        event_type: 'trace', track_id: trackId,
+        meta: { subtype: 'hotswap_trigger', reason },
+      });
       void performHotSwap(trackId, el, lastIframePosRef.current, iframeStartedAtRef.current);
     };
 
