@@ -255,6 +255,8 @@ const PulsingCircle = () => (
 );
 
 const CenterFocusedCarousel = ({ tracks, onPlay }: CenterCarouselProps) => {
+  // Defensive: empty or malformed tracks → render nothing, never crash
+  const safeTracks = Array.isArray(tracks) ? tracks.filter(t => t && t.id) : [];
   const scrollRef = useRef<HTMLDivElement>(null);
   const [centerIndex, setCenterIndex] = useState(1);
   const [scrollState, setScrollState] = useState<'left-end' | 'scrolling' | 'right-end'>('scrolling');
@@ -273,7 +275,8 @@ const CenterFocusedCarousel = ({ tracks, onPlay }: CenterCarouselProps) => {
       if (!container) return;
       const { scrollLeft, scrollWidth, clientWidth } = container;
       const cardWidth = 140;
-      const newIndex = Math.min(Math.max(Math.round(scrollLeft / cardWidth) + 1, 0), tracks.length - 1);
+      const maxIndex = Math.max(0, safeTracks.length - 1);
+      const newIndex = Math.min(Math.max(Math.round(scrollLeft / cardWidth) + 1, 0), maxIndex);
       if (newIndex !== lastIndexRef.current) {
         lastIndexRef.current = newIndex;
         setCenterIndex(newIndex);
@@ -341,7 +344,7 @@ const CenterFocusedCarousel = ({ tracks, onPlay }: CenterCarouselProps) => {
         }}
         onScroll={handleScroll}
       >
-        {tracks.map((track, index) => {
+        {safeTracks.map((track, index) => {
           const isCenter = index === centerIndex;
           const distance = Math.abs(index - centerIndex);
           const scale = isCenter ? 1 : Math.max(0.75, 1 - distance * 0.15);
@@ -1322,71 +1325,101 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
 
   // OYO's Picks = hot stream with favorite-artist bubble + de-dup vs the
   // row above. Compact because pools.hot already did the behavior rerank.
+  // Defensive: missing track fields + getOyoInsights storage corruption
+  // can't crash the shelf — returns [] on any error so Safe isn't needed
+  // for correctness, only for the render tree below.
   const oyosPicks = useMemo(() => {
-    const favs = new Set(
-      getOyoInsights().favoriteArtists.map(a => a.toLowerCase()),
-    );
-    const usedIds = new Set(discoverMoreTracks.map(t => t.id));
-    const filtered = pools.hot.filter(t => !usedIds.has(t.id));
-    // Favorite-artist tracks float to top, rest hold their existing order.
-    return [
-      ...filtered.filter(t => favs.has((t.artist ?? '').toLowerCase())),
-      ...filtered.filter(t => !favs.has((t.artist ?? '').toLowerCase())),
-    ].slice(0, 15);
+    try {
+      const hot = Array.isArray(pools.hot) ? pools.hot : [];
+      if (hot.length === 0) return [];
+      let favs = new Set<string>();
+      try {
+        const insights = getOyoInsights();
+        if (insights?.favoriteArtists) {
+          favs = new Set(insights.favoriteArtists
+            .filter((a): a is string => typeof a === 'string')
+            .map(a => a.toLowerCase()));
+        }
+      } catch { /* insights may be unavailable on first run */ }
+      const dedup = Array.isArray(discoverMoreTracks) ? discoverMoreTracks : [];
+      const usedIds = new Set(dedup.map(t => t?.id).filter(Boolean));
+      const filtered = hot.filter(t => t?.id && !usedIds.has(t.id));
+      return [
+        ...filtered.filter(t => favs.has((t.artist ?? '').toLowerCase())),
+        ...filtered.filter(t => !favs.has((t.artist ?? '').toLowerCase())),
+      ].slice(0, 15);
+    } catch (e) {
+      if (import.meta.env.DEV) console.warn('[HomeFeed] oyosPicks failed:', e);
+      return [];
+    }
   }, [pools.hot, discoverMoreTracks]);
 
-  // African Vibes: West African tags + user's afro-heat preference weighting
+  // African Vibes: West African tags + user's afro-heat preference weighting.
+  // Empty pool / any failure → empty shelf, no crash.
   const africanVibes = useMemo(() => {
-    // Pull a WIDER candidate pool (60) from the curator tag so the shelf can
-    // rotate through more of the West African catalogue across sessions.
-    const curated = getWestAfricanTracks(hotPool, 60);
-    if (curated.length >= 5) {
-      // Score by user's engagement with these tracks
-      const scored = curated.map(track => ({
-        track,
-        score: calculateBehaviorScore(track, trackPreferences)
-      }));
-      scored.sort((a, b) => b.score - a.score);
-      // Top 30 by behavior, then seed-shuffle for fresh rotation every reload.
-      const topBand = scored.map(s => s.track).slice(0, 30);
-      return seededShuffle(topBand, sessionSeed).slice(0, 15);
+    try {
+      const pool = Array.isArray(hotPool) ? hotPool : [];
+      if (pool.length === 0) return [];
+      const curated = getWestAfricanTracks(pool, 60);
+      if (curated.length >= 5) {
+        const scored = curated.map(track => ({
+          track,
+          score: calculateBehaviorScore(track, trackPreferences)
+        }));
+        scored.sort((a, b) => b.score - a.score);
+        const topBand = scored.map(s => s.track).slice(0, 30);
+        return seededShuffle(topBand, sessionSeed).slice(0, 15);
+      }
+      const afroPool = pool.filter((t: any) =>
+        t?.detectedMode === 'afro-heat' || t?.tags?.some?.((tag: string) =>
+          ['afrobeats', 'afro', 'african', 'lagos', 'naija'].includes(tag.toLowerCase())
+        )
+      );
+      if (afroPool.length >= 5) {
+        return seededShuffle(afroPool as Track[], sessionSeed).slice(0, 15);
+      }
+      const fallback = getPoolAwareHotTracks(45) || [];
+      return seededShuffle(fallback, sessionSeed).slice(0, 15);
+    } catch (e) {
+      if (import.meta.env.DEV) console.warn('[HomeFeed] africanVibes failed:', e);
+      return [];
     }
-    // Fallback: Get tracks user has engaged with that have afro vibes
-    const afroPool = hotPool.filter((t: any) =>
-      t.detectedMode === 'afro-heat' || t.tags?.some((tag: string) =>
-        ['afrobeats', 'afro', 'african', 'lagos', 'naija'].includes(tag.toLowerCase())
-      )
-    );
-    if (afroPool.length >= 5) {
-      return seededShuffle(afroPool as Track[], sessionSeed).slice(0, 15);
-    }
-    return seededShuffle(getPoolAwareHotTracks(45), sessionSeed).slice(0, 15);
   }, [hotPool, trackPreferences, sessionSeed]);
 
   // REMOVED: westAfricanTracks alias - africanVibes is now distinct
 
   const classicsTracks = useMemo(() => {
-    // Pull a wider heritage slate (45) then seed-shuffle so the classics shelf
-    // rotates through different oldies every reload instead of the same 15.
-    const curated = getClassicsTracks(hotPool, 45);
-    if (curated.length < 5) return [];
-    return seededShuffle(curated, sessionSeed).slice(0, 15);
+    try {
+      const pool = Array.isArray(hotPool) ? hotPool : [];
+      const curated = getClassicsTracks(pool, 45);
+      if (curated.length < 5) return [];
+      return seededShuffle(curated, sessionSeed).slice(0, 15);
+    } catch (e) {
+      if (import.meta.env.DEV) console.warn('[HomeFeed] classicsTracks failed:', e);
+      return [];
+    }
   }, [hotPool, sessionSeed]);
 
   // Top 10 on VOYO: Trending tracks, excluding what's in other shelves.
   const trending = useMemo(() => {
-    const usedIds = new Set([
-      ...oyosPicks.map(t => t.id),
-      ...discoverMoreTracks.map(t => t.id),
-      ...africanVibes.map(t => t.id),
-    ]);
-    const curated = getCuratedTrendingTracks(hotPool, 50);
-    const available = curated.filter(t => !usedIds.has(t.id));
-    if (available.length >= 5) {
-      return seededShuffle(available, sessionSeed).slice(0, 10);
+    try {
+      const pool = Array.isArray(hotPool) ? hotPool : [];
+      const usedIds = new Set([
+        ...oyosPicks.map(t => t?.id).filter(Boolean),
+        ...discoverMoreTracks.map(t => t?.id).filter(Boolean),
+        ...africanVibes.map(t => t?.id).filter(Boolean),
+      ]);
+      const curated = getCuratedTrendingTracks(pool, 50);
+      const available = curated.filter(t => t?.id && !usedIds.has(t.id));
+      if (available.length >= 5) {
+        return seededShuffle(available, sessionSeed).slice(0, 10);
+      }
+      const fallback = getTrendingTracks(pool, 50).filter(t => t?.id && !usedIds.has(t.id));
+      return seededShuffle(fallback, sessionSeed).slice(0, 10);
+    } catch (e) {
+      if (import.meta.env.DEV) console.warn('[HomeFeed] trending failed:', e);
+      return [];
     }
-    const fallback = getTrendingTracks(hotPool, 50).filter(t => !usedIds.has(t.id));
-    return seededShuffle(fallback, sessionSeed).slice(0, 10);
   }, [hotPool, oyosPicks, discoverMoreTracks, africanVibes, sessionSeed]);
 
   const handleVibeSelect = (vibe: Vibe) => {
@@ -1822,14 +1855,18 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
 
       {/* TIVI+ moved to DaHub */}
 
-      {/* OYO's Picks — OYO-curated surface, the app's voice in the feed */}
-      <div className="mb-12">
-        <div className="px-4 mb-5 flex items-center gap-2">
-          <h2 className="text-white font-semibold text-base">OYO's Picks</h2>
-          <div className="h-[2px] w-6 rounded-full" style={{ background: '#8b5cf6', opacity: 0.6 }} />
+      {/* OYO's Picks — OYO-curated surface, the app's voice in the feed.
+          Only renders when we actually have tracks — an empty header with
+          no carousel below is worse than the shelf being absent. */}
+      {oyosPicks.length > 0 && (
+        <div className="mb-12">
+          <div className="px-4 mb-5 flex items-center gap-2">
+            <h2 className="text-white font-semibold text-base">OYO's Picks</h2>
+            <div className="h-[2px] w-6 rounded-full" style={{ background: '#8b5cf6', opacity: 0.6 }} />
+          </div>
+          <Safe name="OyosPicks"><CenterFocusedCarousel tracks={oyosPicks} onPlay={(track) => onTrackPlay(track)} /></Safe>
         </div>
-        <Safe name="OyosPicks"><CenterFocusedCarousel tracks={oyosPicks} onPlay={(track) => onTrackPlay(track)} /></Safe>
-      </div>
+      )}
 
       {/* Your Artist Radar — personal-history shelf, lives at the bottom as
           a closing beat. Not the first thing users see; the discovery /
