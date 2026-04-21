@@ -12,21 +12,25 @@ import { useAuth } from '../../hooks/useAuth';
 import { friendsAPI, activityAPI, Friend, FriendActivity } from '../../lib/voyo-api';
 import { devWarn } from '../../utils/logger';
 
-// Default avatars for fallback (diverse, West Africa vibes)
+// Default avatars — the real VOYO crew: Dash + Guinean figures + artists.
+// Replaced the stock Unsplash placeholders so the "Oyé! We Live" card
+// reads as the actual community from day one. Dash sits at index 0 so
+// the center-avatar rotation starts on him (brand anchor).
 const DEFAULT_AVATARS = [
-  'https://images.unsplash.com/photo-1531746020798-e6953c6e8e04?w=100&h=100&fit=crop&crop=face',
-  'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&h=100&fit=crop&crop=face',
-  'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100&h=100&fit=crop&crop=face',
-  'https://images.unsplash.com/photo-1539701938214-0d9736e1c16b?w=100&h=100&fit=crop&crop=face',
-  'https://images.unsplash.com/photo-1523824921871-d6f1a15151f1?w=100&h=100&fit=crop&crop=face',
+  '/vibes/dash.png',
+  '/vibes/brandy-moja.jpg',
+  '/vibes/mamadi.jpg',
+  '/vibes/artist-blue.jpg',
+  '/vibes/artist-beanie.jpg',
 ];
 
-// Mock friends listening (fallback)
+// Mock friends listening — names paired to the faces above, tracks kept
+// as real YouTube thumbs so the track-card previews still look live.
 const MOCK_FRIENDS_LISTENING = [
-  { id: '1', name: 'Aziz', avatar: DEFAULT_AVATARS[1], track: { title: 'Last Last', thumbnail: 'https://i.ytimg.com/vi/421w1j87fEM/hqdefault.jpg' } },
-  { id: '2', name: 'Kenza', avatar: DEFAULT_AVATARS[2], track: { title: 'Essence', thumbnail: 'https://i.ytimg.com/vi/jipQpjUA_o8/hqdefault.jpg' } },
-  { id: '3', name: 'Mamadou', avatar: DEFAULT_AVATARS[3], track: { title: 'Calm Down', thumbnail: 'https://i.ytimg.com/vi/WcIcVapfqXw/hqdefault.jpg' } },
-  { id: '4', name: 'Fatou', avatar: DEFAULT_AVATARS[4], track: { title: 'Peru', thumbnail: 'https://i.ytimg.com/vi/mCfPHnO3EB4/hqdefault.jpg' } },
+  { id: '1', name: 'Dash',     avatar: DEFAULT_AVATARS[0], track: { title: 'Last Last', thumbnail: 'https://i.ytimg.com/vi/421w1j87fEM/hqdefault.jpg' } },
+  { id: '2', name: 'Brandy',   avatar: DEFAULT_AVATARS[1], track: { title: 'Essence',   thumbnail: 'https://i.ytimg.com/vi/jipQpjUA_o8/hqdefault.jpg' } },
+  { id: '3', name: 'Mamadi',   avatar: DEFAULT_AVATARS[2], track: { title: 'Calm Down', thumbnail: 'https://i.ytimg.com/vi/WcIcVapfqXw/hqdefault.jpg' } },
+  { id: '4', name: 'Fatou',    avatar: DEFAULT_AVATARS[3], track: { title: 'Peru',      thumbnail: 'https://i.ytimg.com/vi/mCfPHnO3EB4/hqdefault.jpg' } },
 ];
 
 // Gradient colors
