@@ -768,7 +768,7 @@ WideTrackCard.displayName = 'WideTrackCard';
 // cover reads like a zoomed-in vinyl label. 90% opacity keeps it
 // effortless — there but not shouting.
 // ============================================
-const ClassicsDiskCard = memo(({ track, onPlay }: { track: Track; onPlay: () => void }) => {
+const ClassicsDiskCard = memo(({ track, index, onPlay }: { track: Track; index: number; onPlay: () => void }) => {
   const thumbnailUrl = getThumb(track.trackId, 'high');
   return (
     <button
@@ -778,9 +778,10 @@ const ClassicsDiskCard = memo(({ track, onPlay }: { track: Track; onPlay: () => 
       style={{ scrollSnapAlign: 'start' }}
     >
       <div
-        className="relative w-[130px] h-[130px] rounded-full overflow-hidden"
+        className="relative w-[130px] h-[130px] rounded-full overflow-hidden classics-disk-drift"
         style={{
           opacity: 0.9,
+          animationDelay: `${(index % 5) * 0.8}s`,
           boxShadow:
             '0 0 0 1px rgba(212,160,83,0.5), 0 8px 22px rgba(0,0,0,0.55), inset 0 0 20px rgba(0,0,0,0.35)',
         }}
@@ -1748,21 +1749,36 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
               </h2>
             </div>
 
+            <style>{`
+              @keyframes classics-disk-drift {
+                0%, 100% { transform: translateY(0); }
+                50%      { transform: translateY(-5px); }
+              }
+              .classics-disk-drift {
+                animation: classics-disk-drift 7s ease-in-out infinite;
+                will-change: transform;
+              }
+              @media (prefers-reduced-motion: reduce) {
+                .classics-disk-drift { animation: none; }
+              }
+            `}</style>
+
             <div
               className="flex gap-5 px-6 overflow-x-auto scrollbar-hide"
               style={{
                 scrollSnapType: 'x proximity',
                 WebkitOverflowScrolling: 'touch',
                 maskImage:
-                  'linear-gradient(to right, transparent 0, black 6%, black 94%, transparent 100%)',
+                  'linear-gradient(to right, transparent 0, black 8%, black 92%, transparent 100%)',
                 WebkitMaskImage:
-                  'linear-gradient(to right, transparent 0, black 6%, black 94%, transparent 100%)',
+                  'linear-gradient(to right, transparent 0, black 8%, black 92%, transparent 100%)',
               }}
             >
-              {classicsTracks.map((track) => (
+              {classicsTracks.map((track, index) => (
                 <ClassicsDiskCard
                   key={track.id}
                   track={track}
+                  index={index}
                   onPlay={() => onTrackPlay(track, { openFull: true })}
                 />
               ))}
