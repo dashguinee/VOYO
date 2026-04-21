@@ -449,11 +449,19 @@ export const AudioPlayer = () => {
       setIsPlaying(false);
       return;
     }
-    // Involuntary stall — stream hiccup or brief disconnect.
-    // Try to recover silently instead of showing the paused UI.
-    if (voyoStream.sessionId && voyoStream.streamUrl) {
-      audioRef.current?.play().catch(() => {});
-      return;
+    // Involuntary pause on R2 — typically a brief buffer underrun in the
+    // first seconds after a skip (R2 first chunk hasn't arrived by the
+    // time the element starts playback). Prior guard was `sessionId &&
+    // streamUrl`, both always null in the R2-first flow → recovery never
+    // ran → any hiccup froze the UI ("music restarts briefly then pauses"
+    // on skip). If the store still says we should be playing, ask the
+    // element to resume; on rejection fall back to honouring the pause.
+    if (usePlayerStore.getState().isPlaying) {
+      const el = audioRef.current;
+      if (el) {
+        el.play().catch(() => setIsPlaying(false));
+        return;
+      }
     }
     setIsPlaying(false);
   }, [setIsPlaying]);
@@ -590,8 +598,20 @@ export const AudioPlayer = () => {
       ],
     });
 
-    navigator.mediaSession.setActionHandler('play',      () => { voyoStream.resume(); });
-    navigator.mediaSession.setActionHandler('pause',     () => { voyoStream.pause(); });
+    // OS lock-screen / notification-shade controls. voyoStream.pause/resume
+    // are no-op stubs in the R2-first flow — routing through the store +
+    // audio element is what actually controls playback. Set
+    // intentionalPause on the pause path so handlePause honours it instead
+    // of treating the resulting 'pause' event as a buffer underrun.
+    navigator.mediaSession.setActionHandler('play', () => {
+      usePlayerStore.getState().setIsPlaying(true);
+      audioRef.current?.play().catch(() => {});
+    });
+    navigator.mediaSession.setActionHandler('pause', () => {
+      voyoStream.intentionalPause = true;
+      usePlayerStore.getState().setIsPlaying(false);
+      audioRef.current?.pause();
+    });
     navigator.mediaSession.setActionHandler('nexttrack', () => { app.skip(); });
 
     navigator.mediaSession.setActionHandler('previoustrack', () => {
