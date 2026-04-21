@@ -8,6 +8,8 @@
  * All three fit in IndexedDB. No server reads at runtime. OYO boots from local state.
  */
 
+import { devLog } from '../utils/logger';
+
 export interface OyoDeck {
   generation: number;           // 0 = OG seed, increments on each evolution
   trackIds: string[];           // ordered deck, max 50
@@ -202,7 +204,7 @@ export async function evolveDeck(current: OyoDeck, signals: OyoSignals): Promise
     evolvedAt: Date.now(),
   };
 
-  console.log(
+  devLog(
     `[OYO] Deck evolved OG${current.generation} → OG${nextGeneration}. ` +
     `Removed ${persistentSkips.size} persistent skip(s). ` +
     `Deck size: ${current.trackIds.length} → ${nextTrackIds.length}. ` +
