@@ -44,11 +44,6 @@ const ERROR_BURST_WINDOW_MS = 10_000;
 const ERROR_BURST_LIMIT     = 3;
 let errorBurst: number[] = [];
 
-// How long we wait on a stall before skipping forward. The fade cross-over
-// masks the hand-off so the skip reads as a DJ transition, not a bug.
-// (Only triggers on legacy VPS stream — r2/iframe handle stalls natively.)
-const STALL_SKIP_THRESHOLD_MS = 4_000;
-
 // How long a `waiting` event must persist before it counts as a real stall
 // (vs. the normal initial-buffer pause on src assignment). If readyState
 // reaches HAVE_FUTURE_DATA (>=3) within this window, skip logging.
@@ -71,7 +66,6 @@ const FADE_OUT_MIN_ELAPSED_S = 30;
 export const AudioPlayer = () => {
   const audioRef = useRef<HTMLAudioElement>(null);
   const completionSignaledRef = useRef(false);
-  const stallSkipTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // True during track-change (between src swap and the new track's canplay).
   // Prevents handlePause from flipping isPlaying=false on the transient
   // 'pause' event browsers fire when el.src is reassigned — which was
@@ -86,6 +80,12 @@ export const AudioPlayer = () => {
   // sets this to TRACK_CHANGE_FADE_IN_MS so the incoming track eases in;
   // buffer recoveries (no set) get the default short anti-click ramp.
   const nextFadeInMsRef = useRef<number | null>(null);
+  // Monotonic counter incremented on every track-change effect entry.
+  // Async work inside the effect captures its token and bails if the ref
+  // has moved past it — prevents a stale closure from a prior skip from
+  // overwriting el.src or logging play_start after the user has already
+  // moved on.
+  const trackChangeTokenRef = useRef(0);
 
   // Fine-grained selectors — destructuring the full store re-ran this whole
   // component on every progress / currentTime tick (4Hz) during playback,
@@ -229,12 +229,21 @@ export const AudioPlayer = () => {
     // the lane catches up). Watcher lifecycle lives in useHotSwap; no refs
     // to manage here.
     trackSwapInProgressRef.current = true;
+    // Per-effect token. On rapid skips (A→B→C in <200ms) two IIFEs were
+    // running concurrently: effect-B's closure would still write el.src=B
+    // and log play_start for B after effect-C had already moved on. The
+    // token lets the stale closure detect it's been superseded and bail
+    // before any mutation. trackId check alone isn't enough because it
+    // could equal current if the user skipped back quickly.
+    const changeToken = ++trackChangeTokenRef.current;
+    const isStale = () => trackChangeTokenRef.current !== changeToken;
     (async () => {
       const headPromise = r2HasTrack(currentTrack.trackId);
       const fadePromise = shouldFade
         ? new Promise<void>(r => setTimeout(r, fadeOutMs))
         : Promise.resolve();
       const [cached] = await Promise.all([headPromise, fadePromise]);
+      if (isStale()) return;
       // If outgoing was iframe, silence it hard now — the bridge ramp
       // reached 0 by this point; pause+mute ensures it doesn't resume
       // accidentally while the new R2/iframe track takes over.
@@ -255,6 +264,7 @@ export const AudioPlayer = () => {
           const delays = [0, 120, 500, 1500];
           for (const d of delays) {
             if (d > 0) await new Promise(r => setTimeout(r, d));
+            if (isStale()) return;
             const e = audioRef.current;
             if (!e || e.src === '' || !e.paused) return; // already playing or torn down
             try { await e.play(); return; } catch { /* retry */ }
@@ -418,11 +428,7 @@ export const AudioPlayer = () => {
   // onPlaying catches buffer-stall auto-resumes — browser fires 'playing' not 'play'
   const handlePlaying = useCallback(() => {
     setIsPlaying(true);
-    // Audio recovered — cancel any pending stall-skip + stall-log.
-    if (stallSkipTimerRef.current) {
-      clearTimeout(stallSkipTimerRef.current);
-      stallSkipTimerRef.current = null;
-    }
+    // Audio recovered — cancel any pending stall-log.
     if (stallLogTimerRef.current) {
       clearTimeout(stallLogTimerRef.current);
       stallLogTimerRef.current = null;
@@ -665,31 +671,10 @@ export const AudioPlayer = () => {
             },
           });
         }, STALL_LOG_DELAY_MS);
-        // Stall-skip is only meaningful when the audio element is actually
-        // trying to be the source. For 'r2', a transient 'waiting' during
-        // src assignment / network seek is normal and the browser recovers
-        // on its own — auto-skipping here would yank the user off a track
-        // that would have played fine 300ms later.
-        // For 'iframe', the audio element is silent anyway (iframe owns
-        // audio) so a 'waiting' means nothing. Skip logic off.
-        // The original case this was built for — VPS live-stream hangs — no
-        // longer applies since we removed voyoStream session-based playback.
-        if (store.playbackSource === 'r2' || store.playbackSource === 'iframe') {
-          return;
-        }
-        voyoStream.onSoftFade?.(STALL_SKIP_THRESHOLD_MS);
-        if (stallSkipTimerRef.current) clearTimeout(stallSkipTimerRef.current);
-        stallSkipTimerRef.current = setTimeout(() => {
-          stallSkipTimerRef.current = null;
-          const curEl = audioRef.current;
-          if (curEl && curEl.readyState >= 3) return;
-          logPlaybackEvent({
-            event_type: 'stream_stall',
-            track_id: curTrack,
-            meta: { sub: 'skip_on_stall', waited_ms: STALL_SKIP_THRESHOLD_MS },
-          });
-          usePlayerStore.getState().nextTrack();
-        }, STALL_SKIP_THRESHOLD_MS);
+        // Skip-on-stall path removed — the only audio sources now are 'r2'
+        // (discrete files, browser recovers on its own) and 'iframe' (the
+        // <audio> element is silent anyway, iframe owns playback). The
+        // VPS live-stream case the timer was built for no longer exists.
       }}
       onStalled={() => {
         const el = audioRef.current;
