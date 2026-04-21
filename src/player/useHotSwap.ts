@@ -332,19 +332,27 @@ export function useHotSwap(
     // to open a WebSocket channel we'll close seconds later. If it's
     // 'failed', no point subscribing at all.
     if (supabase) {
+      // voyo_upload_queue is keyed by raw YouTube id. trackId coming in
+      // may be VOYO-prefixed (vyo_<base64>) — decode before querying or
+      // the .eq() + RT filter will both silently miss.
+      const ytId = getYouTubeId(trackId);
       const checkAndSubscribe = async () => {
         let rowStatus: string | null = null;
         try {
           const { data } = await supabase!
             .from('voyo_upload_queue')
             .select('status')
-            .eq('youtube_id', trackId)
+            .eq('youtube_id', ytId)
             .limit(1);
           rowStatus = data?.[0]?.status ?? null;
-          // Only RT-subscribe for pending / in-flight rows. 'done' →
-          // poll alone handles the quick R2-propagation window.
-          // 'failed' → RT won't fire anyway.
-          if (rowStatus && rowStatus !== 'pending' && rowStatus !== 'extracting') {
+          // Subscribe for any non-terminal state. Workers write 'processing'
+          // the instant they claim a row (which means extraction is ACTIVELY
+          // running and we want the transition-to-done notification above
+          // all else). 'pending' = claimed but not yet worked. 'extracting'
+          // = legacy synonym. Only 'done' and 'failed' are terminal and
+          // worth skipping — 'done' → poll will see it on next tick,
+          // 'failed' → RT won't fire a success anyway.
+          if (rowStatus === 'done' || rowStatus === 'failed') {
             logPlaybackEvent({
               event_type: 'trace', track_id: trackId,
               meta: { subtype: 'hotswap_rt_skip', rowStatus },
@@ -357,10 +365,10 @@ export function useHotSwap(
           meta: { subtype: 'hotswap_rt_subscribe', rowStatus },
         });
         channelRef.current = supabase!
-          .channel(`hotswap:${trackId}`)
+          .channel(`hotswap:${ytId}`)
           .on('postgres_changes', {
             event: 'UPDATE', schema: 'public', table: 'voyo_upload_queue',
-            filter: `youtube_id=eq.${trackId}`,
+            filter: `youtube_id=eq.${ytId}`,
           }, (payload: { new?: { status?: string } }) => {
             if (payload.new?.status === 'done') trigger('realtime');
           })

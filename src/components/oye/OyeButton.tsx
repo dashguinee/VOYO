@@ -28,6 +28,7 @@ import { memo, useMemo } from 'react';
 import { Zap } from 'lucide-react';
 import { useDownloadStore } from '../../store/downloadStore';
 import { usePreferenceStore } from '../../store/preferenceStore';
+import { usePlayerStore } from '../../store/playerStore';
 import { app } from '../../services/oyo';
 import { getYouTubeId } from '../../utils/voyoId';
 import type { Track } from '../../types';
@@ -99,16 +100,22 @@ const STYLE_BY_STATE: Record<OyeVisualState, {
 function computeVisualState(
   downloadStatus: 'queued' | 'downloading' | 'complete' | 'failed' | undefined,
   hasExplicitLike: boolean,
+  isActiveIframe: boolean,
 ): OyeVisualState {
   // Gold filled = in disco AND explicitly Oye'd. BOTH required per Dash's
   // spec — "filled is in disco + liked/oyed". A track that's cached via
   // auto-play but never user-Oye'd sits in gold-faded; a track that's
   // user-Oye'd but not yet cached sits in bubbling until disco lands.
   if (downloadStatus === 'complete' && hasExplicitLike) return 'gold-filled';
-  // Cooking takes precedence over the faded states — the pulse is the
-  // active signal that matters most while extraction is in flight, even
-  // if the user already tapped Oye.
+  // Cooking — the pulse is the active signal that the track is being
+  // worked on right now. Two sources of "cooking":
+  //   a) local IndexedDB download in flight (downloadStatus)
+  //   b) this IS the currently playing track AND it's on iframe, meaning
+  //      R2 extraction is racing server-side (per Dash's rule "if it's
+  //      iframe and playing probably means it's cooking").
+  // Either qualifies regardless of whether the user has explicitly Oye'd.
   if (downloadStatus === 'downloading' || downloadStatus === 'queued') return 'bubbling';
+  if (isActiveIframe) return 'bubbling';
   // In disco but no explicit Oye tap yet — e.g. auto-cached via play.
   if (downloadStatus === 'complete') return 'gold-faded';
   // Cold — "needs to Oye".
@@ -145,10 +152,21 @@ export const OyeButton = memo(({ track, size = 'md', escape = true, className = 
   // Normalise here — same function boostTrack uses internally.
   const download = useDownloadStore(s => s.downloads.get(getYouTubeId(track.trackId)));
   const preference = usePreferenceStore(s => s.trackPreferences[track.id]);
+  // Active-iframe detection: am I the currently playing track AND is the
+  // app on the iframe fallback? If yes, R2 extraction is racing in the
+  // background and the button should bubble to signal "cooking." This is
+  // Dash's rule — iframe + playing ⇒ cooking, even before the user Oyes.
+  // Both selectors return primitives so zustand's default reference equality
+  // suffices; no extra memoisation needed.
+  const isCurrent = usePlayerStore(s =>
+    s.currentTrack?.trackId === track.trackId || s.currentTrack?.id === track.id,
+  );
+  const isIframe = usePlayerStore(s => s.playbackSource === 'iframe');
+  const isActiveIframe = isCurrent && isIframe;
 
   const state = useMemo(
-    () => computeVisualState(download?.status, preference?.explicitLike === true),
-    [download?.status, preference?.explicitLike],
+    () => computeVisualState(download?.status, preference?.explicitLike === true, isActiveIframe),
+    [download?.status, preference?.explicitLike, isActiveIframe],
   );
 
   const { px, icon } = SIZE_MAP[size];
