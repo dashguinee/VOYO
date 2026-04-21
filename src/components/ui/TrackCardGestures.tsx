@@ -176,49 +176,57 @@ export const TrackCardGestures = ({
     >
       {children}
 
-      {/* Long-press overlay — 30% purple shimmer with Add to Deck action. */}
+      {/* Long-press overlay — calm space-grey shimmer (Apple-grey palette,
+          not purple anymore). 30% tint over the card, glass pill action.
+          Shimmer sweep still animates on top for the "activated" feel,
+          but nothing screams. */}
       {overlayOpen && (
         <div
           onPointerDown={(e) => e.stopPropagation()}
           onClick={(e) => e.stopPropagation()}
           className="absolute inset-0 rounded-[inherit] flex items-center justify-center"
           style={{
-            background: 'rgba(139, 92, 246, 0.32)',
-            backdropFilter: 'blur(6px) saturate(140%)',
-            WebkitBackdropFilter: 'blur(6px) saturate(140%)',
-            border: '1px solid rgba(167, 139, 250, 0.55)',
-            boxShadow: '0 0 0 1px rgba(139,92,246,0.25) inset, 0 10px 32px rgba(139,92,246,0.45)',
+            background: 'rgba(28, 28, 32, 0.52)',
+            backdropFilter: 'blur(10px) saturate(120%)',
+            WebkitBackdropFilter: 'blur(10px) saturate(120%)',
+            border: '1px solid rgba(255,255,255,0.10)',
+            boxShadow: '0 10px 32px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.06)',
             animation: 'voyo-gesture-fade-in 180ms ease-out both',
             zIndex: 20,
           }}
         >
-          {/* Shimmer sweep */}
+          {/* Shimmer sweep — white-on-grey, subtler than the purple variant. */}
           <div
             className="absolute inset-0 rounded-[inherit] pointer-events-none"
             style={{
               background:
-                'linear-gradient(115deg, transparent 0%, rgba(255,255,255,0.18) 35%, rgba(255,255,255,0.08) 50%, transparent 70%)',
-              animation: 'voyo-gesture-shimmer 1600ms linear infinite',
+                'linear-gradient(115deg, transparent 0%, rgba(255,255,255,0.14) 40%, rgba(255,255,255,0.05) 55%, transparent 75%)',
+              animation: 'voyo-gesture-shimmer 1800ms linear infinite',
               mixBlendMode: 'screen',
             }}
           />
           <div className="flex flex-col items-center gap-2 pointer-events-auto">
+            {/* Apple-grey translucent pill — Vision-OS style glass button.
+                Subtle white gradient, backdrop-blur, no dominant hue. */}
             <button
               onClick={addToDeck}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-full text-sm font-bold active:scale-95 transition-transform"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-full text-sm font-semibold text-white/95 active:scale-95 transition-transform"
               style={{
-                background: 'linear-gradient(135deg, #a78bfa 0%, #8b5cf6 55%, #7c3aed 100%)',
-                color: '#fff',
-                boxShadow: '0 6px 20px rgba(139,92,246,0.55), inset 0 1px 0 rgba(255,255,255,0.3)',
+                background: 'linear-gradient(135deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0.08) 100%)',
+                backdropFilter: 'blur(14px) saturate(160%)',
+                WebkitBackdropFilter: 'blur(14px) saturate(160%)',
+                border: '1px solid rgba(255,255,255,0.22)',
+                boxShadow: '0 8px 24px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.28)',
                 letterSpacing: '0.01em',
               }}
             >
-              <Plus className="w-4 h-4" strokeWidth={2.5} />
+              <Plus className="w-4 h-4 text-white/90" strokeWidth={2.2} />
               Add to Deck
             </button>
             <button
               onClick={(e) => { e.stopPropagation(); closeOverlay(); }}
-              className="text-[11px] font-medium text-white/70 px-3 py-1 rounded-full bg-black/25"
+              className="text-[11px] font-medium text-white/55 px-3 py-1 rounded-full"
+              style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)' }}
             >
               Cancel
             </button>

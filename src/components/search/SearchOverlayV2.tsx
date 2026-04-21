@@ -133,23 +133,27 @@ const TrackItem = memo(({
         </div>
       </div>
 
-      {/* Action Buttons */}
-      <div className="flex items-center gap-1.5">
+      {/* Action Buttons — tighter (32×32), more space, calmer chroma.
+          Row had two chunky 44×44 tap targets crowding the right edge;
+          now 32×32 with 10px gap. Icons a touch smaller, subtler bg,
+          still accessible at touch sizes because the whole row is the
+          primary tap surface (plays the track). */}
+      <div className="flex items-center gap-2.5 ml-1">
         <button
-          className="p-2 rounded-full bg-purple-500/15 border border-purple-500/20 active:scale-90 transition-transform min-w-[44px] min-h-[44px] flex items-center justify-center"
+          className="w-8 h-8 rounded-full bg-purple-500/12 border border-purple-500/20 active:scale-90 transition-transform flex items-center justify-center"
           onClick={handleQueueClick}
           aria-label="Add to bucket"
           title="Add to Bucket"
         >
-          <ListPlus className="w-4 h-4 text-purple-400" />
+          <ListPlus className="w-3.5 h-3.5 text-purple-300" />
         </button>
         <button
-          className="p-2 rounded-full bg-[#D4A053]/15 border border-[#D4A053]/20 active:scale-90 transition-transform min-w-[44px] min-h-[44px] flex items-center justify-center"
+          className="w-8 h-8 rounded-full bg-[#D4A053]/12 border border-[#D4A053]/20 active:scale-90 transition-transform flex items-center justify-center"
           onClick={handleDiscoveryClick}
           aria-label="Discover similar tracks"
           title="Discover More Like This"
         >
-          <Compass className="w-4 h-4 text-[#D4A053]" />
+          <Compass className="w-3.5 h-3.5 text-[#D4A053]" />
         </button>
       </div>
     </div>
