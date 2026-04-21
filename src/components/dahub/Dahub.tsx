@@ -17,6 +17,7 @@ import {
   APP_CODES, getAppDisplay,
   type Friend, type Conversation, type AppCode, type SharedAccountMember
 } from '../../lib/dahub/dahub-api';
+import { usePlayerStore } from '../../store/playerStore';
 import { DirectMessageChat } from './DirectMessageChat';
 
 // ==============================================
@@ -946,6 +947,11 @@ function NoteEditModal({ note, userAvatar, userName, onSave, onClose }: { note: 
 export function Dahub({ userId, userName, userAvatar, coreId, appContext, onClose }: DahubProps) {
   const [activeTab, setActiveTab] = useState<Tab>('messages');
   const [friends, setFriends] = useState<Friend[]>([]);
+  // VOYO-specific: the MiniPlayer floats over the bottom when a track
+  // is loaded. Without extra bottom padding the last row of Dahub's
+  // scroll content hides behind it. Stay fine-grained so volume / time
+  // ticks don't re-render this component.
+  const miniPlayerActive = usePlayerStore(s => !!s.currentTrack);
   const [sharedMembers, setSharedMembers] = useState<SharedAccountMember[]>([]);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -1007,8 +1013,13 @@ export function Dahub({ userId, userName, userAvatar, coreId, appContext, onClos
 
   return (
     <div className="h-full bg-[#0a0a0f] flex flex-col overflow-hidden">
-      {/* Header */}
-      <div className="flex-shrink-0 pt-5 px-6 pb-3">
+      {/* Header — safe-area-top so the title doesn't sit under the phone
+          notch / status bar on installed PWAs. Keeps the same 20px
+          breathing-room on devices without an inset. */}
+      <div
+        className="flex-shrink-0 px-6 pb-3"
+        style={{ paddingTop: 'max(20px, calc(env(safe-area-inset-top, 0px) + 12px))' }}
+      >
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <h1 className="text-2xl font-bold text-white tracking-tight">DaHub</h1>
@@ -1060,8 +1071,20 @@ export function Dahub({ userId, userName, userAvatar, coreId, appContext, onClos
           {/* Tab Bar */}
           <TabBar activeTab={activeTab} onTabChange={setActiveTab} friendCount={onlineCount} unreadCount={unreadCount} />
 
-          {/* Content */}
-          <div className="flex-1 overflow-y-auto px-6 pb-6">
+          {/* Content — scroll area.
+                • When the MiniPlayer is floating (a track is loaded), reserve
+                  ~160px at the bottom so the last message/friend isn't hidden
+                  behind it.
+                • Otherwise, just the safe-area-bottom floor for gesture bars
+                  on Android/iOS. */}
+          <div
+            className="flex-1 overflow-y-auto px-6"
+            style={{
+              paddingBottom: miniPlayerActive
+                ? 'calc(160px + env(safe-area-inset-bottom, 0px))'
+                : 'max(24px, calc(env(safe-area-inset-bottom, 0px) + 24px))',
+            }}
+          >
             {activeTab === 'friends' && (
               <div key="friends" className="space-y-1 animate-voyo-fade-in">
                 {friends.length === 0 ? (
