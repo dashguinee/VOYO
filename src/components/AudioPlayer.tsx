@@ -550,6 +550,13 @@ export const AudioPlayer = () => {
     // per track, so 'ended' means track-over, not stream-broken.
     const ps = usePlayerStore.getState().playbackSource;
     if (ps === 'r2' || !voyoStream.sessionId) {
+      // The browser fires 'pause' right after 'ended'. Flip the swap flag
+      // NOW — before nextTrack() runs its state update + before the 'pause'
+      // handler gets a chance to see a stale false. Otherwise handlePause
+      // would see store.isPlaying=true (just set by nextTrack) and retry
+      // play() on the just-ended element, briefly restarting the finished
+      // track before the new track's effect overwrites el.src.
+      trackSwapInProgressRef.current = true;
       logPlaybackEvent({
         event_type: 'stream_ended',
         track_id: voyoStream.currentTrackId ?? 'unknown',
