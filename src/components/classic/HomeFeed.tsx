@@ -254,18 +254,26 @@ const PulsingCircle = () => (
   />
 );
 
+const CARD_W = 130;
+const CARD_GAP = 12;
+
 const CenterFocusedCarousel = ({ tracks, onPlay }: CenterCarouselProps) => {
-  // Defensive: empty or malformed tracks → render nothing, never crash
-  const safeTracks = Array.isArray(tracks) ? tracks.filter(t => t && t.id) : [];
+  // Defensive: empty or malformed tracks → render nothing, never crash.
+  // Memoised so array identity is stable across renders that don't touch
+  // the source, avoiding downstream re-renders.
+  const safeTracks = useMemo(
+    () => (Array.isArray(tracks) ? tracks.filter(t => t && t.id) : []),
+    [tracks],
+  );
   const scrollRef = useRef<HTMLDivElement>(null);
-  const [centerIndex, setCenterIndex] = useState(1);
-  const [scrollState, setScrollState] = useState<'left-end' | 'scrolling' | 'right-end'>('scrolling');
+  const [centerIndex, setCenterIndex] = useState(0);
+  const [scrollState, setScrollState] = useState<'left-end' | 'scrolling' | 'right-end'>('left-end');
   // rAF-throttle + cached last-values so we only fire setState when the
   // computed bucket actually changed. Previously firing at ~60fps during
   // scroll = re-render storm on the entire carousel.
   const scrollRafRef = useRef<number | null>(null);
-  const lastIndexRef = useRef(1);
-  const lastStateRef = useRef<'left-end' | 'scrolling' | 'right-end'>('scrolling');
+  const lastIndexRef = useRef(0);
+  const lastStateRef = useRef<'left-end' | 'scrolling' | 'right-end'>('left-end');
 
   const handleScroll = () => {
     if (scrollRafRef.current != null) return;
@@ -274,17 +282,17 @@ const CenterFocusedCarousel = ({ tracks, onPlay }: CenterCarouselProps) => {
       const container = scrollRef.current;
       if (!container) return;
       const { scrollLeft, scrollWidth, clientWidth } = container;
-      const cardWidth = 140;
+      const step = CARD_W + CARD_GAP;
       const maxIndex = Math.max(0, safeTracks.length - 1);
-      const newIndex = Math.min(Math.max(Math.round(scrollLeft / cardWidth) + 1, 0), maxIndex);
+      const newIndex = Math.min(Math.max(Math.round(scrollLeft / step), 0), maxIndex);
       if (newIndex !== lastIndexRef.current) {
         lastIndexRef.current = newIndex;
         setCenterIndex(newIndex);
       }
       const maxScroll = scrollWidth - clientWidth;
       const nextState: 'left-end' | 'scrolling' | 'right-end' =
-        scrollLeft < 50 ? 'left-end'
-          : scrollLeft > maxScroll - 50 ? 'right-end'
+        scrollLeft < 40 ? 'left-end'
+          : scrollLeft > maxScroll - 40 ? 'right-end'
           : 'scrolling';
       if (nextState !== lastStateRef.current) {
         lastStateRef.current = nextState;
@@ -338,9 +346,14 @@ const CenterFocusedCarousel = ({ tracks, onPlay }: CenterCarouselProps) => {
         ref={scrollRef}
         className="flex gap-3 overflow-x-auto scrollbar-hide py-2"
         style={{
-          scrollSnapType: 'x mandatory',
-          paddingLeft: 'calc(50% - 70px)', // Center first card
-          paddingRight: 'calc(50% - 70px)',
+          // proximity (not mandatory) — browser can assist snap without
+          // fighting the user's horizontal swipe. Combined with snap-
+          // align on the DIRECT flex child below, this is what finally
+          // lets OYO's Picks scroll on iOS/Android.
+          scrollSnapType: 'x proximity',
+          paddingLeft: `calc(50% - ${CARD_W / 2}px)`, // center first card
+          paddingRight: `calc(50% - ${CARD_W / 2}px)`,
+          WebkitOverflowScrolling: 'touch',
         }}
         onScroll={handleScroll}
       >
@@ -351,61 +364,68 @@ const CenterFocusedCarousel = ({ tracks, onPlay }: CenterCarouselProps) => {
           const opacity = isCenter ? 1 : Math.max(0.5, 1 - distance * 0.25);
 
           return (
-            <TrackCardGestures
+            <div
               key={track.id}
-              track={track}
-              onTap={() => onPlay(track)}
-              className="flex-shrink-0 cursor-pointer"
-            ><div
+              className="flex-shrink-0"
               style={{
+                // Snap-align + width BELONG on the direct flex child of
+                // the scroll container. On the nested div, Safari/iOS
+                // silently ignored snap points.
                 scrollSnapAlign: 'center',
-                width: 130,
+                width: CARD_W,
                 transform: `scale(${scale})`,
                 opacity,
+                transition: 'transform 260ms cubic-bezier(0.2, 0.8, 0.2, 1), opacity 260ms ease',
+                transformOrigin: 'center',
               }}
             >
-              <div
-                className="relative rounded-xl overflow-hidden mb-2 bg-white/5"
-                style={{
-                  width: 130,
-                  height: 130,
-                  boxShadow: isCenter ? '0 8px 30px rgba(139, 92, 246, 0.3)' : '0 4px 15px rgba(0,0,0,0.3)',
-                }}
+              <TrackCardGestures
+                track={track}
+                onTap={() => onPlay(track)}
+                className="cursor-pointer"
               >
-                <SmartImage
-                  src={getThumb(track.trackId)}
-                  alt={track.title}
-                  className="w-full h-full object-cover"
-                  trackId={track.trackId}
-                  artist={track.artist}
-                  title={track.title}
-                />
-                {/* Center card: glass play button + glow ring — premium, doesn't cover art */}
-                {isCenter && (
-                  <>
-                    <div className="absolute bottom-2 right-2">
-                      <div
-                        className="w-8 h-8 rounded-full flex items-center justify-center backdrop-blur-md"
-                        style={{
-                          background: 'rgba(139, 92, 246, 0.45)',
-                          border: '1px solid rgba(255,255,255,0.15)',
-                          boxShadow: '0 4px 12px rgba(139, 92, 246, 0.3)',
-                        }}
-                      >
-                        <Play className="w-4 h-4 text-white ml-0.5" fill="white" />
+                <div
+                  className="relative rounded-xl overflow-hidden mb-2 bg-white/5"
+                  style={{
+                    width: CARD_W,
+                    height: CARD_W,
+                    boxShadow: isCenter ? '0 8px 30px rgba(139, 92, 246, 0.3)' : '0 4px 15px rgba(0,0,0,0.3)',
+                  }}
+                >
+                  <SmartImage
+                    src={getThumb(track.trackId)}
+                    alt={track.title}
+                    className="w-full h-full object-cover"
+                    trackId={track.trackId}
+                    artist={track.artist}
+                    title={track.title}
+                  />
+                  {isCenter && (
+                    <>
+                      <div className="absolute bottom-2 right-2">
+                        <div
+                          className="w-8 h-8 rounded-full flex items-center justify-center backdrop-blur-md"
+                          style={{
+                            background: 'rgba(139, 92, 246, 0.45)',
+                            border: '1px solid rgba(255,255,255,0.15)',
+                            boxShadow: '0 4px 12px rgba(139, 92, 246, 0.3)',
+                          }}
+                        >
+                          <Play className="w-4 h-4 text-white ml-0.5" fill="white" />
+                        </div>
                       </div>
-                    </div>
-                    <div className="absolute inset-0 rounded-xl ring-2 ring-purple-500/50 pointer-events-none" />
-                  </>
-                )}
-              </div>
-              <p className={`text-sm font-medium truncate ${isCenter ? 'text-white' : 'text-white/60'}`}>
-                {track.title}
-              </p>
-              <p className={`text-xs truncate ${isCenter ? 'text-white/70' : 'text-white/40'}`}>
-                {track.artist}
-              </p>
-            </div></TrackCardGestures>
+                      <div className="absolute inset-0 rounded-xl ring-2 ring-purple-500/50 pointer-events-none" />
+                    </>
+                  )}
+                </div>
+                <p className={`text-sm font-medium truncate ${isCenter ? 'text-white' : 'text-white/60'}`}>
+                  {track.title}
+                </p>
+                <p className={`text-xs truncate ${isCenter ? 'text-white/70' : 'text-white/40'}`}>
+                  {track.artist}
+                </p>
+              </TrackCardGestures>
+            </div>
           );
         })}
       </div>
@@ -443,15 +463,15 @@ const TrackCard = memo(({ track, onPlay, showBoostBadge = false }: TrackCardProp
   // iPod-smooth — the card lifts, shrinks, and fades as it flies up.
   const [prefMode, setPrefMode] = useState(false);
   const [prefDx, setPrefDx] = useState(0);
-  const [bucketFly, setBucketFly] = useState(false); // Card flying to bucket animation
+  const [bucketFly, setBucketFly] = useState(false);
   const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const prefStartRef = useRef<{ x: number; y: number } | null>(null);
   const cardRef = useRef<HTMLDivElement>(null);
   const didPrefRef = useRef(false);
-  const swipeAxisRef = useRef<'x' | 'y' | null>(null); // Lock to first significant axis
+  const swipeAxisRef = useRef<'x' | 'y' | null>(null);
 
-  const PREF_THRESHOLD = 35; // px to commit (horizontal)
-  const BUCKET_THRESHOLD = 40; // px to commit (vertical swipe up)
+  const PREF_THRESHOLD = 35;
+  const BUCKET_THRESHOLD = 40;
 
   const handlePrefDown = (e: React.PointerEvent) => {
     didPrefRef.current = false;
@@ -469,10 +489,17 @@ const TrackCard = memo(({ track, onPlay, showBoostBadge = false }: TrackCardProp
     const dx = e.clientX - prefStartRef.current.x;
     const dy = e.clientY - prefStartRef.current.y;
 
-    // Lock axis on first significant movement (>8px)
     if (!swipeAxisRef.current && (Math.abs(dx) > 8 || Math.abs(dy) > 8)) {
       swipeAxisRef.current = Math.abs(dy) > Math.abs(dx) ? 'y' : 'x';
-      // Vertical swipe detected early — cancel hold timer (no pref mode)
+      // Horizontal drift detected before the hold timer — user is scrolling
+      // the shelf, not interacting with the card. Cancel the hold so we
+      // don't enter pref mode mid-scroll (this was the remaining "can't
+      // scroll" culprit on Your Next Voyage + Classics).
+      if (swipeAxisRef.current === 'x' && holdTimerRef.current) {
+        clearTimeout(holdTimerRef.current);
+        holdTimerRef.current = null;
+      }
+      // Vertical swipe — also cancels hold; handled below in pointerup.
       if (swipeAxisRef.current === 'y' && holdTimerRef.current) {
         clearTimeout(holdTimerRef.current);
         holdTimerRef.current = null;
@@ -480,22 +507,19 @@ const TrackCard = memo(({ track, onPlay, showBoostBadge = false }: TrackCardProp
     }
 
     if (prefMode && swipeAxisRef.current !== 'y') {
-      setPrefDx(Math.max(-60, Math.min(60, dx))); // clamp horizontal
+      setPrefDx(Math.max(-60, Math.min(60, dx)));
     }
   };
 
   const handlePrefUp = (e: React.PointerEvent) => {
     if (holdTimerRef.current) { clearTimeout(holdTimerRef.current); holdTimerRef.current = null; }
 
-    // ── SWIPE-UP-TO-BUCKET (no hold needed) ──
     if (prefStartRef.current && swipeAxisRef.current === 'y') {
       const dy = e.clientY - prefStartRef.current.y;
       if (dy < -BUCKET_THRESHOLD) {
-        // Swiped up past threshold → bucket it!
         didPrefRef.current = true;
-        addToQueue(track, 0); // Next up
+        addToQueue(track, 0);
         try { navigator.vibrate?.([15, 8, 15]); } catch {}
-        // Fly animation
         setBucketFly(true);
         setTimeout(() => setBucketFly(false), 500);
         prefStartRef.current = null;
@@ -507,12 +531,10 @@ const TrackCard = memo(({ track, onPlay, showBoostBadge = false }: TrackCardProp
     if (!prefMode) { prefStartRef.current = null; swipeAxisRef.current = null; return; }
 
     if (prefDx > PREF_THRESHOLD) {
-      // ── INTERESTED: golden flash → auto-queue ──
       const position = Math.random() < 0.6 ? 0 : undefined;
       addToQueue(track, position);
       try { navigator.vibrate?.([20, 10, 20]); } catch {}
 
-      // Quick golden flash
       if (cardRef.current) {
         cardRef.current.style.transition = 'box-shadow 0.3s ease-out';
         cardRef.current.style.boxShadow = '0 0 20px rgba(212,160,83,0.6), inset 0 0 30px rgba(212,160,83,0.15)';
@@ -521,11 +543,9 @@ const TrackCard = memo(({ track, onPlay, showBoostBadge = false }: TrackCardProp
         }, 500);
       }
     } else if (prefDx < -PREF_THRESHOLD) {
-      // ── NOT INTERESTED: grey fade → skip signal ──
       recordPoolEngagement(track.id || track.trackId, 'skip');
       try { navigator.vibrate?.(10); } catch {}
     }
-    // Reset
     setPrefMode(false);
     setPrefDx(0);
     prefStartRef.current = null;
@@ -551,7 +571,7 @@ const TrackCard = memo(({ track, onPlay, showBoostBadge = false }: TrackCardProp
   return (
     <button
       className="flex-shrink-0 w-32 relative group"
-      onClick={(e) => { if (didPrefRef.current) { didPrefRef.current = false; return; } onPlay(); }}
+      onClick={() => { if (didPrefRef.current) { didPrefRef.current = false; return; } onPlay(); }}
       style={{ scrollSnapAlign: 'start' }}
       onPointerDown={handlePrefDown}
       onPointerMove={handlePrefMove}
@@ -562,8 +582,6 @@ const TrackCard = memo(({ track, onPlay, showBoostBadge = false }: TrackCardProp
         ref={cardRef}
         className="relative w-32 h-32 rounded-xl overflow-hidden mb-2 bg-[#1c1c22] border border-[#28282f]/50 group-active:border-white/15 transition-colors"
         style={{
-          // Card slides on its own axis during preference mode,
-          // or flies up + shrinks when swiped to bucket
           transform: bucketFly
             ? 'translateY(-80px) scale(0.7)'
             : prefMode ? `translateX(${prefDx}px) rotate(${prefDx / 8}deg)` : 'none',
@@ -581,22 +599,14 @@ const TrackCard = memo(({ track, onPlay, showBoostBadge = false }: TrackCardProp
           artist={track.artist}
           title={track.title}
         />
-        {/* Normal state: subtle tint */}
         {!prefMode && (
           <div
             className="absolute inset-0 pointer-events-none"
-            style={{
-              background: 'linear-gradient(135deg, rgba(139,92,246,0.08) 0%, rgba(139,92,246,0.02) 100%)',
-            }}
+            style={{ background: 'linear-gradient(135deg, rgba(139,92,246,0.08) 0%, rgba(139,92,246,0.02) 100%)' }}
           />
         )}
-        {/* PREFERENCE MODE: dual shimmer gradients.
-            Left shimmer = grey (not interested), fades in as user slides left.
-            Right shimmer = golden bronze (interested), fades in as user slides right.
-            Both overlays are always present; opacity is driven by prefDx. */}
         {prefMode && (
           <>
-            {/* Grey "skip" shimmer — left side */}
             <div
               className="absolute inset-0 pointer-events-none"
               style={{
@@ -605,7 +615,6 @@ const TrackCard = memo(({ track, onPlay, showBoostBadge = false }: TrackCardProp
                 transition: 'opacity 0.1s ease-out',
               }}
             />
-            {/* Golden "interested" shimmer — right side */}
             <div
               className="absolute inset-0 pointer-events-none"
               style={{
@@ -614,7 +623,6 @@ const TrackCard = memo(({ track, onPlay, showBoostBadge = false }: TrackCardProp
                 transition: 'opacity 0.1s ease-out',
               }}
             />
-            {/* Center divider glow when neutral */}
             <div
               className="absolute inset-0 pointer-events-none"
               style={{
@@ -624,13 +632,10 @@ const TrackCard = memo(({ track, onPlay, showBoostBadge = false }: TrackCardProp
             />
           </>
         )}
-        {/* BUCKET FLY: purple flash overlay during swipe-up animation */}
         {bucketFly && (
           <div
             className="absolute inset-0 pointer-events-none flex items-center justify-center"
-            style={{
-              background: 'linear-gradient(to top, rgba(139,92,246,0.5), rgba(139,92,246,0.2))',
-            }}
+            style={{ background: 'linear-gradient(to top, rgba(139,92,246,0.5), rgba(139,92,246,0.2))' }}
           >
             <span className="text-white text-[10px] font-bold tracking-wider">BUCKETED</span>
           </div>
