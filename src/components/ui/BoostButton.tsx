@@ -14,8 +14,15 @@
 import { useState, useEffect, useRef } from 'react';
 import { usePlayerStore } from '../../store/playerStore';
 import { useDownloadStore } from '../../store/downloadStore';
-import { getThumbnailUrl } from '../../utils/thumbnail';
+import { usePreferenceStore } from '../../store/preferenceStore';
+import { app } from '../../services/oyo';
+import { computeOyeState } from '../oye/OyeButton';
+import { getYouTubeId } from '../../utils/voyoId';
 import { devLog } from '../../utils/logger';
+
+// NOTE: getThumbnailUrl no longer needed here — the local-cache download
+// now flows through app.oyeCommit -> boostTrack, which sources its own
+// thumbnail via getThumb(track.trackId, 'medium').
 
 interface BoostButtonProps {
   variant?: 'toolbar' | 'floating' | 'mini' | 'inline';
@@ -268,11 +275,16 @@ export const BoostButton = ({ variant = 'toolbar', className = '' }: BoostButton
   const setBoostProfile = usePlayerStore((state) => state.setBoostProfile);
 
   // Fine-grained selectors — avoid re-render on every unrelated download state change.
-  const boostTrack = useDownloadStore(s => s.boostTrack);
   const getDownloadStatus = useDownloadStore(s => s.getDownloadStatus);
   const downloads = useDownloadStore(s => s.downloads);
   const isTrackBoosted = useDownloadStore(s => s.isTrackBoosted);
   const lastBoostCompletion = useDownloadStore(s => s.lastBoostCompletion);
+
+  // Preference — feeds the shared Oye state machine so gold-filled lights
+  // up when the user has Oye'd (explicitLike=true) AND disco has landed.
+  const explicitLike = usePreferenceStore(s =>
+    currentTrack ? s.trackPreferences[currentTrack.id]?.explicitLike === true : false,
+  );
 
   const [isCached, setIsCached] = useState(false);
   const [showSparks, setShowSparks] = useState(false);
@@ -283,8 +295,6 @@ export const BoostButton = ({ variant = 'toolbar', className = '' }: BoostButton
   const activePreset = isEqOn ? boostProfile : lastActivePreset;
   const colors = PRESET_COLORS[activePreset];
 
-  const isServerCached = playbackSource === 'r2';
-  const isLocalCached = playbackSource === 'cached';
 
   useEffect(() => {
     const checkCached = async () => {
@@ -336,37 +346,49 @@ export const BoostButton = ({ variant = 'toolbar', className = '' }: BoostButton
 
   if (!currentTrack?.trackId) return null;
 
-  const downloadStatus = getDownloadStatus(currentTrack.trackId);
+  // Use the DECODED YouTube id for download lookups — downloadStore keys
+  // by raw YT id, VOYO-prefixed track ids silently miss otherwise (same
+  // pattern as v377 fix on OyeButton).
+  const ytId = getYouTubeId(currentTrack.trackId);
+  const downloadStatus = getDownloadStatus(ytId);
   const isDownloading = downloadStatus?.status === 'downloading';
   const isQueued = downloadStatus?.status === 'queued';
   const progress = downloadStatus?.progress || 0;
 
-  const isActive = isEqOn;
-  const showOutline = isEqOn && !isCached;
-  const showFilled = isEqOn && isCached;
+  // Shared narralogy state — same function OyeButton uses. EQ-on counts
+  // as "committed" in boost mode, so gold-filled lights up when cached
+  // and EITHER user Oye'd explicitly OR EQ is actively engaged.
+  const isActiveIframe = playbackSource === 'iframe';
+  const oyeState = computeOyeState(downloadStatus?.status, explicitLike, isActiveIframe, isEqOn);
+  // Legacy visual flags, now derived from the shared state so every Oye
+  // affordance reads the same signal graph:
+  const showFilled = oyeState === 'gold-filled';
+  const showOutline = oyeState === 'gold-faded';
 
   const handleTap = () => {
     if (isDownloading || isQueued) return;
 
-    if (!isCached) {
-      devLog('[Boost] Downloading to local cache...');
-      setShowSparks(true);
-      boostTrack(
-        currentTrack.trackId,
-        currentTrack.title,
-        currentTrack.artist,
-        currentTrack.duration || 0,
-        getThumbnailUrl(currentTrack.trackId, 'medium')
-      );
-    } else if (isEqOn) {
-      devLog('[Boost] OFF - Raw audio');
+    // UNIFIED OYE ACTION — same commit as every other Oye button.
+    // app.oyeCommit fires: reaction + boostTrack (local cache) + addToQueue
+    // + setExplicitLike + pipService.enter. The first tap on a cold track
+    // kicks off the entire pipeline in one go. Was split into "boostTrack
+    // only" before; unifying here so Portrait / Landscape / VideoMode
+    // boost gestures carry the same weight as a card/search/mini-player
+    // tap.
+    if (oyeState === 'gold-filled' && isEqOn) {
+      // Already committed AND EQ engaged → tap toggles EQ off for raw
+      // audio. Keeps explicitLike=true (Oye commitment doesn't rescind).
+      devLog('[Boost] EQ off — raw audio');
       setBoostProfile('off');
-    } else {
-      devLog(`[Boost] ON - ${lastActivePreset} mode`);
-      setBoostProfile(lastActivePreset);
-      setShowSparks(true);
-      setTimeout(() => setShowSparks(false), 600);
+      return;
     }
+    // Every other state: commit and engage EQ in one gesture.
+    devLog('[Boost] Oye + engage EQ');
+    setShowSparks(true);
+    app.oyeCommit(currentTrack, { escape: true });
+    setBoostProfile(lastActivePreset);
+    // Auto-hide sparks if no CompletionBurst lands (e.g., cached already).
+    setTimeout(() => setShowSparks(false), 600);
   };
 
   // TOOLBAR VARIANT

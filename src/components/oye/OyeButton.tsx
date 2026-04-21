@@ -54,12 +54,13 @@ const STYLE_BY_STATE: Record<OyeVisualState, {
   ring: string | 'none';
 }> = {
   'purple-faded': {
-    // Softer than before — feels like a resting state. Background nearly
-    // transparent, border low-opacity, icon at 50%. The faded ring reads
-    // as "there's something here but it's asleep."
-    background: 'rgba(139, 92, 246, 0.05)',
-    border: '1px solid rgba(139, 92, 246, 0.22)',
-    iconColor: 'rgba(196, 181, 253, 0.50)',
+    // Glass idle — dark translucent base (matches BoostButton's
+    // rgba(28,28,35,0.65) aesthetic) with a subtle purple border hint.
+    // Reads as "asleep but alive" — user sees something there that
+    // invites a tap, without shouting.
+    background: 'rgba(28, 28, 35, 0.55)',
+    border: '1px solid rgba(139, 92, 246, 0.30)',
+    iconColor: 'rgba(196, 181, 253, 0.55)',
     iconFill: 'none',
     boxShadow: 'none',
     animation: 'none',
@@ -76,13 +77,16 @@ const STYLE_BY_STATE: Record<OyeVisualState, {
     ring: '2px solid rgba(196, 181, 253, 0.45)',
   },
   'gold-faded': {
-    background: 'rgba(212, 160, 83, 0.14)',
+    // Same glass base as purple-faded — the gold accent only lives on the
+    // border + icon + ring, so the dark translucent surface stays
+    // consistent across states. Narralogy: cold idle → bubbling → glass
+    // arrives in gold → tap fills it.
+    background: 'rgba(28, 28, 35, 0.55)',
     border: '1px solid rgba(212, 160, 83, 0.45)',
     iconColor: 'rgba(212, 160, 83, 0.85)',
     iconFill: 'none',
-    boxShadow: 'none',
+    boxShadow: '0 0 6px rgba(212, 160, 83, 0.18)',
     animation: 'none',
-    // Gold-tinted faded ring, mirrors the purple-faded treatment.
     ring: '1px solid rgba(212, 160, 83, 0.18)',
   },
   'gold-filled': {
@@ -97,26 +101,35 @@ const STYLE_BY_STATE: Record<OyeVisualState, {
   },
 };
 
-function computeVisualState(
+/**
+ * Shared state derivation — exported so BoostButton (the Oye variant with
+ * EQ superpower on Portrait / Landscape / VideoMode toolbars) uses the
+ * exact same narralogy. One source of truth for "what state is this track
+ * in" across every Oye affordance in the app.
+ *
+ * Oye ⊂ Like ⊂ Committed. In boost-mode contexts, turning EQ on ALSO
+ * counts as committed (the user actively chose to engage), so gold-filled
+ * lights up when (in disco) AND (liked OR EQ-on). In default contexts,
+ * only explicitLike counts — isEqOnBoost is ignored.
+ */
+export function computeOyeState(
   downloadStatus: 'queued' | 'downloading' | 'complete' | 'failed' | undefined,
   hasExplicitLike: boolean,
   isActiveIframe: boolean,
+  isEqOnBoost = false,
 ): OyeVisualState {
-  // Gold filled = in disco AND explicitly Oye'd. BOTH required per Dash's
-  // spec — "filled is in disco + liked/oyed". A track that's cached via
-  // auto-play but never user-Oye'd sits in gold-faded; a track that's
-  // user-Oye'd but not yet cached sits in bubbling until disco lands.
-  if (downloadStatus === 'complete' && hasExplicitLike) return 'gold-filled';
+  const isCommitted = hasExplicitLike || isEqOnBoost;
+  // Gold filled = in disco AND committed.
+  if (downloadStatus === 'complete' && isCommitted) return 'gold-filled';
   // Cooking — the pulse is the active signal that the track is being
   // worked on right now. Two sources of "cooking":
   //   a) local IndexedDB download in flight (downloadStatus)
   //   b) this IS the currently playing track AND it's on iframe, meaning
   //      R2 extraction is racing server-side (per Dash's rule "if it's
   //      iframe and playing probably means it's cooking").
-  // Either qualifies regardless of whether the user has explicitly Oye'd.
   if (downloadStatus === 'downloading' || downloadStatus === 'queued') return 'bubbling';
   if (isActiveIframe) return 'bubbling';
-  // In disco but no explicit Oye tap yet — e.g. auto-cached via play.
+  // In disco but no explicit commitment yet — e.g. auto-cached via play.
   if (downloadStatus === 'complete') return 'gold-faded';
   // Cold — "needs to Oye".
   return 'purple-faded';
@@ -165,7 +178,7 @@ export const OyeButton = memo(({ track, size = 'md', escape = true, className = 
   const isActiveIframe = isCurrent && isIframe;
 
   const state = useMemo(
-    () => computeVisualState(download?.status, preference?.explicitLike === true, isActiveIframe),
+    () => computeOyeState(download?.status, preference?.explicitLike === true, isActiveIframe),
     [download?.status, preference?.explicitLike, isActiveIframe],
   );
 
@@ -194,7 +207,7 @@ export const OyeButton = memo(({ track, size = 'md', escape = true, className = 
       onClick={handleClick}
       aria-label={ariaLabel}
       title={ariaLabel}
-      className={`flex items-center justify-center rounded-full active:scale-95 transition-all ${className}`}
+      className={`flex items-center justify-center rounded-full backdrop-blur-md active:scale-95 transition-all ${className}`}
       style={{
         width: px,
         height: px,
