@@ -37,7 +37,10 @@ export const VoyoSplash = ({ onComplete, minDuration = 1500 }: VoyoSplashProps) 
 
   // Store initialization
   const initDownloads = useDownloadStore((s) => s.initialize);
-  const preferenceStore = usePreferenceStore(); // Touch to initialize
+  // Narrow subscription — the full-store read re-rendered VoyoSplash on
+  // every preference change (volume, shuffle, boost…). Only trackPreferences
+  // is read here, and touching the selector is enough to mount the store.
+  const trackPreferences = usePreferenceStore((s) => s.trackPreferences);
 
   // ── Preload: initialise stores + cache real content (invisible work) ──
   useEffect(() => {
@@ -59,7 +62,7 @@ export const VoyoSplash = ({ onComplete, minDuration = 1500 }: VoyoSplashProps) 
         // pre-cache layer needed — the service worker handles offline.
         devLog(
           '🎵 BOOT: ✅ preferences loaded',
-          Object.keys(preferenceStore.trackPreferences).length,
+          Object.keys(trackPreferences).length,
           'tracks',
         );
 
@@ -84,7 +87,7 @@ export const VoyoSplash = ({ onComplete, minDuration = 1500 }: VoyoSplashProps) 
     }, 5000);
 
     return () => clearTimeout(safetyTimeout);
-  }, [initDownloads, preferenceStore.trackPreferences]);
+  }, [initDownloads, trackPreferences]);
 
   // ── Animation timer ──
   useEffect(() => {
