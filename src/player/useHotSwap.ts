@@ -99,8 +99,15 @@ async function performHotSwap(
     // Guard 1 — before touching the element at all.
     if (!stillCurrent()) return bail('hotswap_abort_stale', { stage: 'pre_src' });
 
-    // Preload R2 silently at the matched position.
+    // Preload R2 silently at the matched position. The audio element
+    // ships with preload="none" for battery; without flipping it here,
+    // setting .src alone never triggers a network fetch → canplay never
+    // fires → every hotswap times out. load() then forces the resource
+    // selection algorithm to actually run. Telemetry 2026-04-21 showed
+    // 40/45 triggers timing out before this fix.
+    el.preload = 'auto';
     el.src = `${R2_AUDIO}/${trackId}?q=high`;
+    try { el.load(); } catch {}
     try { el.currentTime = t; } catch {}
     el.volume = 0;
 
