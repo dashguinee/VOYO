@@ -13,6 +13,7 @@ import { Home, Radio, Library as LibraryIcon, Users, Zap, Plus, Shuffle, Repeat,
 import { HomeFeed } from './HomeFeed';
 import { Library } from './Library';
 import { Dahub } from '../dahub/Dahub';
+import { Safe } from '../ui/Safe';
 import { APP_CODES } from '../../lib/dahub/dahub-api';
 import { NowPlaying } from './NowPlaying';
 import { usePlayerStore } from '../../store/playerStore';
@@ -533,13 +534,22 @@ export const ClassicMode = ({ onSwitchToVOYO, onSearch }: ClassicModeProps) => {
           className="h-full"
         >
           {activeTab === 'home' && (
-            <HomeFeed
-              onTrackPlay={handleTrackClick}
-              onSearch={onSearch}
-              onDahub={() => setActiveTab('hub')}
-              onNavVisibilityChange={setNavVisible}
-              onSwitchToVOYO={onSwitchToVOYO}
-            />
+            <Safe name="HomeFeed" fallback={
+              <div className="h-full flex items-center justify-center px-6 text-center">
+                <div className="max-w-xs">
+                  <p className="text-white/70 text-sm mb-2">Home couldn't load right now.</p>
+                  <p className="text-white/40 text-xs">Try the Library tab or pull to refresh.</p>
+                </div>
+              </div>
+            }>
+              <HomeFeed
+                onTrackPlay={handleTrackClick}
+                onSearch={onSearch}
+                onDahub={() => setActiveTab('hub')}
+                onNavVisibilityChange={setNavVisible}
+                onSwitchToVOYO={onSwitchToVOYO}
+              />
+            </Safe>
           )}
           {activeTab === 'hub' && (
             dashId ? (

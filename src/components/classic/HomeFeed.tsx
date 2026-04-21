@@ -13,6 +13,7 @@ import { Search, Bell, Play, Zap } from 'lucide-react';
 import { AfricaIcon } from '../ui/AfricaIcon';
 import { getThumb } from '../../utils/thumbnail';
 import { SmartImage } from '../ui/SmartImage';
+import { Safe } from '../ui/Safe';
 import { TrackCardGestures } from '../ui/TrackCardGestures';
 import { GreetingArea } from './GreetingArea';
 import { VIBES, Vibe } from '../../data/tracks';
@@ -1449,10 +1450,10 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
       {/* Top-of-feed narrative slot — flashy GreetingBanner on session
           open, then eases into an ambient LiveStatusBar that tells the
           tale of what's happening in the app right now. */}
-      <GreetingArea />
+      <Safe name="GreetingArea"><GreetingArea /></Safe>
 
       {/* VoyoLiveCard - "Vibes on Vibes" → Opens VOYO Player */}
-      <SignInPrompt onSwitchToVOYO={onSwitchToVOYO} />
+      <Safe name="SignInPrompt"><SignInPrompt onSwitchToVOYO={onSwitchToVOYO} /></Safe>
 
       {/* Back in the Mood — always show OYE badge, brighter if boosted */}
       {hasHistory && (
@@ -1797,25 +1798,26 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
         <div className="px-4 mb-1.5">
           <h2 className="text-white font-semibold text-base">Vibes</h2>
         </div>
-        <VibesReel vibes={vibes} onOpenVibe={handleVibeSelect} />
+        <Safe name="VibesReel"><VibesReel vibes={vibes} onOpenVibe={handleVibeSelect} /></Safe>
       </div>
 
       {/* Stations rail — DJ-curated vibes (deeper commitment than Vibes buttons).
           Horizontal snap-scroll. Cards autoplay muted; 7s dwell fades audio in
           (iOS shows "Tap to hear"); tap commits to deck + R2 audio. */}
       {stations.length > 0 && (
-        <div className="mb-8 -mx-1">
-          <div className="flex gap-3 overflow-x-auto snap-x snap-mandatory scrollbar-hide px-4 pb-2">
-            {stations.map((station) => (
-              <div
-                key={station.id}
-                className="snap-center flex-shrink-0 w-[82vw] max-w-[420px]"
-              >
-                <StationHero station={station} />
-              </div>
-            ))}
+        <Safe name="StationsRail">
+          <div className="mb-8 -mx-1">
+            <div className="flex gap-3 overflow-x-auto snap-x snap-mandatory scrollbar-hide px-4 pb-2">
+              {stations.map((station) => (
+                <Safe name={`Station:${station.id}`} key={station.id}>
+                  <div className="snap-center flex-shrink-0 w-[82vw] max-w-[420px]">
+                    <StationHero station={station} />
+                  </div>
+                </Safe>
+              ))}
+            </div>
           </div>
-        </div>
+        </Safe>
       )}
 
       {/* TIVI+ moved to DaHub */}
@@ -1826,7 +1828,7 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
           <h2 className="text-white font-semibold text-base">OYO's Picks</h2>
           <div className="h-[2px] w-6 rounded-full" style={{ background: '#8b5cf6', opacity: 0.6 }} />
         </div>
-        <CenterFocusedCarousel tracks={oyosPicks} onPlay={(track) => onTrackPlay(track)} />
+        <Safe name="OyosPicks"><CenterFocusedCarousel tracks={oyosPicks} onPlay={(track) => onTrackPlay(track)} /></Safe>
       </div>
 
       {/* Your Artist Radar — personal-history shelf, lives at the bottom as
