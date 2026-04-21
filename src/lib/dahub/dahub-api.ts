@@ -469,7 +469,11 @@ export const messagesAPI = {
     toId: string,
     message: string,
     sentFrom: AppCode = APP_CODES.VOYO,
-    attachment?: { type: string; data: Record<string, any> }
+    attachment?: { type: string; data: Record<string, any> },
+    /** Optional — sender's display name, used in the notification
+     * title. Callers who already have it (chat UI knows the friend's
+     * name) should pass it; otherwise we fall back to a generic. */
+    senderName?: string,
   ): Promise<boolean> {
     if (!ccSupabase) return false;
 
@@ -482,8 +486,31 @@ export const messagesAPI = {
         attachment_type: attachment?.type || null,
         attachment_data: attachment?.data || null
       });
+      if (error) return false;
 
-      return !error;
+      // Fire-and-forget notification insert for the recipient. Targeted
+      // via target_user so only they see it; app='all' so it lands in
+      // every surface they're logged into (voyo, hub, giraf). Failures
+      // here don't roll back the message — the message itself went
+      // through. Logged via console.warn for debugging.
+      void ccSupabase
+        .from('dash_notifications')
+        .insert({
+          app: 'all',
+          title: senderName ? `${senderName} sent a message` : 'New message',
+          body: message.slice(0, 140),
+          url: '/?action=dahub',
+          target_user: toId,
+          sent_by: fromId,
+          status: 'sent',
+        })
+        .then((res) => {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const err = (res as any)?.error;
+          if (err) console.warn('[DAHUB] notification insert failed:', err.message);
+        });
+
+      return true;
     } catch (err) {
       console.error('[DAHUB] Failed to send message:', err);
       return false;

@@ -236,7 +236,9 @@ export function DirectMessageChat({
       currentUserId,
       friendId,
       messageText,
-      APP_CODES.COMMAND_CENTER
+      APP_CODES.COMMAND_CENTER,
+      undefined,
+      currentUserName,
     );
 
     if (!success) {
