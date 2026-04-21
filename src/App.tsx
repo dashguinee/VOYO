@@ -160,23 +160,20 @@ class AppErrorBoundary extends Component<{ children: ReactNode }, ErrorBoundaryS
 
   componentDidCatch(error: Error, info: ErrorInfo) {
     console.error('[VOYO] Render crash caught by ErrorBoundary:', error, info.componentStack);
-    const count = bumpCrashCounter();
-    // Always auto-recover — user never sees technical copy or buttons.
-    // 1st/2nd crash in window → soft reload (same page, fresh render).
-    // 3rd+ → nuclear: unregister SW, nuke caches, cache-bust reload.
-    if (count >= CRASH_RESET_THRESHOLD) {
-      setTimeout(() => { void nukeAndReload(); }, 600);
-    } else {
-      setTimeout(() => {
-        try { window.location.reload(); } catch { /* noop */ }
-      }, 600);
-    }
+    // v354: NO auto-reload. Previous auto-reload-on-crash was escalating
+    // repeatable crashes into a full lock-out loop (spinner → reload →
+    // crash → spinner → … → nuke → reload → crash again). User controls
+    // retry via the Reload button below. Still bump the counter so if
+    // the user hits Reload and crashes a 3rd time we prefer the nuke
+    // path on their explicit tap (one-tap escape, not auto-loop).
+    bumpCrashCounter();
+    void info; // referenced for side-effect logging above
   }
 
   render() {
     if (this.state.hasError) {
-      // Warm auto-recover: VOYO wordmark + a purple spinner. No scary
-      // copy, no buttons. The reload fires from componentDidCatch.
+      const crashes = readCrashCounter().count;
+      const shouldNuke = crashes >= CRASH_RESET_THRESHOLD;
       return (
         <div
           style={{
@@ -191,7 +188,7 @@ class AppErrorBoundary extends Component<{ children: ReactNode }, ErrorBoundaryS
             fontFamily: "'Inter', system-ui, sans-serif",
             padding: 24,
             textAlign: 'center',
-            gap: 24,
+            gap: 20,
           }}
         >
           <div
@@ -208,15 +205,30 @@ class AppErrorBoundary extends Component<{ children: ReactNode }, ErrorBoundaryS
           >
             VOYO
           </div>
-          <div
-            style={{
-              width: 36, height: 36, borderRadius: 999,
-              border: '2px solid rgba(139,92,246,0.2)',
-              borderTopColor: '#a78bfa',
-              animation: 'voyo-spin 900ms linear infinite',
+          <div style={{ fontSize: 12, opacity: 0.45, maxWidth: 260, lineHeight: 1.5 }}>
+            {shouldNuke
+              ? 'Reload with a fresh download — this clears cached data.'
+              : 'Hiccup loading. Tap reload to try again.'}
+          </div>
+          <button
+            onClick={() => {
+              if (shouldNuke) { void nukeAndReload(); return; }
+              try { window.location.reload(); } catch { /* noop */ }
             }}
-          />
-          <style>{`@keyframes voyo-spin { to { transform: rotate(360deg); } }`}</style>
+            style={{
+              padding: '12px 28px',
+              borderRadius: 999,
+              background: 'linear-gradient(135deg, #8b5cf6, #7c3aed)',
+              color: 'white',
+              border: 'none',
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: 'pointer',
+              boxShadow: '0 0 20px rgba(139, 92, 246, 0.28)',
+            }}
+          >
+            {shouldNuke ? 'Reset & reload' : 'Reload'}
+          </button>
         </div>
       );
     }
