@@ -1646,11 +1646,16 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
           purple Open VOYO morph. Header stays clean, CTA earns the scroll. */}
       <div className="mb-6">
         <div className="px-4 mb-5 flex items-center gap-3">
-          <AfricaIcon size={32} />
+          <AfricaIcon size={36} />
           <div className="flex-1">
-            <h2 className="text-white font-semibold text-base">OYÉ Africa</h2>
+            <h2
+              className="text-white text-[22px] leading-none"
+              style={{ fontWeight: 800, letterSpacing: '-0.01em' }}
+            >
+              OYÉ Africa
+            </h2>
             <p
-              className="text-[9px] font-medium tracking-wider uppercase"
+              className="text-[9px] font-medium tracking-wider uppercase mt-1.5"
               style={{
                 background: 'linear-gradient(90deg, #D4A053 0%, #C4943D 100%)',
                 WebkitBackgroundClip: 'text',
