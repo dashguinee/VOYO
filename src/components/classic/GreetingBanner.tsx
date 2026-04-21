@@ -22,7 +22,13 @@ function greetingFor(hour: number): string {
   return 'Welcome Back';
 }
 
-export const GreetingBanner = () => {
+interface GreetingBannerProps {
+  /** Fires when the banner has finished fading out. Lets a parent swap
+   * in a follow-up component (e.g. a live status bar) in the same slot. */
+  onComplete?: () => void;
+}
+
+export const GreetingBanner = ({ onComplete }: GreetingBannerProps = {}) => {
   const [phase, setPhase] = useState<'hidden' | 'rising' | 'settled' | 'leaving' | 'done'>('hidden');
   const { displayName } = useAuth();
 
@@ -41,6 +47,7 @@ export const GreetingBanner = () => {
     try {
       if (sessionStorage.getItem(SESSION_KEY)) {
         setPhase('done');
+        onComplete?.();
         return;
       }
       sessionStorage.setItem(SESSION_KEY, String(Date.now()));
@@ -51,14 +58,14 @@ export const GreetingBanner = () => {
     const riseTimer = setTimeout(() => setPhase('rising'), 220);
     const settleTimer = setTimeout(() => setPhase('settled'), 220 + 600);
     const leaveTimer = setTimeout(() => setPhase('leaving'), LIFETIME_MS - 1200);
-    const doneTimer = setTimeout(() => setPhase('done'), LIFETIME_MS);
+    const doneTimer = setTimeout(() => { setPhase('done'); onComplete?.(); }, LIFETIME_MS);
     return () => {
       clearTimeout(riseTimer);
       clearTimeout(settleTimer);
       clearTimeout(leaveTimer);
       clearTimeout(doneTimer);
     };
-  }, []);
+  }, [onComplete]);
 
   if (phase === 'done') return null;
 

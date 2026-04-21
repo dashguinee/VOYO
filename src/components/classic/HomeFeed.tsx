@@ -14,7 +14,7 @@ import { AfricaIcon } from '../ui/AfricaIcon';
 import { getThumb } from '../../utils/thumbnail';
 import { SmartImage } from '../ui/SmartImage';
 import { TrackCardGestures } from '../ui/TrackCardGestures';
-import { GreetingBanner } from './GreetingBanner';
+import { GreetingArea } from './GreetingArea';
 import { VIBES, Vibe } from '../../data/tracks';
 import { LottieIcon } from '../ui/LottieIcon';
 import { getUserTopTracks, getPoolAwareHotTracks, getPoolAwareDiscoveryTracks, calculateBehaviorScore, recordPoolEngagement } from '../../services/personalization';
@@ -1571,10 +1571,10 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
         )}
       
 
-      {/* Greeting — fade-rise + bronze shimmer, once per session, then
-          the whole block collapses (banner returns null after ~5.2s) so
-          the feed flows straight into the content below. */}
-      <GreetingBanner />
+      {/* Top-of-feed narrative slot — flashy GreetingBanner on session
+          open, then eases into an ambient LiveStatusBar that tells the
+          tale of what's happening in the app right now. */}
+      <GreetingArea />
 
       {/* VoyoLiveCard - "Vibes on Vibes" → Opens VOYO Player */}
       <SignInPrompt onSwitchToVOYO={onSwitchToVOYO} />
