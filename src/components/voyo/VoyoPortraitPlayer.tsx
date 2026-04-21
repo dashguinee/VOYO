@@ -80,9 +80,17 @@ const ProgressSlider = memo(({ isScrubbing }: { isScrubbing: boolean }) => {
 
   return (
     <div className="flex-1 relative h-3 flex items-center">
-      {/* Track: slightly brighter hairline so the progress line is visible
-          against most backgrounds without stealing attention. */}
-      <div className="absolute left-0 right-0 h-[1px] bg-white/20 rounded-full" />
+      {/* Track hairline — last 30% fades toward the right edge so the
+          bar tapers off into the background instead of ending abruptly.
+          Mask-image cuts visibility, not color, so it works with any
+          underlying background. */}
+      <div
+        className="absolute left-0 right-0 h-[1px] bg-white/20 rounded-full"
+        style={{
+          maskImage: 'linear-gradient(to right, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 70%, rgba(0,0,0,0) 100%)',
+          WebkitMaskImage: 'linear-gradient(to right, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 70%, rgba(0,0,0,0) 100%)',
+        }}
+      />
       {/* No seek input - VOYO is music, not video. You feel it, you don't scrub it. */}
       <div
         className="absolute w-[6px] h-[6px] rounded-full"
