@@ -240,7 +240,7 @@ class MomentsService {
         .from('voyo_moments')
         .select('*')
         .eq('id', momentId)
-        .single();
+        .maybeSingle();
 
       if (error || !data) {
         return null;
@@ -531,7 +531,7 @@ class MomentsService {
         .from('voyo_moments')
         .select('voyo_plays, voyo_full_song_taps')
         .eq('id', momentId)
-        .single();
+        .maybeSingle();
 
       if (fetchError || !current) {
         return false;
@@ -568,7 +568,7 @@ class MomentsService {
         .from('voyo_moments')
         .select('voyo_skips')
         .eq('id', momentId)
-        .single();
+        .maybeSingle();
 
       if (fetchError || !current) {
         console.error('[MomentsService] Record skip error:', fetchError?.message);
@@ -610,7 +610,7 @@ class MomentsService {
         .from('voyo_moments')
         .select('voyo_reactions')
         .eq('id', momentId)
-        .single();
+        .maybeSingle();
 
       if (fetchError || !current) {
         console.error('[MomentsService] Record reaction error:', fetchError?.message);
@@ -654,12 +654,13 @@ class MomentsService {
       const { data, error } = await supabase
         .from('voyo_moments_stats')
         .select('*')
-        .single();
+        .maybeSingle();
 
       if (error) {
         console.error('[MomentsService] Get stats error:', error.message);
         return null;
       }
+      if (!data) return null;
 
       return data as MomentStats;
     } catch (err) {

@@ -549,7 +549,7 @@ export const useUniverseStore = create<UniverseStore>((set, get) => ({
         .from('universes')
         .select('state, public_profile')
         .eq('username', currentUsername)
-        .single();
+        .maybeSingle();
 
       if (error || !data) return false;
 

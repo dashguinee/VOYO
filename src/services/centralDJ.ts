@@ -457,7 +457,7 @@ export async function trainVibe(signal: VibeTrainSignal): Promise<boolean> {
       .from('voyo_tracks')
       .select('voyo_id, vibe_tags')
       .eq('voyo_id', signal.trackId)
-      .single();
+      .maybeSingle();
 
     if (!existing) {
       // Track doesn't exist in central DB yet - that's OK, will be added later

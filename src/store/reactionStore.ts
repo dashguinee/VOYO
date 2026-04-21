@@ -354,12 +354,10 @@ export const useReactionStore = create<ReactionStore>((set, get) => ({
         .from('track_stats')
         .select('*')
         .eq('track_id', trackId)
-        .single();
+        .maybeSingle();
 
-      if (error) {
-        if (error.code === 'PGRST116') return null; // Not found
-        throw error;
-      }
+      if (error) throw error;
+      if (!data) return null; // Track has no stats yet
 
       const stats = data as TrackStats;
 

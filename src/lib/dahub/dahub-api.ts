@@ -613,7 +613,7 @@ export const presenceAPI = {
         .from('user_presence')
         .select('*')
         .eq('core_id', userId)
-        .single();
+        .maybeSingle();
 
       if (error) return null;
       return data as UserPresence;

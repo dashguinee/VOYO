@@ -536,7 +536,7 @@ export function useMoments(): UseMomentsReturn {
         .from('voyo_moments')
         .select('voyo_reactions')
         .eq('id', momentId)
-        .single();
+        .maybeSingle();
 
       if (current) {
         await supabase

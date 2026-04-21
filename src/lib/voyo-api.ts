@@ -152,7 +152,7 @@ export const profileAPI = {
       .from('voyo_profiles')
       .select('*')
       .eq('dash_id', dashId)
-      .single();
+      .maybeSingle();
 
     return data;
   },
@@ -374,7 +374,7 @@ export const friendsAPI = {
         .eq('user_id', myDashId)
         .eq('friend_id', otherDashId)
         .eq('status', 'active')
-        .single();
+        .maybeSingle();
 
       return !!data;
     }
