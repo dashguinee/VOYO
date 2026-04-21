@@ -211,6 +211,155 @@ const ShelfWithRefresh = ({ title, onSeeAll, children }: ShelfWithRefreshProps) 
 );
 
 // ============================================
+// MOOD STAGE — cathedral-pillar frame for "Back in the Mood"
+// ============================================
+// Two purple-bronze neon columns flank the horizontal shelf. Bronze
+// finials cap each corner, a thin gold-foil lintel + base connect the
+// two pillars, and a soft purple bloom radiates from behind the cards.
+// The scroll row lives on top of this architecture; content scrolls
+// PAST the pillars like a stage. Fully static — motion would cheapen
+// the read. Used deliberately for the user's most personal shelf
+// (recently played) because it deserves the hero treatment.
+
+const MoodPillar = ({ side }: { side: 'left' | 'right' }) => {
+  const pos = side === 'left' ? { left: 10 } : { right: 10 };
+  return (
+    <div
+      className="absolute top-0 bottom-0 pointer-events-none"
+      style={{ ...pos, width: 3 }}
+      aria-hidden
+    >
+      {/* Outer purple bloom — soft, wide, low-opacity. Does the heavy
+          lifting visually; the core rail on top is the crisp edge. */}
+      <div
+        className="absolute"
+        style={{
+          inset: '6px -10px',
+          background: 'linear-gradient(180deg, rgba(212,160,83,0.4) 0%, rgba(139,92,246,0.85) 35%, rgba(167,139,250,1) 50%, rgba(139,92,246,0.85) 65%, rgba(212,160,83,0.4) 100%)',
+          filter: 'blur(12px)',
+          opacity: 0.55,
+        }}
+      />
+      {/* Core rail — crisp 3px column with vertical candlelit gradient
+          (bronze top → purple mid → bronze bottom), inner bright
+          highlight for a glass-column read. */}
+      <div
+        className="absolute inset-y-2 inset-x-0"
+        style={{
+          background:
+            'linear-gradient(180deg, #D4A053 0%, #a78bfa 22%, #c4b5fd 48%, #a78bfa 52%, #8b5cf6 70%, #D4A053 100%)',
+          boxShadow:
+            '0 0 10px rgba(167,139,250,0.7), 0 0 20px rgba(139,92,246,0.35), inset 0 0 1px rgba(255,255,255,0.7)',
+          borderRadius: 2,
+        }}
+      />
+      {/* Top finial — brass cap orb with radial glow. The "nail head"
+          that makes the column read as built, not drawn. */}
+      <div
+        className="absolute -top-1 left-1/2 -translate-x-1/2 w-2.5 h-2.5 rounded-full"
+        style={{
+          background:
+            'radial-gradient(circle at 35% 30%, #F4D89A 0%, #E4B878 35%, #C4943D 70%, #8B5A1F 100%)',
+          boxShadow:
+            '0 0 12px rgba(212,160,83,0.85), 0 0 24px rgba(212,160,83,0.35), inset 0 0 2px rgba(255,255,255,0.4)',
+        }}
+      />
+      {/* Bottom finial — mirror. */}
+      <div
+        className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-2.5 h-2.5 rounded-full"
+        style={{
+          background:
+            'radial-gradient(circle at 35% 30%, #F4D89A 0%, #E4B878 35%, #C4943D 70%, #8B5A1F 100%)',
+          boxShadow:
+            '0 0 12px rgba(212,160,83,0.85), 0 0 24px rgba(212,160,83,0.35), inset 0 0 2px rgba(255,255,255,0.4)',
+        }}
+      />
+    </div>
+  );
+};
+
+interface MoodStageProps {
+  title: string;
+  children: React.ReactNode;
+}
+
+const MoodStage = ({ title, children }: MoodStageProps) => (
+  <div className="relative mb-12 pt-6 pb-6">
+    {/* Stage backdrop — warm purple bloom radiating from center, so
+        the frame feels like a lit alcove, not just lines on empty
+        space. Pointer-events-none so it never intercepts taps. */}
+    <div
+      className="absolute pointer-events-none"
+      style={{
+        inset: '0 14px',
+        background:
+          'radial-gradient(ellipse 78% 60% at 50% 55%, rgba(139,92,246,0.12) 0%, rgba(139,92,246,0.05) 40%, rgba(212,160,83,0.03) 70%, transparent 90%)',
+      }}
+      aria-hidden
+    />
+
+    {/* Top lintel — thin gold-foil line connecting the two pillar tops.
+        Horizontal gradient fades in from the pillars and peaks in
+        the middle, giving the frame an architectural ceiling. */}
+    <div
+      className="absolute top-0 pointer-events-none"
+      style={{
+        left: 14,
+        right: 14,
+        height: 1,
+        background:
+          'linear-gradient(90deg, transparent 0%, rgba(212,160,83,0.55) 15%, rgba(244,216,154,0.7) 50%, rgba(212,160,83,0.55) 85%, transparent 100%)',
+        boxShadow: '0 0 6px rgba(212,160,83,0.25)',
+      }}
+      aria-hidden
+    />
+    {/* Bottom base — mirror of the lintel, anchoring the frame. */}
+    <div
+      className="absolute bottom-0 pointer-events-none"
+      style={{
+        left: 14,
+        right: 14,
+        height: 1,
+        background:
+          'linear-gradient(90deg, transparent 0%, rgba(212,160,83,0.55) 15%, rgba(244,216,154,0.7) 50%, rgba(212,160,83,0.55) 85%, transparent 100%)',
+        boxShadow: '0 0 6px rgba(212,160,83,0.25)',
+      }}
+      aria-hidden
+    />
+
+    {/* Pillars */}
+    <MoodPillar side="left" />
+    <MoodPillar side="right" />
+
+    {/* Heading — sits inside the frame. White text + bronze accent
+        dot is the same signature treatment used on OYO's Picks, here
+        tuned for the "memory vault" feel of recently played. */}
+    <div className="relative px-8 mb-4 flex items-center gap-2.5">
+      <h2 className="text-white font-semibold text-base tracking-tight">{title}</h2>
+      <div
+        className="h-[2px] w-5 rounded-full"
+        style={{
+          background: 'linear-gradient(90deg, #D4A053, rgba(212,160,83,0))',
+          boxShadow: '0 0 6px rgba(212,160,83,0.6)',
+        }}
+        aria-hidden
+      />
+    </div>
+
+    {/* Scroll row — sits above the backdrop layers. Extra horizontal
+        padding (px-6) so the first/last cards don't kiss the pillars. */}
+    <div className="relative">
+      <div
+        className="flex gap-4 px-6 overflow-x-auto scrollbar-hide"
+        style={{ scrollSnapType: 'x proximity', WebkitOverflowScrolling: 'touch' }}
+      >
+        {children}
+      </div>
+    </div>
+  </div>
+);
+
+// ============================================
 // CENTER-FOCUSED CAROUSEL - For New Releases
 // Center card big, sides smaller (like Landscape player selector)
 // ============================================
@@ -1493,13 +1642,18 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
       {/* VoyoLiveCard - "Vibes on Vibes" → Opens VOYO Player */}
       <Safe name="SignInPrompt"><SignInPrompt onSwitchToVOYO={onSwitchToVOYO} /></Safe>
 
-      {/* Back in the Mood — always show OYE badge, brighter if boosted */}
+      {/* Back in the Mood — hero treatment: cathedral-pillar stage.
+          Two purple-bronze neon columns flank the shelf with bronze
+          finials at each corner, a thin bronze lintel + base line
+          framing the whole section, and a soft purple bloom radiating
+          from behind the cards. Static on purpose — movement cheapens
+          the architectural read. */}
       {hasHistory && (
-        <ShelfWithRefresh title="Back in the Mood" onRefresh={handleRefresh} isRefreshing={isRefreshing}>
+        <MoodStage title="Back in the Mood">
           {recentlyPlayed.slice(0, 12).map((track) => (
             <WideTrackCard key={track.id} track={track} onPlay={() => onTrackPlay(track)} showBoostBadge isBoosted={boostedIds.has(track.trackId)} />
           ))}
-        </ShelfWithRefresh>
+        </MoodStage>
       )}
 
       {/* Heavy Rotation - circles, only first one rotates gently */}
