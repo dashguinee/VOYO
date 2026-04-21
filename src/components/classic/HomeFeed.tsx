@@ -1454,12 +1454,12 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
           D
         </button>
         <div className="flex items-center gap-2">
-          <button className="p-2 rounded-full bg-white/10 hover:bg-white/20" onClick={onSearch}>
+          <button aria-label="Search" className="p-2 rounded-full bg-white/10 hover:bg-white/20" onClick={onSearch}>
             <Search className="w-5 h-5 text-white/70" />
           </button>
-          <button className="p-2 rounded-full bg-white/10 hover:bg-white/20 relative" onClick={handleNotificationClick}>
+          <button aria-label="Notifications" className="p-2 rounded-full bg-white/10 hover:bg-white/20 relative" onClick={handleNotificationClick}>
             <Bell className="w-5 h-5 text-white/70" />
-            <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-red-500" />
+            <span aria-hidden="true" className="absolute top-1 right-1 w-2 h-2 rounded-full bg-red-500" />
           </button>
         </div>
       </header>

@@ -228,7 +228,7 @@ export const ProfilePage = () => {
       {/* Header */}
       <div className="sticky top-0 z-30 bg-transparent">
         <div className="flex items-center justify-between px-4 py-3">
-          <button onClick={() => navigate('/')} className="p-2 -ml-2">
+          <button aria-label="Back to home" onClick={() => navigate('/')} className="p-2 -ml-2">
             <ArrowLeft className="w-5 h-5 text-white/70" />
           </button>
           <div className="flex items-center gap-2">

@@ -845,7 +845,7 @@ function AddFriendModal({ userId, onClose, onAdded }: { userId: string; onClose:
       >
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-white font-bold text-xl">Add Friend</h2>
-          <button onClick={onClose} className="p-2.5 -mr-2 rounded-xl hover:bg-white/10 active:scale-95 transition-transform">
+          <button aria-label="Close" onClick={onClose} className="p-2.5 -mr-2 rounded-xl hover:bg-white/10 active:scale-95 transition-transform">
             <X size={22} className="text-white/60" />
           </button>
         </div>
