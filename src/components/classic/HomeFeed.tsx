@@ -764,24 +764,25 @@ WideTrackCard.displayName = 'WideTrackCard';
 
 // ============================================
 // CLASSICS DISK CARD — zoomed-disc treatment
-// Circular crop so the cover reads like a vinyl label (zoomed-in center
-// of the album art). Thin gold ring ties it into the Collection palette.
-// No hold-gestures, no preference mode — a classics shelf is for playing,
-// not for training the recommender.
+// A breather in the feed: pure artwork, no labels. Circular crop so the
+// cover reads like a zoomed-in vinyl label. 90% opacity keeps it
+// effortless — there but not shouting.
 // ============================================
 const ClassicsDiskCard = memo(({ track, onPlay }: { track: Track; onPlay: () => void }) => {
   const thumbnailUrl = getThumb(track.trackId, 'high');
   return (
     <button
-      className="flex-shrink-0 flex flex-col items-center active:scale-[0.96] transition-transform"
+      className="flex-shrink-0 active:scale-[0.96] transition-transform"
       onClick={onPlay}
-      style={{ scrollSnapAlign: 'start', width: '132px' }}
+      aria-label={`Play ${track.title} by ${track.artist}`}
+      style={{ scrollSnapAlign: 'start' }}
     >
       <div
-        className="relative w-[120px] h-[120px] rounded-full overflow-hidden mb-3"
+        className="relative w-[130px] h-[130px] rounded-full overflow-hidden"
         style={{
+          opacity: 0.9,
           boxShadow:
-            '0 0 0 1px rgba(212,160,83,0.55), 0 6px 18px rgba(0,0,0,0.55), inset 0 0 18px rgba(0,0,0,0.35)',
+            '0 0 0 1px rgba(212,160,83,0.5), 0 8px 22px rgba(0,0,0,0.55), inset 0 0 20px rgba(0,0,0,0.35)',
         }}
       >
         <SmartImage
@@ -791,11 +792,9 @@ const ClassicsDiskCard = memo(({ track, onPlay }: { track: Track; onPlay: () => 
           trackId={track.trackId}
           artist={track.artist}
           title={track.title}
-          style={{ transform: 'scale(1.35)' }}
+          style={{ transform: 'scale(1.4)' }}
         />
       </div>
-      <p className="text-white text-xs font-medium truncate w-full text-center px-1">{track.title}</p>
-      <p className="text-white/50 text-[10px] truncate w-full text-center px-1">{track.artist}</p>
     </button>
   );
 });
@@ -1726,15 +1725,16 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
               }}
             />
 
-            {/* Header — Italianno script + single flourish. One signature element. */}
-            <div className="px-6 mb-7 relative">
+            {/* Header — single visible mark. One signature element. */}
+            <div className="px-6 mb-6 relative">
               <h2
                 className="leading-none"
                 style={{
                   fontFamily: "'Italianno', cursive",
-                  fontSize: 'clamp(72px, 22vw, 96px)',
+                  fontSize: 'clamp(44px, 13vw, 64px)',
                   fontWeight: 400,
-                  margin: '0 0 4px 0',
+                  margin: 0,
+                  whiteSpace: 'nowrap',
                   background:
                     'linear-gradient(135deg, #FFF3D6 0%, #F4D999 15%, #E6B865 35%, #D4A053 55%, #C4943D 75%, #8B6228 100%)',
                   WebkitBackgroundClip: 'text',
@@ -1744,27 +1744,20 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
                   letterSpacing: '0.005em',
                 }}
               >
-                Classics
+                Vibes on Vibes
               </h2>
-              <div className="flex items-center gap-2 ml-1">
-                <div
-                  className="h-[1px]"
-                  style={{
-                    width: '120px',
-                    background:
-                      'linear-gradient(90deg, rgba(230,184,101,1) 0%, rgba(212,160,83,0.7) 40%, rgba(212,160,83,0.2) 80%, transparent)',
-                  }}
-                />
-                <div
-                  className="w-1 h-1 rounded-full"
-                  style={{ background: '#D4A053', boxShadow: '0 0 6px rgba(212,160,83,0.7)' }}
-                />
-              </div>
             </div>
 
             <div
-              className="flex gap-5 px-4 overflow-x-auto scrollbar-hide"
-              style={{ scrollSnapType: 'x proximity', WebkitOverflowScrolling: 'touch' }}
+              className="flex gap-5 px-6 overflow-x-auto scrollbar-hide"
+              style={{
+                scrollSnapType: 'x proximity',
+                WebkitOverflowScrolling: 'touch',
+                maskImage:
+                  'linear-gradient(to right, transparent 0, black 6%, black 94%, transparent 100%)',
+                WebkitMaskImage:
+                  'linear-gradient(to right, transparent 0, black 6%, black 94%, transparent 100%)',
+              }}
             >
               {classicsTracks.map((track) => (
                 <ClassicsDiskCard
@@ -1795,7 +1788,7 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
             }
             .top10-scroll-title {
               display: inline-block;
-              animation: top10-marquee 6s linear infinite;
+              animation: top10-marquee 7.2s linear infinite;
             }
           `}</style>
           <div className="flex gap-6 px-4 overflow-x-auto scrollbar-hide" style={{ scrollSnapType: 'x proximity', paddingBottom: '60px' }}>
