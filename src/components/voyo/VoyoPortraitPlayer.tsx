@@ -3278,6 +3278,18 @@ const LyricsOverlay = memo(({ track, isOpen, onClose, currentTime }: LyricsOverl
   // Get current segment based on playback time
   const currentSegment = lyrics ? getCurrentSegment(lyrics, currentTime) : null;
 
+  // Apple-Music-style karaoke reveal — fraction of the current segment
+  // that has elapsed. Drives a linear-gradient mask on the active line so
+  // it "fills in" bright white from left to right as the line plays.
+  // Clamped 0-1 with a tiny easing band so the wipe reads as smooth,
+  // not a hard cursor.
+  const segmentProgress = (() => {
+    if (!currentSegment) return 0;
+    const end = currentSegment.endTime ?? (currentSegment.startTime + 4);
+    const span = Math.max(0.1, end - currentSegment.startTime);
+    return Math.max(0, Math.min(1, (currentTime - currentSegment.startTime) / span));
+  })();
+
   // Render words as tappable spans
   const renderTappableText = useCallback((text: string, isCurrent: boolean) => {
     const words = text.split(/(\s+)/); // Split but keep spaces
@@ -3404,7 +3416,25 @@ const LyricsOverlay = memo(({ track, isOpen, onClose, currentTime }: LyricsOverl
                         : 'bg-white/5 hover:bg-white/[0.08]'
                     }`}
                   >
-                    <p className={`text-white ${isCurrent ? 'text-lg font-semibold' : 'text-sm'}`}>
+                    <p
+                      className={isCurrent ? 'text-lg font-semibold' : 'text-white text-sm'}
+                      style={isCurrent ? {
+                        // Karaoke reveal — bright white fills from left to
+                        // right across the segment's duration. Faded white
+                        // tail gives the line definition before the wipe
+                        // reaches it. Web Audio currentTime drives this at
+                        // ~4Hz which is plenty smooth for word-scale text.
+                        backgroundImage: `linear-gradient(90deg,
+                          rgba(255,255,255,1) 0%,
+                          rgba(255,255,255,1) ${Math.max(0, segmentProgress * 100 - 4)}%,
+                          rgba(255,255,255,0.45) ${Math.min(100, segmentProgress * 100 + 4)}%,
+                          rgba(255,255,255,0.45) 100%)`,
+                        backgroundClip: 'text',
+                        WebkitBackgroundClip: 'text',
+                        color: 'transparent',
+                        WebkitTextFillColor: 'transparent',
+                      } : undefined}
+                    >
                       {renderTappableText(segment.original, isCurrent)}
                     </p>
                     {segment.english && (

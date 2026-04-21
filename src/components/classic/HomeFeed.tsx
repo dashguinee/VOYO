@@ -850,6 +850,22 @@ const AfricanVibesVideoCard = memo(({
     );
   }, [isActive, isLoaded]);
 
+  // Lazy-mount the iframe itself — off-active cards show only the
+  // thumbnail. Was mounting 10+ YouTube player instances in parallel
+  // across the rail; now at most 1 (active) + 1 (recently-active
+  // lingering briefly) decode video at a time. Big battery + memory
+  // win on long carousels. Unmount delayed 800ms on inactive so a
+  // quick scroll-through doesn't thrash mount/unmount.
+  const [shouldMountIframe, setShouldMountIframe] = useState(isActive);
+  useEffect(() => {
+    if (isActive) {
+      setShouldMountIframe(true);
+      return;
+    }
+    const t = setTimeout(() => setShouldMountIframe(false), 800);
+    return () => clearTimeout(t);
+  }, [isActive]);
+
   // NOTE: Previews are always muted - audio only through AudioPlayer
   // Removed unmute logic to ensure single audio source
 
@@ -883,28 +899,32 @@ const AfricanVibesVideoCard = memo(({
           lazy={false}
         />
 
-        {/* Video iframe */}
-        <div
-          className="absolute inset-0 transition-opacity duration-300"
-          style={{ opacity: isActive && isLoaded ? 1 : 0 }}
-        >
-          <iframe
-            ref={iframeRef}
-            src={embedUrl}
-            className="pointer-events-none"
-            style={{
-              border: 'none',
-              position: 'absolute',
-              top: '50%',
-              left: '50%',
-              transform: 'translate(-50%, -50%)',
-              width: '300%',
-              height: '300%',
-            }}
-            allow="accelerometer; autoplay; encrypted-media"
-            onLoad={() => setIsLoaded(true)}
-          />
-        </div>
+        {/* Video iframe — mounted only when the card is active (or was
+            recently). Static thumbnail fills the visual the rest of
+            the time. */}
+        {shouldMountIframe && (
+          <div
+            className="absolute inset-0 transition-opacity duration-300"
+            style={{ opacity: isActive && isLoaded ? 1 : 0 }}
+          >
+            <iframe
+              ref={iframeRef}
+              src={embedUrl}
+              className="pointer-events-none"
+              style={{
+                border: 'none',
+                position: 'absolute',
+                top: '50%',
+                left: '50%',
+                transform: 'translate(-50%, -50%)',
+                width: '300%',
+                height: '300%',
+              }}
+              allow="accelerometer; autoplay; encrypted-media"
+              onLoad={() => setIsLoaded(true)}
+            />
+          </div>
+        )}
 
         {/* Purple overlay */}
         <div
