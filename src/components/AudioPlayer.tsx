@@ -31,6 +31,7 @@ import type { BoostPreset } from '../audio/graph/boostPresets';
 // r2Probe is the shared probe — useHotSwap imports the same function,
 // so one fix = both paths. R2_AUDIO stays here for the src-assignment URL.
 import { r2HasTrack, R2_AUDIO_BASE as R2_AUDIO } from '../player/r2Probe';
+import { getYouTubeId } from '../utils/voyoId';
 export type { BoostPreset };
 
 const EDGE_ART = 'https://voyo-edge.dash-webtv.workers.dev/cdn/art';
@@ -242,7 +243,8 @@ export const AudioPlayer = () => {
         iframeBridge.resetVolume();
       }
       if (cached && el) {
-        el.src = `${R2_AUDIO}/${currentTrack.trackId}?q=high`;
+        // R2 is keyed by raw YouTube ID; trackId may be a VOYO ID (vyo_<b64>).
+        el.src = `${R2_AUDIO}/${getYouTubeId(currentTrack.trackId)}?q=high`;
         // Transient 'pause' fires on src reassign; handlePause sees the
         // flag and skips the setIsPlaying(false). The flag clears in
         // handleCanPlay once the new track has data ready. If play() is

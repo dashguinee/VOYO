@@ -6,6 +6,8 @@
  * future edge-caching / ETag optimizations happen in one place.
  */
 
+import { getYouTubeId } from '../utils/voyoId';
+
 export const R2_AUDIO_BASE = 'https://voyo-edge.dash-webtv.workers.dev/audio';
 
 // In-flight dedup: if rapid card-tapping (or poll + track-change)
@@ -21,7 +23,10 @@ const HEAD_TIMEOUT_MS = 1500;
  * HEAD_TIMEOUT_MS so a slow edge never stalls a track transition.
  */
 export async function r2HasTrack(trackId: string): Promise<boolean> {
-  const existing = _inflight.get(trackId);
+  // R2 stores by raw YouTube ID; callers may pass a VOYO ID (vyo_<base64>).
+  // Dedup on the decoded id so vyo_<X> and its decoded form share one probe.
+  const ytId = getYouTubeId(trackId);
+  const existing = _inflight.get(ytId);
   if (existing) return existing;
 
   const promise = (async () => {
@@ -35,7 +40,7 @@ export async function r2HasTrack(trackId: string): Promise<boolean> {
       // cached 404. The _v= query param changes per-request so caches
       // treat each HEAD as a unique URL.
       const bust = Date.now();
-      const res = await fetch(`${R2_AUDIO_BASE}/${trackId}?q=high&_v=${bust}`, {
+      const res = await fetch(`${R2_AUDIO_BASE}/${ytId}?q=high&_v=${bust}`, {
         method: 'HEAD',
         signal: ctrl.signal,
         cache: 'no-store',
@@ -48,11 +53,11 @@ export async function r2HasTrack(trackId: string): Promise<boolean> {
     }
   })();
 
-  _inflight.set(trackId, promise);
+  _inflight.set(ytId, promise);
   // Clear from the dedup map shortly after resolve so subsequent checks
   // (a minute later, same session) re-probe with fresh data.
   promise.finally(() => {
-    setTimeout(() => { _inflight.delete(trackId); }, 2000);
+    setTimeout(() => { _inflight.delete(ytId); }, 2000);
   });
   return promise;
 }

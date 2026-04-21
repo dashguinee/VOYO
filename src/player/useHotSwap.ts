@@ -24,6 +24,7 @@ import { logPlaybackEvent } from '../services/telemetry';
 import { devLog } from '../utils/logger';
 import { iframeBridge } from './iframeBridge';
 import { r2HasTrack, R2_AUDIO_BASE as R2_AUDIO } from './r2Probe';
+import { getYouTubeId } from '../utils/voyoId';
 import type { Track } from '../types';
 
 // Tightened from 5s → 2s. The Realtime channel TIMED_OUT repeatedly in
@@ -56,7 +57,12 @@ async function performHotSwap(
   snapshot: { trackId: string; seconds: number } | null,
   iframeStartedAt: number,
 ): Promise<boolean> {
-  const storeVol = usePlayerStore.getState().volume;
+  // playerStore.volume is 0-100 (see playerStore.ts:409). HTMLMediaElement.volume
+  // requires [0, 1]. Normalize once so every el.volume = storeVol * r2Gain below
+  // stays in range. Prior bug: 100% of hotswaps threw "volume property outside
+  // range [0, 1]" on the first fade step, marked hotswap_unrecoverable, left
+  // playback stuck on iframe — which in turn killed BG playback on mobile.
+  const storeVol = usePlayerStore.getState().volume / 100;
   const elapsed = Date.now() - iframeStartedAt;
 
   // Abort if the user skipped — checked at every await boundary. Without
@@ -106,7 +112,10 @@ async function performHotSwap(
     // selection algorithm to actually run. Telemetry 2026-04-21 showed
     // 40/45 triggers timing out before this fix.
     el.preload = 'auto';
-    el.src = `${R2_AUDIO}/${trackId}?q=high`;
+    // R2 stores audio keyed by raw YouTube ID; app can carry VOYO IDs
+    // (vyo_<base64>) in trackId. Telemetry 2026-04-21 showed vyo_ prefixed
+    // IDs reaching hotswap_watcher_mount — those would 404 without decode.
+    el.src = `${R2_AUDIO}/${getYouTubeId(trackId)}?q=high`;
     try { el.load(); } catch {}
     try { el.currentTime = t; } catch {}
     el.volume = 0;
@@ -166,7 +175,7 @@ async function performHotSwap(
       }
       const p = i / HOT_SWAP_STEPS;          // 0 → 1
       const r2Gain = Math.sin((p * Math.PI) / 2); // 0 → 1 (equal-power in)
-      el.volume = Math.min(storeVol, storeVol * r2Gain);
+      el.volume = storeVol * r2Gain;
       await new Promise((r) => setTimeout(r, stepMs));
     }
     await iframeFade;
@@ -182,8 +191,8 @@ async function performHotSwap(
     iframeBridge.resetVolume();
     // Re-read volume at the final assignment — user may have moved the
     // slider during the 2s fade, and storeVol captured at the top of
-    // performHotSwap is now stale.
-    el.volume = usePlayerStore.getState().volume;
+    // performHotSwap is now stale. Normalize 0-100 → 0-1 for el.volume.
+    el.volume = usePlayerStore.getState().volume / 100;
     usePlayerStore.getState().setPlaybackSource('r2');
 
     logPlaybackEvent({

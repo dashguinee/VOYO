@@ -5,6 +5,7 @@
 // via ensureTrackReady. Mass-populating R2 is a separate deliberate flow.
 
 import { supabase } from '../lib/supabase';
+import { getYouTubeId } from '../utils/voyoId';
 import type { Track } from '../types';
 
 const VITE_SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string | undefined;
@@ -77,7 +78,8 @@ export async function queueForExtraction(
 const R2_AUDIO = 'https://voyo-edge.dash-webtv.workers.dev/audio';
 export async function r2HasTrack(trackId: string, quality: string = 'high'): Promise<boolean> {
   try {
-    const res = await fetch(`${R2_AUDIO}/${trackId}?q=${quality}`, { method: 'HEAD' });
+    // R2 stores by raw YouTube ID; trackId may be a VOYO ID.
+    const res = await fetch(`${R2_AUDIO}/${getYouTubeId(trackId)}?q=${quality}`, { method: 'HEAD' });
     return res.ok;
   } catch {
     return false;
