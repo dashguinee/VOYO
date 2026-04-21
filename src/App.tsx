@@ -81,8 +81,76 @@ interface ErrorBoundaryState {
   error: Error | null;
 }
 
-class AppErrorBoundary extends Component<{ children: ReactNode }, ErrorBoundaryState> {
-  state: ErrorBoundaryState = { hasError: false, error: null };
+// Crash-loop detection. If the boot crashes TWICE within 20s with no
+// successful paint in between, assume a bad cached bundle and auto-nuke
+// SW + caches + reload with a cache-busting query. Critical for
+// installed PWAs where users have no DevTools escape hatch.
+const CRASH_WINDOW_MS = 20_000;
+const CRASH_RESET_THRESHOLD = 2;
+const CRASH_KEY = 'voyo-crash-counter-v1';
+
+function readCrashCounter(): { count: number; firstAt: number } {
+  try {
+    const raw = sessionStorage.getItem(CRASH_KEY);
+    if (!raw) return { count: 0, firstAt: 0 };
+    const p = JSON.parse(raw);
+    if (Date.now() - (p.firstAt || 0) > CRASH_WINDOW_MS) return { count: 0, firstAt: 0 };
+    return p;
+  } catch { return { count: 0, firstAt: 0 }; }
+}
+
+function bumpCrashCounter(): number {
+  try {
+    const cur = readCrashCounter();
+    const next = {
+      count: (cur.count || 0) + 1,
+      firstAt: cur.firstAt || Date.now(),
+    };
+    sessionStorage.setItem(CRASH_KEY, JSON.stringify(next));
+    return next.count;
+  } catch { return 1; }
+}
+
+function clearCrashCounter(): void {
+  try { sessionStorage.removeItem(CRASH_KEY); } catch { /* noop */ }
+}
+
+// Boot-success marker: flips true on first paint. If the NEXT cold boot
+// sees this still unset, something crashed before paint last time.
+const BOOT_OK_KEY = 'voyo-boot-ok-v1';
+function markBootOk(): void {
+  try { sessionStorage.setItem(BOOT_OK_KEY, '1'); } catch { /* noop */ }
+}
+
+/**
+ * Nuclear reset — unregister SW, delete all caches, reload with a
+ * cache-busting query so the HTML isn't served from disk. Used by the
+ * error-boundary Reset & Reload button, and auto-fired when the crash
+ * counter crosses threshold.
+ */
+async function nukeAndReload(): Promise<void> {
+  clearCrashCounter();
+  try {
+    if ('serviceWorker' in navigator) {
+      const regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map(r => r.unregister()));
+    }
+  } catch { /* noop */ }
+  try {
+    if ('caches' in window) {
+      const keys = await caches.keys();
+      await Promise.all(keys.map(k => caches.delete(k)));
+    }
+  } catch { /* noop */ }
+  // Cache-busting query forces a fresh HTML fetch. Slight guard against
+  // edge worker/CDN serving a stale response too.
+  const bust = Date.now().toString(36);
+  const sep = window.location.href.includes('?') ? '&' : '?';
+  window.location.replace(`${window.location.href}${sep}v=${bust}`);
+}
+
+class AppErrorBoundary extends Component<{ children: ReactNode }, ErrorBoundaryState & { resetting: boolean }> {
+  state: ErrorBoundaryState & { resetting: boolean } = { hasError: false, error: null, resetting: false };
 
   static getDerivedStateFromError(error: Error): ErrorBoundaryState {
     return { hasError: true, error };
@@ -90,10 +158,20 @@ class AppErrorBoundary extends Component<{ children: ReactNode }, ErrorBoundaryS
 
   componentDidCatch(error: Error, info: ErrorInfo) {
     console.error('[VOYO] Render crash caught by ErrorBoundary:', error, info.componentStack);
+    // Crash-loop guard: if we've crashed twice inside CRASH_WINDOW_MS
+    // without a successful paint, auto-nuke and reload. Keeps installed
+    // PWA users from getting trapped with no DevTools to escape.
+    const count = bumpCrashCounter();
+    if (count >= CRASH_RESET_THRESHOLD) {
+      this.setState({ resetting: true });
+      // Slight delay so the "Resetting VOYO" UI paints before we leave.
+      setTimeout(() => { void nukeAndReload(); }, 260);
+    }
   }
 
   render() {
     if (this.state.hasError) {
+      const resetting = this.state.resetting;
       return (
         <div
           style={{
@@ -125,36 +203,89 @@ class AppErrorBoundary extends Component<{ children: ReactNode }, ErrorBoundaryS
             VOYO
           </div>
           <div style={{ fontSize: 15, opacity: 0.5, marginBottom: 8, fontWeight: 500 }}>
-            Something went wrong
+            {resetting ? 'Resetting…' : 'Something went wrong'}
           </div>
           <div style={{ fontSize: 12, opacity: 0.25, marginBottom: 32, maxWidth: 280, lineHeight: 1.5 }}>
-            The app encountered an unexpected error. Tap below to restart.
+            {resetting
+              ? 'Clearing cache and reloading — one sec.'
+              : 'Reload to try again. If it keeps happening, tap Reset — it clears the cache and re-downloads the app.'}
           </div>
-          <button
-            onClick={() => {
-              this.setState({ hasError: false, error: null });
-              window.location.reload();
-            }}
-            style={{
-              padding: '14px 40px',
-              borderRadius: 999,
-              background: 'linear-gradient(135deg, #8b5cf6, #7c3aed)',
-              color: 'white',
-              border: 'none',
-              fontSize: 14,
-              fontWeight: 600,
-              cursor: 'pointer',
-              boxShadow: '0 0 24px rgba(139, 92, 246, 0.3)',
-            }}
-          >
-            Reload
-          </button>
+          {!resetting && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'center' }}>
+              <button
+                onClick={() => {
+                  this.setState({ hasError: false, error: null });
+                  window.location.reload();
+                }}
+                style={{
+                  padding: '14px 40px',
+                  borderRadius: 999,
+                  background: 'linear-gradient(135deg, #8b5cf6, #7c3aed)',
+                  color: 'white',
+                  border: 'none',
+                  fontSize: 14,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  boxShadow: '0 0 24px rgba(139, 92, 246, 0.3)',
+                }}
+              >
+                Reload
+              </button>
+              <button
+                onClick={() => {
+                  this.setState({ resetting: true });
+                  void nukeAndReload();
+                }}
+                style={{
+                  padding: '10px 24px',
+                  borderRadius: 999,
+                  background: 'transparent',
+                  color: 'rgba(255,255,255,0.6)',
+                  border: '1px solid rgba(255,255,255,0.16)',
+                  fontSize: 12,
+                  fontWeight: 500,
+                  cursor: 'pointer',
+                }}
+              >
+                Reset &amp; reload (clear cache)
+              </button>
+            </div>
+          )}
+          {resetting && (
+            <div
+              style={{
+                width: 56, height: 56, borderRadius: 999,
+                border: '2px solid rgba(139,92,246,0.25)',
+                borderTopColor: '#a78bfa',
+                animation: 'voyo-spin 900ms linear infinite',
+              }}
+            />
+          )}
+          <style>{`@keyframes voyo-spin { to { transform: rotate(360deg); } }`}</style>
         </div>
       );
     }
     return this.props.children;
   }
 }
+
+// Preflight on every cold boot: if the PREVIOUS session crashed before
+// it could mark boot-ok, start fresh with caches nuked. Runs BEFORE
+// React mounts so we never enter a render cycle on known-bad state.
+(function preflightCrashRecovery() {
+  if (typeof window === 'undefined') return;
+  try {
+    const hadBootOk = sessionStorage.getItem(BOOT_OK_KEY) === '1';
+    const crash = readCrashCounter();
+    // Immediately clear the boot-ok flag for this session — next cold
+    // boot will see it missing if THIS boot crashes before markBootOk.
+    sessionStorage.removeItem(BOOT_OK_KEY);
+    if (!hadBootOk && crash.count >= CRASH_RESET_THRESHOLD) {
+      // Explicit crash loop across sessions. Nuke pre-emptively.
+      void nukeAndReload();
+    }
+  } catch { /* noop */ }
+})();
 
 // App modes
 type AppMode = 'classic' | 'voyo' | 'video';
@@ -1086,6 +1217,14 @@ function App() {
   // Especially useful while iterating on production fixes — the user can
   // grab a new build without hunting for a refresh button.
   const ptr = usePullToRefresh();
+
+  // Mark this boot as successful — lets the next cold-boot's preflight
+  // know we survived to paint. Also clears any crash counter since a
+  // survived render means we're not in a crash loop anymore.
+  useEffect(() => {
+    markBootOk();
+    clearCrashCounter();
+  }, []);
 
   // MOBILE FIX: Setup audio unlock on app mount
   useEffect(() => {
