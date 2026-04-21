@@ -68,11 +68,20 @@ export const VoyoLiveCard = ({ onSwitchToVOYO }: VoyoLiveCardProps = {}) => {
   // Animation state
   const [gradientIndex, setGradientIndex] = useState(0);
   const [prevGradientIndex, setPrevGradientIndex] = useState(0);
-  const [isTransitioning, setIsTransitioning] = useState(false);
   const [centerIndex, setCenterIndex] = useState(0);
+  const [prevCenterIndex, setPrevCenterIndex] = useState<number | null>(null);
   const [rotation, setRotation] = useState(0);
   const [friendIndex, setFriendIndex] = useState(0);
+  const [prevFriendIndex, setPrevFriendIndex] = useState<number | null>(null);
   const animationRef = useRef<number | null>(null);
+  const centerFadeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const friendFadeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Entry+exit transition duration for every cycling element. Picked
+  // long enough to read as "absorbed" (not a hard swap), short enough
+  // that the swap still feels responsive. Blur softens the transition
+  // so the swap reads as atmospheric, not a page-element change.
+  const ABSORB_MS = 700;
 
   // Fetch real friends data
   useEffect(() => {
@@ -130,31 +139,53 @@ export const VoyoLiveCard = ({ onSwitchToVOYO }: VoyoLiveCardProps = {}) => {
     ? friends.slice(0, 5).map(f => f.avatar || DEFAULT_AVATARS[0])
     : DEFAULT_AVATARS;
 
-  // Slow gradient cycle (10 seconds)
+  // Slow gradient cycle (10 seconds). Previous gradient stays rendered
+  // during a 2s crossfade; the new gradient layer mounts with a
+  // fade-in animation so colours dissolve into each other instead of
+  // hard-swapping.
   useEffect(() => {
     const interval = setInterval(() => {
       setPrevGradientIndex(gradientIndex);
-      setIsTransitioning(true);
       setGradientIndex(prev => (prev + 1) % GRADIENT_COLORS.length);
-      setTimeout(() => setIsTransitioning(false), 2000);
     }, 10000);
     return () => clearInterval(interval);
   }, [gradientIndex]);
 
-  // Cycle center avatar
+  // Cycle center avatar — keep the outgoing index rendered for ABSORB_MS
+  // so we can crossfade old→new instead of hard-swapping.
   useEffect(() => {
+    if (avatars.length === 0) return;
     const interval = setInterval(() => {
-      setCenterIndex(prev => (prev + 1) % avatars.length);
+      setCenterIndex(prev => {
+        setPrevCenterIndex(prev);
+        if (centerFadeTimerRef.current) clearTimeout(centerFadeTimerRef.current);
+        centerFadeTimerRef.current = setTimeout(() => setPrevCenterIndex(null), ABSORB_MS);
+        return (prev + 1) % avatars.length;
+      });
     }, 4000);
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      if (centerFadeTimerRef.current) clearTimeout(centerFadeTimerRef.current);
+    };
   }, [avatars.length]);
 
-  // Cycle friends listening - THIS IS THE KEY FIX
+  // Cycle friends listening — same crossfade treatment. The friend pair
+  // (thumbnail + mini avatar) is the "notification" the user reads
+  // most — swapping them absorbed (blur + fade) kills the flicker.
   useEffect(() => {
+    if (friendsListening.length === 0) return;
     const interval = setInterval(() => {
-      setFriendIndex(prev => (prev + 1) % friendsListening.length);
+      setFriendIndex(prev => {
+        setPrevFriendIndex(prev);
+        if (friendFadeTimerRef.current) clearTimeout(friendFadeTimerRef.current);
+        friendFadeTimerRef.current = setTimeout(() => setPrevFriendIndex(null), ABSORB_MS);
+        return (prev + 1) % friendsListening.length;
+      });
     }, 5000);
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      if (friendFadeTimerRef.current) clearTimeout(friendFadeTimerRef.current);
+    };
   }, [friendsListening.length]);
 
   // Smooth rotation animation — pauses when tab is hidden (battery fix).
@@ -203,9 +234,11 @@ export const VoyoLiveCard = ({ onSwitchToVOYO }: VoyoLiveCardProps = {}) => {
   const currentGradient = GRADIENT_COLORS[gradientIndex];
   const prevGradient = GRADIENT_COLORS[prevGradientIndex];
 
-  // Get current 2 friends to display
+  // Get current 2 friends to display (+ outgoing pair for crossfade).
   const friend1 = friendsListening[friendIndex % friendsListening.length];
   const friend2 = friendsListening[(friendIndex + 1) % friendsListening.length];
+  const prevFriend1 = prevFriendIndex != null ? friendsListening[prevFriendIndex % friendsListening.length] : null;
+  const prevFriend2 = prevFriendIndex != null ? friendsListening[(prevFriendIndex + 1) % friendsListening.length] : null;
 
   const getAvatarPosition = (index: number) => {
     const baseAngle = rotation + (index * 100);
@@ -236,16 +269,22 @@ export const VoyoLiveCard = ({ onSwitchToVOYO }: VoyoLiveCardProps = {}) => {
             }
             }}
         >
-          {/* Background gradient - previous */}
+          {/* Background gradient — previous layer sits behind, solid. */}
           <div
             className="absolute inset-0"
             style={{ background: `linear-gradient(135deg, ${prevGradient.from}, ${prevGradient.via}, ${prevGradient.to})` }}
           />
 
-          {/* Background gradient - current */}
+          {/* Background gradient — current layer mounts with a 1.6s
+              fade-in on every index change, dissolving over the prev.
+              Keyed on gradientIndex so React remounts → animation fires. */}
           <div
+            key={`grad-${gradientIndex}`}
             className="absolute inset-0"
-            style={{ background: `linear-gradient(135deg, ${currentGradient.from}, ${currentGradient.via}, ${currentGradient.to})` }}
+            style={{
+              background: `linear-gradient(135deg, ${currentGradient.from}, ${currentGradient.via}, ${currentGradient.to})`,
+              animation: 'voyo-absorb-in 1600ms cubic-bezier(0.4, 0, 0.2, 1) forwards',
+            }}
           />
 
           {/* Shimmer */}
@@ -261,16 +300,28 @@ export const VoyoLiveCard = ({ onSwitchToVOYO }: VoyoLiveCardProps = {}) => {
                 className="absolute inset-0 rounded-full border-2 border-white/20"
               />
 
-              {/* Center avatar */}
+              {/* Center avatar — dual-rendered for absorbed swap. The
+                  outgoing avatar fades out + blurs while the incoming
+                  avatar fades in + unblurs, both in the same slot. */}
               <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-20">
-                
+                <div className="relative w-11 h-11">
+                  {prevCenterIndex != null && (
+                    <div
+                      key={`center-prev-${prevCenterIndex}`}
+                      className="absolute inset-0 rounded-full overflow-hidden border-[3px] border-white shadow-xl"
+                      style={{ animation: `voyo-absorb-out ${ABSORB_MS}ms cubic-bezier(0.4, 0, 0.2, 1) forwards` }}
+                    >
+                      <img src={avatars[prevCenterIndex]} alt="" className="w-full h-full object-cover" />
+                    </div>
+                  )}
                   <div
-                    key={centerIndex}
-                    className="w-11 h-11 rounded-full overflow-hidden border-[3px] border-white shadow-xl"
+                    key={`center-cur-${centerIndex}`}
+                    className="absolute inset-0 rounded-full overflow-hidden border-[3px] border-white shadow-xl"
+                    style={{ animation: `voyo-absorb-in ${ABSORB_MS}ms cubic-bezier(0.4, 0, 0.2, 1) forwards` }}
                   >
                     <img src={avatars[centerIndex]} alt="" className="w-full h-full object-cover" />
                   </div>
-                
+                </div>
 
                 <div
                   className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-500 rounded-full border-2 border-white"
@@ -303,32 +354,60 @@ export const VoyoLiveCard = ({ onSwitchToVOYO }: VoyoLiveCardProps = {}) => {
               <p className="text-white/70 text-xs">For the People, by The People</p>
             </div>
 
-            {/* Mini friend cards + Play button */}
+            {/* Mini friend cards + Play button. Each friend slot dual-
+                renders (outgoing fading/blurring out, incoming fading
+                in) for absorbed swaps instead of hard remounts. */}
             <div className="flex items-center gap-2">
               <div className="flex -space-x-3">
-                
+                <div className="relative w-9 h-9" style={{ zIndex: 10 }}>
+                  {prevFriend1 && (
+                    <div
+                      key={`f1-prev-${prevFriendIndex}`}
+                      className="absolute inset-0 rounded-lg overflow-hidden border-2 border-white/50 shadow-lg"
+                      style={{ animation: `voyo-absorb-out ${ABSORB_MS}ms cubic-bezier(0.4, 0, 0.2, 1) forwards` }}
+                    >
+                      <img src={prevFriend1.track.thumbnail} alt="" className="w-full h-full object-cover" />
+                      <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full border border-white overflow-hidden">
+                        <img src={prevFriend1.avatar} alt={prevFriend1.name} className="w-full h-full object-cover" />
+                      </div>
+                    </div>
+                  )}
                   <div
-                    key={`friend-${friend1.id}-${friendIndex}`}
-                    className="relative w-9 h-9 rounded-lg overflow-hidden border-2 border-white/50 shadow-lg"
-                    style={{ zIndex: 10 }}
+                    key={`f1-cur-${friendIndex}`}
+                    className="absolute inset-0 rounded-lg overflow-hidden border-2 border-white/50 shadow-lg"
+                    style={{ animation: `voyo-absorb-in ${ABSORB_MS}ms cubic-bezier(0.4, 0, 0.2, 1) forwards` }}
                   >
                     <img src={friend1.track.thumbnail} alt="" className="w-full h-full object-cover" />
                     <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full border border-white overflow-hidden">
                       <img src={friend1.avatar} alt={friend1.name} className="w-full h-full object-cover" />
                     </div>
                   </div>
+                </div>
 
+                <div className="relative w-9 h-9" style={{ zIndex: 9 }}>
+                  {prevFriend2 && (
+                    <div
+                      key={`f2-prev-${prevFriendIndex}`}
+                      className="absolute inset-0 rounded-lg overflow-hidden border-2 border-white/50 shadow-lg"
+                      style={{ animation: `voyo-absorb-out ${ABSORB_MS}ms cubic-bezier(0.4, 0, 0.2, 1) forwards` }}
+                    >
+                      <img src={prevFriend2.track.thumbnail} alt="" className="w-full h-full object-cover" />
+                      <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full border border-white overflow-hidden">
+                        <img src={prevFriend2.avatar} alt={prevFriend2.name} className="w-full h-full object-cover" />
+                      </div>
+                    </div>
+                  )}
                   <div
-                    key={`friend-${friend2.id}-${friendIndex}`}
-                    className="relative w-9 h-9 rounded-lg overflow-hidden border-2 border-white/50 shadow-lg"
-                    style={{ zIndex: 9 }}
+                    key={`f2-cur-${friendIndex}`}
+                    className="absolute inset-0 rounded-lg overflow-hidden border-2 border-white/50 shadow-lg"
+                    style={{ animation: `voyo-absorb-in ${ABSORB_MS}ms cubic-bezier(0.4, 0, 0.2, 1) forwards` }}
                   >
                     <img src={friend2.track.thumbnail} alt="" className="w-full h-full object-cover" />
                     <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full border border-white overflow-hidden">
                       <img src={friend2.avatar} alt={friend2.name} className="w-full h-full object-cover" />
                     </div>
                   </div>
-                
+                </div>
               </div>
 
               <div

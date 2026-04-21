@@ -773,6 +773,20 @@ input[type="range"]:focus::-moz-range-thumb {
   to { opacity: 0; }
 }
 
+/* Absorbed entry / exit — opacity + subtle scale + blur. Used on
+   cycling elements that'd otherwise hard-swap on re-mount (Oyé We
+   Live card notifications, gradient transitions). Blur softens the
+   swap so it reads as atmospheric, not a page change. */
+@keyframes voyo-absorb-in {
+  0%   { opacity: 0; transform: scale(0.94); filter: blur(6px); }
+  60%  { opacity: 1; filter: blur(0.5px); }
+  100% { opacity: 1; transform: scale(1);    filter: blur(0); }
+}
+@keyframes voyo-absorb-out {
+  0%   { opacity: 1; transform: scale(1);    filter: blur(0); }
+  100% { opacity: 0; transform: scale(1.04); filter: blur(6px); }
+}
+
 @keyframes voyo-slide-up {
   from { opacity: 0; transform: translateY(16px); }
   to { opacity: 1; transform: translateY(0); }

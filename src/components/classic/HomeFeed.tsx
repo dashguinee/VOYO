@@ -1494,13 +1494,37 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
       {/* VoyoLiveCard - "Vibes on Vibes" → Opens VOYO Player */}
       <Safe name="SignInPrompt"><SignInPrompt onSwitchToVOYO={onSwitchToVOYO} /></Safe>
 
-      {/* Back in the Mood — always show OYE badge, brighter if boosted */}
+      {/* Back in the Mood — subtle brand atmosphere behind the cards.
+          Single element, two stacked gradients:
+            · radial purple breath across the whole section (brand wash)
+            · horizontal pillar fade — the portrait player's top/bottom
+              vignette language rotated 90° and dialled way down (player
+              is ~80% alpha, these pillars peak at ~10%)
+          Cards scroll past from behind; you feel it more than see it. */}
       {hasHistory && (
-        <ShelfWithRefresh title="Back in the Mood" onRefresh={handleRefresh} isRefreshing={isRefreshing}>
-          {recentlyPlayed.slice(0, 12).map((track) => (
-            <WideTrackCard key={track.id} track={track} onPlay={() => onTrackPlay(track)} showBoostBadge isBoosted={boostedIds.has(track.trackId)} />
-          ))}
-        </ShelfWithRefresh>
+        <div className="relative mb-10">
+          <div
+            className="absolute inset-0 pointer-events-none"
+            style={{
+              background: `
+                radial-gradient(ellipse 80% 72% at 50% 55%, rgba(139,92,246,0.055) 0%, rgba(139,92,246,0.015) 55%, transparent 88%),
+                linear-gradient(to right, rgba(139,92,246,0.10) 0%, rgba(139,92,246,0.02) 14%, transparent 30%, transparent 70%, rgba(139,92,246,0.02) 86%, rgba(139,92,246,0.10) 100%)
+              `,
+            }}
+            aria-hidden
+          />
+          <div className="relative flex justify-between items-center px-4 mb-5">
+            <h2 className="text-white font-semibold text-base">Back in the Mood</h2>
+          </div>
+          <div
+            className="relative flex gap-4 px-4 overflow-x-auto scrollbar-hide"
+            style={{ scrollSnapType: 'x proximity', WebkitOverflowScrolling: 'touch' }}
+          >
+            {recentlyPlayed.slice(0, 12).map((track) => (
+              <WideTrackCard key={track.id} track={track} onPlay={() => onTrackPlay(track)} showBoostBadge isBoosted={boostedIds.has(track.trackId)} />
+            ))}
+          </div>
+        </div>
       )}
 
       {/* Heavy Rotation - circles, only first one rotates gently */}
@@ -1604,12 +1628,12 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
         </div>
       </div>
 
-      {/* Your Next Voyage — state-aware discovery. Pool re-ranks around the
+      {/* Next Voyage — state-aware discovery. Pool re-ranks around the
           last click + time-of-session context (sessionSeed + OYO behavior
           rerank). Name carries VOYO DNA (voyage = VOYO root) while "next"
           keeps it relative-to-now. */}
       {hasDiscoverMore && (
-        <ShelfWithRefresh title="Your Next Voyage" onRefresh={handleRefresh} isRefreshing={isRefreshing}>
+        <ShelfWithRefresh title="Next Voyage" onRefresh={handleRefresh} isRefreshing={isRefreshing}>
           {discoverMoreTracks.slice(0, 12).map((track) => (
             <TrackCard key={track.id} track={track} onPlay={() => onTrackPlay(track, { openFull: true })} />
           ))}
