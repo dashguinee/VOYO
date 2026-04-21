@@ -27,6 +27,7 @@ import { InstallButton } from './components/ui/InstallButton';
 import { OfflineIndicator } from './components/ui/OfflineIndicator';
 import { DynamicIsland } from './components/ui/DynamicIsland';
 import { PushBell } from './components/ui/PushBell';
+import { Safe } from './components/ui/Safe';
 import { VoyoSplash } from './components/voyo/VoyoSplash';
 import { usePullToRefresh } from './hooks/usePullToRefresh';
 
@@ -970,9 +971,11 @@ function App() {
                 </span>
               </div>
 
-              {/* Center: Dynamic Island Notifications + push opt-in */}
+              {/* Center: Dynamic Island Notifications + push opt-in.
+                  Both isolated in their own Safe boundary so any
+                  rendering hiccup here can't take down the header. */}
               <div className="flex-1 flex justify-center items-center gap-2">
-                <DynamicIsland />
+                <Safe name="DynamicIsland"><DynamicIsland /></Safe>
                 <PushBell appCode="voyo" />
               </div>
 
