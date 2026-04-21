@@ -536,10 +536,19 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap, onEnterVideoMode
               style={{
                 position: 'absolute',
                 left: 16, right: 16,
-                top: searchAtBottom ? 'auto' : 'max(16px, env(safe-area-inset-top, 16px))',
-                bottom: searchAtBottom ? 'max(16px, env(safe-area-inset-bottom, 16px))' : 'auto',
+                // Anchor stays at the TOP always; transform slides the whole
+                // header down when searchAtBottom flips. Previously we
+                // swapped top↔bottom between 'auto' and a value, which
+                // browsers can't smoothly interpolate → the "glittery"
+                // jump Dash felt. transform: translateY is GPU-accelerated
+                // and animates cleanly between two concrete values.
+                top: 'max(16px, env(safe-area-inset-top, 16px))',
                 zIndex: 51,
-                transition: 'top 320ms cubic-bezier(0.4, 0, 0.2, 1), bottom 320ms cubic-bezier(0.4, 0, 0.2, 1), transform 320ms cubic-bezier(0.4, 0, 0.2, 1)',
+                transform: searchAtBottom
+                  ? 'translateY(calc(100dvh - 100% - max(16px, env(safe-area-inset-top, 16px)) - max(16px, env(safe-area-inset-bottom, 16px))))'
+                  : 'translateY(0)',
+                transition: 'transform 260ms cubic-bezier(0.4, 0, 0.2, 1), background-color 220ms ease, padding 220ms ease',
+                willChange: 'transform',
                 background: searchAtBottom
                   ? 'linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,0.55) 30%, rgba(0,0,0,0.85) 100%)'
                   : 'transparent',
@@ -551,16 +560,24 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap, onEnterVideoMode
                 paddingRight: searchAtBottom ? 16 : 0,
               }}
             >
-              <div className="flex items-center gap-3">
-                {/* Search Input */}
+              <div className="flex items-center gap-2">
+                {/* Search Input — more present visually (stronger border +
+                    frosted depth) but lower-profile in height (py-2.5 →
+                    compact), and the transition on background/border is
+                    spelled out as `all 260ms ease` so the header slide
+                    between top ↔ bottom docks doesn't flicker. */}
                 <div
-                  className="flex-1 flex items-center gap-3 px-4 py-3 rounded-2xl transition-all focus-within:ring-1 focus-within:ring-[#8b5cf6]/40"
+                  className="flex-1 flex items-center gap-2.5 px-3.5 py-2.5 rounded-2xl focus-within:ring-1 focus-within:ring-[#8b5cf6]/40"
                   style={{
-                    background: 'rgba(28, 28, 35, 0.65)',
-                    border: '1px solid #28282f',
-                    }}
+                    background: 'rgba(22, 22, 28, 0.72)',
+                    border: '1px solid rgba(255,255,255,0.08)',
+                    backdropFilter: 'blur(14px) saturate(140%)',
+                    WebkitBackdropFilter: 'blur(14px) saturate(140%)',
+                    boxShadow: '0 6px 18px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.04)',
+                    transition: 'background 260ms ease, border-color 260ms ease, box-shadow 260ms ease',
+                  }}
                 >
-                  <Search className="w-5 h-5 text-white/40 flex-shrink-0" />
+                  <Search className="w-[18px] h-[18px] text-white/45 flex-shrink-0" strokeWidth={2} />
                   <input
                     ref={inputRef}
                     type="text"
@@ -586,27 +603,32 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap, onEnterVideoMode
                     }}
                     className="flex-1 bg-transparent text-white placeholder:text-white/30 focus:outline-none text-[15px]"
                   />
-                  {isSearching && <VinylLoader size={16} opacity={0.35} colorClass="text-white/70" className="flex-shrink-0" />}
+                  {isSearching && <VinylLoader size={14} opacity={0.35} colorClass="text-white/70" className="flex-shrink-0" />}
                   {query && !isSearching && (
-                    <button onClick={() => { setQuery(''); setResults([]); }} className="text-white/30 p-1" aria-label="Clear search">
-                      <X className="w-4 h-4" />
+                    <button onClick={() => { setQuery(''); setResults([]); }} className="text-white/35 p-1 active:scale-90 transition-transform" aria-label="Clear search">
+                      <X className="w-[14px] h-[14px]" strokeWidth={2.2} />
                     </button>
                   )}
                 </div>
+                {/* Close X — dialed down to match the in-input clear X
+                    (no bg pill, no 44×44 tap target chrome). Still meets
+                    touch size via w-10. Fades opacity instead of shouting. */}
                 <button
-                  className="p-2.5 rounded-full bg-white/8 active:scale-90 transition-transform min-w-[44px] min-h-[44px] flex items-center justify-center"
+                  className="w-10 h-10 rounded-full active:scale-90 transition-all flex items-center justify-center text-white/40 hover:text-white/70"
                   onClick={onClose}
                   aria-label="Close search"
+                  style={{ opacity: query ? 0.5 : 0.85 }}
                 >
-                  <X className="w-5 h-5 text-white/60" />
+                  <X className="w-[18px] h-[18px]" strokeWidth={2} />
                 </button>
               </div>
 
-              {/* Tabs — VOYO 3D icons (bronze-gold + amethyst) replace the
-                  generic lucide outlines. Active tab gets a soft glow ring. */}
+              {/* Tabs — Tracks is label-only (it's the default surface,
+                  no need for a glyph). Other tabs keep the VOYO 3D icon
+                  as a visual anchor. Active tab: soft bronze glow ring. */}
               <div className="flex gap-1 mt-3">
                 {([
-                  { key: 'tracks' as const, voyo: 'music-note' as VoyoIconName, label: 'Tracks' },
+                  { key: 'tracks' as const, voyo: null, label: 'Tracks' },
                   { key: 'artists' as const, voyo: 'orb-artist' as VoyoIconName, label: 'Artists' },
                   { key: 'albums' as const, voyo: 'vinyl-disc' as VoyoIconName, label: 'Albums' },
                   { key: 'vibes' as const, voyo: 'radio-vibes' as VoyoIconName, label: 'Vibes' },
@@ -622,7 +644,7 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap, onEnterVideoMode
                     }}
                     onClick={() => setActiveTab(key)}
                   >
-                    <VoyoIcon name={voyo} size={18} glow={activeTab === key} style={{ opacity: activeTab === key ? 1 : 0.55 }} />
+                    {voyo && <VoyoIcon name={voyo} size={18} glow={activeTab === key} style={{ opacity: activeTab === key ? 1 : 0.55 }} />}
                     {label}
                   </button>
                 ))}

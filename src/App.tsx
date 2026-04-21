@@ -1450,6 +1450,30 @@ function App() {
     }
   }, []);
 
+  // PWA back-gesture handler. Push a history entry when search opens;
+  // the system back button / Android gesture pops it → we close search
+  // instead of exiting the app. Ignored if search is closed via the X
+  // (we pop our own entry so back-stack stays clean).
+  useEffect(() => {
+    if (!isSearchOpen) return;
+    const marker = `voyo-search-${Date.now()}`;
+    window.history.pushState({ voyoModal: marker }, '');
+    let closedFromPop = false;
+    const onPop = () => {
+      closedFromPop = true;
+      setIsSearchOpen(false);
+    };
+    window.addEventListener('popstate', onPop);
+    return () => {
+      window.removeEventListener('popstate', onPop);
+      // If search closed via UI (X, ESC) — pop the entry we pushed so
+      // the back-stack doesn't carry a dead marker.
+      if (!closedFromPop && window.history.state?.voyoModal === marker) {
+        window.history.back();
+      }
+    };
+  }, [isSearchOpen]);
+
   // Handle mode switching
   const handleSwitchToVOYO = (tab?: 'music' | 'feed' | 'upload' | 'dahub') => {
     // DEFENSIVE: onClick handlers pass the MouseEvent as the first arg which

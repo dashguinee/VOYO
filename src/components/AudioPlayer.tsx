@@ -53,19 +53,18 @@ const STALL_SKIP_THRESHOLD_MS = 4_000;
 // reaches HAVE_FUTURE_DATA (>=3) within this window, skip logging.
 const STALL_LOG_DELAY_MS = 800;
 
-// Track-to-track transition fades. Outgoing eases down, new track eases in.
-// Sequential (one audio element) — perceived length = out + in.
-// Tighter than a classic DJ blend because Dash's rule is "snappy + smooth":
-// fast enough that a quick card-tap feels instant, smooth enough that a
-// long listen transitions without ever cutting harsh.
-const TRACK_CHANGE_FADE_OUT_MS = 150;
-const TRACK_CHANGE_FADE_IN_MS  = 280;
-
-// Only fade the OUTGOING track when it's actually been playing long enough
-// to deserve a wind-down. If the user is exploring (tapping through cards
-// at 5-10s in), they want snap — no fade, instant swap, zero perceived
-// latency. Past this threshold they're listening, so the transition earns
-// the DJ treatment.
+// Track-to-track transition fades. Two tiers:
+//  - Always-on "polish" fade (SHORT): a mini fade-out + fade-in so NO
+//    transition is ever a hard cut. Even fast card-tapping feels smooth.
+//  - "Earned" DJ fade (LONG): when the outgoing track has been playing
+//    ≥FADE_OUT_MIN_ELAPSED_S, extend the ramps to a proper DJ blend.
+// Dash feedback (v330): gating fade entirely on elapsed made quick
+// taps feel harsh. Now the SHORT fade is the floor; LONG layers on
+// top when the user's actually been listening.
+const SHORT_FADE_OUT_MS = 90;
+const SHORT_FADE_IN_MS  = 170;
+const LONG_FADE_OUT_MS  = 180;
+const LONG_FADE_IN_MS   = 320;
 const FADE_OUT_MIN_ELAPSED_S = 30;
 
 export const AudioPlayer = () => {
@@ -203,27 +202,26 @@ export const AudioPlayer = () => {
     }
 
     // DASH-STYLE TRANSITION — nothing harsh ever, nothing delayed ever.
-    // Outgoing ramp only when: (a) there's audio playing (r2 or iframe),
-    // (b) we're not in a hidden tab (JS timers throttle → silence gap),
-    // (c) the current track has been playing ≥30s (early skips stay
-    // snappy with an instant swap). Covers all four source transitions:
-    // r2→r2, r2→iframe, iframe→r2, iframe→iframe.
+    // Pick fade length by how long the outgoing track actually played.
+    // Quick taps (<30s in) get a SHORT floor fade so there's never a
+    // hard cut; long listens (≥30s) get a proper DJ blend. BG-hidden
+    // tabs skip the timer wait (setTimeout throttles to ~1s in BG,
+    // which would cause audible silence between outgoing and incoming).
     const isHidden = typeof document !== 'undefined' && document.hidden;
     const wasIframe = playbackSource === 'iframe';
     const wasR2 = playbackSource === 'r2';
     const elapsedS = el?.currentTime ?? 0;
-    const earnedFade = elapsedS >= FADE_OUT_MIN_ELAPSED_S;
-    const shouldFade = !!el && !isHidden && earnedFade && (wasR2 || wasIframe);
+    const earnedLong = elapsedS >= FADE_OUT_MIN_ELAPSED_S;
+    const fadeOutMs = earnedLong ? LONG_FADE_OUT_MS : SHORT_FADE_OUT_MS;
+    const fadeInMs  = earnedLong ? LONG_FADE_IN_MS  : SHORT_FADE_IN_MS;
+    const shouldFade = !!el && !isHidden && (wasR2 || wasIframe);
     if (shouldFade) {
-      if (wasR2) softFadeOut(TRACK_CHANGE_FADE_OUT_MS);
-      if (wasIframe) void iframeBridge.fadeOut(TRACK_CHANGE_FADE_OUT_MS);
+      if (wasR2) softFadeOut(fadeOutMs);
+      if (wasIframe) void iframeBridge.fadeOut(fadeOutMs);
     }
-    // Incoming ramp — shorter in BG (user can't see; long ease-in just
-    // reads as a pause). Web Audio clock isn't throttled in BG, so this
-    // fires reliably even when the tab is hidden.
-    nextFadeInMsRef.current = isHidden
-      ? Math.min(TRACK_CHANGE_FADE_IN_MS, 180)
-      : TRACK_CHANGE_FADE_IN_MS;
+    // Incoming ramp — halve in BG; Web Audio clock isn't throttled so
+    // the ramp still fires reliably, just shorter (user can't see it).
+    nextFadeInMsRef.current = isHidden ? Math.min(fadeInMs, 180) : fadeInMs;
 
     // R2-first probe: either set audio.src directly (cached) or hand audio
     // to the YouTubeIframe fallback (useHotSwap handles the cross-fade when
@@ -233,7 +231,7 @@ export const AudioPlayer = () => {
     (async () => {
       const headPromise = r2HasTrack(currentTrack.trackId);
       const fadePromise = shouldFade
-        ? new Promise<void>(r => setTimeout(r, TRACK_CHANGE_FADE_OUT_MS))
+        ? new Promise<void>(r => setTimeout(r, fadeOutMs))
         : Promise.resolve();
       const [cached] = await Promise.all([headPromise, fadePromise]);
       // If outgoing was iframe, silence it hard now — the bridge ramp
