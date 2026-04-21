@@ -16,7 +16,7 @@ import { SmartImage } from '../ui/SmartImage';
 import { Safe } from '../ui/Safe';
 import { TrackCardGestures } from '../ui/TrackCardGestures';
 import { GreetingArea } from './GreetingArea';
-import { VIBES, Vibe } from '../../data/tracks';
+import { VIBES, Vibe, TRACKS } from '../../data/tracks';
 import { VibesReel } from './VibesReel';
 import { getUserTopTracks, getPoolAwareHotTracks, getPoolAwareDiscoveryTracks, calculateBehaviorScore, recordPoolEngagement } from '../../services/personalization';
 import { curateAllSections } from '../../services/poolCurator';
@@ -715,6 +715,13 @@ const WideTrackCard = memo(({ track, onPlay, showBoostBadge = false, isBoosted =
           artist={track.artist}
           title={track.title}
         />
+        <div
+          className="absolute inset-0 pointer-events-none"
+          style={{
+            background: 'linear-gradient(135deg, rgba(139,92,246,0.12) 0%, rgba(139,92,246,0.03) 45%, transparent 70%)',
+          }}
+          aria-hidden
+        />
         <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent" />
         {isHovered && (
           <div
@@ -754,6 +761,45 @@ const WideTrackCard = memo(({ track, onPlay, showBoostBadge = false, isBoosted =
   );
 });
 WideTrackCard.displayName = 'WideTrackCard';
+
+// ============================================
+// CLASSICS DISK CARD — zoomed-disc treatment
+// Circular crop so the cover reads like a vinyl label (zoomed-in center
+// of the album art). Thin gold ring ties it into the Collection palette.
+// No hold-gestures, no preference mode — a classics shelf is for playing,
+// not for training the recommender.
+// ============================================
+const ClassicsDiskCard = memo(({ track, onPlay }: { track: Track; onPlay: () => void }) => {
+  const thumbnailUrl = getThumb(track.trackId, 'high');
+  return (
+    <button
+      className="flex-shrink-0 flex flex-col items-center active:scale-[0.96] transition-transform"
+      onClick={onPlay}
+      style={{ scrollSnapAlign: 'start', width: '132px' }}
+    >
+      <div
+        className="relative w-[120px] h-[120px] rounded-full overflow-hidden mb-3"
+        style={{
+          boxShadow:
+            '0 0 0 1px rgba(212,160,83,0.55), 0 6px 18px rgba(0,0,0,0.55), inset 0 0 18px rgba(0,0,0,0.35)',
+        }}
+      >
+        <SmartImage
+          src={thumbnailUrl}
+          alt={track.title}
+          className="w-full h-full object-cover"
+          trackId={track.trackId}
+          artist={track.artist}
+          title={track.title}
+          style={{ transform: 'scale(1.35)' }}
+        />
+      </div>
+      <p className="text-white text-xs font-medium truncate w-full text-center px-1">{track.title}</p>
+      <p className="text-white/50 text-[10px] truncate w-full text-center px-1">{track.artist}</p>
+    </button>
+  );
+});
+ClassicsDiskCard.displayName = 'ClassicsDiskCard';
 
 // ============================================
 // ARTIST CARD COMPONENT
@@ -1398,8 +1444,22 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
     try {
       const pool = Array.isArray(hotPool) ? hotPool : [];
       const curated = getClassicsTracks(pool, 45);
-      if (curated.length < 5) return [];
-      return seededShuffle(curated, sessionSeed).slice(0, 15);
+
+      // Seed fallback — hand-vetted all-time classics from the static TRACKS
+      // data, sorted by oyeScore. Guarantees the shelf is never empty on
+      // cold boot before curateAllSections has finished its searches.
+      const seedClassics = [...TRACKS]
+        .filter(t => (t.oyeScore || 0) >= 10_000_000)
+        .sort((a, b) => (b.oyeScore || 0) - (a.oyeScore || 0));
+
+      const seen = new Set(curated.map(t => t.trackId));
+      const merged: Track[] = [...curated];
+      for (const t of seedClassics) {
+        if (merged.length >= 15) break;
+        if (!seen.has(t.trackId)) merged.push(t);
+      }
+      if (merged.length < 5) return [];
+      return seededShuffle(merged, sessionSeed).slice(0, 12);
     } catch (e) {
       if (import.meta.env.DEV) console.warn('[HomeFeed] classicsTracks failed:', e);
       return [];
@@ -1640,109 +1700,83 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
         </ShelfWithRefresh>
       )}
 
-      {/* Classics - Timeless African music (from poolCurator) → COMMUNAL */}
-      {classicsTracks.length > 0 && (
-        <div
-          className="mb-10 pt-14 pb-10 relative overflow-hidden"
-          style={{
-            background:
-              'radial-gradient(ellipse 120% 80% at 30% 0%, rgba(212,160,83,0.16) 0%, rgba(212,160,83,0.06) 40%, transparent 75%)',
-          }}
-        >
-          {/* Top thin gold foil line */}
+      {/* Classics — all-time African classics, disk-style cards. */}
+      <Safe name="Classics">
+        {classicsTracks.length > 0 && (
           <div
-            className="absolute top-0 left-8 right-8 h-px"
+            className="mb-10 pt-12 pb-10 relative overflow-hidden"
             style={{
               background:
-                'linear-gradient(90deg, transparent, rgba(212,160,83,0.4), rgba(230,184,101,0.75), rgba(212,160,83,0.4), transparent)',
+                'radial-gradient(ellipse 120% 80% at 30% 0%, rgba(212,160,83,0.16) 0%, rgba(212,160,83,0.06) 40%, transparent 75%)',
             }}
-          />
-          {/* Bottom thin gold foil line */}
-          <div
-            className="absolute bottom-0 left-8 right-8 h-px"
-            style={{
-              background:
-                'linear-gradient(90deg, transparent, rgba(212,160,83,0.25), rgba(230,184,101,0.5), rgba(212,160,83,0.25), transparent)',
-            }}
-          />
-
-          {/* Vertical contour label — mirrors African Vibes "TRENDING" style */}
-          <div
-            className="absolute right-1 top-16 bottom-16 flex items-center pointer-events-none"
-            style={{ width: '22px' }}
           >
-            <span
-              className="text-[8px] font-black tracking-[0.3em]"
-              style={{
-                writingMode: 'vertical-rl',
-                color: 'transparent',
-                WebkitTextStroke: '0.5px rgba(212, 160, 83, 0.65)',
-                textShadow: '0 0 8px rgba(212, 160, 83, 0.15)',
-              }}
-            >
-              TIMELESS
-            </span>
-          </div>
-
-          {/* Header — proper premium hierarchy: eyebrow → script → flourish → subtitle */}
-          <div className="px-6 mb-8 relative">
-            {/* Eyebrow label */}
+            {/* Gold foil hairlines — top + bottom, atmosphere only */}
             <div
-              className="text-[9px] font-bold tracking-[0.3em] uppercase mb-1"
-              style={{ color: 'rgba(212, 160, 83, 0.75)' }}
-            >
-              Collection
-            </div>
-
-            {/* Italianno script — the heart */}
-            <h2
-              className="leading-none"
+              className="absolute top-0 left-8 right-8 h-px pointer-events-none"
               style={{
-                fontFamily: "'Italianno', cursive",
-                fontSize: 'clamp(72px, 22vw, 96px)',
-                fontWeight: 400,
-                margin: '0 0 4px 0',
                 background:
-                  'linear-gradient(135deg, #FFF3D6 0%, #F4D999 15%, #E6B865 35%, #D4A053 55%, #C4943D 75%, #8B6228 100%)',
-                WebkitBackgroundClip: 'text',
-                WebkitTextFillColor: 'transparent',
-                filter:
-                  'drop-shadow(0 2px 6px rgba(0,0,0,0.7)) drop-shadow(0 0 24px rgba(212,160,83,0.3))',
-                letterSpacing: '0.005em',
+                  'linear-gradient(90deg, transparent, rgba(212,160,83,0.4), rgba(230,184,101,0.75), rgba(212,160,83,0.4), transparent)',
               }}
-            >
-              Classics
-            </h2>
+            />
+            <div
+              className="absolute bottom-0 left-8 right-8 h-px pointer-events-none"
+              style={{
+                background:
+                  'linear-gradient(90deg, transparent, rgba(212,160,83,0.25), rgba(230,184,101,0.5), rgba(212,160,83,0.25), transparent)',
+              }}
+            />
 
-            {/* Signature flourish — longer, curved feel */}
-            <div className="flex items-center gap-2 ml-1">
-              <div
-                className="h-[1px]"
+            {/* Header — Italianno script + single flourish. One signature element. */}
+            <div className="px-6 mb-7 relative">
+              <h2
+                className="leading-none"
                 style={{
-                  width: '120px',
+                  fontFamily: "'Italianno', cursive",
+                  fontSize: 'clamp(72px, 22vw, 96px)',
+                  fontWeight: 400,
+                  margin: '0 0 4px 0',
                   background:
-                    'linear-gradient(90deg, rgba(230,184,101,1) 0%, rgba(212,160,83,0.7) 40%, rgba(212,160,83,0.2) 80%, transparent)',
+                    'linear-gradient(135deg, #FFF3D6 0%, #F4D999 15%, #E6B865 35%, #D4A053 55%, #C4943D 75%, #8B6228 100%)',
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent',
+                  filter:
+                    'drop-shadow(0 2px 6px rgba(0,0,0,0.7)) drop-shadow(0 0 24px rgba(212,160,83,0.3))',
+                  letterSpacing: '0.005em',
                 }}
-              />
-              <div
-                className="w-1 h-1 rounded-full"
-                style={{ background: '#D4A053', boxShadow: '0 0 6px rgba(212,160,83,0.7)' }}
-              />
+              >
+                Classics
+              </h2>
+              <div className="flex items-center gap-2 ml-1">
+                <div
+                  className="h-[1px]"
+                  style={{
+                    width: '120px',
+                    background:
+                      'linear-gradient(90deg, rgba(230,184,101,1) 0%, rgba(212,160,83,0.7) 40%, rgba(212,160,83,0.2) 80%, transparent)',
+                  }}
+                />
+                <div
+                  className="w-1 h-1 rounded-full"
+                  style={{ background: '#D4A053', boxShadow: '0 0 6px rgba(212,160,83,0.7)' }}
+                />
+              </div>
             </div>
 
-            {/* Subtitle — below, breathing */}
-            <p className="text-[10px] font-medium tracking-[0.25em] uppercase text-white/35 mt-3 ml-1">
-              Timeless African Sounds
-            </p>
+            <div
+              className="flex gap-5 px-4 overflow-x-auto scrollbar-hide"
+              style={{ scrollSnapType: 'x proximity', WebkitOverflowScrolling: 'touch' }}
+            >
+              {classicsTracks.map((track) => (
+                <ClassicsDiskCard
+                  key={track.id}
+                  track={track}
+                  onPlay={() => onTrackPlay(track, { openFull: true })}
+                />
+              ))}
+            </div>
           </div>
-
-          <div className="flex gap-4 px-4 overflow-x-auto scrollbar-hide">
-            {classicsTracks.slice(0, 12).map((track) => (
-              <TrackCard key={track.id} track={track} onPlay={() => onTrackPlay(track, { openFull: true })} />
-            ))}
-          </div>
-        </div>
-      )}
+        )}
+      </Safe>
 
       {/* Top 10 on VOYO */}
       {hasTrending && (
