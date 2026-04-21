@@ -16,6 +16,7 @@ import { SmartImage } from '../ui/SmartImage';
 import { TrackCardGestures } from '../ui/TrackCardGestures';
 import { GreetingArea } from './GreetingArea';
 import { VIBES, Vibe } from '../../data/tracks';
+import { VibesReel } from './VibesReel';
 import { getUserTopTracks, getPoolAwareHotTracks, getPoolAwareDiscoveryTracks, calculateBehaviorScore, recordPoolEngagement } from '../../services/personalization';
 import { curateAllSections } from '../../services/poolCurator';
 import { getInsights as getOyoInsights } from '../../services/oyoDJ';
@@ -1265,9 +1266,8 @@ const VibeCard = memo(({ vibe, onSelect }: VibeCardProps) => {
           boxShadow: `0 6px 24px ${vibe.color}50`,
         }}
       >
-        {/* Portrait image (when provided) — the face IS the card. The
-            color gradient above is kept as the base so the card still
-            reads as its vibe while the image loads / if it fails. */}
+        {/* AI vibe backdrop (Afro-futurist poster). Falls back to the
+            color gradient if the image doesn't load. */}
         {vibe.image && (
           <img
             src={vibe.image}
@@ -1276,16 +1276,15 @@ const VibeCard = memo(({ vibe, onSelect }: VibeCardProps) => {
             decoding="async"
             className="absolute inset-0 w-full h-full object-cover"
             style={{
-              // Slight zoom-in so faces don't sit too close to the edges
-              // and the portrait feels like it earned the frame.
               transform: isHero ? 'scale(1.06)' : 'scale(1.02)',
               transformOrigin: 'center 30%',
             }}
           />
         )}
-        {/* Color wash overlay — pulls the portrait into the vibe's palette
-            so the shelf still reads as one coherent color story. Hero card
-            washes lighter (let the image speak more). */}
+
+        {/* Color wash overlay — pulls everything into the vibe's palette
+            so the shelf reads as one coherent color story. Hero washes
+            lighter (let the poster speak). */}
         <div
           className="absolute inset-0"
           style={{
@@ -1947,16 +1946,16 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
         </div>
       )}
 
-      {/* Vibes - choices, not playlist */}
+      {/* Vibes reel — one horizontal scroll interleaving AI vibe-covers
+          with real track cards pulled from the hot-pool for that vibe.
+          Tap AI card → open the vibe (playFromVibe); tap track card →
+          play that exact track. Lightweight: 5 thumbs per vibe, all
+          R2-cached so playback is instant on tap. */}
       <div className="mb-12">
         <div className="px-4 mb-1.5">
           <h2 className="text-white font-semibold text-base">Vibes</h2>
         </div>
-        <div className="flex gap-4 px-4 overflow-x-auto scrollbar-hide py-4">
-          {vibes.map((vibe) => (
-            <VibeCard key={vibe.id} vibe={vibe} onSelect={() => handleVibeSelect(vibe)} />
-          ))}
-        </div>
+        <VibesReel vibes={vibes} onOpenVibe={handleVibeSelect} />
       </div>
 
       {/* Stations rail — DJ-curated vibes (deeper commitment than Vibes buttons).

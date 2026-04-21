@@ -11,10 +11,10 @@ const apiKey = (envText.match(/^VITE_GEMINI_API_KEY=(.+)$/m) || [])[1];
 if (!apiKey) { console.error('no key'); process.exit(1); }
 
 const VIBES = [
-  { id: 'chill',      prompt: 'Warm amber dusk over an empty African savanna, silhouettes of baobab trees against a deep violet twilight sky, soft bronze-gold light, dreamy cinematic bokeh, film-grain texture, rich warm tones, premium editorial aesthetic, no people, vertical composition, Afro-futurist mood, calm and contemplative' },
-  { id: 'party',      prompt: 'Vibrant Afro-futurist dance energy in rich bronze-gold and amethyst purple, abstract geometric Adinkra-inspired symbols radiating outward, warm confetti-like sparks of amber light, deep velvet background, dynamic motion blur, premium editorial poster, no people, vertical composition, joyful kinetic energy' },
-  { id: 'late-night', prompt: 'Lagos skyline at 3am, deep violet cinematic sky, warm amber window lights in the distance, ethereal fog rolling between buildings, mysterious and cinematic, Afro-futurist noir mood, premium editorial photography aesthetic, no people, vertical composition, bronze-gold highlights' },
-  { id: 'workout',    prompt: 'Bold Afro-futurist kinetic energy pattern, deep amethyst violet and electric bronze-gold, radiating geometric power lines remixed from West African Kente cloth patterns, premium athletic poster aesthetic, abstract no people, vertical composition, strong dynamic motion, powerful' },
+  { id: 'chill',      prompt: 'Afro-futurist editorial portrait of a serene young Black woman wearing a luminous iridescent headwrap woven with soft fiber-optic thread, bronze-gold catch-lights on her skin, deep amethyst and indigo shadows, dreamy cinematic bokeh, calm contemplative expression, premium magazine aesthetic, no brand text, vertical 9:16 composition, rich warm film grain' },
+  { id: 'party',      prompt: 'Afro-futurist editorial portrait of a young Black dancer mid-motion under bronze-gold spotlights, flowing metallic garment with Kente-inspired geometric panels, streaks of amber confetti light, deep amethyst atmospheric haze, dynamic joyful energy, premium editorial poster, no brand text, vertical 9:16 composition' },
+  { id: 'late-night', prompt: 'Afro-futurist editorial portrait of a young Black figure in a sleek asymmetric jacket against deep violet night fog, warm amber rim-light from the side, mysterious and cinematic, quiet confident posture, noir premium editorial aesthetic, bronze-gold accents, no brand text, vertical 9:16 composition' },
+  { id: 'workout',    prompt: 'Afro-futurist editorial portrait of a powerful young Black athlete in motion, bronze-gold body highlights against deep amethyst, woven kinetic fabric with Kente-inspired geometric power lines radiating outward, strong determined expression, premium athletic editorial aesthetic, no brand text, vertical 9:16 composition' },
 ];
 
 function gemImagen(prompt) {
