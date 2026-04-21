@@ -82,6 +82,7 @@ export function usePushSubscribe(appCode: 'voyo' | 'hub' | 'tivi' | 'giraf' | st
 
       const tokenOwner = dashId || deviceId(sub.endpoint);
 
+      if (!ccSupabase) { setLastError('Supabase not configured'); return 'failed'; }
       const { error } = await ccSupabase.from('dash_push_tokens').upsert(
         {
           user_id: tokenOwner,
@@ -126,10 +127,11 @@ export function usePushSubscribe(appCode: 'voyo' | 'hub' | 'tivi' | 'giraf' | st
       const reg = await navigator.serviceWorker.ready;
       const sub = await reg.pushManager.getSubscription();
       if (sub) {
-        // Delete by matching the subscription jsonb (endpoint is unique within it)
-        await ccSupabase.from('dash_push_tokens')
-          .delete()
-          .eq('subscription->>endpoint', sub.endpoint);
+        if (ccSupabase) {
+          await ccSupabase.from('dash_push_tokens')
+            .delete()
+            .eq('subscription->>endpoint', sub.endpoint);
+        }
         await sub.unsubscribe();
       }
       setIsSubscribed(false);

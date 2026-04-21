@@ -103,8 +103,10 @@ export function useDashNotifications({ appCode, dashId, limit = 20 }: Options): 
   // and filter client-side (cheap — this table is write-rare).
   useEffect(() => {
     if (!ccSupabase) return;
-    const channel = ccSupabase
-      .channel(`dash_notifications:${appCode}`)
+    const client = ccSupabase;
+    // supabase-js tightened .on() overloads in newer versions — the
+    // realtime event strings resolve at runtime but TS misfires.
+    const channel = (client.channel(`dash_notifications:${appCode}`) as any)
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'dash_notifications' },
@@ -114,7 +116,6 @@ export function useDashNotifications({ appCode, dashId, limit = 20 }: Options): 
           if (!matchesAudience(row, appCode, dashId)) return;
           devLog('[DashNotifications] realtime:', row.title);
           setNotifications(prev => {
-            // Dedup if the initial fetch already surfaced it.
             if (prev.some(p => p.id === row.id)) return prev;
             return [{ ...row, read: isReadLocally(row.id) }, ...prev].slice(0, limit);
           });
@@ -122,7 +123,7 @@ export function useDashNotifications({ appCode, dashId, limit = 20 }: Options): 
       )
       .subscribe();
     return () => {
-      try { ccSupabase.removeChannel(channel); } catch { /* noop */ }
+      try { client.removeChannel(channel); } catch { /* noop */ }
     };
   }, [appCode, dashId, limit]);
 

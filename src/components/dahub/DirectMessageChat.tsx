@@ -160,7 +160,7 @@ function MessageBubble({
 
 export function DirectMessageChat({
   currentUserId,
-  // currentUserName is available but not currently displayed
+  currentUserName,
   friendId,
   friendName,
   friendAvatar,
