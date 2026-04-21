@@ -742,13 +742,15 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
 
   setVolume: (volume) => {
     set({ volume });
-    // Debounce persist — slider drag fires dozens of times. Only write
-    // localStorage once the user stops dragging (200ms settle).
+    // Debounce persist — slider drag fires dozens of times. Bumped from
+    // 200ms → 300ms so a long drag doesn't pay the sync-storage cost on
+    // every settle point. localStorage.setItem is ~1-5ms on mobile and
+    // blocks the main thread; 300ms lets the drag finish before we write.
     if (_volumePersistTimer) clearTimeout(_volumePersistTimer);
     _volumePersistTimer = setTimeout(() => {
       localStorage.setItem('voyo-volume', String(volume));
       _volumePersistTimer = null;
-    }, 200);
+    }, 300);
   },
 
   nextTrack: () => {

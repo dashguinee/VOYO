@@ -16,7 +16,6 @@ import { SmartImage } from '../ui/SmartImage';
 import { TrackCardGestures } from '../ui/TrackCardGestures';
 import { GreetingArea } from './GreetingArea';
 import { VIBES, Vibe } from '../../data/tracks';
-import { LottieIcon } from '../ui/LottieIcon';
 import { getUserTopTracks, getPoolAwareHotTracks, getPoolAwareDiscoveryTracks, calculateBehaviorScore, recordPoolEngagement } from '../../services/personalization';
 import { curateAllSections } from '../../services/poolCurator';
 import { getInsights as getOyoInsights } from '../../services/oyoDJ';

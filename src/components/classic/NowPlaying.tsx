@@ -351,14 +351,30 @@ export const NowPlaying = ({ isOpen, onClose }: NowPlayingProps) => {
     });
   }, [currentTrack, dashId, createReaction, spawnReaction, trackPosition]);
 
-  // Auto-spawn ambient reactions
+  // Auto-spawn ambient reactions — only while NowPlaying is open, playing,
+  // AND the tab is visible. In BG we were burning setInterval + state
+  // updates on invisible floating emojis; now the whole interval stops
+  // when the tab hides and resumes when it's back.
   useEffect(() => {
     if (!isPlaying || !isOpen) return;
-    const interval = setInterval(() => {
-      const emojis = ['🔥', '⚡', '💜', '🎵', '✨'];
-      spawnReaction(emojis[Math.floor(Math.random() * emojis.length)]);
-    }, 4000 + Math.random() * 3000);
-    return () => clearInterval(interval);
+    let interval: ReturnType<typeof setInterval> | null = null;
+    const start = () => {
+      if (interval != null) return;
+      interval = setInterval(() => {
+        const emojis = ['🔥', '⚡', '💜', '🎵', '✨'];
+        spawnReaction(emojis[Math.floor(Math.random() * emojis.length)]);
+      }, 4000 + Math.random() * 3000);
+    };
+    const stop = () => {
+      if (interval != null) { clearInterval(interval); interval = null; }
+    };
+    if (!document.hidden) start();
+    const onVis = () => { document.hidden ? stop() : start(); };
+    document.addEventListener('visibilitychange', onVis);
+    return () => {
+      document.removeEventListener('visibilitychange', onVis);
+      stop();
+    };
   }, [isPlaying, isOpen, spawnReaction]);
 
   // Handle Share button

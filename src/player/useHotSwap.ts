@@ -244,15 +244,34 @@ export function useHotSwap(
 
     // Poll safety net — fires if realtime drops or never subscribes.
     // Silent: success = performHotSwap's 'hotswap' trace covers it.
-    pollRef.current = setInterval(async () => {
-      if (usePlayerStore.getState().currentTrack?.trackId !== trackId) {
-        if (pollRef.current) clearInterval(pollRef.current);
-        pollRef.current = null;
-        return;
+    // Paused while the tab is hidden (BG battery saver): hot-swap visual
+    // doesn't matter when there's no visible UI; the next foreground tick
+    // re-arms the interval and catches any lane completion from the gap.
+    const startPoll = () => {
+      if (pollRef.current != null) return;
+      pollRef.current = setInterval(async () => {
+        if (usePlayerStore.getState().currentTrack?.trackId !== trackId) {
+          if (pollRef.current) clearInterval(pollRef.current);
+          pollRef.current = null;
+          return;
+        }
+        const has = await r2HasTrack(trackId);
+        if (has) trigger('poll');
+      }, HOT_SWAP_POLL_MS);
+    };
+    const stopPoll = () => {
+      if (pollRef.current != null) { clearInterval(pollRef.current); pollRef.current = null; }
+    };
+    if (!document.hidden) startPoll();
+    const onVis = () => {
+      if (document.hidden) stopPoll();
+      else {
+        // Immediate probe on return in case R2 landed during BG.
+        void r2HasTrack(trackId).then(has => { if (has) trigger('poll'); });
+        startPoll();
       }
-      const has = await r2HasTrack(trackId);
-      if (has) trigger('poll');
-    }, HOT_SWAP_POLL_MS);
+    };
+    document.addEventListener('visibilitychange', onVis);
 
     return () => {
       if (snapRef.current) { clearInterval(snapRef.current); snapRef.current = null; }
@@ -261,6 +280,7 @@ export function useHotSwap(
         supabase.removeChannel(channelRef.current);
         channelRef.current = null;
       }
+      document.removeEventListener('visibilitychange', onVis);
     };
   }, [playbackSource, currentTrack?.trackId, audioRef]);
 }
