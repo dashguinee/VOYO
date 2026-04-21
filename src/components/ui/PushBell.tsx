@@ -1,17 +1,21 @@
 /**
- * PushBell — tiny opt-in affordance for first-class Web Push.
- * Hidden when already subscribed, unsupported, denied, or not signed in.
+ * PushBell — opt-in chip for first-class Web Push.
+ *
+ * Defensive by design: a render failure here must NEVER crash the
+ * surrounding app tree. On any unexpected throw the component hides
+ * itself and logs quietly.
  */
 
-import { useState } from 'react';
+import { Component, type ReactNode, useState } from 'react';
 import { useAuth } from '../../hooks/useAuth';
 import { usePushSubscribe } from '../../hooks/usePushSubscribe';
+import { devWarn } from '../../utils/logger';
 
 interface Props {
   appCode?: 'voyo' | 'hub' | 'tivi' | 'giraf' | string;
 }
 
-export function PushBell({ appCode = 'voyo' }: Props) {
+function PushBellInner({ appCode = 'voyo' }: Props) {
   const { dashId } = useAuth();
   const { supported, permission, isSubscribed, isBusy, request } = usePushSubscribe(appCode);
   const [hidden, setHidden] = useState(false);
@@ -25,8 +29,13 @@ export function PushBell({ appCode = 'voyo' }: Props) {
   return (
     <button
       onClick={async () => {
-        const res = await request();
-        if (res !== 'success') setHidden(true);
+        try {
+          const res = await request();
+          if (res !== 'success') setHidden(true);
+        } catch (e) {
+          devWarn('[PushBell] request failed:', e);
+          setHidden(true);
+        }
       }}
       disabled={isBusy}
       className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-purple-500/15 border border-purple-500/30 text-[10px] text-purple-200 backdrop-blur-md hover:bg-purple-500/25 transition-colors"
@@ -38,5 +47,22 @@ export function PushBell({ appCode = 'voyo' }: Props) {
       </svg>
       <span>{isBusy ? 'Enabling…' : 'Turn on alerts'}</span>
     </button>
+  );
+}
+
+// Hard boundary: anything the inner hook/component throws is swallowed
+// here so the top-level AppErrorBoundary never sees it.
+class PushBellBoundary extends Component<{ children: ReactNode }, { dead: boolean }> {
+  state = { dead: false };
+  static getDerivedStateFromError(): { dead: boolean } { return { dead: true }; }
+  componentDidCatch(error: Error) { devWarn('[PushBell] render crash:', error); }
+  render() { return this.state.dead ? null : this.props.children; }
+}
+
+export function PushBell(props: Props) {
+  return (
+    <PushBellBoundary>
+      <PushBellInner {...props} />
+    </PushBellBoundary>
   );
 }

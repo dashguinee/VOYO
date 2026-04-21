@@ -83,12 +83,12 @@ interface ErrorBoundaryState {
   error: Error | null;
 }
 
-// Crash-loop detection. If the boot crashes TWICE within 20s with no
-// successful paint in between, assume a bad cached bundle and auto-nuke
-// SW + caches + reload with a cache-busting query. Critical for
-// installed PWAs where users have no DevTools escape hatch.
+// Crash recovery. First crash within the window → silent auto-recover
+// (reload the SAME page, warm spinner only, no scary copy). Only if we
+// cross CRASH_RESET_THRESHOLD do we escalate to the nuclear nuke-SW-
+// and-caches path. Users should never see a technical error page.
 const CRASH_WINDOW_MS = 20_000;
-const CRASH_RESET_THRESHOLD = 2;
+const CRASH_RESET_THRESHOLD = 3; // 1+2 soft reloads, then nuke on 3rd
 const CRASH_KEY = 'voyo-crash-counter-v1';
 
 function readCrashCounter(): { count: number; firstAt: number } {
@@ -160,20 +160,23 @@ class AppErrorBoundary extends Component<{ children: ReactNode }, ErrorBoundaryS
 
   componentDidCatch(error: Error, info: ErrorInfo) {
     console.error('[VOYO] Render crash caught by ErrorBoundary:', error, info.componentStack);
-    // Crash-loop guard: if we've crashed twice inside CRASH_WINDOW_MS
-    // without a successful paint, auto-nuke and reload. Keeps installed
-    // PWA users from getting trapped with no DevTools to escape.
     const count = bumpCrashCounter();
+    // Always auto-recover — user never sees technical copy or buttons.
+    // 1st/2nd crash in window → soft reload (same page, fresh render).
+    // 3rd+ → nuclear: unregister SW, nuke caches, cache-bust reload.
     if (count >= CRASH_RESET_THRESHOLD) {
-      this.setState({ resetting: true });
-      // Slight delay so the "Resetting VOYO" UI paints before we leave.
-      setTimeout(() => { void nukeAndReload(); }, 260);
+      setTimeout(() => { void nukeAndReload(); }, 600);
+    } else {
+      setTimeout(() => {
+        try { window.location.reload(); } catch { /* noop */ }
+      }, 600);
     }
   }
 
   render() {
     if (this.state.hasError) {
-      const resetting = this.state.resetting;
+      // Warm auto-recover: VOYO wordmark + a purple spinner. No scary
+      // copy, no buttons. The reload fires from componentDidCatch.
       return (
         <div
           style={{
@@ -188,81 +191,31 @@ class AppErrorBoundary extends Component<{ children: ReactNode }, ErrorBoundaryS
             fontFamily: "'Inter', system-ui, sans-serif",
             padding: 24,
             textAlign: 'center',
+            gap: 24,
           }}
         >
           <div
             style={{
-              fontSize: 48,
+              fontSize: 44,
               fontWeight: 900,
               letterSpacing: '0.05em',
-              marginBottom: 12,
               background: 'linear-gradient(135deg, #a78bfa, #8b5cf6)',
               backgroundClip: 'text',
               WebkitBackgroundClip: 'text',
               color: 'transparent',
+              filter: 'drop-shadow(0 0 18px rgba(139,92,246,0.35))',
             }}
           >
             VOYO
           </div>
-          <div style={{ fontSize: 15, opacity: 0.5, marginBottom: 8, fontWeight: 500 }}>
-            {resetting ? 'Resetting…' : 'Something went wrong'}
-          </div>
-          <div style={{ fontSize: 12, opacity: 0.25, marginBottom: 32, maxWidth: 280, lineHeight: 1.5 }}>
-            {resetting
-              ? 'Clearing cache and reloading — one sec.'
-              : 'Reload to try again. If it keeps happening, tap Reset — it clears the cache and re-downloads the app.'}
-          </div>
-          {!resetting && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'center' }}>
-              <button
-                onClick={() => {
-                  this.setState({ hasError: false, error: null });
-                  window.location.reload();
-                }}
-                style={{
-                  padding: '14px 40px',
-                  borderRadius: 999,
-                  background: 'linear-gradient(135deg, #8b5cf6, #7c3aed)',
-                  color: 'white',
-                  border: 'none',
-                  fontSize: 14,
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  boxShadow: '0 0 24px rgba(139, 92, 246, 0.3)',
-                }}
-              >
-                Reload
-              </button>
-              <button
-                onClick={() => {
-                  this.setState({ resetting: true });
-                  void nukeAndReload();
-                }}
-                style={{
-                  padding: '10px 24px',
-                  borderRadius: 999,
-                  background: 'transparent',
-                  color: 'rgba(255,255,255,0.6)',
-                  border: '1px solid rgba(255,255,255,0.16)',
-                  fontSize: 12,
-                  fontWeight: 500,
-                  cursor: 'pointer',
-                }}
-              >
-                Reset &amp; reload (clear cache)
-              </button>
-            </div>
-          )}
-          {resetting && (
-            <div
-              style={{
-                width: 56, height: 56, borderRadius: 999,
-                border: '2px solid rgba(139,92,246,0.25)',
-                borderTopColor: '#a78bfa',
-                animation: 'voyo-spin 900ms linear infinite',
-              }}
-            />
-          )}
+          <div
+            style={{
+              width: 36, height: 36, borderRadius: 999,
+              border: '2px solid rgba(139,92,246,0.2)',
+              borderTopColor: '#a78bfa',
+              animation: 'voyo-spin 900ms linear infinite',
+            }}
+          />
           <style>{`@keyframes voyo-spin { to { transform: rotate(360deg); } }`}</style>
         </div>
       );
