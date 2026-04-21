@@ -514,7 +514,6 @@ export const LandscapeVOYO = ({ onVideoMode }: LandscapeVOYOProps) => {
   const prevTrack = usePlayerStore(s => s.prevTrack);
   // Route through app.playTrack so every queue pick registers with lanes at p=10.
   const playTrack = useCallback((track: Track) => app.playTrack(track, 'queue'), []);
-  const addToQueue = usePlayerStore(s => s.addToQueue);
   const addReaction = usePlayerStore(s => s.addReaction);
   const volume = usePlayerStore(s => s.volume);
   const refreshRecommendations = usePlayerStore(s => s.refreshRecommendations);
@@ -658,7 +657,7 @@ export const LandscapeVOYO = ({ onVideoMode }: LandscapeVOYOProps) => {
           // Find track in our catalog or create a new one
           const existingTrack = TRACKS.find(t => t.trackId === videoId);
           if (existingTrack) {
-            addToQueue(existingTrack);
+            app.oyeCommit(existingTrack);
           } else {
             // Create ad-hoc track for videos not in our catalog
             // This is a REAL video from YouTube's related feed!
@@ -674,7 +673,7 @@ export const LandscapeVOYO = ({ onVideoMode }: LandscapeVOYOProps) => {
               oyeScore: 0,
               createdAt: new Date().toISOString(),
             };
-            addToQueue(newTrack);
+            app.oyeCommit(newTrack);
           }
 
           // Track queue action in Supabase (collective brain)

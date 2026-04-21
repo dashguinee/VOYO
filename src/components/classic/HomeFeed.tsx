@@ -452,7 +452,6 @@ const TrackCard = memo(({ track, onPlay, showBoostBadge = false }: TrackCardProp
   const [oyeActive, setOyeActive] = useState(false);
   const createReaction = useReactionStore(s => s.createReaction);
   const boostTrack = useDownloadStore(s => s.boostTrack);
-  const addToQueue = usePlayerStore(s => s.addToQueue);
 
   // ── HOLD-TO-PREFERENCE + SWIPE-UP-TO-BUCKET GESTURE ─────────────
   // Hold 400ms → card enters preference mode. Two shimmers appear:
@@ -519,7 +518,7 @@ const TrackCard = memo(({ track, onPlay, showBoostBadge = false }: TrackCardProp
       const dy = e.clientY - prefStartRef.current.y;
       if (dy < -BUCKET_THRESHOLD) {
         didPrefRef.current = true;
-        addToQueue(track, 0);
+        app.oyeCommit(track, { position: 0 });
         try { navigator.vibrate?.([15, 8, 15]); } catch {}
         setBucketFly(true);
         setTimeout(() => setBucketFly(false), 500);
@@ -533,7 +532,7 @@ const TrackCard = memo(({ track, onPlay, showBoostBadge = false }: TrackCardProp
 
     if (prefDx > PREF_THRESHOLD) {
       const position = Math.random() < 0.6 ? 0 : undefined;
-      addToQueue(track, position);
+      app.oyeCommit(track, { position });
       try { navigator.vibrate?.([20, 10, 20]); } catch {}
 
       if (cardRef.current) {

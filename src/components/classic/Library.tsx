@@ -20,6 +20,7 @@ import { getYouTubeThumbnail, TRACKS } from '../../data/tracks';
 import { SmartImage } from '../ui/SmartImage';
 import { Track } from '../../types';
 import { PlaylistModal } from '../playlist/PlaylistModal';
+import { app } from '../../services/oyo';
 
 // Base filter tabs — VOYO Disco DNA palette: bronze-gold for active states,
 // platform purple as accent. Consistent with Search overlay tabs (v161+).
@@ -179,7 +180,6 @@ export const Library = ({ onTrackClick }: LibraryProps) => {
   const [activeFilter, setActiveFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [playlistModalTrack, setPlaylistModalTrack] = useState<Track | null>(null);
-  const addToQueue = usePlayerStore(s => s.addToQueue);
   const queue = usePlayerStore(s => s.queue);
   const history = usePlayerStore(s => s.history);
   const playlists = usePlaylistStore(s => s.playlists);
@@ -535,7 +535,7 @@ export const Library = ({ onTrackClick }: LibraryProps) => {
               cacheQuality={trackQualityMap.get(track.trackId) || null}
               onClick={() => handleTrackClick(track)}
               onLike={() => handleLike(track.id)}
-              onAddToQueue={() => addToQueue(track)}
+              onAddToQueue={() => app.oyeCommit(track)}
               onAddToPlaylist={() => setPlaylistModalTrack(track)}
             />
           ))

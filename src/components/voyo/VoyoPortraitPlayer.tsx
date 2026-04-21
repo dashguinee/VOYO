@@ -3775,9 +3775,6 @@ export const VoyoPortraitPlayer = ({
     }
   }, [detectTrackMode]);
 
-  // Access queue actions from player store
-  const addToQueue = usePlayerStore(state => state.addToQueue);
-
   // Handle mode tap - adds 1 manual bar to tapped mode, steals from others
   // Zero-sum: total MANUAL bars always = 6
   const TOTAL_MANUAL_BARS = 6;
@@ -3843,13 +3840,13 @@ export const VoyoPortraitPlayer = ({
       : allTracks.slice(0, 3); // Fallback to first 3 if no keyword matches
 
     tracksToAdd.forEach(track => {
-      addToQueue(track);
+      app.oyeCommit(track);
       trackQueueAddition(track);
     });
 
     // Also boost this mode manually (user explicitly wants this vibe)
     handleModeBoost(modeId);
-  }, [hotTracks, discoverTracks, addToQueue, trackQueueAddition, handleModeBoost]);
+  }, [hotTracks, discoverTracks, trackQueueAddition, handleModeBoost]);
 
   // Random Mixer spin animation state
   const [xRandomizerSpin, setXRandomizerSpin] = useState(false);

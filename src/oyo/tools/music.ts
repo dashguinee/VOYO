@@ -14,6 +14,7 @@
 import type { ToolDefinition, ToolResult } from './types';
 import { usePlayerStore } from '../../store/playerStore';
 import { useTrackPoolStore } from '../../store/trackPoolStore';
+import { app } from '../../services/oyo';
 import type { Track } from '../../types';
 import { searchEssences, saveEssence } from '../memory';
 import type { MemoryCategory } from '../schema';
@@ -101,9 +102,12 @@ const addToQueueTool: ToolDefinition = {
     if (!track) return fail('addToQueue', `Track not found in pool: ${trackId}`);
 
     try {
-      const player = usePlayerStore.getState();
       const pos = position ? parseInt(position, 10) : undefined;
-      player.addToQueue(track, Number.isFinite(pos) ? pos : undefined);
+      // Routed through app.oyeCommit so every AI-driven queue action also
+      // warms R2 + fires the OYE signal graph. Keeps the tool's observable
+      // contract unchanged (name="addToQueue") while the underlying effect
+      // is the unified Oye gesture.
+      app.oyeCommit(track, { position: Number.isFinite(pos) ? pos : undefined });
       return ok('addToQueue', `Queued ${track.title} by ${track.artist}`);
     } catch (err) {
       return fail('addToQueue', `Failed to queue: ${String(err)}`);

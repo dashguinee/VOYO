@@ -210,7 +210,7 @@ export function oye(
  */
 export function oyeCommit(
   track: Track,
-  opts: { escape?: boolean } = {},
+  opts: { escape?: boolean; position?: number } = {},
 ): void {
   // (1) Reaction signal — goes through existing oye() so the signal graph
   // stays a single path.
@@ -229,11 +229,17 @@ export function oyeCommit(
   } catch { /* non-fatal */ }
 
   // (3) Enqueue. playerStore.addToQueue de-dups by trackId, so repeat Oyes
-  // don't balloon the queue.
+  // don't balloon the queue. `position` (when provided) lets swipe-up-to-front
+  // gestures keep their existing semantics (0 = top of queue).
   try {
     const store = usePlayerStore.getState();
     if (typeof store.addToQueue === 'function') {
-      store.addToQueue(track);
+      if (opts.position !== undefined) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (store.addToQueue as any)(track, opts.position);
+      } else {
+        store.addToQueue(track);
+      }
     }
   } catch { /* non-fatal */ }
 
