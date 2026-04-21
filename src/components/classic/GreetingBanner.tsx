@@ -84,7 +84,7 @@ export const GreetingBanner = ({ onComplete }: GreetingBannerProps = {}) => {
 
   return (
     <div
-      className="pointer-events-none px-4 pt-3 pb-1"
+      className="pointer-events-none px-4 pt-6 pb-4"
       style={{
         opacity: leaving ? 0 : visible ? 1 : 0,
         transform: leaving
