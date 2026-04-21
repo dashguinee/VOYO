@@ -223,11 +223,12 @@ self.addEventListener('message', (event) => {
 // PUSH NOTIFICATIONS
 // ============================================
 
-// Push notification handler
+// Push notification handler — payload from send-push edge function:
+//   { id, title, body, url, app, tag }
 self.addEventListener('push', (event) => {
-  let data = { title: 'VOYO', body: 'New update' };
+  let data = { title: 'VOYO', body: 'New update', url: '/', tag: 'voyo-notification' };
   try {
-    if (event.data) data = event.data.json();
+    if (event.data) data = { ...data, ...event.data.json() };
   } catch (e) {
     data.body = event.data?.text() || 'New update';
   }
@@ -237,13 +238,27 @@ self.addEventListener('push', (event) => {
       body: data.body,
       icon: data.icon || '/icon-192.png',
       badge: '/icon-192.png',
-      data: { url: data.url || '/' },
-      tag: 'voyo-notification',
+      data: data.url || '/',
+      tag: data.tag || 'voyo-notification',
+      vibrate: [100, 50, 100],
+      renotify: true,
     })
   );
 });
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  event.waitUntil(clients.openWindow(event.notification.data.url || '/'));
+  const url = event.notification.data || '/';
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
+      for (const client of windowClients) {
+        if (client.url.includes(self.location.origin) && 'focus' in client) {
+          client.focus();
+          if ('navigate' in client) client.navigate(url);
+          return;
+        }
+      }
+      return clients.openWindow(url);
+    })
+  );
 });
