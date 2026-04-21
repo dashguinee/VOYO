@@ -1266,14 +1266,49 @@ const VibeCard = memo(({ vibe, onSelect }: VibeCardProps) => {
           boxShadow: `0 6px 24px ${vibe.color}50`,
         }}
       >
+        {/* Portrait image (when provided) — the face IS the card. The
+            color gradient above is kept as the base so the card still
+            reads as its vibe while the image loads / if it fails. */}
+        {vibe.image && (
+          <img
+            src={vibe.image}
+            alt=""
+            loading="lazy"
+            decoding="async"
+            className="absolute inset-0 w-full h-full object-cover"
+            style={{
+              // Slight zoom-in so faces don't sit too close to the edges
+              // and the portrait feels like it earned the frame.
+              transform: isHero ? 'scale(1.06)' : 'scale(1.02)',
+              transformOrigin: 'center 30%',
+            }}
+          />
+        )}
+        {/* Color wash overlay — pulls the portrait into the vibe's palette
+            so the shelf still reads as one coherent color story. Hero card
+            washes lighter (let the image speak more). */}
+        <div
+          className="absolute inset-0"
+          style={{
+            background: `linear-gradient(135deg, ${vibe.color}${isHero ? '33' : '55'} 0%, ${vibe.color}${isHero ? '55' : '88'} 55%, ${vibe.color}${isHero ? '88' : 'bb'} 100%)`,
+            mixBlendMode: 'overlay',
+          }}
+        />
+        {/* Dark vignette at the bottom for title readability. */}
+        <div
+          className="absolute inset-x-0 bottom-0 h-2/3 pointer-events-none"
+          style={{
+            background: 'linear-gradient(180deg, transparent 0%, rgba(0,0,0,0.18) 45%, rgba(0,0,0,0.55) 100%)',
+          }}
+        />
         {/* Subtle grain */}
-        <div className="absolute inset-0 opacity-[0.15]" style={{
+        <div className="absolute inset-0 opacity-[0.12]" style={{
           backgroundImage: `radial-gradient(circle at 50% 50%, rgba(255,255,255,0.6) 0.5px, transparent 1px)`,
           backgroundSize: '6px 6px',
         }} />
         {/* Soft top-left highlight */}
         <div className="absolute inset-0" style={{
-          background: 'linear-gradient(130deg, rgba(255,255,255,0.3) 0%, transparent 30%, transparent 70%, rgba(0,0,0,0.15) 100%)',
+          background: 'linear-gradient(130deg, rgba(255,255,255,0.22) 0%, transparent 30%, transparent 70%, rgba(0,0,0,0.18) 100%)',
         }} />
 
         {/* Embossed big title — hero card: clean canvas (no title), others keep it */}

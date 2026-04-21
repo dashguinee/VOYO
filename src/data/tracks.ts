@@ -68,6 +68,7 @@ export interface Vibe {
   color: string;        // Primary color
   gradient: string;     // Tailwind gradient classes
   description: string;  // Short description
+  image?: string;       // Optional background portrait/artwork
 }
 
 // Premium palette (April 2026): Heating Up RN is the ONLY non-purple —
@@ -83,6 +84,7 @@ export const VIBES: Vibe[] = [
     color: '#F4A23E',
     gradient: 'from-amber-500 via-orange-500 to-amber-700',
     description: 'Afrobeats • Amapiano',
+    image: '/vibes/dash.png', // hero — Dash (central card)
   },
   {
     id: 'chill-vibes',
@@ -91,6 +93,7 @@ export const VIBES: Vibe[] = [
     color: '#c4b5fd',
     gradient: 'from-violet-300 via-violet-400 to-purple-500',
     description: 'Relax & Be',
+    image: '/vibes/artist-blue.jpg', // elegant, regal — matches the chill slot
   },
   {
     id: 'party-mode',
@@ -99,6 +102,7 @@ export const VIBES: Vibe[] = [
     color: '#a78bfa',
     gradient: 'from-violet-400 via-purple-500 to-purple-600',
     description: 'Get on Da Dance Floor',
+    image: '/vibes/brandy-moja.jpg', // Brandy Moja — bright, colorful
   },
   {
     id: 'late-night',
@@ -107,6 +111,7 @@ export const VIBES: Vibe[] = [
     color: '#8b5cf6',
     gradient: 'from-purple-500 via-purple-700 to-violet-900',
     description: 'City Lights • Vibes',
+    image: '/vibes/mamadi.jpg', // iconic, mysterious — shades + flag
   },
   {
     id: 'workout',
@@ -115,6 +120,7 @@ export const VIBES: Vibe[] = [
     color: '#7c3aed',
     gradient: 'from-violet-600 via-purple-700 to-purple-900',
     description: 'Pump it UP',
+    image: '/vibes/artist-beanie.jpg', // young, kinetic energy
   },
 ];
 
