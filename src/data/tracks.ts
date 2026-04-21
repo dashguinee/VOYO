@@ -93,7 +93,7 @@ export const VIBES: Vibe[] = [
     color: '#c4b5fd',
     gradient: 'from-violet-300 via-violet-400 to-purple-500',
     description: 'Relax & Be',
-    image: '/vibes/artist-blue.jpg', // elegant, regal — matches the chill slot
+    image: '/vibes/ai-chill.png', // AI — golden-hour cityscape dusk
   },
   {
     id: 'party-mode',
@@ -102,7 +102,7 @@ export const VIBES: Vibe[] = [
     color: '#a78bfa',
     gradient: 'from-violet-400 via-purple-500 to-purple-600',
     description: 'Get on Da Dance Floor',
-    image: '/vibes/brandy-moja.jpg', // Brandy Moja — bright, colorful
+    image: '/vibes/ai-party.png', // AI — kinetic dance energy in gold light
   },
   {
     id: 'late-night',
@@ -111,7 +111,7 @@ export const VIBES: Vibe[] = [
     color: '#8b5cf6',
     gradient: 'from-purple-500 via-purple-700 to-violet-900',
     description: 'City Lights • Vibes',
-    image: '/vibes/mamadi.jpg', // iconic, mysterious — shades + flag
+    image: '/vibes/ai-late-night.png', // AI — violet Lagos 3am skyline
   },
   {
     id: 'workout',
@@ -120,7 +120,7 @@ export const VIBES: Vibe[] = [
     color: '#7c3aed',
     gradient: 'from-violet-600 via-purple-700 to-purple-900',
     description: 'Pump it UP',
-    image: '/vibes/artist-beanie.jpg', // young, kinetic energy
+    image: '/vibes/ai-workout.png', // AI — bronze sunburst power pattern
   },
 ];
 
