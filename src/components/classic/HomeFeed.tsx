@@ -440,7 +440,11 @@ const CenterFocusedCarousel = ({ tracks, onPlay }: CenterCarouselProps) => {
 
 interface TrackCardProps {
   track: Track;
-  onPlay: () => void;
+  // Takes the track so the parent can pass a single stable callback shared
+  // across every card instance. Passing `() => onTrackPlay(track)` inline
+  // created a fresh function ref per render, invalidating the memo and
+  // re-rendering every card on every HomeFeed state update.
+  onPlay: (track: Track) => void;
   /** Show the bronze OYÉ boost badge */
   showBoostBadge?: boolean;
   /** Track is actually cached/boosted — full opacity. False = faded + smaller */
@@ -552,7 +556,7 @@ const TrackCard = memo(({ track, onPlay, showBoostBadge = false }: TrackCardProp
   return (
     <button
       className="flex-shrink-0 w-32 relative group"
-      onClick={() => { if (didPrefRef.current) { didPrefRef.current = false; return; } onPlay(); }}
+      onClick={() => { if (didPrefRef.current) { didPrefRef.current = false; return; } onPlay(track); }}
       style={{ scrollSnapAlign: 'start' }}
       onPointerDown={handlePrefDown}
       onPointerMove={handlePrefMove}
@@ -652,7 +656,7 @@ const WideTrackCard = memo(({ track, onPlay, showBoostBadge = false }: TrackCard
   return (
     <div
       className="flex-shrink-0 cursor-pointer group"
-      onClick={onPlay}
+      onClick={() => onPlay(track)}
       style={{ scrollSnapAlign: 'start', width: '180px' }}
     >
       <div className="relative w-full rounded-xl overflow-hidden mb-2 bg-[#1c1c22] border border-[#28282f]/50 group-active:border-[#8b5cf6]/30 transition-colors" style={{ aspectRatio: '16/9' }}>
@@ -705,12 +709,12 @@ WideTrackCard.displayName = 'WideTrackCard';
 // cover reads like a zoomed-in vinyl label. 90% opacity keeps it
 // effortless — there but not shouting.
 // ============================================
-const ClassicsDiskCard = memo(({ track, index, onPlay }: { track: Track; index: number; onPlay: () => void }) => {
+const ClassicsDiskCard = memo(({ track, index, onPlay }: { track: Track; index: number; onPlay: (track: Track) => void }) => {
   const thumbnailUrl = getThumb(track.trackId, 'high');
   return (
     <button
       className="flex-shrink-0 active:scale-[0.96] transition-transform"
-      onClick={onPlay}
+      onClick={() => onPlay(track)}
       aria-label={`Play ${track.title} by ${track.artist}`}
       style={{ scrollSnapAlign: 'start' }}
     >
@@ -806,7 +810,7 @@ const AfricanVibesVideoCard = memo(({
   track: Track;
   idx: number;
   isActive: boolean;
-  onTrackPlay: () => void;
+  onTrackPlay: (track: Track) => void;
 }) => {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [isLoaded, setIsLoaded] = useState(false);
@@ -863,7 +867,7 @@ const AfricanVibesVideoCard = memo(({
     <button
       className="flex-shrink-0 relative rounded-xl"
       style={{ width: '95px', height: '142px' }}
-      onClick={onTrackPlay}
+      onClick={() => onTrackPlay(track)}
     >
       {/* Bronze glow - stronger for hero (idx 0) */}
       <div
@@ -1039,7 +1043,7 @@ const AfricanVibesCarousel = ({
             track={track}
             idx={idx}
             isActive={isInView && activeIdx === idx}
-            onTrackPlay={() => onTrackPlay(track)}
+            onTrackPlay={onTrackPlay}
           />
         </div>
       ))}
@@ -1292,6 +1296,19 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
     setTimeout(() => setShowNotificationHint(false), 2500);
   };
 
+  // Stable callbacks for memo'd card children. Every card receives ONE of
+  // these refs regardless of the track it renders — the card itself passes
+  // its own track back. Without this, inline `() => onTrackPlay(track)`
+  // closures invalidated every card's memo on every HomeFeed render.
+  const playTrack = useCallback(
+    (track: Track) => onTrackPlay(track),
+    [onTrackPlay],
+  );
+  const playTrackFull = useCallback(
+    (track: Track) => onTrackPlay(track, { openFull: true }),
+    [onTrackPlay],
+  );
+
   // Data from existing DJ/Curator systems (pool-based)
   const recentlyPlayed = useMemo(() => getRecentlyPlayed(history, 15), [history]);
   const heavyRotation = useMemo(() => getUserTopTracks(15), [history]);
@@ -1518,7 +1535,7 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
             style={{ scrollSnapType: 'x proximity', WebkitOverflowScrolling: 'touch' }}
           >
             {recentlyPlayed.slice(0, 12).map((track) => (
-              <WideTrackCard key={track.id} track={track} onPlay={() => onTrackPlay(track)} showBoostBadge isBoosted={boostedIds.has(track.trackId)} />
+              <WideTrackCard key={track.id} track={track} onPlay={playTrack} showBoostBadge isBoosted={boostedIds.has(track.trackId)} />
             ))}
           </div>
         </div>
@@ -1609,7 +1626,7 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
           </div>
           <AfricanVibesCarousel
             tracks={africanVibes.slice(0, 15)}
-            onTrackPlay={(track) => onTrackPlay(track, { openFull: true })}
+            onTrackPlay={playTrackFull}
             onOpenVoyo={(lastWatched) => {
               // Stash the last-watched video ID so VoyoMoments can pick
               // up on it (future hook-in; for now we just switch tabs).
@@ -1632,7 +1649,7 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
       {hasDiscoverMore && (
         <ShelfWithRefresh title="Next Voyage" onRefresh={handleRefresh} isRefreshing={isRefreshing}>
           {discoverMoreTracks.slice(0, 12).map((track) => (
-            <TrackCard key={track.id} track={track} onPlay={() => onTrackPlay(track, { openFull: true })} />
+            <TrackCard key={track.id} track={track} onPlay={playTrackFull} />
           ))}
         </ShelfWithRefresh>
       )}
@@ -1716,7 +1733,7 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
                   key={track.id}
                   track={track}
                   index={index}
-                  onPlay={() => onTrackPlay(track, { openFull: true })}
+                  onPlay={playTrackFull}
                 />
               ))}
             </div>
@@ -1874,7 +1891,7 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
             <h2 className="text-white font-semibold text-base">OYO's Picks</h2>
             <div className="h-[2px] w-6 rounded-full" style={{ background: '#8b5cf6', opacity: 0.6 }} />
           </div>
-          <Safe name="OyosPicks"><CenterFocusedCarousel tracks={oyosPicks} onPlay={(track) => onTrackPlay(track)} /></Safe>
+          <Safe name="OyosPicks"><CenterFocusedCarousel tracks={oyosPicks} onPlay={playTrack} /></Safe>
         </div>
       )}
 
@@ -1888,7 +1905,7 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
           </div>
           <div className="flex gap-6 px-4 overflow-x-auto scrollbar-hide">
             {artistsYouLove.map((artist) => (
-              <ArtistCard key={artist.name} artist={artist} onPlay={onTrackPlay} />
+              <ArtistCard key={artist.name} artist={artist} onPlay={playTrack} />
             ))}
           </div>
         </div>

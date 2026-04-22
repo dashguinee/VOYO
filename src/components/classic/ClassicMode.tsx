@@ -490,15 +490,17 @@ export const ClassicMode = ({ onSwitchToVOYO, onSearch }: ClassicModeProps) => {
   // Section-aware track play handler - CONSOLIDATED
   // Communal sections (Top 10, African Vibes, Trending) → open full player
   // Personal sections (Continue Listening, Made For You) → mini player only
-  const handleTrackClick = (track: Track, options?: { openFull?: boolean }) => {
-    // Open full player for communal/discovery sections
+  //
+  // useCallback keeps the ref stable across ClassicMode renders so that
+  // HomeFeed's downstream useCallback wrappers + the memoised TrackCard /
+  // WideTrackCard / ClassicsDiskCard / ArtistCard / AfricanVibesVideoCard
+  // children don't all invalidate on every parent state tick.
+  const handleTrackClick = useCallback((track: Track, options?: { openFull?: boolean }) => {
     if (options?.openFull) {
       setShowNowPlaying(true);
     }
-
-    // Route through app.playTrack → registers with lanes (bump_queue_priority p=10)
     app.playTrack(track, 'feed');
-  };
+  }, [setShowNowPlaying]);
 
   const handleArtistClick = (artist: { name: string; tracks: Track[] }) => {
     // Switch to library with artist filter
