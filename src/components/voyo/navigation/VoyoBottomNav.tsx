@@ -101,13 +101,19 @@ export const VoyoBottomNav = ({ onDahub, onHome, oyoSurface = 'home', playerMode
 
     setNavState('fade'); // start hidden in player mode
 
-    const onScroll = (e: Event) => {
-      if (promptActiveRef.current) return;
-      const target = e.target as HTMLElement | Document | null;
-      const el = target instanceof Document ? document.documentElement : (target as HTMLElement | null);
-      if (!el) return;
+    // rAF-dedup: the scroll event fires 60+ times per second on touch
+    // devices. The original handler called setNavState on every event,
+    // which round-tripped through React reconciliation at full frame
+    // rate. Now we batch into one read + one state update per frame.
+    let rafId: number | null = null;
+    let latestEl: HTMLElement | null = null;
+
+    const tick = () => {
+      rafId = null;
+      if (!latestEl || promptActiveRef.current) return;
+      const el = latestEl;
       const max = el.scrollHeight - el.clientHeight;
-      if (max <= 0) return; // not scrollable
+      if (max <= 0) return;
       const pct = el.scrollTop / max;
       // Hysteresis — reveal at 88% (truly near the bottom), hide back
       // at 84% so the nav doesn't strobe right at the threshold.
@@ -118,9 +124,19 @@ export const VoyoBottomNav = ({ onDahub, onHome, oyoSurface = 'home', playerMode
       });
     };
 
+    const onScroll = (e: Event) => {
+      if (promptActiveRef.current) return;
+      const target = e.target as HTMLElement | Document | null;
+      latestEl = target instanceof Document
+        ? document.documentElement
+        : (target as HTMLElement | null);
+      if (rafId == null) rafId = requestAnimationFrame(tick);
+    };
+
     document.addEventListener('scroll', onScroll, { capture: true, passive: true });
     return () => {
       document.removeEventListener('scroll', onScroll, { capture: true } as EventListenerOptions);
+      if (rafId != null) cancelAnimationFrame(rafId);
     };
   }, [playerMode]);
 
