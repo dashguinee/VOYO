@@ -167,7 +167,24 @@ interface LibraryProps {
 }
 
 export const Library = ({ onTrackClick }: LibraryProps) => {
-  const [activeFilter, setActiveFilter] = useState('all');
+  const [activeFilter, setActiveFilterRaw] = useState('all');
+  // Wrapper: save outgoing filter's scroll position, restore incoming
+  // filter's. Runs even on the initial tap-to-switch gesture so user
+  // never loses their place mid-list.
+  const setActiveFilter = useCallback((next: string) => {
+    setActiveFilterRaw((prev) => {
+      if (prev === next) return prev;
+      const el = scrollContainerRef.current;
+      if (el) scrollMemoryRef.current.set(prev, el.scrollTop);
+      // Restore on the next paint so React has mounted the new list first.
+      requestAnimationFrame(() => {
+        const saved = scrollMemoryRef.current.get(next) ?? 0;
+        const elNow = scrollContainerRef.current;
+        if (elNow) elNow.scrollTop = saved;
+      });
+      return next;
+    });
+  }, []);
   const [searchQuery, setSearchQuery] = useState('');
   const [playlistModalTrack, setPlaylistModalTrack] = useState<Track | null>(null);
   // DiscoExplainer — triggered from the "My Disco" heading.
@@ -190,6 +207,11 @@ export const Library = ({ onTrackClick }: LibraryProps) => {
   // every frame during scroll.
   const scrollRafRef = useRef<number | null>(null);
   const scrollPctRef = useRef(0);
+  // Per-filter scroll position memory — when the user switches filter
+  // tabs, we restore their last scroll position in that tab instead of
+  // dropping them back to the top. Liked tracks buried mid-list stay
+  // reachable without re-scrolling every switch.
+  const scrollMemoryRef = useRef<Map<string, number>>(new Map());
   const handleScroll = useCallback(() => {
     if (scrollRafRef.current != null) return;
     scrollRafRef.current = requestAnimationFrame(() => {

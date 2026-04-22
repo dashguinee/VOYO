@@ -102,8 +102,14 @@ export function InstallBanner() {
   const handleInstall = async () => {
     trace('pwa_install_clicked', null, { surface: 'banner', platform, has_native_prompt: hasNativePrompt });
     if (platform === 'ios' || !hasNativePrompt) {
+      // Opening the manual-instructions sheet counts as "user engaged
+      // with install" — mark the 14-day cooldown so the top banner
+      // doesn't re-nag this session. Banner fades out; the sheet
+      // stays until the user closes it via its own × or back gesture.
       setIosSheetOpen(true);
       trace('pwa_install_sheet_opened', null, { surface: 'banner', platform });
+      try { localStorage.setItem(DISMISS_KEY, String(Date.now())); } catch { /* private mode */ }
+      dismiss(false, 'installed');
       return;
     }
     const ok = await install();

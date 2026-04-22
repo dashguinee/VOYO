@@ -11,6 +11,7 @@ import { pipedTrackToVoyoTrack } from '../../data/tracks';
 import { usePlayerStore } from '../../store/playerStore';
 import { app } from '../../services/oyo';
 import { Track } from '../../types';
+import { useBackGuard } from '../../hooks/useBackGuard';
 
 interface AlbumSectionProps {
   query: string;
@@ -25,6 +26,10 @@ export const AlbumSection = ({ query, isVisible }: AlbumSectionProps) => {
   const [isLoadingTracks, setIsLoadingTracks] = useState(false);
 
   const addToQueue = usePlayerStore(s => s.addToQueue);
+
+  // Back gesture peels the album detail view back to the grid instead
+  // of closing the parent search overlay.
+  useBackGuard(!!selectedAlbum, () => setSelectedAlbum(null), 'album-detail');
 
   // Search for albums when query changes
   const handleSearch = useCallback(async () => {

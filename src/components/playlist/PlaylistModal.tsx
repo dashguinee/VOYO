@@ -4,7 +4,7 @@
  * Add track to playlist / Create new playlist
  */
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { X, Plus, Check, Music2, Globe, Lock } from 'lucide-react';
 import { usePlaylistStore, Playlist } from '../../store/playlistStore';
 import { useAuth } from '../../hooks/useAuth';
@@ -19,6 +19,15 @@ interface PlaylistModalProps {
 
 export const PlaylistModal = ({ isOpen, onClose, trackId, trackTitle }: PlaylistModalProps) => {
   useBackGuard(isOpen, onClose, 'playlist-modal');
+
+  // Desktop keyboard — Escape dismisses. Browsers don't fire popstate
+  // for Escape so useBackGuard alone doesn't cover this path.
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [isOpen, onClose]);
   // Fine-grained selectors — avoid re-renders on unrelated playlist mutations.
   const playlists = usePlaylistStore(s => s.playlists);
   const createPlaylist = usePlaylistStore(s => s.createPlaylist);

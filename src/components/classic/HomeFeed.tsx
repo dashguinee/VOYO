@@ -1249,9 +1249,13 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
 
   // Stations — curator-led vibe hubs, shown as a horizontal snap-scroll rail
   // above the shelves. Rail animates parallax on scroll when >1 station.
+  // stationsLoading gates a skeleton rail while the query is in flight so
+  // users on slow networks see continuity instead of a ghost gap that
+  // jolts into content 2-3s later.
   const [stations, setStations] = useState<Station[]>([]);
+  const [stationsLoading, setStationsLoading] = useState(true);
   useEffect(() => {
-    if (!supabase) return;
+    if (!supabase) { setStationsLoading(false); return; }
     let cancelled = false;
     (async () => {
       const { data } = await supabase
@@ -1260,7 +1264,9 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
         .eq('is_featured', true)
         .not('hero_r2_key', 'is', null)
         .order('sort_order', { ascending: true });
-      if (!cancelled && data) setStations(data as Station[]);
+      if (cancelled) return;
+      if (data) setStations(data as Station[]);
+      setStationsLoading(false);
     })();
     return () => { cancelled = true; };
   }, []);
@@ -1876,8 +1882,33 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
 
       {/* Stations rail — DJ-curated vibes (deeper commitment than Vibes buttons).
           Horizontal snap-scroll. Cards autoplay muted; 7s dwell fades audio in
-          (iOS shows "Tap to hear"); tap commits to deck + R2 audio. */}
-      {stations.length > 0 && (
+          (iOS shows "Tap to hear"); tap commits to deck + R2 audio.
+          Skeleton row renders while the query is in flight to kill the
+          "ghost-then-jolt" layout shift on slow networks. */}
+      {stationsLoading && stations.length === 0 ? (
+        <div className="mb-8 -mx-1" aria-busy="true" aria-label="Loading stations">
+          <div className="flex gap-3 overflow-hidden scrollbar-hide px-4 pb-2">
+            {[0, 1].map((i) => (
+              <div
+                key={i}
+                className="snap-center flex-shrink-0 w-[82vw] max-w-[420px] rounded-2xl"
+                style={{
+                  aspectRatio: '4 / 5',
+                  background: 'linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.02) 100%)',
+                  border: '1px solid rgba(255,255,255,0.04)',
+                  animation: 'voyo-skeleton-pulse 1.8s ease-in-out infinite',
+                }}
+              />
+            ))}
+          </div>
+          <style>{`
+            @keyframes voyo-skeleton-pulse {
+              0%, 100% { opacity: 0.55; }
+              50%      { opacity: 0.85; }
+            }
+          `}</style>
+        </div>
+      ) : stations.length > 0 && (
         <Safe name="StationsRail">
           <div className="mb-8 -mx-1">
             <div className="flex gap-3 overflow-x-auto snap-x snap-mandatory scrollbar-hide px-4 pb-2">

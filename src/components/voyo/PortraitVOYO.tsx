@@ -161,17 +161,26 @@ export const PortraitVOYO = ({ onSearch, onDahub, onHome }: PortraitVOYOProps) =
   const [artistPageName, setArtistPageName] = useState<string | null>(null);
   const originalVolumeRef = useRef(volume);
 
-  // Fade music when DJ is active
+  // Fade music when DJ is active.
+  // Volume intentionally EXCLUDED from deps — this effect should only
+  // fire on DJ-mode transitions, never on mid-session volume changes.
+  // Pre-fix, `volume` in deps caused an infinite re-fire: slider tick →
+  // effect → setVolume(vol*0.3) → slider tick → effect → ... which both
+  // overwrote originalVolumeRef with the ducked value (losing the real
+  // user volume) AND fought the user's live slider input.
+  // Reading via getState() means the captured "original" is always
+  // the live store value at the moment DJ mode activates — no stale
+  // closure issue.
   useEffect(() => {
     if (djMode !== 'idle') {
-      // Store current volume before ducking (even if 0)
-      originalVolumeRef.current = volume;
-      setVolume(Math.max(10, volume * 0.3));
-    } else if (djMode === 'idle') {
-      // FIX: Always restore original volume, even if it was 0 (muted)
+      const current = usePlayerStore.getState().volume;
+      originalVolumeRef.current = current;
+      setVolume(Math.max(10, current * 0.3));
+    } else {
       setVolume(originalVolumeRef.current);
     }
-  }, [djMode, volume, setVolume]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [djMode, setVolume]);
 
   // Handle OYEE - Voice listen mode
   const handleListenMode = () => {
@@ -248,7 +257,12 @@ export const PortraitVOYO = ({ onSearch, onDahub, onHome }: PortraitVOYOProps) =
           />
         </div>
 
-        {/* LAYER 1: MUSIC MODE - Main Player */}
+        {/* LAYER 1: MUSIC MODE - Main Player.
+            `visibility: hidden` on inactive so the scale(0.95) + blur
+            ghost can't leak touch targets or phantom shadows into the
+            Feed layer above. Still keep opacity/transform transitions
+            for the visible→hidden handoff direction so the fade-out
+            animates cleanly before visibility flips. */}
         <div
           className="absolute inset-0 z-0 pb-20 transition-all duration-400"
           style={{
@@ -256,9 +270,18 @@ export const PortraitVOYO = ({ onSearch, onDahub, onHome }: PortraitVOYOProps) =
             opacity: voyoActiveTab === 'music' ? 1 : 0,
             filter: voyoActiveTab === 'music' ? 'blur(0px)' : 'blur(10px)',
             pointerEvents: voyoActiveTab === 'music' ? 'auto' : 'none',
+            visibility: voyoActiveTab === 'music' ? 'visible' : 'hidden',
+            transitionProperty: 'transform, opacity, filter, visibility',
           }}
         >
-          <Suspense fallback={<div className="h-full bg-[#0a0a0c]" />}>
+          <Suspense fallback={
+            <div className="h-full flex items-center justify-center bg-[#0a0a0c]">
+              <div
+                className="w-10 h-10 rounded-full border-2 border-white/10 border-t-white/60 animate-spin"
+                aria-label="Loading player"
+              />
+            </div>
+          }>
             <VoyoPortraitPlayer
               onVoyoFeed={() => setVoyoTab('feed')}
               djMode={djMode === 'listening' || djMode === 'responding'}

@@ -50,6 +50,7 @@ export const ProfilePage = () => {
   const [pin, setPin] = useState('');
   const [pinError, setPinError] = useState('');
   const [loadingProfile, setLoadingProfile] = useState(true);
+  const [profileError, setProfileError] = useState<string | null>(null);
   const [showShareModal, setShowShareModal] = useState(false);
   const [copied, setCopied] = useState(false);
 
@@ -96,6 +97,7 @@ export const ProfilePage = () => {
 
     const loadProfile = async () => {
       setLoadingProfile(true);
+      setProfileError(null);
 
       try {
         // Fetch VOYO profile using dash_id
@@ -108,6 +110,13 @@ export const ProfilePage = () => {
         }
       } catch (err) {
         console.error('[ProfilePage] Failed to load profile:', err);
+        // Surface the failure so the user sees "couldn't load" instead
+        // of an infinite loader. Distinguishes from the legitimate
+        // "profile not found" state (profile === null after success).
+        const message = err instanceof Error && err.message
+          ? err.message
+          : 'Could not load profile — check your connection and try again.';
+        setProfileError(message);
       }
 
       setLoadingProfile(false);
@@ -190,6 +199,37 @@ export const ProfilePage = () => {
         <div
           className="w-16 h-16 rounded-full border-4 border-purple-500/30 border-t-purple-500"
         />
+      </div>
+    );
+  }
+
+  // Load failure (network / rate limit / server error). Distinct from
+  // "profile not found" below: we reached the API and it responded
+  // cleanly with no profile. Here we hit an exception before that.
+  if (profileError) {
+    return (
+      <div className="min-h-screen bg-[#0a0a0c] flex items-center justify-center p-8">
+        <div className="text-center max-w-md">
+          <div className="w-24 h-24 mx-auto mb-6 rounded-full bg-white/5 flex items-center justify-center">
+            <User className="w-12 h-12 text-white/20" />
+          </div>
+          <h1 className="text-2xl font-bold text-white mb-2">Couldn't load profile</h1>
+          <p className="text-white/50 mb-8">{profileError}</p>
+          <div className="flex gap-3 justify-center">
+            <button
+              onClick={() => window.location.reload()}
+              className="px-6 py-3 rounded-full bg-gradient-to-r from-purple-500 to-[#D4A053] text-white font-semibold"
+            >
+              Try again
+            </button>
+            <button
+              onClick={() => navigate('/')}
+              className="px-6 py-3 rounded-full bg-white/10 border border-white/15 text-white/80 font-semibold"
+            >
+              Go home
+            </button>
+          </div>
+        </div>
       </div>
     );
   }

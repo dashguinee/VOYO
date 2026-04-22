@@ -12,6 +12,7 @@ import { app } from '../../services/oyo';
 import { Track } from '../../types';
 import { getThumb } from '../../utils/thumbnail';
 import { vibeEngine, VIBES, Vibe as VibeDefinition, VibeTrack as EngineTrack } from '../../lib/vibeEngine';
+import { useBackGuard } from '../../hooks/useBackGuard';
 
 // Vibe category colors
 const CATEGORY_COLORS: Record<string, string> = {
@@ -93,6 +94,9 @@ export const VibesSection = ({ query, isVisible }: VibesSectionProps) => {
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
 
   const addToQueue = usePlayerStore(s => s.addToQueue);
+
+  // Back gesture peels the vibe detail view back to the grid.
+  useBackGuard(!!selectedVibe, () => setSelectedVibe(null), 'vibe-detail');
 
   // Get all vibes from vibeEngine, filtered by query
   const vibes = useMemo(() => {
