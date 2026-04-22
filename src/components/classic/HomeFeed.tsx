@@ -219,6 +219,10 @@ const ShelfWithRefresh = ({ title, onSeeAll, children }: ShelfWithRefreshProps) 
 interface CenterCarouselProps {
   tracks: Track[];
   onPlay: (track: Track) => void;
+  // Right-end "Discover more" pill turns into a tappable affordance
+  // when this callback is provided. Leaves the pill non-interactive
+  // if the callsite doesn't wire it (backwards-compatible).
+  onDiscover?: () => void;
 }
 
 // Scattered VOYO text for left end - arrow pattern (clean, no dot)
@@ -258,7 +262,7 @@ const PulsingCircle = () => (
 const CARD_W = 130;
 const CARD_GAP = 12;
 
-const CenterFocusedCarousel = ({ tracks, onPlay }: CenterCarouselProps) => {
+const CenterFocusedCarousel = ({ tracks, onPlay, onDiscover }: CenterCarouselProps) => {
   // Defensive: empty or malformed tracks → render nothing, never crash.
   // Memoised so array identity is stable across renders that don't touch
   // the source, avoiding downstream re-renders.
@@ -333,26 +337,47 @@ const CenterFocusedCarousel = ({ tracks, onPlay }: CenterCarouselProps) => {
       
         {scrollState === 'right-end' && (
           <div
-            className="absolute right-4 top-1/2 -translate-y-1/2 z-10 pointer-events-none"
+            className={`absolute right-4 top-1/2 -translate-y-1/2 z-10 ${onDiscover ? 'pointer-events-auto' : 'pointer-events-none'}`}
           >
             {/* Glass pill — Giraf's Activity-page duration-pill recipe
-                retuned to VOYO's purple accent. Stays non-interactive
-                (pointer-events-none on the parent): it's a visual cue for
-                "you've reached the end", not a second affordance. */}
-            <span
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-semibold tracking-wide whitespace-nowrap"
-              style={{
-                background: 'rgba(255,255,255,0.08)',
-                border: '1px solid rgba(196,181,253,0.20)',
-                color: 'rgba(196,181,253,0.92)',
-                backdropFilter: 'blur(10px) saturate(130%)',
-                WebkitBackdropFilter: 'blur(10px) saturate(130%)',
-                boxShadow: '0 6px 18px -6px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.08)',
-              }}
-            >
-              Discover more
-              <span aria-hidden="true" className="opacity-70">→</span>
-            </span>
+                retuned to VOYO's purple accent. Tappable when the parent
+                wires onDiscover (opens the search overlay on OYO's Picks
+                so the user has somewhere to go after hitting the rail's
+                right-end), otherwise stays a passive visual cue. */}
+            {onDiscover ? (
+              <button
+                type="button"
+                onClick={onDiscover}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-semibold tracking-wide whitespace-nowrap voyo-tap-scale voyo-hover-scale"
+                style={{
+                  background: 'rgba(255,255,255,0.08)',
+                  border: '1px solid rgba(196,181,253,0.20)',
+                  color: 'rgba(196,181,253,0.92)',
+                  backdropFilter: 'blur(10px) saturate(130%)',
+                  WebkitBackdropFilter: 'blur(10px) saturate(130%)',
+                  boxShadow: '0 6px 18px -6px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.08)',
+                }}
+                aria-label="Discover more — open search"
+              >
+                Discover more
+                <span aria-hidden="true" className="opacity-70">→</span>
+              </button>
+            ) : (
+              <span
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-semibold tracking-wide whitespace-nowrap"
+                style={{
+                  background: 'rgba(255,255,255,0.08)',
+                  border: '1px solid rgba(196,181,253,0.20)',
+                  color: 'rgba(196,181,253,0.92)',
+                  backdropFilter: 'blur(10px) saturate(130%)',
+                  WebkitBackdropFilter: 'blur(10px) saturate(130%)',
+                  boxShadow: '0 6px 18px -6px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.08)',
+                }}
+              >
+                Discover more
+                <span aria-hidden="true" className="opacity-70">→</span>
+              </span>
+            )}
           </div>
         )}
       
@@ -1935,7 +1960,7 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
             <h2 className="text-white font-semibold text-base">OYO's Picks</h2>
             <div className="h-[2px] w-6 rounded-full" style={{ background: '#8b5cf6', opacity: 0.6 }} />
           </div>
-          <Safe name="OyosPicks"><CenterFocusedCarousel tracks={oyosPicks} onPlay={playTrack} /></Safe>
+          <Safe name="OyosPicks"><CenterFocusedCarousel tracks={oyosPicks} onPlay={playTrack} onDiscover={onSearch} /></Safe>
         </div>
       )}
 
