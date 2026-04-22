@@ -814,7 +814,12 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
           pickedTitle: nextPlayable.track.title?.slice(0, 40),
           queueRemaining: rest.length,
         });
-        if (state.currentTrack && state.currentTime > 0) {
+        // Always record in history when advancing — even a rapid-skip
+        // (currentTime=0 because no timeupdate fired yet) counts as
+        // "seen" for exclusion purposes. The old `currentTime > 0` gate
+        // let rapid-skipped tracks re-surface in the discover pool
+        // seconds later, giving the feel of "same tracks on loop".
+        if (state.currentTrack) {
           get().addToHistory(state.currentTrack, state.currentTime);
         }
         // POOL ENGAGEMENT: Record play for next track
@@ -931,8 +936,11 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     const currentTrackId = state.currentTrack?.id || state.currentTrack?.trackId;
     const recentHistoryIds = new Set<string>();
 
-    // Add last 20 played tracks to exclusion (check both id and trackId)
-    state.history.slice(-20).forEach(h => {
+    // Add last 40 played tracks to exclusion (check both id and trackId).
+    // Bumped from 20 → 40: discover pool is ~50 tracks, and 20 left too
+    // much re-pick surface when users rapid-skipped — same tracks
+    // reappeared within a minute. 40 keeps 10+ fresh candidates.
+    state.history.slice(-40).forEach(h => {
       if (h.track?.id) recentHistoryIds.add(h.track.id);
       if (h.track?.trackId) recentHistoryIds.add(h.track.trackId);
     });
@@ -1022,7 +1030,9 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
         }
       }
 
-      if (state.currentTrack && state.currentTime > 0) {
+      // Same "record every advance" rule as the queue path — rapid
+      // skips were the reason identical tracks reappeared in discover.
+      if (state.currentTrack) {
         get().addToHistory(state.currentTrack, state.currentTime);
       }
       // POOL ENGAGEMENT: Record play for next track
@@ -1150,8 +1160,8 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     const currentTrackId = state.currentTrack?.id || state.currentTrack?.trackId;
     const recentHistoryIds = new Set<string>();
 
-    // Add last 20 played tracks to exclusion
-    state.history.slice(-20).forEach(h => {
+    // Add last 40 played tracks to exclusion (see note at primary site).
+    state.history.slice(-40).forEach(h => {
       if (h.track?.id) recentHistoryIds.add(h.track.id);
       if (h.track?.trackId) recentHistoryIds.add(h.track.trackId);
     });
@@ -1209,7 +1219,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     const excluded = new Set<string>();
 
     // Seed exclusion with history + current track (same as predictNextTrack)
-    state.history.slice(-20).forEach(h => {
+    state.history.slice(-40).forEach(h => {
       if (h.track?.id) excluded.add(h.track.id);
       if (h.track?.trackId) excluded.add(h.track.trackId);
     });
