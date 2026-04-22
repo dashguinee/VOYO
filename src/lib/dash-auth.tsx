@@ -25,6 +25,22 @@ type ProductCode = 'E' | 'DC' | 'V' | 'TV' | 'AMP' | 'AME' | 'DF' | 'DT' | 'DH' 
 // Storage key for session persistence
 const STORAGE_KEY = 'dash_citizen_storage';
 
+// Secondary key that utils/userHash.ts reads FIRST. Historically unwritten —
+// getUserHash's logged-in branch was dead code and every voyo_signals row
+// from a DASH-authed user was stamped with the anon device hash, breaking
+// cross-device taste. Written at every sign-in site below, cleared on
+// signOutDash. Shape matches getUserHash's parse:
+//   { account: { id: <coreId> } }
+const VOYO_ACCOUNT_KEY = 'voyo-account';
+function writeVoyoAccount(coreId: string): void {
+  try {
+    localStorage.setItem(VOYO_ACCOUNT_KEY, JSON.stringify({ account: { id: coreId } }));
+  } catch {
+    // ignore — quota / disabled storage; getUserHash will gracefully
+    // fall back to the anon device hash.
+  }
+}
+
 export interface DashUser {
   core_id: string;
   full_name: string;
@@ -90,6 +106,7 @@ export async function signInWithDashId(
       version: 0
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(storageData));
+    writeVoyoAccount(user.core_id);
 
     return { success: true, session };
   } catch (e) {
@@ -137,6 +154,9 @@ export function signOutDash(): void {
   try {
     // Simply remove the storage key - works for both nested and flat formats
     localStorage.removeItem(STORAGE_KEY);
+    // Drop the userHash logged-in hint so future signals fall back to the
+    // anon device hash. Matches writeVoyoAccount above.
+    localStorage.removeItem(VOYO_ACCOUNT_KEY);
   } catch {
     // Ignore
   }
@@ -369,6 +389,7 @@ export async function exchangeSSOToken(
       version: 0
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(storageData));
+    writeVoyoAccount(user.core_id);
 
     // Trigger re-render
     window.dispatchEvent(new StorageEvent('storage', {
@@ -414,6 +435,7 @@ export async function handleSSOCallback(): Promise<boolean> {
           version: 0
         };
         localStorage.setItem(STORAGE_KEY, JSON.stringify(storageData));
+        writeVoyoAccount(citizen.coreId);
 
         // Clean URL
         window.history.replaceState({}, '', window.location.pathname);

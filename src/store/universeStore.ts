@@ -347,6 +347,8 @@ export const useUniverseStore = create<UniverseStore>((set, get) => ({
     localStorage.removeItem(STORAGE_KEYS.username);
     localStorage.removeItem(STORAGE_KEYS.session);
     localStorage.removeItem(DASH_CITIZEN_KEY);
+    // Drop the userHash logged-in hint (C3) so signals fall back to anon.
+    localStorage.removeItem('voyo-account');
     set({
       isLoggedIn: false,
       currentUsername: null,
@@ -381,6 +383,16 @@ export const useUniverseStore = create<UniverseStore>((set, get) => ({
       if (citizen.coreId) {
         // Save FLAT to localStorage (matches Command Center format)
         localStorage.setItem(DASH_CITIZEN_KEY, JSON.stringify(citizen));
+        // C3: wire userHash's logged-in branch. utils/userHash.ts reads
+        // `voyo-account` first and returns parsed.account.id. Without this,
+        // every voyo_signals row from a DASH-authed user was stamped with
+        // the anon device hash, breaking cross-device taste.
+        try {
+          localStorage.setItem(
+            'voyo-account',
+            JSON.stringify({ account: { id: citizen.coreId } }),
+          );
+        } catch { /* ignore quota */ }
 
         // Update store
         set({
