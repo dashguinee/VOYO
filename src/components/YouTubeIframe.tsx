@@ -15,6 +15,7 @@ import { useEffect, useRef, useCallback, memo, useState, type Dispatch, type Set
 import { usePlayerStore } from '../store/playerStore';
 import { iframeBridge } from '../player/iframeBridge';
 import { markTrackAsFailed } from '../services/trackVerifier';
+import { logPlaybackEvent } from '../services/telemetry';
 import { devLog } from '../utils/logger';
 
 const YT_STATES = {
@@ -301,6 +302,17 @@ export const YouTubeIframe = memo(() => {
                 || (audioEl.duration > 0 && audioEl.currentTime / audioEl.duration > 0.98);
               if (audioFinished) {
                 devLog('[YouTubeIframe] ENDED watchdog — audio did not advance, forcing nextTrack');
+                logPlaybackEvent({
+                  event_type: 'trace',
+                  track_id: trackAtEnd,
+                  meta: {
+                    subtype: 'iframe_ended_watchdog_fired',
+                    audio_paused: audioEl?.paused ?? null,
+                    audio_ended: audioEl?.ended ?? null,
+                    audio_duration: audioEl?.duration ?? null,
+                    audio_current: audioEl?.currentTime ?? null,
+                  },
+                });
                 nextTrack();
               }
             }, 3000);
