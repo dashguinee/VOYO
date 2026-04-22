@@ -357,6 +357,14 @@ export function useHotSwap(
               event_type: 'trace', track_id: trackId,
               meta: { subtype: 'hotswap_rt_skip', rowStatus },
             });
+            // Extra guard for 'failed' — row is terminal, R2 will never
+            // land. Stop the poll loop now so we don't spam HEAD probes.
+            // 'done' needs no guard: poll will confirm within 2s and
+            // trigger the swap on the next tick.
+            if (rowStatus === 'failed' && pollRef.current) {
+              clearInterval(pollRef.current);
+              pollRef.current = null;
+            }
             return;
           }
         } catch { /* non-fatal, fall through to RT */ }
@@ -370,7 +378,25 @@ export function useHotSwap(
             event: 'UPDATE', schema: 'public', table: 'voyo_upload_queue',
             filter: `youtube_id=eq.${ytId}`,
           }, (payload: { new?: { status?: string } }) => {
-            if (payload.new?.status === 'done') trigger('realtime');
+            const next = payload.new?.status;
+            if (next === 'done') {
+              trigger('realtime');
+              return;
+            }
+            if (next === 'failed') {
+              // Extraction failed server-side — give up polling so we
+              // stop hitting the edge for a track that'll never land.
+              // iframe stays, audio continues, the user just won't get
+              // the R2 upgrade for this track.
+              logPlaybackEvent({
+                event_type: 'trace', track_id: trackId,
+                meta: { subtype: 'hotswap_rt_failed' },
+              });
+              if (pollRef.current) {
+                clearInterval(pollRef.current);
+                pollRef.current = null;
+              }
+            }
           })
           .subscribe((status: string) => {
             logPlaybackEvent({
@@ -387,6 +413,14 @@ export function useHotSwap(
     // Paused while the tab is hidden (BG battery saver): hot-swap visual
     // doesn't matter when there's no visible UI; the next foreground tick
     // re-arms the interval and catches any lane completion from the gap.
+    //
+    // MAX_POLL_ATTEMPTS stops the polling after ~2 min of 'has:false'
+    // hits. Before this cap, a server-side extraction failure caused
+    // the client to keep hitting r2HasTrack every 2s indefinitely —
+    // wasted network on a track that was never going to land. Once
+    // capped, the iframe continues playing (user hears audio) but we
+    // stop spamming HEAD probes for a terminal failure.
+    const MAX_POLL_ATTEMPTS = 60;
     const startPoll = () => {
       if (pollRef.current != null) return;
       let pollCount = 0;
@@ -401,6 +435,18 @@ export function useHotSwap(
           return;
         }
         pollCount++;
+        if (pollCount > MAX_POLL_ATTEMPTS) {
+          // Extraction likely failed or is unusually stuck. Bail
+          // silently — iframe stays on, user keeps hearing audio, we
+          // just stop wasting HEAD requests.
+          logPlaybackEvent({
+            event_type: 'trace', track_id: trackId,
+            meta: { subtype: 'hotswap_poll_cap', n: pollCount },
+          });
+          if (pollRef.current) clearInterval(pollRef.current);
+          pollRef.current = null;
+          return;
+        }
         const has = await r2HasTrack(trackId);
         // Heartbeat every 5 polls (~10s) so we can confirm the poll is
         // alive in production telemetry even when R2 never lands. Also
