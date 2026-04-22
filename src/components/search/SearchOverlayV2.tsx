@@ -8,6 +8,7 @@ import { Search, X, Music2, Clock, Play, Compass, Disc3, Radio, User } from 'luc
 import { OyeButton } from '../oye/OyeButton';
 import { VoyoIcon, VoyoIconName } from '../ui/VoyoIcon';
 import { VinylLoader } from '../ui/VinylLoader';
+import { DiscoExplainer } from '../ui/DiscoExplainer';
 import { usePlayerStore } from '../../store/playerStore';
 import { app } from '../../services/oyo';
 import { Track } from '../../types';
@@ -55,6 +56,9 @@ interface TrackItemProps {
   // + syncs collective brain before the oyeCommit fires.
   onOye: (track: Track) => void;
   onAddToDiscovery: (result: SearchResult) => void;
+  // Opens the DiscoExplainer overlay. Lifted to the parent so only one
+  // overlay exists at a time no matter how many results render.
+  onDiscoBadgeTap: () => void;
   formatDuration: (seconds: number) => string;
   formatViews: (views: number) => string;
 }
@@ -68,6 +72,7 @@ const TrackItem = memo(({
   onSelect,
   onOye,
   onAddToDiscovery,
+  onDiscoBadgeTap,
   formatDuration,
   formatViews,
 }: TrackItemProps) => {
@@ -106,21 +111,25 @@ const TrackItem = memo(({
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1.5">
           <h4 className="text-white/90 font-medium truncate text-sm">{result.title}</h4>
-          {/* R2-cached marker — track plays instantly + survives BG lockscreen.
-              Bronze-gold dot, tooltip explains. Letterspaced so it doesn't crowd. */}
+          {/* Disco badge — bronze-gold pill on cached tracks. Tappable:
+              opens DiscoExplainer with the "play instantly + tap Oye to
+              cook" briefing. e.stopPropagation prevents bubbling into the
+              row's play-on-tap handler. */}
           {isCached && (
-            <span
-              className="flex-shrink-0 text-[9px] font-bold tracking-[0.12em] uppercase px-1.5 py-[1px] rounded-md"
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onDiscoBadgeTap(); }}
+              className="flex-shrink-0 text-[9px] font-bold tracking-[0.12em] uppercase px-1.5 py-[1px] rounded-md voyo-tap-scale"
               style={{
                 color: 'rgba(232,208,158,0.95)',
                 background: 'rgba(212,175,110,0.14)',
                 border: '1px solid rgba(212,175,110,0.30)',
                 boxShadow: '0 0 8px -2px rgba(212,175,110,0.35)',
               }}
-              title="In Disco — plays instantly, survives lockscreen"
+              aria-label="What is Disco?"
             >
               ✦ DISCO
-            </span>
+            </button>
           )}
         </div>
         <p className="text-white/40 text-xs truncate">{result.artist}</p>
@@ -183,6 +192,10 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap, onEnterVideoMode
 
   // Toast feedback for queue/discovery actions
   const [toast, setToast] = useState<{ text: string; type: 'queue' | 'discovery' } | null>(null);
+
+  // DiscoExplainer — opened by tapping the ✦ DISCO badge on cached results.
+  // Single instance in the overlay; each TrackItem just fires the open callback.
+  const [discoExplainerOpen, setDiscoExplainerOpen] = useState(false);
 
   const inputRef = useRef<HTMLInputElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -820,6 +833,7 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap, onEnterVideoMode
                           onSelect={handleSelectTrack}
                           onOye={handleOyeCommit}
                           onAddToDiscovery={handleAddToDiscovery}
+                          onDiscoBadgeTap={() => setDiscoExplainerOpen(true)}
                           formatDuration={formatDuration}
                           formatViews={formatViews}
                         />
@@ -900,6 +914,9 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap, onEnterVideoMode
           </>
         </>
       )}
+
+      {/* Disco explainer — mounted once, opened from any ✦ DISCO badge tap */}
+      <DiscoExplainer open={discoExplainerOpen} onClose={() => setDiscoExplainerOpen(false)} />
     </>
   );
 };

@@ -21,6 +21,7 @@ import { SmartImage } from '../ui/SmartImage';
 import { Track } from '../../types';
 import { PlaylistModal } from '../playlist/PlaylistModal';
 import { OyeButton } from '../oye/OyeButton';
+import { DiscoExplainer } from '../ui/DiscoExplainer';
 
 // Base filter tabs — VOYO Disco DNA palette: bronze-gold for active states,
 // platform purple as accent. Consistent with Search overlay tabs (v161+).
@@ -169,6 +170,8 @@ export const Library = ({ onTrackClick }: LibraryProps) => {
   const [activeFilter, setActiveFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [playlistModalTrack, setPlaylistModalTrack] = useState<Track | null>(null);
+  // DiscoExplainer — triggered from the "My Disco" heading.
+  const [discoExplainerOpen, setDiscoExplainerOpen] = useState(false);
   const queue = usePlayerStore(s => s.queue);
   const history = usePlayerStore(s => s.history);
   const playlists = usePlaylistStore(s => s.playlists);
@@ -363,13 +366,23 @@ export const Library = ({ onTrackClick }: LibraryProps) => {
         className="px-4 pt-5 pb-2"
         style={{ opacity: headerOpacity, transition: 'opacity 220ms ease' }}
       >
-        <h1
-          className="text-3xl font-display font-bold tracking-tight"
-          style={{ color: 'rgba(232, 208, 158, 0.96)', textShadow: '0 0 18px rgba(212,175,110,0.20)', letterSpacing: '-0.01em' }}
+        {/* Tappable: opens DiscoExplainer. Rendered as a button so
+            assistive tech + keyboard users reach the same briefing.
+            Visual styling unchanged. */}
+        <button
+          type="button"
+          onClick={() => setDiscoExplainerOpen(true)}
+          className="text-left voyo-tap-scale"
+          aria-label="What is Disco?"
         >
-          My Disco
-        </h1>
-        <p className="text-white/35 text-[12px] mt-1 tracking-wide">your sound, your selection</p>
+          <h1
+            className="text-3xl font-display font-bold tracking-tight"
+            style={{ color: 'rgba(232, 208, 158, 0.96)', textShadow: '0 0 18px rgba(212,175,110,0.20)', letterSpacing: '-0.01em' }}
+          >
+            My Disco
+          </h1>
+          <p className="text-white/35 text-[12px] mt-1 tracking-wide">your sound, your selection</p>
+        </button>
       </header>
 
       {/* Search bar + filter tabs — block slides from top to bottom (thumb zone)
@@ -544,6 +557,9 @@ export const Library = ({ onTrackClick }: LibraryProps) => {
           trackTitle={playlistModalTrack.title}
         />
       )}
+
+      {/* Disco explainer — triggered by tapping the "My Disco" heading */}
+      <DiscoExplainer open={discoExplainerOpen} onClose={() => setDiscoExplainerOpen(false)} />
     </div>
   );
 };

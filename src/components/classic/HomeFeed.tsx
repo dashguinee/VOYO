@@ -335,11 +335,24 @@ const CenterFocusedCarousel = ({ tracks, onPlay }: CenterCarouselProps) => {
           <div
             className="absolute right-4 top-1/2 -translate-y-1/2 z-10 pointer-events-none"
           >
-            <p
-              className="text-[10px] text-purple-400/60 font-medium whitespace-nowrap"
+            {/* Glass pill — Giraf's Activity-page duration-pill recipe
+                retuned to VOYO's purple accent. Stays non-interactive
+                (pointer-events-none on the parent): it's a visual cue for
+                "you've reached the end", not a second affordance. */}
+            <span
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-semibold tracking-wide whitespace-nowrap"
+              style={{
+                background: 'rgba(255,255,255,0.08)',
+                border: '1px solid rgba(196,181,253,0.20)',
+                color: 'rgba(196,181,253,0.92)',
+                backdropFilter: 'blur(10px) saturate(130%)',
+                WebkitBackdropFilter: 'blur(10px) saturate(130%)',
+                boxShadow: '0 6px 18px -6px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.08)',
+              }}
             >
               Discover more
-            </p>
+              <span aria-hidden="true" className="opacity-70">→</span>
+            </span>
           </div>
         )}
       

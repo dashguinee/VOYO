@@ -34,7 +34,7 @@ import { getYouTubeId } from '../../utils/voyoId';
 import type { Track } from '../../types';
 
 export type OyeButtonSize = 'sm' | 'md' | 'lg';
-export type OyeVisualState = 'purple-faded' | 'bubbling' | 'gold-faded' | 'gold-filled';
+export type OyeVisualState = 'grey-faded' | 'bubbling' | 'gold-faded' | 'gold-filled';
 
 const SIZE_MAP: Record<OyeButtonSize, { px: number; icon: number }> = {
   sm: { px: 28, icon: 14 },
@@ -53,18 +53,19 @@ const STYLE_BY_STATE: Record<OyeVisualState, {
    *  draws its own brighter pulsing ring) and gold-filled (already glows). */
   ring: string | 'none';
 }> = {
-  'purple-faded': {
-    // Glass idle — dark translucent base (matches BoostButton's
-    // rgba(28,28,35,0.65) aesthetic) with a subtle purple border hint.
-    // Reads as "asleep but alive" — user sees something there that
-    // invites a tap, without shouting.
-    background: 'rgba(28, 28, 35, 0.55)',
-    border: '1px solid rgba(139, 92, 246, 0.30)',
-    iconColor: 'rgba(196, 181, 253, 0.55)',
+  'grey-faded': {
+    // Neutral grey glass — the "not in your disco" state. Chromatic-
+    // free on purpose: the ONLY gold in the narralogy is disco presence,
+    // so a cold track has to read as absent-of-gold, not a different
+    // colour of Oye. White alpha over dark glass = quiet, inactive,
+    // obviously tappable without shouting.
+    background: 'rgba(255, 255, 255, 0.06)',
+    border: '1px solid rgba(255, 255, 255, 0.12)',
+    iconColor: 'rgba(255, 255, 255, 0.40)',
     iconFill: 'none',
     boxShadow: 'none',
     animation: 'none',
-    ring: '1px solid rgba(196, 181, 253, 0.15)',
+    ring: '1px solid rgba(255, 255, 255, 0.08)',
   },
   'bubbling': {
     background: 'rgba(139, 92, 246, 0.25)',
@@ -82,7 +83,7 @@ const STYLE_BY_STATE: Record<OyeVisualState, {
     ring: 'none',
   },
   'gold-faded': {
-    // Same glass base as purple-faded — the gold accent only lives on the
+    // Same glass base as grey-faded — the gold accent only lives on the
     // border + icon + ring, so the dark translucent surface stays
     // consistent across states. Narralogy: cold idle → bubbling → glass
     // arrives in gold → tap fills it.
@@ -137,7 +138,7 @@ export function computeOyeState(
   // In disco but no explicit commitment yet — e.g. auto-cached via play.
   if (downloadStatus === 'complete') return 'gold-faded';
   // Cold — "needs to Oye".
-  return 'purple-faded';
+  return 'grey-faded';
 }
 
 interface OyeButtonProps {
@@ -166,7 +167,7 @@ export const OyeButton = memo(({ track, size = 'md', escape = true, className = 
   // CRITICAL: downloadStore keys its entries by the *decoded* YouTube id
   // (see downloadStore.boostTrack -> decodeVoyoId). If we look up with a
   // raw VOYO id (vyo_<base64>), the hit always misses and the button stays
-  // stuck in purple-faded even while the track is actively downloading.
+  // stuck in grey-faded even while the track is actively downloading.
   // Normalise here — same function boostTrack uses internally.
   const download = useDownloadStore(s => s.downloads.get(getYouTubeId(track.trackId)));
   const preference = usePreferenceStore(s => s.trackPreferences[track.id]);
@@ -252,12 +253,12 @@ export const OyeButton = memo(({ track, size = 'md', escape = true, className = 
     state === 'gold-filled' ? 'Oye\'d — already committed'
     : state === 'bubbling' ? 'Cooking — will finish soon'
     : state === 'gold-faded' ? 'Oye this track'
-    : 'Oye — warm it up and carry Oyo offline';
+    : 'Oye — not in your disco yet, tap to cook';
 
   // Sequential "ring → bubble" choreography (never overlap):
   //
   //   Phase 1 — IDLE at rest:
-  //     State is purple-faded or gold-faded, not charging. Ring spins
+  //     State is grey-faded or gold-faded, not charging. Ring spins
   //     slowly + faintly in the state's accent color (purple or gold).
   //     Low-key ambient electricity.
   //
@@ -280,9 +281,18 @@ export const OyeButton = memo(({ track, size = 'md', escape = true, className = 
   const isBubblingState = state === 'bubbling';
   const showRing = state !== 'gold-filled' && (!isBubblingState || isCharging);
   const runBubble = isBubblingState && !isCharging;
+  // Ring accent tracks the state's dominant colour so the lightning arc
+  // matches the button's identity at rest. Gold in disco, white for cold
+  // (no purple hint in the cold state — the Oye button is never "purple
+  // at rest" anymore), purple reserved for the charge/bubble phase.
   const isGoldAccent = state === 'gold-faded';
-  const ringAccent = isGoldAccent ? 'rgba(212,160,83,0.85)' : 'rgba(196,181,253,0.85)';
-  const ringFaint  = isGoldAccent ? 'rgba(212,160,83,0.15)' : 'rgba(196,181,253,0.12)';
+  const isGreyAccent = state === 'grey-faded' && !isCharging;
+  const ringAccent = isGoldAccent ? 'rgba(212,160,83,0.85)'
+    : isGreyAccent ? 'rgba(255,255,255,0.55)'
+    : 'rgba(196,181,253,0.85)';
+  const ringFaint  = isGoldAccent ? 'rgba(212,160,83,0.15)'
+    : isGreyAccent ? 'rgba(255,255,255,0.10)'
+    : 'rgba(196,181,253,0.12)';
   const ringDuration = isCharging ? '0.5s' : '4.5s';
   const ringOpacity  = isCharging ? 0.95 : 0.55;
   // Ring thickness scales with button size so the conic segments stay
