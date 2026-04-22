@@ -5,38 +5,53 @@ interface BeforeInstallPromptEvent extends Event {
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
 }
 
+export type Platform = 'ios' | 'android' | 'desktop' | 'unknown';
+
+// iOS Safari never fires beforeinstallprompt — the only path to install is the
+// system Share sheet → "Add to Home Screen". We still want to surface the UX,
+// so the hook flags the platform and lets the UI render iOS-specific guidance.
+function detectPlatform(): Platform {
+  if (typeof navigator === 'undefined') return 'unknown';
+  const ua = navigator.userAgent;
+  const isIOS = /iPad|iPhone|iPod/.test(ua) && !(window as unknown as { MSStream?: unknown }).MSStream;
+  if (isIOS) return 'ios';
+  if (/Android/i.test(ua)) return 'android';
+  return 'desktop';
+}
+
+function isStandaloneDisplay(): boolean {
+  if (typeof window === 'undefined') return false;
+  return window.matchMedia('(display-mode: standalone)').matches ||
+         (navigator as unknown as { standalone?: boolean }).standalone === true;
+}
+
 export function usePWA() {
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [isInstallable, setIsInstallable] = useState(false);
   const [isInstalled, setIsInstalled] = useState(false);
+  const [platform, setPlatform] = useState<Platform>('unknown');
 
   useEffect(() => {
-    // Register service worker
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/service-worker.js', {
-        updateViaCache: 'none'
-      }).catch(() => {
-        // Silent fail - SW not critical for app function
-      });
-    }
+    const p = detectPlatform();
+    setPlatform(p);
 
-    // Check if already installed
-    const isStandalone = window.matchMedia('(display-mode: standalone)').matches ||
-                         (navigator as any).standalone === true;
-
-    if (isStandalone) {
+    if (isStandaloneDisplay()) {
       setIsInstalled(true);
       return;
     }
 
-    // Listen for install prompt
+    // iOS has no native prompt — treat as installable so UI can render the
+    // Share-sheet instructions. UI branches on platform === 'ios'.
+    if (p === 'ios') {
+      setIsInstallable(true);
+    }
+
     const handleBeforeInstall = (e: Event) => {
       e.preventDefault();
       setDeferredPrompt(e as BeforeInstallPromptEvent);
       setIsInstallable(true);
     };
 
-    // Listen for successful install
     const handleAppInstalled = () => {
       setIsInstalled(true);
       setIsInstallable(false);
@@ -74,6 +89,8 @@ export function usePWA() {
   return {
     isInstallable,
     isInstalled,
-    install
+    install,
+    platform,
+    hasNativePrompt: deferredPrompt !== null,
   };
 }

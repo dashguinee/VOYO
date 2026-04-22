@@ -5,6 +5,14 @@ import './index.css'
 import App from './App.tsx'
 import { ProfilePage } from './components/profile/ProfilePage'
 
+// ── PWA rotation safety net ──
+// Manifest sets "orientation": "any" and no code locks orientation today,
+// but a stale WebAPK (built when the manifest was "portrait") can keep the
+// installed PWA locked until Chrome rebuilds it. Calling unlock() on boot
+// makes runtime rotation work immediately — some engines throw
+// NotSupportedError unless in fullscreen, so we swallow.
+try { (screen.orientation as { unlock?: () => void } | undefined)?.unlock?.(); } catch { /* expected on iOS / non-fullscreen */ }
+
 // ── Service worker auto-update wiring (ported from Tivi+) ──
 // Register the SW with `updateViaCache: 'none'` so the browser always
 // refetches sw.js (not the cached version). Schedule reg.update() every

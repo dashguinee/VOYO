@@ -24,6 +24,7 @@ import { LowBatteryEffect } from './components/atmosphere/LowBatteryEffect';
 import { initBatteryMonitor } from './services/battery';
 import { YouTubeIframe } from './components/YouTubeIframe';
 import { InstallButton } from './components/ui/InstallButton';
+import { InstallBanner } from './components/ui/InstallBanner';
 import { OfflineIndicator } from './components/ui/OfflineIndicator';
 import { DynamicIsland } from './components/ui/DynamicIsland';
 import { PushBell } from './components/ui/PushBell';
@@ -1103,8 +1104,12 @@ function App() {
       {/* Universe Panel - Full Profile/Settings/Login/Backup */}
       <UniversePanel isOpen={isProfileOpen} onClose={() => setIsProfileOpen(false)} />
 
-      {/* PWA Install Button - Subtle, bottom right */}
+      {/* PWA Install — bottom-right pill (always visible when installable) +
+          top banner (auto-shows once, 6s after boot, 14-day dismissal cooldown).
+          Both branch on platform: iOS Safari opens Share-sheet instructions
+          because beforeinstallprompt never fires there. */}
       <InstallButton />
+      <InstallBanner />
 
       {/* Offline Indicator - Shows when network is lost */}
       <OfflineIndicator />

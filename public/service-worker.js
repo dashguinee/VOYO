@@ -4,7 +4,7 @@
  * BACKGROUND PLAYBACK: Enhanced to cache audio streams
  */
 
-const CACHE_NAME = 'voyo-v121';
+const CACHE_NAME = 'voyo-v122';
 const AUDIO_CACHE_NAME = 'voyo-audio-v2';
 const STATIC_ASSETS = [
   '/',
@@ -135,6 +135,13 @@ self.addEventListener('fetch', (event) => {
   // never fires the update prompt. `return` without respondWith → default
   // browser fetch, which bypasses the SW cache layer.
   if (event.request.url.includes('/version.json')) return;
+
+  // Skip manifest.json too — Android Chrome reads orientation/display/etc
+  // from it when updating the installed WebAPK. A stale cached manifest
+  // (e.g. from a legacy build that had "orientation": "portrait") keeps
+  // the PWA locked even after the source manifest is fixed. Network-only
+  // here guarantees Chrome's periodic WebAPK refresh sees the live value.
+  if (event.request.url.includes('/manifest.json')) return;
 
   // Skip Vite dev server resources (HMR, react-refresh, etc.)
   if (event.request.url.includes('@vite') ||
