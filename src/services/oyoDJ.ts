@@ -948,14 +948,28 @@ export function getInsights(): {
 // so making favoriteArtists persist makes the entire hot-shelf sort
 // persist across sessions.
 
+// Weights must match the action strings that ACTUALLY land in voyo_signals.
+// Verified emit sites (2026-04-22):
+//   love     ← trackPoolStore.recordReaction → centralSignals.love (OYE gesture)
+//              + playerStore.addReaction → record_signal RPC 'love'
+//   react    ← oyo/index.ts onOye → recordRemoteSignal → record_signal RPC 'react'
+//              (paired with the 'love' row above — both land for one OYE tap)
+//   complete ← centralSignals.complete (≥80% playback) + record_signal RPC 'complete'
+//   queue    ← trackPoolStore.recordQueue → centralSignals.queue
+//   play     ← trackPoolStore.recordPlay → centralSignals.play
+//   skip     ← centralSignals.skip + record_signal RPC 'skip'
+//
+// Previously had `oye: 4` and `unlove: -3` — neither is ever emitted
+// (centralDJ.SignalData.action union doesn't include 'oye', and no code
+// path calls centralSignals.unlove or record_signal with 'unlove'). They
+// were dead weights. `react: 4` replaces the unreachable `oye: 4`.
 const SIGNAL_WEIGHTS: Record<string, number> = {
   love: 5,
+  react: 4,
   complete: 3,
   queue: 2,
   play: 1,
   skip: -2,
-  unlove: -3,
-  oye: 4,
 };
 
 let hydrateDone = false;
