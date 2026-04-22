@@ -301,8 +301,11 @@ export const useTrackPoolStore = create<TrackPoolStore>()(
           ),
         }));
 
-        // FLYWHEEL: Love signal to Central DJ
-        centralSignals.love(trackId).catch(() => {});
+        // Local-only. The canonical voyo_signals row (action='react') is
+        // written exactly once per OYE gesture by services/oyo/index.ts
+        // (onOye → recordRemoteSignal). This function is invoked from
+        // multiple call sites (reactionStore, preferenceStore, personalization)
+        // and firing centralSignals.love here caused 2-3x duplication per tap.
       },
 
       recordQueue: (trackId) => {

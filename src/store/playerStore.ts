@@ -53,10 +53,6 @@ type PrefetchStatus = 'idle' | 'loading' | 'ready' | 'error';
 // AbortController for cancelling async operations on rapid track changes
 let currentTrackAbortController: AbortController | null = null;
 
-// Circuit breaker: if record_signal RPC returns 401/403 (not accessible to anon),
-// stop firing requests — each failed fetch appears as red in Chrome console.
-let _rpcSignalBlocked = false;
-
 // Dedup trackers for setCurrentTime persistence — see setCurrentTime impl
 let _lastPersistedSec = -1;
 let _lastPortalSyncSec = -1;
@@ -1688,15 +1684,12 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
         usePreferenceStore.getState().recordReaction(currentTrack.id);
       });
 
-      // POOL ENGAGEMENT: Record reaction (strong positive signal)
+      // POOL ENGAGEMENT: Record reaction (strong positive signal) — local
+      // pool bookkeeping only. The canonical voyo_signals row (action='react')
+      // is written once per OYE gesture by services/oyo/index.ts (onOye →
+      // recordRemoteSignal). Previously an inline record_signal('love') RPC
+      // fired here too, producing a 3rd taste-graph row per tap (C1 fix).
       recordPoolEngagement(currentTrack.id, 'react');
-      // GLOBAL SIGNAL: persist love to video_intelligence
-      if (!_rpcSignalBlocked) import('../lib/supabase').then(async ({ supabase }) => {
-        try {
-          const r = await supabase?.rpc('record_signal', { p_youtube_id: currentTrack.trackId, p_action: 'love' });
-          if ((r as any)?.error?.status === 401 || (r as any)?.error?.code === '42501') _rpcSignalBlocked = true;
-        } catch {}
-      });
 
       // 🔥 OYE = AUTO-BOOST: When user OYEs a track, cache it for offline
       // This is the signature VOYO feature - love it? Keep it forever.

@@ -13,7 +13,6 @@
 
 import { create } from 'zustand';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
-import { useTrackPoolStore } from './trackPoolStore';
 import { onTrackReaction as oyoOnTrackReaction } from '../services/oyoDJ';
 import { devLog, devWarn } from '../utils/logger';
 import type { Track } from '../types';
@@ -218,8 +217,11 @@ export const useReactionStore = create<ReactionStore>((set, get) => ({
       if (trackPosition !== undefined) {
         get().computeHotspots(trackId);
       }
-      // BOOST TRACK SCORE IN POOL - Reactions are strong engagement signals!
-      useTrackPoolStore.getState().recordReaction(trackId);
+      // NOTE: Pool reactionCount + voyo_signals row are written by the
+      // canonical OYE path (services/oyo/app.ts oye() → onOye() →
+      // recordPoolEngagement('react') + recordRemoteSignal('react')).
+      // Firing useTrackPoolStore.recordReaction here duplicated the local
+      // pool bump 2x per tap (C1 fix).
       // FEED THE BRAIN — OYO DJ learns favorite artists from reactions.
       // Without this wire, oyoDJ.getInsights().favoriteArtists stays empty
       // and the playerStore.refreshRecommendations boost is a no-op.
@@ -230,7 +232,7 @@ export const useReactionStore = create<ReactionStore>((set, get) => ({
         artist: trackArtist,
         coverUrl: trackThumbnail,
       } as Track);
-      devLog(`[Reactions] Boosted pool score + fed OYO DJ for ${trackId}`);
+      devLog(`[Reactions] Fed OYO DJ for ${trackId}`);
       return true;
     }
 
@@ -263,8 +265,9 @@ export const useReactionStore = create<ReactionStore>((set, get) => ({
       if (trackPosition !== undefined) {
         get().computeHotspots(trackId);
       }
-      // BOOST TRACK SCORE IN POOL - Reactions are strong engagement signals!
-      useTrackPoolStore.getState().recordReaction(trackId);
+      // NOTE: Pool reactionCount + voyo_signals row handled by the canonical
+      // onOye() fanout (oyo/index.ts). See matching note in the offline
+      // branch above (C1 consolidation).
       // FEED THE BRAIN — OYO DJ learns favorite artists from reactions.
       void oyoOnTrackReaction({
         id: trackId,
@@ -273,7 +276,7 @@ export const useReactionStore = create<ReactionStore>((set, get) => ({
         artist: trackArtist,
         coverUrl: trackThumbnail,
       } as Track);
-      devLog(`[Reactions] Boosted pool score + fed OYO DJ for ${trackId}`);
+      devLog(`[Reactions] Fed OYO DJ for ${trackId}`);
       return true;
     } catch (err: any) {
       const s = err?.status || err?.response?.status;

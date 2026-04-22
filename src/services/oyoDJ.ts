@@ -949,23 +949,24 @@ export function getInsights(): {
 // persist across sessions.
 
 // Weights must match the action strings that ACTUALLY land in voyo_signals.
-// Verified emit sites (2026-04-22):
-//   love     ← trackPoolStore.recordReaction → centralSignals.love (OYE gesture)
-//              + playerStore.addReaction → record_signal RPC 'love'
+// Verified emit sites (Wave C consolidation, 2026-04-22):
 //   react    ← oyo/index.ts onOye → recordRemoteSignal → record_signal RPC 'react'
-//              (paired with the 'love' row above — both land for one OYE tap)
+//              (canonical OYE gesture — exactly ONE row per tap)
 //   complete ← centralSignals.complete (≥80% playback) + record_signal RPC 'complete'
 //   queue    ← trackPoolStore.recordQueue → centralSignals.queue
 //   play     ← trackPoolStore.recordPlay → centralSignals.play
 //   skip     ← centralSignals.skip + record_signal RPC 'skip'
 //
-// Previously had `oye: 4` and `unlove: -3` — neither is ever emitted
-// (centralDJ.SignalData.action union doesn't include 'oye', and no code
-// path calls centralSignals.unlove or record_signal with 'unlove'). They
-// were dead weights. `react: 4` replaces the unreachable `oye: 4`.
+// Historical:
+//   `love: 5` (pre-Wave-C) was emitted 2x by trackPoolStore.recordReaction
+//     (called from both reactionStore + onOye fanout) plus a 3rd time from
+//     playerStore.addReaction's inline RPC. Wave C stripped all three sites;
+//     `react` is the single canonical action and retains the +5 weight the
+//     OYE gesture deserves (bumped from 4 to 5 now that it's no longer
+//     paired with love).
+//   `oye: 4` + `unlove: -3` were never emitted — dead weights, removed.
 const SIGNAL_WEIGHTS: Record<string, number> = {
-  love: 5,
-  react: 4,
+  react: 5,
   complete: 3,
   queue: 2,
   play: 1,
