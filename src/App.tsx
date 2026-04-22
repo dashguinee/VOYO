@@ -164,6 +164,34 @@ class AppErrorBoundary extends Component<{ children: ReactNode }, ErrorBoundaryS
 
   componentDidCatch(error: Error, info: ErrorInfo) {
     console.error('[VOYO] Render crash caught by ErrorBoundary:', error, info.componentStack);
+    // ChunkLoadError isn't a real crash — it's a flaky-network symptom.
+    // On Guinea / SL LTE, bumping the counter for these would trivially
+    // hit the 3-strike threshold and trigger a NUKE that then has to
+    // re-download the whole app over the same flaky link. So: classify
+    // the error first. For chunk-load errors, try ONE soft reload (no
+    // cache wipe, no counter bump). If that also fails we'll land here
+    // again and the retry flag will be consumed → bump normally.
+    const msg = error?.message || '';
+    const isChunkError =
+      error?.name === 'ChunkLoadError' ||
+      /loading chunk|dynamically imported module|failed to fetch dynamically imported module/i.test(msg);
+    if (isChunkError) {
+      const RETRY_FLAG = 'voyo-chunk-retry-v1';
+      const alreadyRetried = sessionStorage.getItem(RETRY_FLAG) === '1';
+      if (!alreadyRetried) {
+        try { sessionStorage.setItem(RETRY_FLAG, '1'); } catch {}
+        // Soft reload only — preserve caches so the retry uses whatever
+        // we already have locally. Small delay lets the error UI paint
+        // briefly so the user sees a signal, not a white-flash loop.
+        setTimeout(() => { try { window.location.reload(); } catch {} }, 1200);
+        void info;
+        return;
+      }
+      // Retried once and still chunk-failing — fall through to normal
+      // counter bump. Clear the retry flag so a successful boot later
+      // doesn't keep suppressing future bumps on real crashes.
+      try { sessionStorage.removeItem(RETRY_FLAG); } catch {}
+    }
     // v354: NO auto-reload. Previous auto-reload-on-crash was escalating
     // repeatable crashes into a full lock-out loop (spinner → reload →
     // crash → spinner → … → nuke → reload → crash again). User controls
@@ -496,6 +524,9 @@ function App() {
   useEffect(() => {
     markBootOk();
     clearCrashCounter();
+    // Successful boot — clear the chunk-retry flag so a future transient
+    // chunk-load error gets a fresh single-retry budget.
+    try { sessionStorage.removeItem('voyo-chunk-retry-v1'); } catch {}
   }, []);
 
   // MOBILE FIX: Setup audio unlock on app mount
