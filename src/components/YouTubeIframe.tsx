@@ -292,14 +292,34 @@ export const YouTubeIframe = memo(() => {
               return;
             }
             const trackAtEnd = store.currentTrack?.trackId ?? null;
+            // Snapshot audio state at the moment iframe ENDED fires. The
+            // watchdog only force-advances if audio has meaningfully
+            // progressed PAST this snapshot (i.e. it actually played to
+            // its own end) — a brand-new near-end audio element freshly
+            // hot-swapped in at 97% will otherwise trigger a false
+            // positive on the currentTime/duration > 0.98 guard and skip
+            // the user past a track they were about to finish.
+            const audioElAtEnd = document.querySelector('audio');
+            const currentTimeAtIframeEnd = audioElAtEnd?.currentTime ?? 0;
+            const durationAtIframeEnd = audioElAtEnd?.duration ?? 0;
+            const MIN_AUDIO_ADVANCE_S = 2;
             setTimeout(() => {
               const now = usePlayerStore.getState().currentTrack?.trackId ?? null;
               if (!now || now !== trackAtEnd) return; // audio already advanced
               const audioEl = document.querySelector('audio');
-              const audioFinished = !audioEl
-                || audioEl.paused
-                || audioEl.ended
-                || (audioEl.duration > 0 && audioEl.currentTime / audioEl.duration > 0.98);
+              // Paused / ended / no element => audio is truly done: force advance.
+              const audioHalted = !audioEl || audioEl.paused || audioEl.ended;
+              // Otherwise only fire if the audio element has played meaningfully
+              // past where it was at iframe-end AND is near its own end. This
+              // distinguishes "played to its end naturally" (advance by >=2s
+              // since the snapshot) from "started near end due to a
+              // position-matched hotswap" (little-to-no advance).
+              const advanced = audioEl
+                ? (audioEl.currentTime - currentTimeAtIframeEnd) >= MIN_AUDIO_ADVANCE_S
+                : false;
+              const nearEnd = !!audioEl && audioEl.duration > 0
+                && audioEl.currentTime / audioEl.duration > 0.98;
+              const audioFinished = audioHalted || (advanced && nearEnd);
               if (audioFinished) {
                 devLog('[YouTubeIframe] ENDED watchdog — audio did not advance, forcing nextTrack');
                 logPlaybackEvent({
@@ -311,9 +331,31 @@ export const YouTubeIframe = memo(() => {
                     audio_ended: audioEl?.ended ?? null,
                     audio_duration: audioEl?.duration ?? null,
                     audio_current: audioEl?.currentTime ?? null,
+                    current_at_iframe_end: currentTimeAtIframeEnd,
+                    duration_at_iframe_end: durationAtIframeEnd,
+                    advanced_s: audioEl
+                      ? audioEl.currentTime - currentTimeAtIframeEnd
+                      : null,
                   },
                 });
                 nextTrack();
+              } else {
+                // Benign stale ENDED (e.g. iframe ran out while hot-swap
+                // left audio starting near-end). Log so telemetry can
+                // measure how often we prevent the false positive.
+                logPlaybackEvent({
+                  event_type: 'trace',
+                  track_id: trackAtEnd,
+                  meta: {
+                    subtype: 'iframe_ended_watchdog_suppressed',
+                    audio_paused: audioEl?.paused ?? null,
+                    audio_current: audioEl?.currentTime ?? null,
+                    current_at_iframe_end: currentTimeAtIframeEnd,
+                    advanced_s: audioEl
+                      ? audioEl.currentTime - currentTimeAtIframeEnd
+                      : null,
+                  },
+                });
               }
             }, 3000);
           }
