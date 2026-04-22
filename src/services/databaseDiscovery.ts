@@ -125,7 +125,12 @@ function searchResultToTrack(r: { voyoId: string; title: string; artist: string;
 }
 
 /**
- * Get user's played track IDs from localStorage
+ * Get user's played track IDs from localStorage.
+ *
+ * NOTE: playerStore persists via a flat savePersistedState() write at key
+ * 'voyo-player-state' — NOT a zustand-persist `{state, version}` wrapper.
+ * History items carry `trackId` (string), not `id`. Reading the wrong shape
+ * silently returns [] and kills history-exclusion in discovery + familiar.
  */
 function getPlayedTrackIds(): string[] {
   try {
@@ -133,9 +138,14 @@ function getPlayedTrackIds(): string[] {
     if (!stored) return [];
 
     const state = JSON.parse(stored);
-    const history = state?.state?.history || [];
+    // Flat shape (current): state.history
+    // Legacy/defensive: state.state.history (in case anything ever wraps it)
+    const history = state?.history ?? state?.state?.history ?? [];
+    if (!Array.isArray(history)) return [];
 
-    return history.map((t: any) => t.id).filter(Boolean);
+    return history
+      .map((t: any) => t?.trackId ?? t?.id)
+      .filter((v: unknown): v is string => typeof v === 'string' && v.length > 0);
   } catch {
     return [];
   }
@@ -313,15 +323,33 @@ export async function getFamiliarTracks(limit: number = 10): Promise<Track[]> {
   }
 
   if (!supabaseConfigured) {
-    // Return from localStorage history directly
+    // Return from localStorage history directly.
+    // Uses the same flat persistence shape as getPlayedTrackIds: items have
+    // trackId/title/artist/coverUrl (PersistedHistoryItem) — hydrate them into
+    // Track shape so downstream consumers get a consistent object.
     try {
       const stored = localStorage.getItem('voyo-player-state');
       if (!stored) return [];
 
       const state = JSON.parse(stored);
-      const history = state?.state?.history || [];
+      const history = state?.history ?? state?.state?.history ?? [];
+      if (!Array.isArray(history)) return [];
 
-      return history.slice(0, limit);
+      return history
+        .slice(-limit)
+        .reverse()
+        .map((h: any): Track => ({
+          id: h?.trackId ?? h?.id ?? '',
+          trackId: h?.trackId ?? h?.id ?? '',
+          title: h?.title ?? '',
+          artist: h?.artist ?? '',
+          coverUrl: h?.coverUrl ?? '',
+          duration: h?.duration ?? 0,
+          tags: [],
+          oyeScore: 0,
+          createdAt: h?.playedAt ?? new Date().toISOString(),
+        }))
+        .filter((t: Track) => t.trackId.length > 0);
     } catch {
       return [];
     }
