@@ -288,6 +288,12 @@ export const YouTubeIframe = memo(() => {
             const store = usePlayerStore.getState();
             const ps = store.playbackSource;
             if (ps !== 'cached' && ps !== 'r2') {
+              // iframe IS the audio source here → its ENDED = audio ended.
+              logPlaybackEvent({
+                event_type: 'stream_ended',
+                track_id: store.currentTrack?.trackId ?? 'unknown',
+                meta: { source: ps, advance: 'iframe_ended_owner' },
+              });
               nextTrack();
               return;
             }
@@ -323,10 +329,10 @@ export const YouTubeIframe = memo(() => {
               if (audioFinished) {
                 devLog('[YouTubeIframe] ENDED watchdog — audio did not advance, forcing nextTrack');
                 logPlaybackEvent({
-                  event_type: 'trace',
+                  event_type: 'skip_auto',
                   track_id: trackAtEnd,
                   meta: {
-                    subtype: 'iframe_ended_watchdog_fired',
+                    reason: 'iframe_ended_watchdog_fired',
                     audio_paused: audioEl?.paused ?? null,
                     audio_ended: audioEl?.ended ?? null,
                     audio_duration: audioEl?.duration ?? null,
@@ -397,6 +403,11 @@ export const YouTubeIframe = memo(() => {
                 devLog('[YouTubeIframe] 100 recovery skipped — hot-swap won');
                 return;
               }
+              logPlaybackEvent({
+                event_type: 'skip_auto',
+                track_id: videoId || 'unknown',
+                meta: { reason: 'yt_error_100', error_code: errorCode },
+              });
               nextTrack();
             }, 500);
             return;
@@ -425,6 +436,11 @@ export const YouTubeIframe = memo(() => {
                 devLog('[YouTubeIframe] embed-blocked recovery skipped — hot-swap won');
                 return;
               }
+              logPlaybackEvent({
+                event_type: 'skip_auto',
+                track_id: videoId || 'unknown',
+                meta: { reason: 'yt_error_embed_blocked', error_code: errorCode },
+              });
               nextTrack();
             }, 500);
             return;

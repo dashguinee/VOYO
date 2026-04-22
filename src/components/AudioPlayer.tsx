@@ -571,10 +571,10 @@ export const AudioPlayer = () => {
       const finished = el.ended || (el.paused && nearEnd);
       if (!finished) return;
       logPlaybackEvent({
-        event_type: 'trace',
+        event_type: 'skip_auto',
         track_id: store.currentTrack?.trackId ?? 'unknown',
         meta: {
-          subtype: 'bg_auto_advance_watchdog_v2',
+          reason: 'bg_auto_advance_watchdog_v2',
           ended: el.ended,
           paused: el.paused,
           current_time: el.currentTime,
@@ -730,9 +730,9 @@ export const AudioPlayer = () => {
           errorBurst = [];
           devWarn('[AudioPlayer] error-burst on current track — advancing');
           logPlaybackEvent({
-            event_type: 'trace',
+            event_type: 'skip_auto',
             track_id: trackId,
-            meta: { subtype: 'error_burst_skip', burst_count: burstCount },
+            meta: { reason: 'error_burst_skip', burst_count: burstCount },
           });
           usePlayerStore.getState().nextTrack();
         }

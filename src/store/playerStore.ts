@@ -1056,11 +1056,31 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
         currentTime: 0,
       });
     } else {
-      trace('nt_no_tracks', currentTrackId || null, {
+      // WARM-IT-UP SAFETY NET: the pool dried up — every candidate was
+      // filtered by history + blocklist + unplayable. No error toast, no
+      // retry button. Loop the current track so OYO's flow stays alive,
+      // and kick off a pool refresh so the NEXT track-end can advance
+      // into fresh content. This is the terminal "OYO never stops"
+      // invariant: silence is the bug, looping is the cheap graceful
+      // degradation that buys the refresh time to land.
+      trace('nt_no_tracks_looping_current', currentTrackId || null, {
         poolSize: allAvailable.length,
         discoverLen: state.discoverTracks.length,
         hotLen: state.hotTracks.length,
       });
+      if (state.currentTrack) {
+        set({
+          isPlaying: true,
+          progress: 0,
+          currentTime: 0,
+          seekPosition: 0,
+          playbackRate: 1,
+          isSkeeping: false,
+        });
+      }
+      // Async pool refresh — don't await, don't block. On success the
+      // next natural track-end finds populated discover/hot pools.
+      try { get().refreshRecommendations(); } catch {}
     }
   },
 
