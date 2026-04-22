@@ -7,6 +7,7 @@
  */
 
 import { getYouTubeId } from '../utils/voyoId';
+import { markR2Known } from '../store/r2KnownStore';
 
 export const R2_AUDIO_BASE = 'https://voyo-edge.dash-webtv.workers.dev/audio';
 
@@ -45,6 +46,11 @@ export async function r2HasTrack(trackId: string): Promise<boolean> {
         signal: ctrl.signal,
         cache: 'no-store',
       });
+      // Positive probes feed the shared r2KnownStore so any mounted
+      // OyeButton / BoostButton for this track flips to gold-faded (or
+      // gold-filled if already oyed) on the next render — no wait for
+      // local download completion.
+      if (res.ok) markR2Known(ytId);
       return res.ok;
     } catch {
       return false;

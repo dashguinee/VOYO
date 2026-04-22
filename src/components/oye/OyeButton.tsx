@@ -29,6 +29,7 @@ import { Zap } from 'lucide-react';
 import { useDownloadStore } from '../../store/downloadStore';
 import { usePreferenceStore } from '../../store/preferenceStore';
 import { usePlayerStore } from '../../store/playerStore';
+import { useR2KnownStore } from '../../store/r2KnownStore';
 import { app } from '../../services/oyo';
 import { getYouTubeId } from '../../utils/voyoId';
 import type { Track } from '../../types';
@@ -123,20 +124,30 @@ export function computeOyeState(
   hasExplicitLike: boolean,
   isActiveIframe: boolean,
   isEqOnBoost = false,
+  isInR2 = false,
 ): OyeVisualState {
   const isCommitted = hasExplicitLike || isEqOnBoost;
+  // "In your Disco" = can play instantly. Two equivalent sources:
+  //   a) local IndexedDB download complete
+  //   b) known present in R2 (from r2KnownStore — populated by probe,
+  //      hotswap success, or bulk video_intelligence query)
+  // Either one means the Oye button can honestly show gold.
+  const inDisco = downloadStatus === 'complete' || isInR2;
+
   // Gold filled = in disco AND committed.
-  if (downloadStatus === 'complete' && isCommitted) return 'gold-filled';
+  if (inDisco && isCommitted) return 'gold-filled';
   // Cooking — the pulse is the active signal that the track is being
   // worked on right now. Two sources of "cooking":
   //   a) local IndexedDB download in flight (downloadStatus)
   //   b) this IS the currently playing track AND it's on iframe, meaning
   //      R2 extraction is racing server-side (per Dash's rule "if it's
-  //      iframe and playing probably means it's cooking").
+  //      iframe and playing probably means it's cooking"). Suppressed
+  //      when inDisco (R2 already has it) — the iframe is about to be
+  //      swapped out any poll tick now.
   if (downloadStatus === 'downloading' || downloadStatus === 'queued') return 'bubbling';
-  if (isActiveIframe) return 'bubbling';
+  if (isActiveIframe && !inDisco) return 'bubbling';
   // In disco but no explicit commitment yet — e.g. auto-cached via play.
-  if (downloadStatus === 'complete') return 'gold-faded';
+  if (inDisco) return 'gold-faded';
   // Cold — "needs to Oye".
   return 'grey-faded';
 }
@@ -182,10 +193,17 @@ export const OyeButton = memo(({ track, size = 'md', escape = true, className = 
   );
   const isIframe = usePlayerStore(s => s.playbackSource === 'iframe');
   const isActiveIframe = isCurrent && isIframe;
+  // Know-about-R2: populated by r2Probe (HEAD success), gateToR2 (bulk
+  // video_intelligence query), and the hotswap poll tick. Lets the
+  // button flip to gold-faded / gold-filled the moment R2 is proven
+  // ready, rather than waiting for a local IndexedDB download to
+  // complete. Selector returns primitive boolean so zustand's default
+  // equality is sufficient.
+  const isInR2 = useR2KnownStore(s => s.known.has(getYouTubeId(track.trackId)));
 
   const state = useMemo(
-    () => computeOyeState(download?.status, preference?.explicitLike === true, isActiveIframe),
-    [download?.status, preference?.explicitLike, isActiveIframe],
+    () => computeOyeState(download?.status, preference?.explicitLike === true, isActiveIframe, false, isInR2),
+    [download?.status, preference?.explicitLike, isActiveIframe, isInR2],
   );
 
   const { px, icon } = SIZE_MAP[size];

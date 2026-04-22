@@ -6,6 +6,7 @@
 
 import { supabase } from '../lib/supabase';
 import { getYouTubeId } from '../utils/voyoId';
+import { markR2KnownMany } from '../store/r2KnownStore';
 import type { Track } from '../types';
 
 const VITE_SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string | undefined;
@@ -37,6 +38,11 @@ export async function gateToR2(
   const cachedSet = new Set(
     data.filter(r => r.r2_cached === true).map(r => r.youtube_id),
   );
+  // Broadcast to the shared R2-known store so any mounted OyeButton /
+  // BoostButton for these tracks can flip to gold-faded (or gold-filled
+  // if already oyed) on the next render — without waiting for a local
+  // download or a HEAD probe.
+  if (cachedSet.size) markR2KnownMany(Array.from(cachedSet));
   return candidates.filter(t => cachedSet.has(t.trackId));
 }
 

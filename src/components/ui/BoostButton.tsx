@@ -15,6 +15,7 @@ import { useState, useEffect, useRef } from 'react';
 import { usePlayerStore } from '../../store/playerStore';
 import { useDownloadStore } from '../../store/downloadStore';
 import { usePreferenceStore } from '../../store/preferenceStore';
+import { useR2KnownStore } from '../../store/r2KnownStore';
 import { app } from '../../services/oyo';
 import { computeOyeState } from '../oye/OyeButton';
 import { getYouTubeId } from '../../utils/voyoId';
@@ -359,7 +360,10 @@ export const BoostButton = ({ variant = 'toolbar', className = '' }: BoostButton
   // as "committed" in boost mode, so gold-filled lights up when cached
   // and EITHER user Oye'd explicitly OR EQ is actively engaged.
   const isActiveIframe = playbackSource === 'iframe';
-  const oyeState = computeOyeState(downloadStatus?.status, explicitLike, isActiveIframe, isEqOn);
+  // R2-known — populated by probe/hotswap/gateToR2. Flips to gold the
+  // moment the edge has the track, no wait for local download.
+  const isInR2 = useR2KnownStore(s => s.known.has(ytId));
+  const oyeState = computeOyeState(downloadStatus?.status, explicitLike, isActiveIframe, isEqOn, isInR2);
   // Legacy visual flags, now derived from the shared state so every Oye
   // affordance reads the same signal graph:
   const showFilled = oyeState === 'gold-filled';
@@ -400,17 +404,53 @@ export const BoostButton = ({ variant = 'toolbar', className = '' }: BoostButton
       return 'Raw audio (tap for boost)';
     };
 
+    // Unified narralogy colours — match OyeButton exactly so the Portrait
+    // player's Oye affordance reads the same as the ones in search, feed,
+    // library. Preset (voyex purple, calm bronze, boosted yellow) only
+    // drives visuals when EQ is ACTIVELY ON. When EQ is off, "in disco"
+    // states always render in gold — no lingering purple border from a
+    // previously-active voyex preset.
+    const isBubbling = oyeState === 'bubbling';
+    const bubblingStyle = isBubbling
+      ? {
+          background: 'rgba(139, 92, 246, 0.22)',
+          border: '1.5px solid rgba(196, 181, 253, 0.80)',
+          boxShadow: '0 0 12px rgba(139, 92, 246, 0.50), 0 0 22px rgba(139, 92, 246, 0.24)',
+          animation: 'voyo-oye-bubble 1.6s ease-in-out infinite',
+        } as const
+      : null;
+    const filledStyle = showFilled
+      ? (isEqOn
+          ? null /* preset-coloured via className below */
+          : {
+              background: 'linear-gradient(135deg, #D4A053, #C4943D)',
+              border: '1px solid rgba(212, 160, 83, 0.85)',
+              boxShadow: '0 2px 10px rgba(212, 160, 83, 0.50), 0 0 20px rgba(212, 160, 83, 0.25)',
+            })
+      : null;
+    const outlineStyle = showOutline
+      ? {
+          background: 'rgba(28, 28, 35, 0.55)',
+          border: '1px solid rgba(212, 160, 83, 0.45)',
+          boxShadow: '0 0 6px rgba(212, 160, 83, 0.18)',
+        }
+      : null;
+    const greyStyle = (!showFilled && !showOutline && !isBubbling)
+      ? {
+          background: 'rgba(255, 255, 255, 0.06)',
+          border: '1px solid rgba(255, 255, 255, 0.12)',
+        }
+      : null;
+
     return (
       <button
         onClick={handleTap}
         className={`w-11 h-11 rounded-full flex items-center justify-center backdrop-blur-md shadow-lg transition-all duration-300 relative voyo-hover-lift voyo-tap-scale ${
-          showOutline
-            ? `border-2 ${colors.border}`
-            : showFilled
-              ? `${colors.bg} border ${colors.border} ${colors.shadow}`
-              : 'border border-[#28282f] hover:border-white/20'
+          showFilled && isEqOn
+            ? `${colors.bg} border ${colors.border} ${colors.shadow}`
+            : ''
         } ${className}`}
-        style={!showFilled ? { background: 'rgba(28, 28, 35, 0.65)' } : undefined}
+        style={bubblingStyle ?? filledStyle ?? outlineStyle ?? greyStyle ?? undefined}
         title={getTitle()}
       >
         {/* Glow effect when EQ is ON */}
@@ -424,12 +464,23 @@ export const BoostButton = ({ variant = 'toolbar', className = '' }: BoostButton
         {showBurst && <CompletionBurst onComplete={() => setShowBurst(false)} preset={activePreset} />}
         {(isDownloading || isQueued) && <ProgressRing progress={progress} isStarting={isDownloading || isQueued} size={44} preset={activePreset} />}
 
+        {/* Lightning icon:
+             - EQ on         → preset-coloured, glowing (voyex purple, calm bronze, etc)
+             - EQ off + gold → gold filled or gold outline (matches OyeButton's in-disco)
+             - Otherwise     → neutral grey (same as OyeButton grey-faded)
+           The preset color only enters the visual when the user has
+           actually engaged an EQ — no more "mystery purple" on cached
+           tracks that haven't been EQ'd. */}
         <LightningIcon
-          isGlowing={isEqOn}
-          isCharging={isDownloading || isQueued}
+          isGlowing={isEqOn || showFilled}
+          // "Charging" animates the icon — reuse it for the bubbling
+          // (cooking) state so the Portrait player signals cooking on
+          // any active-iframe / downloading track, same semantics as
+          // OyeButton's bubble pulse.
+          isCharging={isDownloading || isQueued || isBubbling}
           size={16}
-          preset={isEqOn ? activePreset : 'off'}
-          outlineOnly={showOutline}
+          preset={isEqOn ? activePreset : (showFilled || showOutline ? 'calm' : 'off')}
+          outlineOnly={showOutline && !isEqOn}
         />
         {showSparks && <BoostSparks preset={activePreset} />}
       </button>
