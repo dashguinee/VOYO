@@ -91,13 +91,29 @@ async function performHotSwap(
   });
 
   // Clean-exit helper — used by every abort path so state is consistent.
+  //
+  // Guarded src-strip: the <audio> element is a singleton shared with
+  // AudioPlayer. If the user rapid-skipped during the hotswap, AudioPlayer
+  // has already re-assigned el.src for track N+1 (R2 fast path). An
+  // unconditional removeAttribute('src')+load() here would strip the src
+  // off the *new* track's element, producing silent dead audio. Only strip
+  // if el.src still corresponds to the track this bail is for.
   const bail = (subtype: string, extra: Record<string, unknown> = {}): false => {
     logPlaybackEvent({
       event_type: 'trace', track_id: trackId,
       meta: { subtype, mode: posSource, elapsed_ms: Date.now() - iframeStartedAt, ...extra },
     });
     try { el.pause(); } catch {}
-    try { el.removeAttribute('src'); el.load(); } catch {}
+    try {
+      const ytId = getYouTubeId(trackId);
+      // Only strip src if this element still points at OUR track. If the
+      // user skipped and AudioPlayer reassigned el.src to a new ytId,
+      // leave it alone — the new effect owns the element now.
+      if (ytId && el.src && el.src.includes(ytId)) {
+        el.removeAttribute('src');
+        el.load();
+      }
+    } catch {}
     return false;
   };
 
