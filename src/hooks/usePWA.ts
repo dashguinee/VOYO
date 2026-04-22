@@ -40,11 +40,14 @@ export function usePWA() {
       return;
     }
 
-    // iOS has no native prompt — treat as installable so UI can render the
-    // Share-sheet instructions. UI branches on platform === 'ios'.
-    if (p === 'ios') {
-      setIsInstallable(true);
-    }
+    // Treat every non-standalone view as installable up-front. Chrome only
+    // fires beforeinstallprompt when it feels like it (suppresses when the
+    // PWA is already on the device, when the user recently dismissed, on
+    // iOS Safari at all) — if we gated the UI on that event, most visits
+    // would show no install affordance at all. Instead we always render,
+    // and the click handler routes to the native prompt when available or
+    // to the manual instructions sheet otherwise.
+    setIsInstallable(true);
 
     const handleBeforeInstall = (e: Event) => {
       e.preventDefault();
