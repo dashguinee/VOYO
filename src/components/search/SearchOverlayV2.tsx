@@ -598,7 +598,7 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap, onEnterVideoMode
                   <input
                     ref={inputRef}
                     type="text"
-                    placeholder="Search songs, artists..."
+                    placeholder="Search…"
                     value={query}
                     onChange={(e) => handleSearch(e.target.value)}
                     // Keyboard navigation: ↓/↑ move through results,
@@ -622,8 +622,12 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap, onEnterVideoMode
                   />
                   {isSearching && <VinylLoader size={14} opacity={0.35} colorClass="text-white/70" className="flex-shrink-0" />}
                   {query && !isSearching && (
-                    <button onClick={() => { setQuery(''); setResults([]); }} className="text-white/35 p-1 active:scale-90 transition-transform" aria-label="Clear search">
-                      <X className="w-[14px] h-[14px]" strokeWidth={2.2} />
+                    <button
+                      onClick={() => { setQuery(''); setResults([]); }}
+                      className="text-white/15 hover:text-white/40 p-1 active:scale-90 transition-all"
+                      aria-label="Clear search"
+                    >
+                      <X className="w-[14px] h-[14px]" strokeWidth={2} />
                     </button>
                   )}
                 </div>

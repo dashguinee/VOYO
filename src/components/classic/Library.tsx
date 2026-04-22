@@ -773,7 +773,7 @@ export const Library = ({ onTrackClick }: LibraryProps) => {
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search your disco…"
+              placeholder="Search…"
               className="w-full pl-11 pr-4 py-[11px] rounded-xl bg-white/[0.05] border border-white/10 text-white placeholder:text-white/30 focus:outline-none transition-colors text-[14px]"
               onFocus={(e) => { e.currentTarget.style.borderColor = 'rgba(212,175,110,0.45)'; }}
               onBlur={(e) => { e.currentTarget.style.borderColor = ''; }}
