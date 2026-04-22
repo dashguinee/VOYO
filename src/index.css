@@ -792,6 +792,19 @@ input[type="range"]:focus::-moz-range-thumb {
   to { opacity: 0; }
 }
 
+/* Join-button shimmer — a single warm-white highlight band slides across
+   the silver pill once every ~8s. 88% of the cycle is idle (band parked
+   off-screen, opacity 0); the shimmer only blooms for ~0.9s. Quiet most
+   of the time, inviting when it does fire — more controlled than Oye's
+   continuous bubble. */
+@keyframes voyo-join-shimmer {
+  0%   { transform: translateX(-120%); opacity: 0; }
+  2%   { opacity: 0.55; }
+  10%  { transform: translateX(220%);  opacity: 0.55; }
+  12%  { opacity: 0; }
+  100% { transform: translateX(220%);  opacity: 0; }
+}
+
 /* Absorbed entry / exit — opacity + subtle scale + blur. Used on
    cycling elements that'd otherwise hard-swap on re-mount (Oyé We
    Live card notifications, gradient transitions). Blur softens the

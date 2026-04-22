@@ -250,7 +250,12 @@ export const StationHero = ({ station }: StationHeroProps) => {
             border: 0,
             filter: isPreviewingAudio ? 'brightness(0.82)' : 'brightness(0.52) blur(0.4px)',
             transition: 'filter 500ms ease',
-            transform: 'scale(1.22) translateY(7%)',
+            // scale 1.22 left ~55% of the iframe as YT letterbox black
+            // (16:9 video in 4:5 frame). 1.62 zooms the video enough to
+            // clip ~40% of the top black strip while still keeping the
+            // main subject framed. translateY keeps YT's title flash
+            // inside the top fade.
+            transform: 'scale(1.62) translateY(5%)',
             pointerEvents: 'none',
           }}
           allow="autoplay; encrypted-media; picture-in-picture"
@@ -281,7 +286,7 @@ export const StationHero = ({ station }: StationHeroProps) => {
           className="absolute inset-0 w-full h-full object-cover"
           style={{
             filter: 'brightness(0.52) blur(0.4px)',
-            transform: 'scale(1.22) translateY(7%)',
+            transform: 'scale(1.62) translateY(5%)',
             pointerEvents: 'none',
           }}
         />
@@ -438,7 +443,7 @@ export const StationHero = ({ station }: StationHeroProps) => {
               Inner inset ring + soft shadow = frame, not flatness. */}
           <button
             onClick={(e) => { e.stopPropagation(); commit(); }}
-            className="flex items-center gap-2 pl-2 pr-4 py-2 rounded-full text-[13px] font-bold transition-transform active:scale-95"
+            className="relative overflow-hidden flex items-center gap-2 pl-2 pr-4 py-2 rounded-full text-[13px] font-bold transition-transform active:scale-95"
             style={{
               color: '#1b1b22',
               background:
@@ -450,8 +455,25 @@ export const StationHero = ({ station }: StationHeroProps) => {
             }}
             aria-label={subscribed ? 'Enter joined station' : 'Join station'}
           >
+            {/* Shimmer overlay — a thin warm-white highlight band sweeps
+                across the silver once every ~8s. 88% of the cycle is idle
+                (band parked off-screen at opacity 0), so the motion reads
+                as invitation, not noise. Subtler than Oye's continuous
+                bubble — it catches the eye, then gets out of the way. */}
+            {!subscribed && (
+              <span
+                aria-hidden="true"
+                className="absolute inset-y-0 -inset-x-2 pointer-events-none"
+                style={{
+                  background:
+                    'linear-gradient(115deg, transparent 35%, rgba(255,255,255,0.78) 50%, transparent 65%)',
+                  mixBlendMode: 'overlay',
+                  animation: 'voyo-join-shimmer 8s cubic-bezier(0.4, 0, 0.2, 1) infinite',
+                }}
+              />
+            )}
             <span
-              className="w-7 h-7 rounded-full flex items-center justify-center"
+              className="relative w-7 h-7 rounded-full flex items-center justify-center"
               style={{
                 background: 'linear-gradient(135deg, #1b1b22 0%, #2a2a33 100%)',
                 boxShadow: 'inset 0 1px 1px rgba(255,255,255,0.12), 0 1px 2px rgba(0,0,0,0.4)',
@@ -459,7 +481,7 @@ export const StationHero = ({ station }: StationHeroProps) => {
             >
               <Play className="w-3.5 h-3.5" fill="#f7f7fa" style={{ color: '#f7f7fa' }} />
             </span>
-            {subscribed ? 'Joined' : 'Join'}
+            <span className="relative">{subscribed ? 'Joined' : 'Join'}</span>
           </button>
         </div>
       </div>
