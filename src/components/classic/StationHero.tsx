@@ -67,10 +67,14 @@ export const StationHero = ({ station }: StationHeroProps) => {
   const fadeIntervalRef = useRef<number | null>(null);
 
   const [isInView, setIsInView] = useState(false);
-  // `isNearby`: card is within ~1.5 viewport-heights of the visible area.
+  // `isNearby`: card is within ~2.5 viewport-heights of the visible area.
   // Iframe only mounts when nearby — off-screen stations don't load video
   // at all (massive battery + bandwidth win when the rail has 5+ stations).
   const [isNearby, setIsNearby] = useState(false);
+  // Live mirror of isInView for the iframe onLoad callback. Without this
+  // ref, onLoad captures the initial (false) value and can't tell whether
+  // the card became visible while the YT player was booting.
+  const isInViewRef = useRef(false);
   const [isPreviewingAudio, setIsPreviewingAudio] = useState(false);
   const [subscribed, setSubscribed] = useState(false);
   const [showIosHint, setShowIosHint] = useState(false);
@@ -119,6 +123,8 @@ export const StationHero = ({ station }: StationHeroProps) => {
     viewObs.observe(el);
     return () => { nearObs.disconnect(); viewObs.disconnect(); };
   }, []);
+
+  useEffect(() => { isInViewRef.current = isInView; }, [isInView]);
 
   useEffect(() => {
     if (!isInView) {
@@ -249,6 +255,21 @@ export const StationHero = ({ station }: StationHeroProps) => {
           }}
           allow="autoplay; encrypted-media; picture-in-picture"
           title={station.title}
+          onLoad={() => {
+            // autoplay=1 in the URL starts the video the moment the iframe
+            // boots. If we're mounted-nearby-but-not-in-view, that's pure
+            // wasted decode + stream. Push pauseVideo as soon as the YT
+            // API is reachable — retry once because postMessage can land
+            // before YT's command handler is listening.
+            if (isInViewRef.current) return;
+            postYTMessage('pauseVideo');
+            postYTMessage('mute');
+            window.setTimeout(() => {
+              if (isInViewRef.current) return;
+              postYTMessage('pauseVideo');
+              postYTMessage('mute');
+            }, 800);
+          }}
         />
       ) : (
         <img
