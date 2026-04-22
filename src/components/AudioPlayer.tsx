@@ -506,29 +506,16 @@ export const AudioPlayer = () => {
       // Still check for the 80% completion signal — it's the taste
       // graph's strongest input and must not miss a BG listen-through.
       if (!completionSignaledRef.current) {
-        const elDur = isFinite(el.duration) ? el.duration : 0;
         const dur = isFinite(el.duration) ? el.duration : 0;
         if (dur > 0 && el.currentTime / dur >= 0.8) {
           completionSignaledRef.current = true;
           oyaPlanSignal('completion');
         }
       }
-      // BG auto-advance watchdog. Chrome Android / iOS Safari throttle
-      // the 'ended' event in hidden tabs — sometimes it fires late, sometimes
-      // not at all. If we're within 0.3s of duration and the audio element
-      // is already paused (natural end), force the advance ourselves.
-      // Prevents "app just stops after one track" in BG.
-      if (!trackSwapInProgressRef.current) {
-        const elDur = isFinite(el.duration) ? el.duration : 0;
-        if (elDur > 0 && el.currentTime >= elDur - 0.3 && el.paused) {
-          logPlaybackEvent({
-            event_type: 'trace',
-            track_id: usePlayerStore.getState().currentTrack?.trackId ?? 'unknown',
-            meta: { subtype: 'bg_auto_advance_watchdog' },
-          });
-          usePlayerStore.getState().nextTrack();
-        }
-      }
+      // BG auto-advance watchdog MOVED out of here to a standalone
+      // setInterval below — timeupdate events halt once <audio> enters
+      // ended+paused, which is the exact state the watchdog was built
+      // to catch.
       return;
     }
 
@@ -558,6 +545,47 @@ export const AudioPlayer = () => {
       } catch {}
     }
   }, [setCurrentTime, setProgress, setDuration]);
+
+  // ── BG auto-advance watchdog — setInterval, not timeupdate ───────────
+  // The previous watchdog lived inside handleTimeUpdate. Problem:
+  // `timeupdate` events stop firing once <audio> reaches ended+paused —
+  // the exact state we were watching for. On Chrome Android Power Save
+  // (Pixel 7) this manifests as "app stops after one song". setInterval
+  // keeps firing in BG (throttled to ~1/sec min, but never halted), so
+  // its cadence is independent of the audio element's event stream.
+  //
+  // Fires nextTrack() when the element is genuinely finished (ended=true
+  // OR paused-at-duration-end) and the store still thinks we're playing.
+  // Skips when a track swap is in flight (swap owns advance) and when
+  // playbackSource='iframe' (iframe's own ENDED handler owns advance).
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      const el = audioRef.current;
+      if (!el) return;
+      if (trackSwapInProgressRef.current) return;
+      const store = usePlayerStore.getState();
+      if (!store.isPlaying) return;
+      if (store.playbackSource === 'iframe') return;
+      const dur = isFinite(el.duration) ? el.duration : 0;
+      const nearEnd = dur > 0 && el.currentTime >= dur - 0.3;
+      const finished = el.ended || (el.paused && nearEnd);
+      if (!finished) return;
+      logPlaybackEvent({
+        event_type: 'trace',
+        track_id: store.currentTrack?.trackId ?? 'unknown',
+        meta: {
+          subtype: 'bg_auto_advance_watchdog_v2',
+          ended: el.ended,
+          paused: el.paused,
+          current_time: el.currentTime,
+          duration: dur,
+          hidden: document.hidden,
+        },
+      });
+      store.nextTrack();
+    }, 1000);
+    return () => window.clearInterval(id);
+  }, []);
 
   const handleEnded = useCallback(() => {
     // R2-direct playback — the audio element gets a discrete R2 file per
