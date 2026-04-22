@@ -423,24 +423,32 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap, onEnterVideoMode
     // Drop YouTube duplicates that already appear in library — no point showing the same track twice
     const youtube = dedup(yt).filter(r => !librarySeen.has(r.voyoId)).map(r => ({ ...r, source: 'youtube' as const }));
 
-    if (library.length > 0 || youtube.length > 0) {
-      setResults([...library, ...youtube]);
+    const merged = [...library, ...youtube];
+    const hasResults = merged.length > 0;
+
+    if (hasResults) {
+      setResults(merged);
       saveToHistory(searchQuery);
     }
 
     if (searchIdRef.current !== thisSearchId) return;
 
-    // Final: cache merged results, sync, clear loading
+    // Final: cache the ACTUAL results for THIS query's closure — never read
+    // from state (which may still carry the previous query's results due to
+    // the "keep showing previous while typing" UX at handleSearch).
+    // Bug before: `setResults(prev => { if (prev.length > 0) searchCache.set(searchQuery, prev) })`
+    //   → if query B returned empty while A's results were on screen, A's
+    //     tracks got cached under B's key → next search for B = wrong data.
     setIsSearching(false);
-    setResults(prev => {
-      if (prev.length > 0) {
-        searchCache.set(searchQuery, prev);
-        syncSearchResults(prev);
-      } else {
-        setError('No results found. Try a different search.');
-      }
-      return prev;
-    });
+    if (hasResults) {
+      searchCache.set(searchQuery, merged);
+      syncSearchResults(merged);
+    } else {
+      // Empty result for THIS query: clear stale prev so "No results for X"
+      // UI renders correctly instead of pretending old data is the answer.
+      setResults([]);
+      setError('No results found. Try a different search.');
+    }
   }, []);
 
   const handleSearch = (value: string) => {
