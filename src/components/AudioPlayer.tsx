@@ -385,106 +385,12 @@ export const AudioPlayer = () => {
     }
   }, [currentTrack?.trackId]);
 
-  // ── Background recovery (superseded by bgEngine) ─────────────────────
-  // bgEngine owns the capture-phase visibilitychange handler, the 5s
-  // battery-suspend timer, and the heartbeat that keeps audio alive in
-  // BG. This useEffect is kept ONLY as a last-line kick in case the
-  // bgEngine heartbeat cadence (4s) hasn't fired yet by the time the
-  // user comes back — we still want to be correct if they return within
-  // the first tick. bgEngine's element-kick is idempotent with this one.
-  useEffect(() => {
-    let wentHiddenAt: number | null = null;
-
-    const handleVisibility = () => {
-      if (document.hidden) {
-        wentHiddenAt = Date.now();
-        return;
-      }
-      const el = audioRef.current;
-      if (!el) return;
-      const store = usePlayerStore.getState();
-      // Previous guard: `if (!store.isPlaying) return;`. That blocked the
-      // exact recovery case this effect was written for. In deep BG,
-      // Chrome Android (and iOS sometimes) pauses the <audio> element
-      // under us when autoplay permissions reset. The subsequent 'pause'
-      // event lands in handlePause whose play()-retry rejects in BG and
-      // flips isPlaying to false as a fallback. When the user returns to
-      // FG, isPlaying is false, so the old guard bailed — audio stays
-      // silent, user has to manually tap play. That's the "I still have
-      // to open the app" symptom.
-      //
-      // New condition: act whenever there IS a currentTrack, regardless
-      // of the flag. If play() succeeds, we reflect reality by setting
-      // isPlaying=true. If it rejects (genuinely needs a user gesture),
-      // we leave the flag alone so the UI still shows paused. Either way
-      // the element has a real shot at resuming instead of being locked
-      // out by a stale boolean.
-      if (!store.currentTrack) return;
-      if (!el.paused && el.readyState >= 2) return; // already playing cleanly
-      const bgDurationMs = wentHiddenAt ? Date.now() - wentHiddenAt : null;
-      const trackId = store.currentTrack.trackId ?? 'unknown';
-      const readyBefore = el.readyState;
-      const hadSrc = !!el.src && el.src !== '';
-      devLog(`[AudioPlayer] back from BG — readyState=${readyBefore}, attempting resume`);
-      logPlaybackEvent({
-        event_type: 'bg_disconnect',
-        track_id: trackId,
-        meta: {
-          bg_duration_ms: bgDurationMs,
-          ready_state: readyBefore,
-          paused: el.paused,
-          ended: el.ended,
-          has_src: hadSrc,
-          store_is_playing: store.isPlaying,
-        },
-      });
-
-      // If the element's buffer has been torn down (Android killed the R2
-      // stream in BG), just play() is a no-op — there's no audio data to
-      // actually play. Force a re-fetch via load() first. preserveCurrentTime
-      // is set by grabbing currentTime BEFORE load wipes it.
-      if (readyBefore < 2 && hadSrc && store.playbackSource !== 'iframe') {
-        const resumeAt = el.currentTime || 0;
-        try { el.load(); } catch {}
-        // Wait for canplay once before retrying play — otherwise play() on
-        // an un-loaded element will queue but without a visible event to
-        // unlock handleCanPlay's flow.
-        const onCanPlayOnce = () => {
-          el.removeEventListener('canplay', onCanPlayOnce);
-          if (resumeAt > 0 && Math.abs(el.currentTime - resumeAt) > 1) {
-            try { el.currentTime = resumeAt; } catch {}
-          }
-          el.play().then(() => {
-            if (!usePlayerStore.getState().isPlaying) {
-              usePlayerStore.getState().setIsPlaying(true);
-            }
-          }).catch(() => {});
-        };
-        el.addEventListener('canplay', onCanPlayOnce, { once: true });
-        // Safety timeout: if canplay never fires within 5s, fallback-attempt play()
-        setTimeout(() => {
-          el.removeEventListener('canplay', onCanPlayOnce);
-          el.play().then(() => {
-            if (!usePlayerStore.getState().isPlaying) {
-              usePlayerStore.getState().setIsPlaying(true);
-            }
-          }).catch(() => {});
-        }, 5000);
-        return;
-      }
-
-      // Ready-state healthy or iframe-owned — simple play() retry.
-      el.play().then(() => {
-        if (!usePlayerStore.getState().isPlaying) {
-          usePlayerStore.getState().setIsPlaying(true);
-        }
-      }).catch(() => {
-        // Autoplay policy genuinely requires a gesture — leave UI paused.
-      });
-    };
-    document.addEventListener('visibilitychange', handleVisibility);
-    return () => document.removeEventListener('visibilitychange', handleVisibility);
-  }, []);
+  // Background visibility + recovery is fully owned by bgEngine (see
+  // src/audio/bg/bgEngine.ts). It runs in capture phase — BEFORE any
+  // pause event the browser fires during the hide transition — and owns
+  // the heartbeat + element-kick + AudioContext resume. The prior v407
+  // and v408 visibility handler here was doing a competing el.load() on
+  // FG return which tore down bgEngine's in-flight kick. Removed.
 
   // ── MediaSession playback state sync ─────────────────────────────────
   useEffect(() => {
