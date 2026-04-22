@@ -1074,13 +1074,18 @@ export async function hydrateFromSignals(): Promise<void> {
       return;
     }
 
-    // Union with any locally-learned artists (don't clobber in-session learning);
-    // keep the 20 most recent across the union so brand-new session reactions
-    // also persist.
+    // Union with any locally-learned artists (don't clobber in-session learning).
+    // Insertion order: hydrated top artists FIRST (already sorted by score
+    // desc), in-session artists appended after. `.slice(0, 20)` keeps the
+    // HEAD — i.e. the highest-scored cross-session artists — falling back
+    // to in-session additions only when hydrate yielded <20. Previously
+    // `.slice(-20)` took the tail, which inverted the intent: on heavy
+    // users with 20+ combined artists it dropped the 30-day persistent
+    // favorites and kept the ephemeral session reactions.
     const union = new Set<string>();
     for (const a of topArtists) union.add(a);
     for (const a of djProfile.relationship.favoriteArtists) union.add(a);
-    djProfile.relationship.favoriteArtists = [...union].slice(-20);
+    djProfile.relationship.favoriteArtists = [...union].slice(0, 20);
 
     saveProfile();
     // Only mark hydrateDone AFTER a successful merge — any earlier and a
