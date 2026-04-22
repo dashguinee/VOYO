@@ -1,19 +1,23 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { usePWA } from '../../hooks/usePWA';
 import { IOSInstallSheet } from './IOSInstallSheet';
 
-// One-time dismissal, 14-day cooldown.
 const DISMISS_KEY = 'voyo-install-banner-dismissed-at';
 const COOLDOWN_MS = 14 * 24 * 60 * 60 * 1000;
 
-// Once-per-session guard so navigating inside the app doesn't re-trigger.
 const SESSION_KEY = 'voyo-install-banner-seen';
 
-// The GreetingBanner runs fade-in → hold → fade-out = 5.2s. Start at 8s
-// so the install moment lands cleanly after the greeting has left the
-// stage, not on top of it. Feels like two separate breaths, not one
-// noisy arrival.
+// The GreetingBanner plays for 5.2s. Land at 8s so the two moments never
+// overlap — greeting exits, a beat of quiet, install appears.
 const SHOW_DELAY_MS = 8000;
+
+// Auto-dismiss so the banner never overstays its welcome. 10s is enough
+// to read + decide; after that it fades out on its own.
+const AUTO_HIDE_MS = 10000;
+
+// Swipe-up threshold — past this distance the card is released and
+// dismissed; below it, we snap back.
+const SWIPE_DISMISS_PX = 48;
 
 function isDismissedRecently(): boolean {
   try {
@@ -36,21 +40,25 @@ function markSeenThisSession() {
 }
 
 /**
- * Install moment — single, quiet, bottom-center glass card.
+ * Install moment — top-of-screen glass card, aligned with the profile /
+ * search row so it feels like a header announcement rather than a toast.
  *
- *   - Fires 8s after mount, AFTER the GreetingBanner has fully faded so
- *     the two moments never overlap.
- *   - Once per session + 14-day localStorage cooldown on dismiss.
- *   - No shimmer, no neon, no slide acrobatics — a gentle fade + 6px
- *     rise is the only motion. Premium = restraint.
- *   - Single primary action. Tapping calls native prompt (Android) or
- *     opens the Share-sheet instructions (iOS).
+ *   - Fires 8s after mount (greeting done) once per session.
+ *   - Auto-hides after 10s visible.
+ *   - Swipe-up to dismiss with localStorage 14-day cooldown.
+ *   - Tapping × also persists dismissal.
+ *   - Premium = restraint: one VOYO mark, one gradient, static motion.
  */
 export function InstallBanner() {
   const { isInstallable, isInstalled, install, platform, hasNativePrompt } = usePWA();
   const [visible, setVisible] = useState(false);
   const [leaving, setLeaving] = useState(false);
   const [iosSheetOpen, setIosSheetOpen] = useState(false);
+
+  // Live drag offset while swiping up. Positive = no drag, negative = dragged up.
+  const [dragY, setDragY] = useState(0);
+  const dragStartY = useRef<number | null>(null);
+  const dragActive = useRef(false);
 
   useEffect(() => {
     if (isInstalled || !isInstallable) {
@@ -59,16 +67,27 @@ export function InstallBanner() {
     }
     if (wasSeenThisSession() || isDismissedRecently()) return;
 
-    const t = window.setTimeout(() => {
+    const showTimer = window.setTimeout(() => {
       setVisible(true);
       markSeenThisSession();
     }, SHOW_DELAY_MS);
-    return () => window.clearTimeout(t);
+    return () => window.clearTimeout(showTimer);
   }, [isInstallable, isInstalled]);
+
+  // Auto-hide after 10s of visibility. Cancelled if user is actively
+  // dragging (don't yank the card out from under their finger).
+  useEffect(() => {
+    if (!visible || leaving) return;
+    const t = window.setTimeout(() => {
+      if (!dragActive.current) dismiss(false);
+    }, AUTO_HIDE_MS);
+    return () => window.clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible, leaving]);
 
   const dismiss = (remember: boolean) => {
     setLeaving(true);
-    window.setTimeout(() => setVisible(false), 400);
+    window.setTimeout(() => setVisible(false), 360);
     if (remember) {
       try { localStorage.setItem(DISMISS_KEY, String(Date.now())); } catch { /* private mode */ }
     }
@@ -83,37 +102,80 @@ export function InstallBanner() {
     if (ok) dismiss(false);
   };
 
+  // ── Swipe-up gesture ────────────────────────────────────────────────
+  const onPointerDown = (e: React.PointerEvent) => {
+    dragStartY.current = e.clientY;
+    dragActive.current = true;
+    (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
+  };
+  const onPointerMove = (e: React.PointerEvent) => {
+    if (dragStartY.current === null) return;
+    const delta = e.clientY - dragStartY.current;
+    // Only track upward motion — downward drag does nothing.
+    setDragY(Math.min(0, delta));
+  };
+  const onPointerUp = () => {
+    dragActive.current = false;
+    if (dragStartY.current === null) return;
+    const dragged = dragY;
+    dragStartY.current = null;
+    if (dragged <= -SWIPE_DISMISS_PX) {
+      // Commit the dismissal — remember for 14 days, just like the ×.
+      dismiss(true);
+    } else {
+      // Snap back.
+      setDragY(0);
+    }
+  };
+
   if (!visible) {
     return <IOSInstallSheet open={iosSheetOpen} onClose={() => setIosSheetOpen(false)} platform={platform} />;
   }
+
+  // Card transform: enter animation handled by CSS keyframe, drag offset
+  // layered on top. When leaving we fade out + lift slightly.
+  const transform = leaving
+    ? 'translateY(-12px)'
+    : `translateY(${dragY}px)`;
+
+  const opacity = leaving
+    ? 0
+    : Math.max(0.25, 1 + dragY / 120); // fade as dragged up
 
   return (
     <>
       <div
         className="fixed left-0 right-0 z-[55] flex justify-center px-4 pointer-events-none"
         style={{
-          // Sits above both VoyoBottomNav (~90px with safe-area) AND the
-          // bottom-right InstallButton pill (bottom-24 = 96px, ~40px tall).
-          // 148px clears the pill with a 12px gap — no vertical collision.
-          bottom: 'calc(env(safe-area-inset-bottom) + 148px)',
+          // Profile-icon level — just below the header strip. Header is
+          // safe-area + py-3 + ~36px icon buttons ≈ 60px. 64px leaves a
+          // hairline gap so it doesn't graze the icons.
+          top: 'calc(env(safe-area-inset-top) + 64px)',
+          touchAction: 'pan-y',
         }}
       >
         <div
-          className="pointer-events-auto w-full max-w-sm rounded-2xl px-4 py-3.5 flex items-center gap-3"
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={onPointerUp}
+          onPointerCancel={onPointerUp}
+          className="pointer-events-auto w-full max-w-sm rounded-2xl px-4 py-3.5 flex items-center gap-3 select-none"
           style={{
             background: 'rgba(15, 12, 24, 0.82)',
             backdropFilter: 'blur(24px) saturate(140%)',
             WebkitBackdropFilter: 'blur(24px) saturate(140%)',
             border: '1px solid rgba(255,255,255,0.06)',
             boxShadow: '0 20px 60px -20px rgba(0,0,0,0.7), 0 1px 0 rgba(255,255,255,0.04) inset',
-            opacity: leaving ? 0 : 1,
-            transform: leaving ? 'translateY(6px)' : 'translateY(0)',
-            transition: 'opacity 400ms cubic-bezier(0.2, 0.8, 0.2, 1), transform 400ms cubic-bezier(0.2, 0.8, 0.2, 1)',
-            animation: leaving ? undefined : 'voyo-install-enter 520ms cubic-bezier(0.2, 0.8, 0.2, 1)',
+            opacity,
+            transform,
+            transition: dragActive.current
+              ? 'none'
+              : 'opacity 360ms cubic-bezier(0.2, 0.8, 0.2, 1), transform 360ms cubic-bezier(0.2, 0.8, 0.2, 1)',
+            animation: leaving || dragActive.current ? undefined : 'voyo-install-enter 480ms cubic-bezier(0.2, 0.8, 0.2, 1)',
+            cursor: 'grab',
           }}
         >
-          {/* Single signature element: the VOYO mark, unadorned. */}
-          <svg width="22" height="22" viewBox="0 0 192 192" className="flex-shrink-0">
+          <svg width="22" height="22" viewBox="0 0 192 192" className="flex-shrink-0 pointer-events-none">
             <path
               d="M56 50 L96 130 L136 50"
               fill="none"
@@ -125,7 +187,7 @@ export function InstallBanner() {
             <circle cx="96" cy="145" r="7" fill="#a78bfa"/>
           </svg>
 
-          <div className="flex-1 min-w-0">
+          <div className="flex-1 min-w-0 pointer-events-none">
             <p
               className="text-[14px] font-medium text-white/95 leading-tight truncate"
               style={{ fontFamily: "'Satoshi', sans-serif" }}
@@ -138,6 +200,7 @@ export function InstallBanner() {
           </div>
 
           <button
+            onPointerDown={(e) => e.stopPropagation()}
             onClick={handleInstall}
             className="flex-shrink-0 px-3.5 py-1.5 rounded-full text-[12px] font-semibold voyo-tap-scale"
             style={{
@@ -150,6 +213,7 @@ export function InstallBanner() {
           </button>
 
           <button
+            onPointerDown={(e) => e.stopPropagation()}
             onClick={() => dismiss(true)}
             aria-label="Dismiss"
             className="flex-shrink-0 w-6 h-6 -mr-1 flex items-center justify-center text-white/30 hover:text-white/70 text-lg leading-none voyo-tap-scale"
@@ -160,7 +224,7 @@ export function InstallBanner() {
 
         <style>{`
           @keyframes voyo-install-enter {
-            from { opacity: 0; transform: translateY(8px); }
+            from { opacity: 0; transform: translateY(-8px); }
             to   { opacity: 1; transform: translateY(0); }
           }
         `}</style>
