@@ -19,6 +19,8 @@
 import { Track } from '../types';
 import { devLog, devWarn } from '../utils/logger';
 import { notifyMilestone, notifyInsight, notifyTrackContext } from './oyoNotifications';
+import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { getUserHash } from '../utils/userHash';
 
 // ============================================
 // CONFIGURATION
@@ -285,6 +287,11 @@ export function initOYO(): void {
   djProfile.relationship.totalSessionsStarted++;
   djProfile.lastInteractionAt = new Date().toISOString();
   saveProfile();
+
+  // Hydrate persisted taste from voyo_signals (fire-and-forget — loadProfile
+  // already provided the offline baseline, this upgrades it with cross-session
+  // learning when network + Supabase are available).
+  hydrateFromSignals().catch(() => null);
 
   devLog(`[OYO] 🎙️ ${djProfile.name} is ready!`);
 }
@@ -925,6 +932,121 @@ export function getInsights(): {
 }
 
 // ============================================
+// SIGNAL HYDRATION (the real BRAIN wire)
+// ============================================
+//
+// Until 2026-04-22 the djProfile.favoriteArtists array was session-local —
+// populated only via onTrackReaction during the current tab's lifetime,
+// lost on every refresh. Meanwhile voyo_signals was being written to
+// Supabase but nobody read it back, so cross-session / cross-device
+// learning was effectively dead.
+//
+// This hydrator closes the loop: on boot, we pull the user's own last-30d
+// signals, score each track, join against video_intelligence for artist
+// names, and merge the top 20 into djProfile.favoriteArtists. The
+// hotTracks sort in playerStore.ts:1491-1526 already reads this array —
+// so making favoriteArtists persist makes the entire hot-shelf sort
+// persist across sessions.
+
+const SIGNAL_WEIGHTS: Record<string, number> = {
+  love: 5,
+  complete: 3,
+  queue: 2,
+  play: 1,
+  skip: -2,
+  unlove: -3,
+  oye: 4,
+};
+
+let hydrateDone = false;
+
+export async function hydrateFromSignals(): Promise<void> {
+  if (hydrateDone) return;
+  if (!supabase || !isSupabaseConfigured) return;
+  hydrateDone = true;
+
+  try {
+    const userHash = getUserHash();
+    if (!userHash) return;
+
+    const since = new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString();
+
+    const { data: signalRows, error: sigErr } = await supabase
+      .from('voyo_signals')
+      .select('track_id, action')
+      .eq('user_hash', userHash)
+      .gt('created_at', since)
+      .limit(2000);
+
+    if (sigErr || !signalRows || signalRows.length === 0) {
+      if (sigErr) devWarn('[OYO hydrate] signals query failed', sigErr);
+      return;
+    }
+
+    // Score each track
+    const trackScore = new Map<string, number>();
+    for (const r of signalRows) {
+      const w = SIGNAL_WEIGHTS[r.action] ?? 0;
+      trackScore.set(r.track_id, (trackScore.get(r.track_id) || 0) + w);
+    }
+
+    const topTrackIds = [...trackScore.entries()]
+      .filter(([, s]) => s > 0)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 200)
+      .map(([id]) => id);
+
+    if (topTrackIds.length === 0) {
+      devLog('[OYO hydrate] no positive-score tracks yet');
+      return;
+    }
+
+    // Join with video_intelligence to resolve artist names. Batch-limit to
+    // keep query URL length sane.
+    const { data: meta, error: metaErr } = await supabase
+      .from('video_intelligence')
+      .select('youtube_id, artist')
+      .in('youtube_id', topTrackIds.slice(0, 100));
+
+    if (metaErr || !meta) {
+      if (metaErr) devWarn('[OYO hydrate] meta query failed', metaErr);
+      return;
+    }
+
+    // Aggregate per artist
+    const artistScore = new Map<string, number>();
+    for (const row of meta) {
+      if (!row.artist) continue;
+      const s = trackScore.get(row.youtube_id) || 0;
+      artistScore.set(row.artist, (artistScore.get(row.artist) || 0) + s);
+    }
+
+    const topArtists = [...artistScore.entries()]
+      .filter(([, s]) => s > 0)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 20)
+      .map(([a]) => a);
+
+    if (topArtists.length === 0) return;
+
+    // Union with any locally-learned artists (don't clobber in-session learning);
+    // keep the 20 most recent across the union so brand-new session reactions
+    // also persist.
+    const union = new Set<string>();
+    for (const a of topArtists) union.add(a);
+    for (const a of djProfile.relationship.favoriteArtists) union.add(a);
+    djProfile.relationship.favoriteArtists = [...union].slice(-20);
+
+    saveProfile();
+    devLog(
+      `[OYO hydrate] 🎧 merged ${topArtists.length} persisted artists from ${signalRows.length} signals`,
+    );
+  } catch (err) {
+    devWarn('[OYO hydrate] failed', err);
+  }
+}
+
+// ============================================
 // INITIALIZATION
 // ============================================
 
@@ -964,4 +1086,5 @@ export default {
 
   // Insights
   getInsights,
+  hydrateFromSignals,
 };

@@ -14,7 +14,11 @@ import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { Track } from '../types';
 import { getThumb } from '../utils/thumbnail';
 import { devLog, devWarn } from '../utils/logger';
+import { getUserHash } from '../utils/userHash';
 import { getPlan } from './oyoPlan';
+
+// Re-export so existing consumers of `centralDJ.getUserHash` still work.
+export { getUserHash };
 
 // ============================================
 // TYPES
@@ -74,50 +78,6 @@ export interface VibeTrainSignal {
   modeId: MixBoardMode;
   action: 'boost' | 'queue' | 'reaction';  // How they interacted
   intensity: number;  // 1-3 based on action strength
-}
-
-// Anonymous user hash (consistent per device)
-let userHash: string | null = null;
-
-/**
- * Get user identifier for signals
- * - If logged in: returns account ID (e.g., "dash-001")
- * - If anonymous: returns device-consistent hash (e.g., "u_abc123...")
- *
- * This allows:
- * - Anonymous usage (no login required)
- * - Account-linked data when logged in (syncs across devices)
- */
-export function getUserHash(): string {
-  // Try to get logged-in account ID first
-  try {
-    const accountData = localStorage.getItem('voyo-account');
-    if (accountData) {
-      const parsed = JSON.parse(accountData);
-      if (parsed?.account?.id) {
-        return parsed.account.id; // Use account ID (e.g., "dash-001")
-      }
-    }
-  } catch {
-    // Ignore parse errors
-  }
-
-  // Fall back to anonymous device hash
-  if (userHash) return userHash;
-
-  // Try to get from localStorage
-  const stored = localStorage.getItem('voyo_user_hash');
-  if (stored) {
-    userHash = stored;
-    return stored;
-  }
-
-  // Generate new anonymous hash
-  const newHash = 'u_' + Math.random().toString(36).substring(2, 15) +
-                  Math.random().toString(36).substring(2, 15);
-  localStorage.setItem('voyo_user_hash', newHash);
-  userHash = newHash;
-  return newHash;
 }
 
 function getTimeOfDay(): string {
