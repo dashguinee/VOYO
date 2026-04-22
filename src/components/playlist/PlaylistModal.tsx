@@ -8,6 +8,7 @@ import { useState } from 'react';
 import { X, Plus, Check, Music2, Globe, Lock } from 'lucide-react';
 import { usePlaylistStore, Playlist } from '../../store/playlistStore';
 import { useAuth } from '../../hooks/useAuth';
+import { useBackGuard } from '../../hooks/useBackGuard';
 
 interface PlaylistModalProps {
   isOpen: boolean;
@@ -17,6 +18,7 @@ interface PlaylistModalProps {
 }
 
 export const PlaylistModal = ({ isOpen, onClose, trackId, trackTitle }: PlaylistModalProps) => {
+  useBackGuard(isOpen, onClose, 'playlist-modal');
   // Fine-grained selectors — avoid re-renders on unrelated playlist mutations.
   const playlists = usePlaylistStore(s => s.playlists);
   const createPlaylist = usePlaylistStore(s => s.createPlaylist);

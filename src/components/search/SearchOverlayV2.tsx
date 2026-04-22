@@ -25,6 +25,7 @@ import { supabase, isSupabaseConfigured } from '../../lib/supabase';
 import { getVibeEssence } from '../../services/essenceEngine';
 import { voyoStream } from '../../services/voyoStream';
 import { onSignal as oyaPlanSignal } from '../../services/oyoPlan';
+import { useBackGuard } from '../../hooks/useBackGuard';
 
 interface SearchOverlayProps {
   isOpen: boolean;
@@ -196,6 +197,11 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap, onEnterVideoMode
   // DiscoExplainer — opened by tapping the ✦ DISCO badge on cached results.
   // Single instance in the overlay; each TrackItem just fires the open callback.
   const [discoExplainerOpen, setDiscoExplainerOpen] = useState(false);
+
+  // System back gesture closes Search instead of exiting the app.
+  // DiscoExplainer registers its own guard internally, so a back press
+  // while the explainer is open peels it off first, a second peels Search.
+  useBackGuard(isOpen, onClose, 'search-overlay');
 
   const inputRef = useRef<HTMLInputElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);

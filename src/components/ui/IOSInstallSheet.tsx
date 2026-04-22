@@ -1,4 +1,5 @@
 import type { Platform } from '../../hooks/usePWA';
+import { useBackGuard } from '../../hooks/useBackGuard';
 
 interface Props {
   open: boolean;
@@ -14,6 +15,7 @@ interface Props {
  * browser menu.
  */
 export function IOSInstallSheet({ open, onClose, platform }: Props) {
+  useBackGuard(open, onClose, 'ios-install-sheet');
   if (!open) return null;
 
   const isIOS = platform === 'ios';

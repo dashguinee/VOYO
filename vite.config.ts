@@ -2,6 +2,7 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import fs from 'node:fs'
+import path from 'node:path'
 
 // Read version from public/version.json — stamped into the build at compile
 // time as `__APP_VERSION__`. The UpdateButton in App.tsx polls /version.json
@@ -12,6 +13,14 @@ const versionData = JSON.parse(fs.readFileSync('public/version.json', 'utf8')) a
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  resolve: {
+    // Mirrors tsconfig.app.json "paths": lets source use `@/foo` for
+    // anything under ./src. Relative imports keep working — migrate
+    // opportunistically, no big-bang codemod needed.
+    alias: {
+      '@': path.resolve(__dirname, './src'),
+    },
+  },
   define: {
     __APP_VERSION__: JSON.stringify(versionData.version),
   },

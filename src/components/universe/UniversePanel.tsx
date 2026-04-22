@@ -16,6 +16,7 @@ import { usePreferenceStore } from '../../store/preferenceStore';
 import { profileAPI, formatVoyoId } from '../../lib/voyo-api';
 import { UserSearch } from './UserSearch';
 import { openCommandCenterForSSO } from '../../lib/dash-auth';
+import { useBackGuard } from '../../hooks/useBackGuard';
 
 interface UniversePanelProps {
   isOpen: boolean;
@@ -23,6 +24,7 @@ interface UniversePanelProps {
 }
 
 export const UniversePanel = ({ isOpen, onClose }: UniversePanelProps) => {
+  useBackGuard(isOpen, onClose, 'universe-panel');
   const { isLoggedIn, dashId, voyoId, displayName, signOut, signIn, isLoading: authLoading, error: authError } = useAuth();
   const trackPreferences = usePreferenceStore(s => s.trackPreferences);
 

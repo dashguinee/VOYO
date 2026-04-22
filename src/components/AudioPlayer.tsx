@@ -31,6 +31,7 @@ import type { BoostPreset } from '../audio/graph/boostPresets';
 // r2Probe is the shared probe — useHotSwap imports the same function,
 // so one fix = both paths. R2_AUDIO stays here for the src-assignment URL.
 import { r2HasTrack, R2_AUDIO_BASE as R2_AUDIO } from '../player/r2Probe';
+import { useR2KnownStore } from '../store/r2KnownStore';
 import { getYouTubeId } from '../utils/voyoId';
 export type { BoostPreset };
 
@@ -223,12 +224,25 @@ export const AudioPlayer = () => {
     // could equal current if the user skipped back quickly.
     const changeToken = ++trackChangeTokenRef.current;
     const isStale = () => trackChangeTokenRef.current !== changeToken;
+
+    // Fast path: if the shared r2KnownStore already proves R2 has this
+    // track (from a prior probe, gateToR2 hit, or hotswap success), skip
+    // the HEAD round-trip entirely and go straight to R2. If we don't
+    // know, go iframe-first — no HEAD gate. useHotSwap's 2s poll will
+    // discover R2 and crossfade if the track is actually cached.
+    //
+    // Pre-v395 this path did `await Promise.all([headPromise, fadePromise])`
+    // which made iframe playback wait on the HEAD (100-500ms typical,
+    // 1500ms worst case) for every not-yet-known track. The perceptible
+    // tap-to-audio delay is gone in v395: we only wait on the outgoing
+    // fade (240ms short / 600ms long), which is natural transition time.
+    const knownInR2Sync = useR2KnownStore.getState().has(currentTrack.trackId);
+
     (async () => {
-      const headPromise = r2HasTrack(currentTrack.trackId);
       const fadePromise = shouldFade
         ? new Promise<void>(r => setTimeout(r, fadeOutMs))
         : Promise.resolve();
-      const [cached] = await Promise.all([headPromise, fadePromise]);
+      await fadePromise;
       if (isStale()) return;
       // If outgoing was iframe, silence it hard now — the bridge ramp
       // reached 0 by this point; pause+mute ensures it doesn't resume
@@ -237,7 +251,7 @@ export const AudioPlayer = () => {
         iframeBridge.pause();
         iframeBridge.resetVolume();
       }
-      if (cached && el) {
+      if (knownInR2Sync && el) {
         // R2 is keyed by raw YouTube ID; trackId may be a VOYO ID (vyo_<b64>).
         el.src = `${R2_AUDIO}/${getYouTubeId(currentTrack.trackId)}?q=high`;
         // Transient 'pause' fires on src reassign; handlePause sees the
@@ -295,6 +309,11 @@ export const AudioPlayer = () => {
         // Queue the track so lanes extract to R2 → useHotSwap watchers fire
         // the cross-fade as soon as it lands.
         void ensureTrackReady(currentTrack, null, { priority: 10 });
+        // Background HEAD probe — warms r2KnownStore even though we're on
+        // the iframe path. If the track turns out to be cached already
+        // (race case: the store didn't know yet), useHotSwap's poll will
+        // catch the positive HEAD and fire the cross-fade on its own.
+        void r2HasTrack(currentTrack.trackId);
       }
     })();
 

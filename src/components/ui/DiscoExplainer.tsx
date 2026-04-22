@@ -1,4 +1,5 @@
 import { Zap } from 'lucide-react';
+import { useBackGuard } from '../../hooks/useBackGuard';
 
 interface Props {
   open: boolean;
@@ -17,6 +18,10 @@ interface Props {
  * pagination, no tutorial mode — the whole thing reads in 3 seconds.
  */
 export function DiscoExplainer({ open, onClose }: Props) {
+  // Back gesture closes the explainer. When opened from inside search,
+  // the search overlay's own guard (named differently) stays put so one
+  // back press peels the explainer off, second back press peels search.
+  useBackGuard(open, onClose, 'disco-explainer');
   if (!open) return null;
 
   return (
