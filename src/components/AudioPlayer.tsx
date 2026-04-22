@@ -409,18 +409,57 @@ export const AudioPlayer = () => {
       if (!el.paused && el.readyState >= 2) return; // already playing cleanly
       const bgDurationMs = wentHiddenAt ? Date.now() - wentHiddenAt : null;
       const trackId = store.currentTrack.trackId ?? 'unknown';
-      devLog('[AudioPlayer] back from BG — audio paused, attempting resume');
+      const readyBefore = el.readyState;
+      const hadSrc = !!el.src && el.src !== '';
+      devLog(`[AudioPlayer] back from BG — readyState=${readyBefore}, attempting resume`);
       logPlaybackEvent({
         event_type: 'bg_disconnect',
         track_id: trackId,
         meta: {
           bg_duration_ms: bgDurationMs,
-          ready_state: el.readyState,
+          ready_state: readyBefore,
           paused: el.paused,
           ended: el.ended,
+          has_src: hadSrc,
           store_is_playing: store.isPlaying,
         },
       });
+
+      // If the element's buffer has been torn down (Android killed the R2
+      // stream in BG), just play() is a no-op — there's no audio data to
+      // actually play. Force a re-fetch via load() first. preserveCurrentTime
+      // is set by grabbing currentTime BEFORE load wipes it.
+      if (readyBefore < 2 && hadSrc && store.playbackSource !== 'iframe') {
+        const resumeAt = el.currentTime || 0;
+        try { el.load(); } catch {}
+        // Wait for canplay once before retrying play — otherwise play() on
+        // an un-loaded element will queue but without a visible event to
+        // unlock handleCanPlay's flow.
+        const onCanPlayOnce = () => {
+          el.removeEventListener('canplay', onCanPlayOnce);
+          if (resumeAt > 0 && Math.abs(el.currentTime - resumeAt) > 1) {
+            try { el.currentTime = resumeAt; } catch {}
+          }
+          el.play().then(() => {
+            if (!usePlayerStore.getState().isPlaying) {
+              usePlayerStore.getState().setIsPlaying(true);
+            }
+          }).catch(() => {});
+        };
+        el.addEventListener('canplay', onCanPlayOnce, { once: true });
+        // Safety timeout: if canplay never fires within 5s, fallback-attempt play()
+        setTimeout(() => {
+          el.removeEventListener('canplay', onCanPlayOnce);
+          el.play().then(() => {
+            if (!usePlayerStore.getState().isPlaying) {
+              usePlayerStore.getState().setIsPlaying(true);
+            }
+          }).catch(() => {});
+        }, 5000);
+        return;
+      }
+
+      // Ready-state healthy or iframe-owned — simple play() retry.
       el.play().then(() => {
         if (!usePlayerStore.getState().isPlaying) {
           usePlayerStore.getState().setIsPlaying(true);
