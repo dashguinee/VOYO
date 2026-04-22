@@ -959,11 +959,16 @@ const SIGNAL_WEIGHTS: Record<string, number> = {
 };
 
 let hydrateDone = false;
+// Soft rate-limit: after a failed attempt don't retry for 10s. Prevents
+// hammering Supabase when auth/RLS/network is hard-broken while still
+// allowing a recovery once the underlying issue clears.
+let _lastHydrateFailureAt = 0;
+const HYDRATE_RETRY_COOLDOWN_MS = 10_000;
 
 export async function hydrateFromSignals(): Promise<void> {
   if (hydrateDone) return;
   if (!supabase || !isSupabaseConfigured) return;
-  hydrateDone = true;
+  if (Date.now() - _lastHydrateFailureAt < HYDRATE_RETRY_COOLDOWN_MS) return;
 
   try {
     const userHash = getUserHash();
@@ -978,8 +983,22 @@ export async function hydrateFromSignals(): Promise<void> {
       .gt('created_at', since)
       .limit(2000);
 
-    if (sigErr || !signalRows || signalRows.length === 0) {
-      if (sigErr) devWarn('[OYO hydrate] signals query failed', sigErr);
+    // Hard error — leave hydrateDone=false so the next init call can retry
+    // (subject to the cooldown). Previously the flag was set BEFORE the
+    // query, so a single transient failure locked hydrate for the session.
+    if (sigErr) {
+      devWarn('[OYO hydrate] signals query failed — will retry', sigErr);
+      _lastHydrateFailureAt = Date.now();
+      return;
+    }
+    if (!signalRows) {
+      _lastHydrateFailureAt = Date.now();
+      return;
+    }
+    // Zero rows is a legitimate success (brand-new user) — mark done so we
+    // don't re-query on every init.
+    if (signalRows.length === 0) {
+      hydrateDone = true;
       return;
     }
 
@@ -997,6 +1016,8 @@ export async function hydrateFromSignals(): Promise<void> {
       .map(([id]) => id);
 
     if (topTrackIds.length === 0) {
+      // Signals exist but none scored positively — valid success, no retry.
+      hydrateDone = true;
       devLog('[OYO hydrate] no positive-score tracks yet');
       return;
     }
@@ -1008,8 +1029,14 @@ export async function hydrateFromSignals(): Promise<void> {
       .select('youtube_id, artist')
       .in('youtube_id', topTrackIds.slice(0, 100));
 
-    if (metaErr || !meta) {
-      if (metaErr) devWarn('[OYO hydrate] meta query failed', metaErr);
+    // Hard error on the meta query — leave hydrateDone=false so we retry.
+    if (metaErr) {
+      devWarn('[OYO hydrate] meta query failed — will retry', metaErr);
+      _lastHydrateFailureAt = Date.now();
+      return;
+    }
+    if (!meta) {
+      _lastHydrateFailureAt = Date.now();
       return;
     }
 
@@ -1027,7 +1054,11 @@ export async function hydrateFromSignals(): Promise<void> {
       .slice(0, 20)
       .map(([a]) => a);
 
-    if (topArtists.length === 0) return;
+    if (topArtists.length === 0) {
+      // Tracks exist in video_intelligence but no artist aggregated — valid success.
+      hydrateDone = true;
+      return;
+    }
 
     // Union with any locally-learned artists (don't clobber in-session learning);
     // keep the 20 most recent across the union so brand-new session reactions
@@ -1038,11 +1069,15 @@ export async function hydrateFromSignals(): Promise<void> {
     djProfile.relationship.favoriteArtists = [...union].slice(-20);
 
     saveProfile();
+    // Only mark hydrateDone AFTER a successful merge — any earlier and a
+    // transient failure would lock hydrate out for the rest of the session.
+    hydrateDone = true;
     devLog(
       `[OYO hydrate] 🎧 merged ${topArtists.length} persisted artists from ${signalRows.length} signals`,
     );
   } catch (err) {
-    devWarn('[OYO hydrate] failed', err);
+    devWarn('[OYO hydrate] failed — will retry', err);
+    _lastHydrateFailureAt = Date.now();
   }
 }
 
