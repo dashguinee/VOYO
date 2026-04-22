@@ -42,15 +42,15 @@ type PlayMode = 'magic' | 'in-order' | 'shuffle';
 type SortMode = 'date-desc' | 'date-asc' | 'a-z' | 'z-a';
 
 /**
- * PlayAllButton — the bronze pill that sits on the first track row
- * (breaking the visual rhythm intentionally so the "play what's showing"
- * affordance is impossible to miss). Tap = fire the current play mode.
- * Long-press (420ms) opens the mode menu so users can switch between
- * Magic Mix / In Order / Shuffle. Matches the Vibes-section pill
- * aesthetic: rounded-full, small padding, bronze tint active, glass
- * rest state.
+ * PlayAllBar — dedicated play row above the track list. Iteration of
+ * the previous inline-on-first-row design: detached so the gesture
+ * has its own breathing room, bigger button (14×14), mode tag moved
+ * next to the button as a readable chip. Tap fires the active mode;
+ * long-press (420ms) opens the mode menu. Hairline bronze rail at
+ * the bottom gives the separation the user asked for without a
+ * heavy divider.
  */
-const PlayAllButton = ({
+const PlayAllBar = ({
   modeLabel,
   onPlay,
   onLongPress,
@@ -61,6 +61,13 @@ const PlayAllButton = ({
 }) => {
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const firedLongPress = useRef(false);
+
+  // Cleanup on unmount — if the filter flips to an empty set while the
+  // user is mid-press, the pending timer would fire onLongPress against
+  // an unmounted component (React warning + minor leak). Clear it here.
+  useEffect(() => () => {
+    if (longPressTimer.current) clearTimeout(longPressTimer.current);
+  }, []);
 
   const startPress = () => {
     firedLongPress.current = false;
@@ -77,42 +84,53 @@ const PlayAllButton = ({
   };
 
   return (
-    <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1.5 pointer-events-none">
-      {/* Mode tag — small glass pill showing current play mode. Echoes
-          the Vibes-section chip recipe so it reads as part of the
-          design system, not a one-off. */}
-      <span
-        className="px-2 py-0.5 rounded-full text-[9px] font-bold tracking-[0.14em] uppercase pointer-events-none"
+    <div className="px-4 pt-3 pb-4">
+      <div className="flex items-center gap-3">
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            if (firedLongPress.current) return;
+            onPlay();
+          }}
+          onPointerDown={(e) => { e.stopPropagation(); startPress(); }}
+          onPointerUp={endPress}
+          onPointerCancel={endPress}
+          onPointerLeave={endPress}
+          className="relative w-14 h-14 rounded-full flex items-center justify-center voyo-tap-scale voyo-hover-scale flex-shrink-0"
+          style={{
+            background: 'linear-gradient(135deg, #E6B865 0%, #D4A053 50%, #C4943D 100%)',
+            boxShadow:
+              '0 10px 26px -6px rgba(212,175,110,0.55), inset 0 1px 0 rgba(255,255,255,0.38), inset 0 -1px 0 rgba(0,0,0,0.18)',
+            border: '1px solid rgba(255,255,255,0.25)',
+          }}
+          aria-label="Play all"
+        >
+          <Play className="w-[20px] h-[20px]" fill="#1b1206" style={{ color: '#1b1206' }} />
+        </button>
+
+        <div className="flex flex-col min-w-0">
+          <span
+            className="text-[14px] font-semibold leading-tight tracking-tight"
+            style={{ color: 'rgba(232,208,158,0.95)' }}
+          >
+            Play
+          </span>
+          <span
+            className="text-[11px] text-white/45 leading-tight mt-0.5 tracking-wide truncate"
+          >
+            {modeLabel} · long-press to switch
+          </span>
+        </div>
+      </div>
+      {/* Hairline bronze rail — separates the play affordance from the
+          list below without heavy ornament. */}
+      <div
+        className="h-[1px] mt-4 rounded-full"
         style={{
-          background: 'rgba(255,255,255,0.05)',
-          border: '1px solid rgba(255,255,255,0.10)',
-          color: 'rgba(232,208,158,0.75)',
-          backdropFilter: 'blur(6px)',
+          background:
+            'linear-gradient(90deg, rgba(212,175,110,0.22) 0%, rgba(212,175,110,0.08) 50%, rgba(212,175,110,0.0) 100%)',
         }}
-      >
-        {modeLabel}
-      </span>
-      <button
-        onClick={(e) => {
-          e.stopPropagation();
-          if (firedLongPress.current) return; // long-press already handled
-          onPlay();
-        }}
-        onPointerDown={(e) => { e.stopPropagation(); startPress(); }}
-        onPointerUp={endPress}
-        onPointerCancel={endPress}
-        onPointerLeave={endPress}
-        className="relative w-12 h-12 rounded-full flex items-center justify-center pointer-events-auto voyo-tap-scale voyo-hover-scale"
-        style={{
-          background: 'linear-gradient(135deg, #E6B865 0%, #D4A053 50%, #C4943D 100%)',
-          boxShadow:
-            '0 8px 22px -6px rgba(212,175,110,0.55), inset 0 1px 0 rgba(255,255,255,0.38), inset 0 -1px 0 rgba(0,0,0,0.18)',
-          border: '1px solid rgba(255,255,255,0.25)',
-        }}
-        aria-label="Play all"
-      >
-        <Play className="w-[18px] h-[18px]" fill="#1b1206" style={{ color: '#1b1206' }} />
-      </button>
+      />
     </div>
   );
 };
@@ -192,7 +210,7 @@ const PlayModeMenu = ({
         <div className="flex flex-col gap-2">
           <button onClick={() => pick('magic')} className="px-4 py-2.5 rounded-full text-left text-[13px] font-medium voyo-tap-scale" style={pillStyle(playMode === 'magic')}>
             Magic Mix
-            <span className="ml-2 text-[11px] opacity-60">our system, tuned to you</span>
+            <span className="ml-2 text-[11px] opacity-60">smart mix · rotates daily · surfaces forgotten favourites</span>
           </button>
 
           <button onClick={() => pick('in-order')} className="px-4 py-2.5 rounded-full text-left text-[13px] font-medium voyo-tap-scale flex items-center justify-between" style={pillStyle(playMode === 'in-order')}>
@@ -455,6 +473,42 @@ export const Library = ({ onTrackClick }: LibraryProps) => {
   // stay reachable across tab switches.
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const scrollMemoryRef = useRef<Map<string, number>>(new Map());
+
+  // Chrome-retreat pattern: the heading fades out while the user is
+  // actively scrolling, then fades back in once they go idle (~1.1s
+  // after the last scroll tick). Doesn't translate position — only
+  // opacity — so it never shifts layout. At scroll=0 we always show
+  // full opacity regardless of idle state.
+  const [isScrolled, setIsScrolled] = useState(false);
+  const [isScrolling, setIsScrolling] = useState(false);
+  const scrollIdleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scrollRafRef = useRef<number | null>(null);
+  const lastScrollTopRef = useRef(0);
+  const onListScroll = useCallback(() => {
+    if (scrollRafRef.current != null) return;
+    scrollRafRef.current = requestAnimationFrame(() => {
+      scrollRafRef.current = null;
+      const el = scrollContainerRef.current;
+      if (!el) return;
+      const top = el.scrollTop;
+      // Threshold so a one-pixel jitter doesn't trip the state machine.
+      const wasScrolled = lastScrollTopRef.current > 40;
+      const nowScrolled = top > 40;
+      lastScrollTopRef.current = top;
+      if (nowScrolled !== wasScrolled) setIsScrolled(nowScrolled);
+      // Arm the idle flag: true while ticks are arriving, false after
+      // 1100ms of silence. Feels like the chrome "breathes back in"
+      // when the user stops interacting.
+      setIsScrolling(true);
+      if (scrollIdleTimerRef.current) clearTimeout(scrollIdleTimerRef.current);
+      scrollIdleTimerRef.current = setTimeout(() => setIsScrolling(false), 1100);
+    });
+  }, []);
+  useEffect(() => () => {
+    if (scrollRafRef.current != null) cancelAnimationFrame(scrollRafRef.current);
+    if (scrollIdleTimerRef.current) clearTimeout(scrollIdleTimerRef.current);
+  }, []);
+  const headerOpacity = !isScrolled ? 1 : isScrolling ? 0.18 : 0.94;
 
   // System back peels the filter stack too — user taps All → Liked →
   // Bucket, back press returns to Liked, then All, then up to the
@@ -748,27 +802,53 @@ export const Library = ({ onTrackClick }: LibraryProps) => {
 
   return (
     <div className="flex flex-col h-full">
-      {/* ── Sticky chrome: heading + search + filter tabs, no animation games ── */}
-      <div className="flex-shrink-0 pt-5">
-        {/* Heading — tap opens the DiscoExplainer briefing. One bronze
-            signature element, no subtitle, no decorative chrome. */}
+      {/* ── Sticky chrome. Header weight scales with scroll: at rest,
+          "My Disco" fills the top with bronze shimmer. As the user
+          scrolls into the list, the heading compresses (shrinks +
+          fades) so results own the screen — same retreat pattern as
+          the old layout, tighter execution via transform+opacity
+          (cheap compositor-only) instead of the top↔bottom reposition
+          jump that felt weak. ── */}
+      <div className="flex-shrink-0">
         <button
           type="button"
           onClick={() => setDiscoExplainerOpen(true)}
-          className="block w-full text-left px-4 pb-3 voyo-tap-scale"
+          className="block w-full text-left px-4 pt-5 pb-3 voyo-tap-scale"
+          style={{
+            opacity: headerOpacity,
+            transition: 'opacity 380ms cubic-bezier(0.2, 0.8, 0.2, 1)',
+          }}
           aria-label="What is Disco?"
         >
+          {/* Bronze shimmer headline — same gradient as the DiscoExplainer
+              title so the two surfaces rhyme. Heavier weight + glow than
+              v397 so the page has centre of gravity. */}
           <h1
-            className="text-[28px] font-display font-bold tracking-tight"
+            className="text-[34px] font-black leading-none tracking-tight"
             style={{
-              color: 'rgba(232, 208, 158, 0.96)',
-              textShadow: '0 0 18px rgba(212,175,110,0.18)',
-              letterSpacing: '-0.01em',
               fontFamily: "'Satoshi', sans-serif",
+              background:
+                'linear-gradient(90deg, #8B6228 0%, #C4943D 18%, #E6B865 35%, #FFF3D6 50%, #E6B865 65%, #C4943D 82%, #8B6228 100%)',
+              backgroundSize: '240% 100%',
+              WebkitBackgroundClip: 'text',
+              backgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+              filter: 'drop-shadow(0 0 18px rgba(212,160,83,0.22))',
+              letterSpacing: '-0.02em',
             }}
           >
             My Disco
           </h1>
+          {/* Thin bronze underline flourish — echoes GreetingBanner so
+              the "daily arrival moment" language stays consistent. */}
+          <div
+            className="h-[1.5px] mt-1.5 rounded-full"
+            style={{
+              width: '34%',
+              background:
+                'linear-gradient(90deg, rgba(212,160,83,0.85) 0%, rgba(230,184,101,0.5) 50%, rgba(212,160,83,0.08) 100%)',
+            }}
+          />
         </button>
 
         {/* Search bar — bronze focus ring, dark glass base */}
@@ -873,6 +953,7 @@ export const Library = ({ onTrackClick }: LibraryProps) => {
       {/* ── Scroll list — tracks + the "Not in your Disco" fallback ── */}
       <div
         ref={scrollContainerRef}
+        onScroll={onListScroll}
         className="flex-1 overflow-y-auto"
         style={{ paddingBottom: 'calc(76px + env(safe-area-inset-bottom, 0px))' }}
       >
@@ -895,29 +976,31 @@ export const Library = ({ onTrackClick }: LibraryProps) => {
           )}
         </div>
 
+        {orderedTracks.length > 0 && (
+          /* Dedicated Big-Play row — detached from the first track so
+             the "play what's showing" gesture has its own space + a
+             clear visual separator from the list below. Slightly
+             bigger button and bolder mode label — earns a bit more
+             weight than when it was inline. */
+          <PlayAllBar
+            modeLabel={modeLabel}
+            onPlay={handlePlayAll}
+            onLongPress={() => setPlayMenuOpen(true)}
+          />
+        )}
+
         {orderedTracks.length > 0 ? (
           orderedTracks.map((track, index) => (
-            <div key={track.id} className={index === 0 ? 'relative' : ''}>
-              <SongRow
-                track={track}
-                index={index}
-                isLiked={likedTracks.has(track.id)}
-                cacheQuality={trackQualityMap.get(track.trackId) || null}
-                onClick={() => handleTrackClick(track)}
-                onLike={() => handleLike(track.id)}
-                onAddToPlaylist={() => setPlaylistModalTrack(track)}
-              />
-              {/* Big Play button lives inline with the first (most recent)
-                  row — breaks the visual rhythm intentionally, anchors the
-                  "play what's showing" affordance where the eye lands. */}
-              {index === 0 && (
-                <PlayAllButton
-                  modeLabel={modeLabel}
-                  onPlay={handlePlayAll}
-                  onLongPress={() => setPlayMenuOpen(true)}
-                />
-              )}
-            </div>
+            <SongRow
+              key={track.id}
+              track={track}
+              index={index}
+              isLiked={likedTracks.has(track.id)}
+              cacheQuality={trackQualityMap.get(track.trackId) || null}
+              onClick={() => handleTrackClick(track)}
+              onLike={() => handleLike(track.id)}
+              onAddToPlaylist={() => setPlaylistModalTrack(track)}
+            />
           ))
         ) : !showFallback && (
           <div className="flex flex-col items-center justify-center py-12 text-white/40">
