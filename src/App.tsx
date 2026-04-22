@@ -294,6 +294,40 @@ const useOrientation = () => {
 //     version file. If it differs from the build-time stamp, we know a
 //     new build is live even if the SW hasn't updated yet. force=true
 //     auto-clears all caches and reloads (no user choice).
+// Session-storage flag: a force-reload was requested while user was mid-track.
+// Consumed on next poll / mount / 'ended' / tab-close-reopen so the update still
+// lands, just at a moment that doesn't interrupt listening.
+const PENDING_FORCE_RELOAD_KEY = 'voyo-pending-force-reload-v1';
+
+/**
+ * Runs the destructive cache-wipe + reload. Extracted so it can be called
+ * immediately (safe moment) OR deferred via an 'ended' listener / next poll.
+ */
+async function performForceReload(): Promise<void> {
+  if (document.pictureInPictureElement) {
+    try { await document.exitPictureInPicture(); } catch {}
+  }
+  if ('caches' in window) {
+    const keys = await caches.keys();
+    // Preserve voyo-audio-v2 — the SW's own activate handler does the same.
+    // Wiping it forces users to re-download already-played audio on every
+    // version bump (bandwidth-expensive in Guinea / SL).
+    await Promise.all(keys.filter(k => k !== 'voyo-audio-v2').map(k => caches.delete(k)));
+  }
+  window.location.reload();
+}
+
+/** Returns true if it's safe to reload right now (not mid-track). */
+function isSafeToReload(): boolean {
+  try {
+    const { isPlaying, currentTrack, currentTime, duration } = usePlayerStore.getState();
+    if (!isPlaying || !currentTrack) return true;
+    if (duration <= 0) return true; // no duration known → assume safe
+    const remaining = duration - currentTime;
+    return remaining <= 10; // <10s left is close enough to "just finish"
+  } catch { return true; }
+}
+
 function UpdateButton() {
   const [available, setAvailable] = useState(false);
   const [forceUpdate, setForceUpdate] = useState(false);
@@ -303,7 +337,40 @@ function UpdateButton() {
     window.addEventListener('voyo-update-available', swHandler);
 
     let active = true;
+    let endedListenerAttached = false;
+
+    // One-shot 'ended' listener on the global <audio> element. Fires when the
+    // current track finishes naturally, at which point we perform the deferred
+    // force-reload. Kept alive across track boundaries only if the reload is
+    // still pending.
+    const attachEndedListener = () => {
+      if (endedListenerAttached) return;
+      const audioEl = document.querySelector('audio');
+      if (!audioEl) return;
+      endedListenerAttached = true;
+      const onEnded = () => {
+        audioEl.removeEventListener('ended', onEnded);
+        endedListenerAttached = false;
+        if (sessionStorage.getItem(PENDING_FORCE_RELOAD_KEY) === '1') {
+          void performForceReload();
+        }
+      };
+      audioEl.addEventListener('ended', onEnded);
+    };
+
     async function checkVersion() {
+      // If a reload was previously deferred, re-evaluate: user may have paused /
+      // finished the track / closed-reopened the tab. Do this BEFORE fetching
+      // version.json so we don't even need a network round-trip.
+      if (sessionStorage.getItem(PENDING_FORCE_RELOAD_KEY) === '1') {
+        if (isSafeToReload()) {
+          setForceUpdate(true);
+          void performForceReload();
+          return;
+        }
+        attachEndedListener();
+      }
+
       try {
         const res = await fetch('/version.json?t=' + Date.now(), {
           cache: 'no-store',
@@ -313,16 +380,15 @@ function UpdateButton() {
         const data = await res.json();
         if (data.version && data.version !== __APP_VERSION__) {
           if (data.force) {
-            setForceUpdate(true);
-            // Exit PiP before reload — destroying DOM mid-PiP crashes the app
-            if (document.pictureInPictureElement) {
-              try { await document.exitPictureInPicture(); } catch {}
+            if (isSafeToReload()) {
+              setForceUpdate(true);
+              await performForceReload();
+            } else {
+              // DEFER — user is mid-track with >10s left. Persist so we still
+              // reload if the tab closes + reopens before the track ends.
+              try { sessionStorage.setItem(PENDING_FORCE_RELOAD_KEY, '1'); } catch {}
+              attachEndedListener();
             }
-            if ('caches' in window) {
-              const keys = await caches.keys();
-              await Promise.all(keys.map(k => caches.delete(k)));
-            }
-            window.location.reload();
           } else {
             setAvailable(true);
           }
