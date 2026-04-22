@@ -21,6 +21,8 @@ import { iframeBridge } from '../player/iframeBridge';
 import { oyo, app } from '../services/oyo';
 import { useAudioChain } from '../audio/graph/useAudioChain';
 import { useFrequencyPump } from '../audio/graph/freqPump';
+import { useBgEngine } from '../audio/bg/bgEngine';
+import { useWakeLock } from '../audio/bg/useWakeLock';
 import { devLog, devWarn } from '../utils/logger';
 import { logPlaybackEvent } from '../services/telemetry';
 import { loadOyoState, handleRapidSkip } from '../services/oyoState';
@@ -111,10 +113,12 @@ export const AudioPlayer = () => {
   // ── Web Audio chain (VOYEX EQ + spatial effects) ──────────────────────
   const {
     audioContextRef,
+    gainNodeRef,
     setupAudioEnhancement,
     applyMasterGain,
     fadeInMasterGain,
     softFadeOut,
+    computeMasterTarget,
   } = useAudioChain({
     audioRef,
     volume,
@@ -123,6 +127,34 @@ export const AudioPlayer = () => {
     isPlaying,
     playbackSource,
   });
+
+  // ── BG invariant (silent-WAV keeper + heartbeat + suspend/resume) ─────
+  // Restored from the pre-VPS era. Owns EVERY BG-related mitigation so
+  // AudioPlayer stays narrow. Invariant: while store.isPlaying is true,
+  // the <audio> element is always playing SOMETHING (real track or the
+  // silent WAV keeper) — the OS never revokes audio focus, so BG return
+  // finds a live session instead of a dead one.
+  const runEndedAdvanceRef = useRef<() => void>(() => {});
+  const syntheticEndedBypassRef = useRef<boolean>(false);
+  const lastEndedTrackIdRef = useRef<string | null>(null);
+  const { engageSilentWav, isTransitioningToBackgroundRef } = useBgEngine({
+    audioRef,
+    audioContextRef,
+    gainNodeRef,
+    isLoadingTrackRef: trackSwapInProgressRef,
+    isPlaying,
+    playbackSource,
+    computeMasterTarget,
+    runEndedAdvanceRef,
+    syntheticEndedBypassRef,
+    lastEndedTrackIdRef,
+  });
+  // Request screen wake-lock while playing so the device doesn't deep-sleep.
+  useWakeLock(isPlaying);
+  // Silence unused-ref warnings — consumers are the useBgEngine API and
+  // the silent-WAV bridges engaged at transition points below.
+  void engageSilentWav;
+  void isTransitioningToBackgroundRef;
 
   // ── Hot-swap: iframe → R2 cross-fade, snapshot resume, watcher lifecycle ──
   // Self-contained hook. Activates whenever playbackSource flips to 'iframe'
@@ -353,31 +385,13 @@ export const AudioPlayer = () => {
     }
   }, [currentTrack?.trackId]);
 
-  // ── AudioContext power gate ──────────────────────────────────────────
-  // When paused for a while, suspend the Web Audio graph so it stops
-  // running the scheduler / tick loop on the audio thread. Resume on
-  // next play (canplay's fadeInMasterGain already calls ctx.resume()).
-  // Saves measurable battery on mobile during long pauses.
-  useEffect(() => {
-    if (isPlaying) return;
-    const ctx = audioContextRef.current;
-    if (!ctx || ctx.state !== 'running') return;
-    const t = setTimeout(() => {
-      const ctxNow = audioContextRef.current;
-      if (ctxNow && ctxNow.state === 'running' && !usePlayerStore.getState().isPlaying) {
-        ctxNow.suspend().catch(() => {});
-      }
-    }, 30_000);
-    return () => clearTimeout(t);
-  }, [isPlaying, audioContextRef]);
-
-  // ── Background recovery ───────────────────────────────────────────────
-  // When the user returns from a BG state where audio was playing but
-  // got paused mid-track (iOS audio-session yank during a phone call,
-  // aggressive Chrome Android battery throttling, Samsung DeX context
-  // switch), retry play() so they don't come back to dead silence.
-  // Prior gate on voyoStream.streamUrl was always null post-VPS-rip,
-  // so this effect silently did nothing for months.
+  // ── Background recovery (superseded by bgEngine) ─────────────────────
+  // bgEngine owns the capture-phase visibilitychange handler, the 5s
+  // battery-suspend timer, and the heartbeat that keeps audio alive in
+  // BG. This useEffect is kept ONLY as a last-line kick in case the
+  // bgEngine heartbeat cadence (4s) hasn't fired yet by the time the
+  // user comes back — we still want to be correct if they return within
+  // the first tick. bgEngine's element-kick is idempotent with this one.
   useEffect(() => {
     let wentHiddenAt: number | null = null;
 
@@ -654,46 +668,11 @@ export const AudioPlayer = () => {
     }
   }, [setCurrentTime, setProgress, setDuration]);
 
-  // ── BG auto-advance watchdog — setInterval, not timeupdate ───────────
-  // The previous watchdog lived inside handleTimeUpdate. Problem:
-  // `timeupdate` events stop firing once <audio> reaches ended+paused —
-  // the exact state we were watching for. On Chrome Android Power Save
-  // (Pixel 7) this manifests as "app stops after one song". setInterval
-  // keeps firing in BG (throttled to ~1/sec min, but never halted), so
-  // its cadence is independent of the audio element's event stream.
-  //
-  // Fires nextTrack() when the element is genuinely finished (ended=true
-  // OR paused-at-duration-end) and the store still thinks we're playing.
-  // Skips when a track swap is in flight (swap owns advance) and when
-  // playbackSource='iframe' (iframe's own ENDED handler owns advance).
-  useEffect(() => {
-    const id = window.setInterval(() => {
-      const el = audioRef.current;
-      if (!el) return;
-      if (trackSwapInProgressRef.current) return;
-      const store = usePlayerStore.getState();
-      if (!store.isPlaying) return;
-      if (store.playbackSource === 'iframe') return;
-      const dur = isFinite(el.duration) ? el.duration : 0;
-      const nearEnd = dur > 0 && el.currentTime >= dur - 0.3;
-      const finished = el.ended || (el.paused && nearEnd);
-      if (!finished) return;
-      logPlaybackEvent({
-        event_type: 'skip_auto',
-        track_id: store.currentTrack?.trackId ?? 'unknown',
-        meta: {
-          reason: 'bg_auto_advance_watchdog_v2',
-          ended: el.ended,
-          paused: el.paused,
-          current_time: el.currentTime,
-          duration: dur,
-          hidden: document.hidden,
-        },
-      });
-      store.nextTrack();
-    }, 1000);
-    return () => window.clearInterval(id);
-  }, []);
+  // BG auto-advance: owned by bgEngine's heartbeat (synthetic-ended +
+  // stuck-playback detectors) via runEndedAdvanceRef, which we point at
+  // handleEnded below. The old setInterval watchdog here was made
+  // obsolete by bgEngine's MessageChannel heartbeat (MC isn't throttled
+  // in BG, setInterval is).
 
   const handleEnded = useCallback(() => {
     // R2-direct playback — the audio element gets a discrete R2 file per
@@ -710,10 +689,33 @@ export const AudioPlayer = () => {
     logPlaybackEvent({
       event_type: 'stream_ended',
       track_id: trackId,
-      meta: { source: usePlayerStore.getState().playbackSource, advance: 'local_next' },
+      meta: {
+        source: usePlayerStore.getState().playbackSource,
+        advance: 'local_next',
+        bypass: syntheticEndedBypassRef.current,
+      },
     });
+    // Dedup for bgEngine's synthetic-ended + stuck detectors: remember
+    // this was the last trackId we advanced, so the detectors don't fire
+    // again on the same track after we've already triggered.
+    lastEndedTrackIdRef.current = trackId;
+    // Reset the bypass flag — it was set to true by bgEngine only for
+    // this one escalated advance; keep normal ended-gating for future.
+    syntheticEndedBypassRef.current = false;
+    // Engage the silent-WAV keeper right now to bridge the gap between
+    // this track ending and the next track's src landing. Keeps the
+    // audio element "playing" so the OS doesn't revoke audio focus
+    // (which is what causes BG sessions to die mid-transition).
+    engageSilentWav('ended_advance', trackId);
     usePlayerStore.getState().nextTrack();
-  }, []);
+  }, [engageSilentWav]);
+
+  // Keep runEndedAdvanceRef pointed at the latest handleEnded so bgEngine's
+  // heartbeat detectors (synthetic-ended, stuck-playback) can trigger advance
+  // through the same code path as the normal 'ended' event.
+  useEffect(() => {
+    runEndedAdvanceRef.current = handleEnded;
+  }, [handleEnded]);
 
   // ── MediaSession ──────────────────────────────────────────────────────
   useEffect(() => {
