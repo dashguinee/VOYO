@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { usePWA } from '../../hooks/usePWA';
 import { IOSInstallSheet } from './IOSInstallSheet';
+import { trace } from '../../services/telemetry';
 
 const DISMISS_KEY = 'voyo-install-banner-dismissed-at';
 const COOLDOWN_MS = 14 * 24 * 60 * 60 * 1000;
@@ -70,8 +71,10 @@ export function InstallBanner() {
     const showTimer = window.setTimeout(() => {
       setVisible(true);
       markSeenThisSession();
+      trace('pwa_install_shown', null, { surface: 'banner', platform, has_native_prompt: hasNativePrompt });
     }, SHOW_DELAY_MS);
     return () => window.clearTimeout(showTimer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isInstallable, isInstalled]);
 
   // Auto-hide after 10s of visibility. Cancelled if user is actively
@@ -79,27 +82,37 @@ export function InstallBanner() {
   useEffect(() => {
     if (!visible || leaving) return;
     const t = window.setTimeout(() => {
-      if (!dragActive.current) dismiss(false);
+      if (!dragActive.current) dismiss(false, 'auto');
     }, AUTO_HIDE_MS);
     return () => window.clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible, leaving]);
 
-  const dismiss = (remember: boolean) => {
+  const dismiss = (remember: boolean, dismissType: 'x' | 'swipe' | 'auto' | 'installed' = 'auto') => {
     setLeaving(true);
     window.setTimeout(() => setVisible(false), 360);
     if (remember) {
       try { localStorage.setItem(DISMISS_KEY, String(Date.now())); } catch { /* private mode */ }
     }
+    if (dismissType !== 'installed') {
+      trace('pwa_install_dismissed', null, { surface: 'banner', platform, dismiss_type: dismissType });
+    }
   };
 
   const handleInstall = async () => {
+    trace('pwa_install_clicked', null, { surface: 'banner', platform, has_native_prompt: hasNativePrompt });
     if (platform === 'ios' || !hasNativePrompt) {
       setIosSheetOpen(true);
+      trace('pwa_install_sheet_opened', null, { surface: 'banner', platform });
       return;
     }
     const ok = await install();
-    if (ok) dismiss(false);
+    if (ok) {
+      trace('pwa_install_accepted', null, { surface: 'banner', platform });
+      dismiss(false, 'installed');
+    } else {
+      trace('pwa_install_dismissed', null, { surface: 'banner', platform, dismiss_type: 'native_cancelled' });
+    }
   };
 
   // ── Swipe-up gesture ────────────────────────────────────────────────
@@ -121,7 +134,7 @@ export function InstallBanner() {
     dragStartY.current = null;
     if (dragged <= -SWIPE_DISMISS_PX) {
       // Commit the dismissal — remember for 14 days, just like the ×.
-      dismiss(true);
+      dismiss(true, 'swipe');
     } else {
       // Snap back.
       setDragY(0);
@@ -214,7 +227,7 @@ export function InstallBanner() {
 
           <button
             onPointerDown={(e) => e.stopPropagation()}
-            onClick={() => dismiss(true)}
+            onClick={() => dismiss(true, 'x')}
             aria-label="Dismiss"
             className="flex-shrink-0 w-6 h-6 -mr-1 flex items-center justify-center text-white/30 hover:text-white/70 text-lg leading-none voyo-tap-scale"
           >

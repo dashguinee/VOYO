@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { usePWA } from '../../hooks/usePWA';
 import { IOSInstallSheet } from './IOSInstallSheet';
+import { trace } from '../../services/telemetry';
 
 /**
  * Subtle PWA Install Button — bottom-right floating pill.
@@ -15,15 +16,31 @@ import { IOSInstallSheet } from './IOSInstallSheet';
 export function InstallButton() {
   const { isInstallable, isInstalled, install, platform, hasNativePrompt } = usePWA();
   const [iosSheetOpen, setIosSheetOpen] = useState(false);
+  const shownLogged = useRef(false);
+
+  // Fire pwa_install_shown once per mount when the pill actually renders.
+  useEffect(() => {
+    if (isInstalled || !isInstallable) return;
+    if (shownLogged.current) return;
+    shownLogged.current = true;
+    trace('pwa_install_shown', null, { surface: 'pill', platform, has_native_prompt: hasNativePrompt });
+  }, [isInstallable, isInstalled, platform, hasNativePrompt]);
 
   if (isInstalled || !isInstallable) return null;
 
-  const handleClick = () => {
+  const handleClick = async () => {
+    trace('pwa_install_clicked', null, { surface: 'pill', platform, has_native_prompt: hasNativePrompt });
     if (platform === 'ios' || !hasNativePrompt) {
       setIosSheetOpen(true);
+      trace('pwa_install_sheet_opened', null, { surface: 'pill', platform });
       return;
     }
-    void install();
+    const ok = await install();
+    trace(ok ? 'pwa_install_accepted' : 'pwa_install_dismissed', null, {
+      surface: 'pill',
+      platform,
+      dismiss_type: ok ? undefined : 'native_cancelled',
+    });
   };
 
   return (

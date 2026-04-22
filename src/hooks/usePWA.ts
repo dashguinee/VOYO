@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { trace } from '../services/telemetry';
 
 interface BeforeInstallPromptEvent extends Event {
   prompt(): Promise<void>;
@@ -97,6 +98,7 @@ export function usePWA() {
       setIsInstallable(false);
       setDeferredPrompt(null);
       writeInstalledFlag();
+      trace('pwa_install_completed', null, { platform: p });
     };
 
     window.addEventListener('beforeinstallprompt', handleBeforeInstall);
