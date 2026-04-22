@@ -529,9 +529,46 @@ export function useMoments(): UseMomentsReturn {
   }, []);
 
   const recordOye = useCallback(async (momentId: string) => {
+    // C2 fanout — feed the taste graph from Moments OYEs too.
+    // Find the moment's parent_track_id by walking the fetched-moments map.
+    // Cheap: Map is at most a few hundred rows in practice.
+    let parentTrackId: string | undefined;
+    let matched: Moment | undefined;
+    for (const list of moments.values()) {
+      const hit = list.find(m => m.id === momentId);
+      if (hit) {
+        matched = hit;
+        parentTrackId = hit.parent_track_id;
+        break;
+      }
+    }
+    if (parentTrackId && matched) {
+      // Route through the canonical OYE fanout so the moment reaction
+      // contributes to favoriteArtists + recordRemoteSignal('react') just
+      // like a music-player OYE does. Exactly ONE voyo_signals row written
+      // per tap (matches C1 consolidation).
+      try {
+        const [{ oyo }] = await Promise.all([import('../services/oyo/index')]);
+        oyo.onOye({
+          id: parentTrackId,
+          trackId: parentTrackId,
+          title: matched.parent_track_title || matched.title,
+          artist: matched.parent_track_artist || matched.creator_name || '',
+          coverUrl: matched.thumbnail_url,
+        } as never);
+      } catch {
+        // non-fatal — reaction increment below is the primary effect
+      }
+    }
+
     if (!supabase || !isSupabaseConfigured) return;
     try {
-      // Increment voyo_reactions
+      // Known race: two rapid OYEs can both read voyo_reactions=N and
+      // both write N+1, dropping one increment. Acceptable trade-off for
+      // now — the voyo_signals fanout above is the taste-graph truth;
+      // voyo_moments.voyo_reactions is a displayed counter, not a
+      // source-of-truth. Follow-up ticket: add an atomic
+      // increment_moment_reaction RPC (audit AUDIT-MOMENTS-1 finding #3).
       const { data: current } = await supabase
         .from('voyo_moments')
         .select('voyo_reactions')
@@ -547,7 +584,7 @@ export function useMoments(): UseMomentsReturn {
     } catch {
       // Silent fail
     }
-  }, []);
+  }, [moments]);
 
   const recordStar = useCallback(async (momentId: string, creatorUsername: string, stars: number) => {
     if (!supabase || !isSupabaseConfigured) return;
