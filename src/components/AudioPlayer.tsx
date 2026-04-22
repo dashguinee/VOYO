@@ -81,6 +81,11 @@ export const AudioPlayer = () => {
   // sets this to TRACK_CHANGE_FADE_IN_MS so the incoming track eases in;
   // buffer recoveries (no set) get the default short anti-click ramp.
   const nextFadeInMsRef = useRef<number | null>(null);
+  // Trackes the trackId whose "next up" has already been pre-warmed via
+  // ensureTrackReady at priority=7. Cleared on every track change so each
+  // new track gets exactly one predictive pre-warm round. Without this the
+  // 4Hz timeupdate would fire ensureTrackReady hundreds of times per track.
+  const prewarmFiredForRef = useRef<string | null>(null);
   // Monotonic counter incremented on every track-change effect entry.
   // Async work inside the effect captures its token and bails if the ref
   // has moved past it — prevents a stale closure from a prior skip from
@@ -175,6 +180,9 @@ export const AudioPlayer = () => {
     if (!currentTrack) return;
     // Reset completion signal on every track change
     completionSignaledRef.current = false;
+    // Clear predictive pre-warm latch so the new track gets its own single
+    // ahead-of-time ensureTrackReady call at the 50% mark.
+    prewarmFiredForRef.current = null;
 
     devLog(`[AudioPlayer] track change: ${currentTrack.trackId}`);
 
@@ -529,6 +537,39 @@ export const AudioPlayer = () => {
     if (progress >= 0.8 && !completionSignaledRef.current) {
       completionSignaledRef.current = true;
       oyaPlanSignal('completion');
+    }
+
+    // ── Predictive pre-warm ──────────────────────────────────────────────
+    // At 50% of the current track, fire ensureTrackReady on what's coming
+    // next at priority=7 (below user-click p=10, above background p=0). The
+    // VPS lane can then extract the next track in parallel with the current
+    // track's second half — when A ends, B's R2 file is already warm and
+    // the hot-swap lands instantly instead of iframe-bridging 3-12s of
+    // extraction lag. Fires exactly once per track (prewarmFiredForRef).
+    // Canonical "warm it up and slide it in" loop: predict → warm → arrive.
+    const curTrack = usePlayerStore.getState().currentTrack;
+    const curTrackId = curTrack?.trackId ?? null;
+    if (
+      progress >= 0.5 &&
+      curTrackId &&
+      prewarmFiredForRef.current !== curTrackId
+    ) {
+      prewarmFiredForRef.current = curTrackId;
+      const store = usePlayerStore.getState();
+      const upcoming = store.queue[0]?.track ?? store.predictUpcoming(1)[0] ?? null;
+      if (upcoming && upcoming.trackId && upcoming.trackId !== curTrackId) {
+        void ensureTrackReady(upcoming, null, { priority: 7 });
+        logPlaybackEvent({
+          event_type: 'trace',
+          track_id: upcoming.trackId,
+          meta: {
+            subtype: 'predictive_prewarm',
+            from_track: curTrackId,
+            progress_at_fire: progress,
+            source: store.queue.length > 0 ? 'queue' : 'predict',
+          },
+        });
+      }
     }
 
     setCurrentTime(position);
