@@ -265,15 +265,45 @@ export const YouTubeIframe = memo(() => {
         },
         onStateChange: (e: any) => {
           if (e.data === YT_STATES.ENDED) {
-            // In VPS streaming mode, the VPS handles all track advancement via SSE.
-            // Ignore ENDED from YouTube — it fires spuriously on player init/destroy
-            // and would cause session cycling if allowed through.
-            const ps = usePlayerStore.getState().playbackSource;
-            if (ps === 'cached' || ps === 'r2') {
-              devLog('[YouTubeIframe] ENDED ignored — VPS owns track advance in boosted mode');
+            // OYO never stops. The only question is who fires the advance.
+            //
+            // If playbackSource is 'iframe' the iframe IS the audio source, so
+            // its ENDED is authoritative — advance immediately.
+            //
+            // If playbackSource is 'r2'/'cached' the audio element owns
+            // playback and its own 'ended' event (AudioPlayer.handleEnded)
+            // normally fires the advance. But that event can misfire — blocked
+            // autoplay, iOS BG throttle, short/incomplete R2 stream, stalled
+            // element. Previous guard simply ignored ENDED in this case,
+            // producing the "app stops after one song" stall whenever audio's
+            // 'ended' didn't reach us.
+            //
+            // New behaviour: watchdog. 3s after iframe ENDED, if currentTrack
+            // hasn't changed AND the audio element is actually finished (near
+            // its duration or paused), force nextTrack. If audio was still
+            // playing healthily past the iframe's end — R2 file slightly
+            // longer than the iframe video — the watchdog leaves it alone so
+            // the user hears the full track.
+            const store = usePlayerStore.getState();
+            const ps = store.playbackSource;
+            if (ps !== 'cached' && ps !== 'r2') {
+              nextTrack();
               return;
             }
-            nextTrack();
+            const trackAtEnd = store.currentTrack?.trackId ?? null;
+            setTimeout(() => {
+              const now = usePlayerStore.getState().currentTrack?.trackId ?? null;
+              if (!now || now !== trackAtEnd) return; // audio already advanced
+              const audioEl = document.querySelector('audio');
+              const audioFinished = !audioEl
+                || audioEl.paused
+                || audioEl.ended
+                || (audioEl.duration > 0 && audioEl.currentTime / audioEl.duration > 0.98);
+              if (audioFinished) {
+                devLog('[YouTubeIframe] ENDED watchdog — audio did not advance, forcing nextTrack');
+                nextTrack();
+              }
+            }, 3000);
           }
         },
         onError: (e: any) => {
