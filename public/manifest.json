@@ -43,6 +43,8 @@
     "enctype": "application/x-www-form-urlencoded",
     "params": { "text": "q" }
   },
-  "related_applications": [],
+  "related_applications": [
+    { "platform": "webapp", "url": "https://voyomusic.com/manifest.json" }
+  ],
   "prefer_related_applications": false
 }
