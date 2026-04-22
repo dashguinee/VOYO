@@ -156,7 +156,7 @@ function ProfileCard({
             {/* Avatar — bigger (72px) */}
             <div className="relative flex-shrink-0">
               {userAvatar ? (
-                <img src={userAvatar} alt="" className="w-[72px] h-[72px] rounded-full object-cover ring-2 ring-white/[0.1]" />
+                <img src={userAvatar} alt="" loading="lazy" decoding="async" className="w-[72px] h-[72px] rounded-full object-cover ring-2 ring-white/[0.1]" />
               ) : (
                 <div className="w-[72px] h-[72px] rounded-full bg-gradient-to-br from-purple-500 to-violet-600 flex items-center justify-center text-2xl font-bold text-white ring-2 ring-white/[0.1]">
                   {getInitials(userName)}
@@ -229,7 +229,7 @@ function ProfileCard({
                 <div className="relative">
                   <div className="w-14 h-14 rounded-full overflow-hidden border-[3px] border-white shadow-xl">
                     {onlineFriends[0]?.avatar ? (
-                      <img src={onlineFriends[0].avatar} alt="" className="w-full h-full object-cover" />
+                      <img src={onlineFriends[0].avatar} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
                     ) : onlineCount > 0 ? (
                       <div className="w-full h-full bg-gradient-to-br from-purple-500 to-[#D4A053] flex items-center justify-center text-base text-white font-bold">
                         {getInitials(onlineFriends[0]?.name || '?')}
@@ -266,7 +266,7 @@ function ProfileCard({
                     }}
                   >
                     {friend.avatar ? (
-                      <img src={friend.avatar} alt="" className="w-full h-full object-cover" />
+                      <img src={friend.avatar} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
                     ) : (
                       <div className="w-full h-full bg-gradient-to-br from-purple-500 to-[#D4A053] flex items-center justify-center text-[9px] text-white font-bold">
                         {getInitials(friend.name)}
@@ -403,7 +403,7 @@ function NotesStoriesSection({
                 <div className="rounded-full" style={ringStyle}>
                   <div className="w-[74px] h-[74px] rounded-full overflow-hidden bg-[#0a0a0f]">
                     {friend.avatar ? (
-                      <img src={friend.avatar} alt="" className={`w-full h-full object-cover ${!isOnline ? 'opacity-50' : ''}`} />
+                      <img src={friend.avatar} alt="" loading="lazy" decoding="async" className={`w-full h-full object-cover ${!isOnline ? 'opacity-50' : ''}`} />
                     ) : (
                       <div className={`w-full h-full bg-gradient-to-br from-purple-500/60 to-violet-600/60 flex items-center justify-center text-white text-xl font-semibold ${!isOnline ? 'opacity-50' : ''}`}>
                         {getInitials(friend.name)}
@@ -461,7 +461,7 @@ function FollowingSection() {
               >
                 <div className={`relative w-20 h-20 rounded-2xl overflow-hidden ${artist.isLive ? 'ring-2 ring-red-500' : 'ring-1 ring-white/10'}`}>
                   {/* Image zoomed in */}
-                  <img src={artist.avatar} alt="" className="w-full h-full object-cover scale-150" />
+                  <img src={artist.avatar} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover scale-150" />
 
                   {/* Full card overlay for cohesion */}
                   <div className="absolute inset-0 bg-black/20" />
@@ -582,7 +582,7 @@ function FriendItem({ friend, onClick }: { friend: Friend; onClick: () => void }
           friend.avatar ? '' : 'bg-gradient-to-br from-purple-500/60 to-violet-600/60'
         } ${!isOnline ? 'opacity-50' : ''}`}>
           {friend.avatar ? (
-            <img src={friend.avatar} alt="" className="w-full h-full object-cover" />
+            <img src={friend.avatar} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
           ) : (
             <span className="text-base">{getInitials(friend.name)}</span>
           )}
@@ -645,7 +645,7 @@ function MessageItem({ convo, onClick }: { convo: Conversation; onClick: () => v
           convo.friend_avatar ? '' : 'bg-gradient-to-br from-purple-500/60 to-violet-600/60'
         }`}>
           {convo.friend_avatar ? (
-            <img src={convo.friend_avatar} alt="" className="w-full h-full object-cover" />
+            <img src={convo.friend_avatar} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
           ) : (
             <span className="text-base">{getInitials(convo.friend_name)}</span>
           )}
@@ -722,7 +722,7 @@ function DashMemberItem({
       <div className="relative flex-shrink-0">
         <div className="w-14 h-14 rounded-full overflow-hidden flex items-center justify-center font-semibold text-white bg-gradient-to-br from-white/10 to-white/5 opacity-55">
           {member.avatar ? (
-            <img src={member.avatar} alt="" className="w-full h-full object-cover" />
+            <img src={member.avatar} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
           ) : (
             <span className="text-base">{getInitials(member.name)}</span>
           )}
@@ -918,7 +918,7 @@ function NoteEditModal({ note, userAvatar, userName, onSave, onClose }: { note: 
             </div>
             {/* Avatar */}
             {userAvatar ? (
-              <img src={userAvatar} alt="" className="w-20 h-20 rounded-full object-cover ring-2 ring-purple-500/30 mx-auto" />
+              <img src={userAvatar} alt="" loading="lazy" decoding="async" className="w-20 h-20 rounded-full object-cover ring-2 ring-purple-500/30 mx-auto" />
             ) : (
               <div className="w-20 h-20 rounded-full bg-gradient-to-br from-purple-500 to-violet-600 flex items-center justify-center text-2xl font-bold text-white ring-2 ring-purple-500/30 mx-auto">
                 {userName[0]?.toUpperCase()}

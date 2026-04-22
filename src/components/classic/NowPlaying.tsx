@@ -52,7 +52,10 @@ const AlbumArtBackground = ({ coverUrl }: { coverUrl: string }) => (
   <div className="absolute inset-0 overflow-hidden">
     <img
       src={coverUrl}
-      alt="Album cover"
+      alt=""
+      loading="lazy"
+      decoding="async"
+      aria-hidden="true"
       className="absolute w-full h-full object-cover scale-110 blur-md"
     />
     {/* Gradient overlay for depth */}
@@ -474,6 +477,8 @@ export const NowPlaying = ({ isOpen, onClose }: NowPlayingProps) => {
                 <img
                   src={getTrackThumbnailUrl(currentTrack, 'medium')}
                   alt={currentTrack.title}
+                  decoding="async"
+                  fetchPriority="high"
                   className="w-full h-full object-cover"
                 />
               </div>
@@ -676,6 +681,8 @@ export const NowPlaying = ({ isOpen, onClose }: NowPlayingProps) => {
                           <img
                             src={getTrackThumbnailUrl(item.track, 'default')}
                             alt={item.track.title}
+                            loading="lazy"
+                            decoding="async"
                             className="w-full h-full object-cover"
                           />
                         </div>

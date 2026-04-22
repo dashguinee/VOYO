@@ -921,6 +921,9 @@ function App() {
               <img
                 src={getBackgroundUrl()}
                 alt=""
+                loading="lazy"
+                decoding="async"
+                aria-hidden="true"
                 className="absolute inset-0 w-full h-full object-cover blur-3xl opacity-15 scale-110"
                 onError={() => setBgError(true)}
               />

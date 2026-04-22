@@ -245,6 +245,9 @@ export const StationHero = ({ station }: StationHeroProps) => {
         <img
           src={getThumb(station.hero_video_id)}
           alt=""
+          decoding="async"
+          fetchPriority="high"
+          aria-hidden="true"
           className="absolute inset-0 w-full h-full object-cover"
           style={{
             filter: 'brightness(0.52) blur(0.4px)',

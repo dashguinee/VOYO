@@ -585,7 +585,7 @@ const MomentCard = memo(({ moment, isOyed, onOye, isActive, isMuted, onToggleMut
       {format === 'r2_video' && (
         <>
           {/* Thumbnail as background fallback behind video */}
-          {moment.thumbnail_url && <img src={moment.thumbnail_url} alt="" style={S.thumb} loading="eager" draggable={false} />}
+          {moment.thumbnail_url && <img src={moment.thumbnail_url} alt="" style={S.thumb} loading="lazy" decoding="async" draggable={false} />}
           <video
             ref={videoRef}
             src={videoUrl}
@@ -621,7 +621,7 @@ const MomentCard = memo(({ moment, isOyed, onOye, isActive, isMuted, onToggleMut
       {/* === FORMAT: THUMBNAIL STATIC === */}
       {format === 'thumbnail' && (
         <>
-          {moment.thumbnail_url && <img src={moment.thumbnail_url} alt="" style={S.thumb} loading="eager" draggable={false} />}
+          {moment.thumbnail_url && <img src={moment.thumbnail_url} alt="" style={S.thumb} loading="lazy" decoding="async" draggable={false} />}
         </>
       )}
 

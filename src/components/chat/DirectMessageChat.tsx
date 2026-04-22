@@ -206,6 +206,7 @@ export const DirectMessageChat = memo(({
           <img
             src={otherUserAvatar}
             alt=""
+            decoding="async"
             className="w-10 h-10 rounded-full object-cover"
           />
         ) : (

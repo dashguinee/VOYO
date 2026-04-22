@@ -249,6 +249,8 @@ export const ProfilePage = () => {
               <img
                 src={avatarUrl}
                 alt={displayName}
+                decoding="async"
+                fetchPriority="high"
                 className="w-28 h-28 rounded-full object-cover ring-4 ring-purple-500/30"
               />
             ) : (
@@ -365,6 +367,9 @@ export const ProfilePage = () => {
                 <img
                   src={nowPlaying.thumbnail}
                   alt=""
+                  loading="lazy"
+                  decoding="async"
+                  aria-hidden="true"
                   className="w-full h-full object-cover blur-2xl"
                 />
               </div>
@@ -376,6 +381,7 @@ export const ProfilePage = () => {
                     <img
                       src={nowPlaying.thumbnail}
                       alt={nowPlaying.title}
+                      decoding="async"
                       className="w-24 h-24 rounded-xl object-cover shadow-2xl"
                     />
                     {nowPlaying.isPlaying && (
@@ -587,6 +593,8 @@ export const ProfilePage = () => {
                 <img
                   src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(profileUrl)}&bgcolor=ffffff&color=7c3aed&format=svg`}
                   alt="Profile QR Code"
+                  loading="lazy"
+                  decoding="async"
                   className="w-full h-full"
                 />
               </div>
