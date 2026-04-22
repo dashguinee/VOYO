@@ -14,6 +14,7 @@ import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { Track } from '../types';
 import { getThumb } from '../utils/thumbnail';
 import { devLog, devWarn } from '../utils/logger';
+import { getPlan } from './oyoPlan';
 
 // ============================================
 // TYPES
@@ -378,13 +379,40 @@ export async function saveVerifiedTracks(
 // SIGNAL RECORDING
 // ============================================
 
+// In-memory dedupe window. Two call paths (playerStore + oyo/index.ts) both fire
+// recordPoolEngagement('play') on the same track change, so identical rows
+// landed within a second. Skip if same (user, track, action) fired recently.
+const SIGNAL_DEDUPE_MS = 5_000;
+const recentSignals = new Map<string, number>();
+
+function resolveSessionVibe(): string | null {
+  try {
+    return getPlan()?.direction ?? null;
+  } catch { return null; }
+}
+
 export async function recordSignal(signal: SignalData): Promise<boolean> {
   if (!supabase || !isSupabaseConfigured) return false;
+
+  const userHash = getUserHash();
+  const key = `${userHash}:${signal.trackId}:${signal.action}`;
+  const now = Date.now();
+  const last = recentSignals.get(key);
+  if (last && now - last < SIGNAL_DEDUPE_MS) return true; // treat as success, already journalled
+  recentSignals.set(key, now);
+
+  // Opportunistic GC so the map never grows past a session's track count.
+  if (recentSignals.size > 500) {
+    for (const [k, t] of recentSignals) {
+      if (now - t > SIGNAL_DEDUPE_MS * 2) recentSignals.delete(k);
+    }
+  }
+
   const { error } = await supabase.from('voyo_signals').upsert({
     track_id: signal.trackId,
-    user_hash: getUserHash(),
+    user_hash: userHash,
     action: signal.action,
-    session_vibe: signal.sessionVibe || null,
+    session_vibe: signal.sessionVibe ?? resolveSessionVibe(),
     time_of_day: getTimeOfDay(),
     listen_duration: signal.listenDuration || 0,
   }, { ignoreDuplicates: true });
