@@ -298,6 +298,15 @@ export const AudioPlayer = () => {
           el.removeAttribute('src');
         }
         setSource('iframe');
+        // Iframe branch owns playback from here on — the audio element is
+        // intentionally silent (no src) and will NEVER fire canplay, so the
+        // trackSwap guard can't rely on handleCanPlay to clear it. Left set,
+        // the flag would permanently disable the BG auto-advance watchdog
+        // (AudioPlayer.tsx:512) and swallow every handlePause call for the
+        // lifetime of the iframe-sourced track. handlePause's separate
+        // playbackSource==='iframe' guard (line 461) still absorbs the
+        // expected audio-element pauses, so clearing here is safe.
+        trackSwapInProgressRef.current = false;
         setTimeout(() => {
           if (isStale()) return;
           logPlaybackEvent({
