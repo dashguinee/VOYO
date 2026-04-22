@@ -347,12 +347,29 @@ export function useHotSwap(
     // the poll below will catch it within HOT_SWAP_POLL_MS, no reason
     // to open a WebSocket channel we'll close seconds later. If it's
     // 'failed', no point subscribing at all.
+    //
+    // Reconnect strategy: memory notes the RT channel TIMED_OUT/CLOSED
+    // in prod. When that happens, the poll safety net was the only
+    // detector — capped at MAX_POLL_ATTEMPTS=60 × 2s = 120s, so any
+    // cold-queue track whose extraction exceeded ~2 min got stranded on
+    // iframe permanently. We now tear down the dead channel and
+    // re-subscribe up to RT_MAX_RECONNECTS times with a fixed 10s
+    // backoff (~30s recovery window). Each attempt is traced so
+    // telemetry can measure reconnect yield.
+    const RT_MAX_RECONNECTS = 3;
+    const RT_RECONNECT_DELAY_MS = 10_000;
+    let rtReconnectAttempts = 0;
+    const rtReconnectTimerRef: { current: ReturnType<typeof setTimeout> | null } = { current: null };
     if (supabase) {
       // voyo_upload_queue is keyed by raw YouTube id. trackId coming in
       // may be VOYO-prefixed (vyo_<base64>) — decode before querying or
       // the .eq() + RT filter will both silently miss.
       const ytId = getYouTubeId(trackId);
       const checkAndSubscribe = async () => {
+        // Track may have moved on between scheduling and running the
+        // (async) check. Don't subscribe against a stale trackId — the
+        // new track's watcher owns the channel now.
+        if (usePlayerStore.getState().currentTrack?.trackId !== trackId) return;
         let rowStatus: string | null = null;
         try {
           const { data } = await supabase!
@@ -384,9 +401,15 @@ export function useHotSwap(
             return;
           }
         } catch { /* non-fatal, fall through to RT */ }
+        // Re-check mount after the await — effect cleanup may have run.
+        if (usePlayerStore.getState().currentTrack?.trackId !== trackId) return;
         logPlaybackEvent({
           event_type: 'trace', track_id: trackId,
-          meta: { subtype: 'hotswap_rt_subscribe', rowStatus },
+          meta: {
+            subtype: 'hotswap_rt_subscribe',
+            rowStatus,
+            attempt: rtReconnectAttempts,
+          },
         });
         channelRef.current = supabase!
           .channel(`hotswap:${ytId}`)
@@ -417,8 +440,65 @@ export function useHotSwap(
           .subscribe((status: string) => {
             logPlaybackEvent({
               event_type: 'trace', track_id: trackId,
-              meta: { subtype: 'hotswap_rt_channel_status', status },
+              meta: {
+                subtype: 'hotswap_rt_channel_status',
+                status,
+                attempt: rtReconnectAttempts,
+              },
             });
+            // TIMED_OUT / CLOSED / CHANNEL_ERROR: channel is dead and
+            // will never recover on its own. Tear down, wait, then
+            // re-subscribe — bounded by RT_MAX_RECONNECTS so we don't
+            // loop forever against a hard-broken backend.
+            if (status === 'TIMED_OUT' || status === 'CLOSED' || status === 'CHANNEL_ERROR') {
+              if (rtReconnectAttempts >= RT_MAX_RECONNECTS) {
+                logPlaybackEvent({
+                  event_type: 'trace', track_id: trackId,
+                  meta: {
+                    subtype: 'hotswap_rt_reconnect_give_up',
+                    status,
+                    attempts: rtReconnectAttempts,
+                  },
+                });
+                return;
+              }
+              // Already scheduled a reconnect — don't stack timers.
+              if (rtReconnectTimerRef.current) return;
+              // Bail if the watcher has moved on (new track) — no point
+              // reconnecting a stale subscription.
+              if (usePlayerStore.getState().currentTrack?.trackId !== trackId) return;
+              rtReconnectAttempts += 1;
+              logPlaybackEvent({
+                event_type: 'trace', track_id: trackId,
+                meta: {
+                  subtype: 'hotswap_rt_reconnect_schedule',
+                  status,
+                  attempt: rtReconnectAttempts,
+                  delay_ms: RT_RECONNECT_DELAY_MS,
+                },
+              });
+              rtReconnectTimerRef.current = setTimeout(() => {
+                rtReconnectTimerRef.current = null;
+                // Final mount guard — track might have changed during delay.
+                if (usePlayerStore.getState().currentTrack?.trackId !== trackId) return;
+                // Tear down the dead channel before re-creating so
+                // Supabase's per-client channel registry doesn't leak.
+                try {
+                  if (channelRef.current && supabase) {
+                    supabase.removeChannel(channelRef.current);
+                  }
+                } catch {}
+                channelRef.current = null;
+                logPlaybackEvent({
+                  event_type: 'trace', track_id: trackId,
+                  meta: {
+                    subtype: 'hotswap_rt_reconnect_fire',
+                    attempt: rtReconnectAttempts,
+                  },
+                });
+                void checkAndSubscribe();
+              }, RT_RECONNECT_DELAY_MS);
+            }
           });
       };
       void checkAndSubscribe();
@@ -495,6 +575,10 @@ export function useHotSwap(
     return () => {
       if (snapRef.current) { clearInterval(snapRef.current); snapRef.current = null; }
       if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+      if (rtReconnectTimerRef.current) {
+        clearTimeout(rtReconnectTimerRef.current);
+        rtReconnectTimerRef.current = null;
+      }
       if (channelRef.current && supabase) {
         supabase.removeChannel(channelRef.current);
         channelRef.current = null;
