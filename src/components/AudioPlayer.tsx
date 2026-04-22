@@ -262,11 +262,19 @@ export const AudioPlayer = () => {
         };
         void tryPlay();
         setSource('r2');
-        logPlaybackEvent({
-          event_type: 'play_start',
-          track_id: currentTrack.trackId,
-          source: 'r2',
-        });
+        // Defer the play_start log — on rapid skip (A→B→C within a few
+        // hundred ms) the user never actually hears B, so logging
+        // play_start for it inflates session analytics. 300ms captures
+        // "user committed to this track" without delaying real events
+        // long enough to matter.
+        setTimeout(() => {
+          if (isStale()) return;
+          logPlaybackEvent({
+            event_type: 'play_start',
+            track_id: currentTrack.trackId,
+            source: 'r2',
+          });
+        }, 300);
       } else {
         // Blank the audio element so the iframe is the sole audio source.
         // intentionalPause flag prevents handlePause from flipping isPlaying.
@@ -276,11 +284,14 @@ export const AudioPlayer = () => {
           el.removeAttribute('src');
         }
         setSource('iframe');
-        logPlaybackEvent({
-          event_type: 'play_start',
-          track_id: currentTrack.trackId,
-          source: 'iframe',
-        });
+        setTimeout(() => {
+          if (isStale()) return;
+          logPlaybackEvent({
+            event_type: 'play_start',
+            track_id: currentTrack.trackId,
+            source: 'iframe',
+          });
+        }, 300);
         // Queue the track so lanes extract to R2 → useHotSwap watchers fire
         // the cross-fade as soon as it lands.
         void ensureTrackReady(currentTrack, null, { priority: 10 });
