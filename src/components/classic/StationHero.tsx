@@ -35,7 +35,11 @@ const IS_IOS = typeof navigator !== 'undefined'
   && /iPhone|iPad|iPod/.test(navigator.userAgent)
   && !(window as unknown as { MSStream?: unknown }).MSStream;
 
-const DWELL_MS = 7000;
+// Dwell before audio ramps in. Was 7000ms — felt slow enough that users
+// saw the YT loader finish, the video play, and still sat in silence for
+// several seconds. 2s is long enough to register intent (not a pass-by
+// scroll) without letting the user stare at a muted player.
+const DWELL_MS = 2000;
 
 function muxYTUrl(videoId: string): string {
   const params = new URLSearchParams({
@@ -92,19 +96,24 @@ export const StationHero = ({ station }: StationHeroProps) => {
   }, [station.id]);
 
   // Two observers with different thresholds:
-  //   - proximity (rootMargin 150% 0): iframe mount gate. Only loads when
-  //     the card is within ~1.5 viewport-heights of the visible region.
-  //   - visibility (>0.6 intersectionRatio): preview / dwell / pause gate.
+  //   - proximity (rootMargin 250% 0): iframe mount gate. Larger margin
+  //     than before so the YouTube embed loads + starts muted autoplay
+  //     well before the card scrolls into view. Kills the "see the YT
+  //     loader" moment + the mid-scroll iframe-mount jank.
+  //   - visibility (>0.35 intersectionRatio): preview / dwell / pause
+  //     gate. Lower than 0.6 so the dwell timer starts as soon as the
+  //     card is meaningfully on-screen — audio ramp begins by the time
+  //     the user is actually focused on it.
   useEffect(() => {
     const el = cardRef.current;
     if (!el) return;
     const nearObs = new IntersectionObserver(
       (entries) => setIsNearby(entries[0].isIntersecting),
-      { rootMargin: '150% 0px 150% 0px' }
+      { rootMargin: '250% 0px 250% 0px' }
     );
     const viewObs = new IntersectionObserver(
-      (entries) => setIsInView(entries[0].isIntersecting && entries[0].intersectionRatio > 0.6),
-      { threshold: [0.3, 0.6, 0.85] }
+      (entries) => setIsInView(entries[0].isIntersecting && entries[0].intersectionRatio > 0.35),
+      { threshold: [0.2, 0.35, 0.6, 0.85] }
     );
     nearObs.observe(el);
     viewObs.observe(el);
