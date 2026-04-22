@@ -52,13 +52,18 @@ export interface VibeProfile {
   'workout': number;      // 0-100
 }
 
-// Keywords for auto-detecting vibe from track metadata
+// Keywords for auto-detecting vibe from track metadata.
+// Kept aligned with the canonical list in src/store/intentStore.ts
+// (MODE_KEYWORDS). If you change one, change both. See comments in
+// intentStore for rationale on the 2026-04-22 purification (dropped
+// 'mix'/'dj' from party, 'love'/'essence'/'vibe' from chill, 'vibe' from
+// late-night, 'run'/'energy' from workout).
 const MODE_KEYWORDS: Record<MixBoardMode, string[]> = {
-  'afro-heat': ['afrobeat', 'afro', 'lagos', 'naija', 'amapiano', 'burna', 'davido', 'wizkid', 'afrobeats'],
-  'chill-vibes': ['chill', 'slow', 'r&b', 'soul', 'acoustic', 'mellow', 'relax', 'smooth', 'rnb'],
-  'party-mode': ['party', 'dance', 'club', 'banger', 'hype', 'turn up', 'edm', 'remix'],
-  'late-night': ['late', 'night', 'moody', 'dark', 'atmospheric', 'vibe', 'midnight'],
-  'workout': ['workout', 'gym', 'run', 'energy', 'pump', 'fitness', 'high tempo', 'intense'],
+  'afro-heat': ['afrobeats', 'afrobeat', 'afro', 'amapiano', 'naija', 'lagos', 'burna', 'davido', 'wizkid', 'rema', 'asake', 'ayra', 'tems', 'ckay', 'tyla', 'nigeria', 'ghana', 'african'],
+  'chill-vibes': ['chill', 'slow', 'calm', 'relax', 'smooth', 'mellow', 'downtempo', 'acoustic', 'rnb', 'r&b', 'soul', 'ballad', 'lofi'],
+  'party-mode': ['party', 'banger', 'turn up', 'club', 'dance', 'anthem', 'edm', 'hype', 'afro house', 'amapiano', 'baile'],
+  'late-night': ['night', 'late', 'midnight', 'dark', 'moody', 'heartbreak', 'sad', 'emotional', 'last last'],
+  'workout': ['workout', 'gym', 'fitness', 'cardio', 'hiit', 'pump', 'motivation', 'sweat', 'hustle', 'beast', 'grind'],
   'random-mixer': [],
 };
 

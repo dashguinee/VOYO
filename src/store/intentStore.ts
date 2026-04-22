@@ -430,30 +430,38 @@ export const MODE_KEYWORDS: Record<VibeMode, string[]> = {
     'nigeria', 'ghana', 'african',    // Regions
   ],
   // CHILL VIBES - Relaxed, smooth listening
+  // Purified 2026-04-22: dropped 'love', 'essence', 'vibe' — they matched
+  // ~33-60% of African music titles (Love Nwantiti, Essence, Good Vibes...)
+  // and bloated the chill bucket with non-chill tracks. Tighter markers now.
   'chill-vibes': [
-    'chill', 'relax', 'smooth', 'slow', 'calm', // Mood
-    'acoustic', 'rnb', 'r&b',                   // Genre
-    'love', 'essence', 'vibe',                  // Common chill words
+    'chill', 'slow', 'calm', 'relax', 'smooth', 'mellow', 'downtempo', // Mood / tempo
+    'acoustic', 'rnb', 'r&b', 'soul', 'ballad', 'lofi',                // Genre
   ],
   // PARTY MODE - High energy, danceable
+  // Purified 2026-04-22: dropped 'mix', 'dj' — every DJ set / remix hit
+  // party incorrectly (tagging Burna's DJ Maphorisa remix as party, not
+  // afro-heat). Tightened with 'anthem' + specific dance subgenres.
   'party-mode': [
-    'party', 'club', 'dance',         // Direct party keywords
-    'turn up', 'lit', 'banger',       // Slang
-    'hype', 'energy',                 // Mood (shared with workout but party takes precedence)
-    'mix', 'dj',                      // Mix/DJ content
+    'party', 'banger', 'turn up', 'club', 'dance', 'anthem', // Direct party
+    'edm', 'hype',                                           // Energy tier
+    'afro house', 'amapiano', 'baile',                       // Dance subgenres
   ],
   // LATE NIGHT - Moody, atmospheric
+  // Dropped 'feels' — too loose, matches "feels good", "feeling", etc.
   'late-night': [
     'night', 'late', 'midnight',      // Time
-    'dark', 'moody', 'feels',         // Mood
+    'dark', 'moody',                  // Mood
     'heartbreak', 'sad', 'emotional', // Emotional
     'last last',                      // Specific tracks with late night vibe
   ],
   // WORKOUT - Pump up energy
+  // Dropped 'run' (matches "running", "runtime") and 'power' (matches
+  // "powerhouse"). Kept tighter action markers, added 'cardio', 'hiit',
+  // 'sweat', 'hustle' for sharper intent.
   'workout': [
-    'workout', 'gym', 'fitness',      // Direct workout
-    'pump', 'run', 'motivation',      // Action
-    'power', 'beast', 'grind',        // Energy words
+    'workout', 'gym', 'fitness', 'cardio', 'hiit', // Direct workout
+    'pump', 'motivation', 'sweat', 'hustle',       // Action
+    'beast', 'grind',                              // Energy words
   ],
   // RANDOM MIXER - No filtering, pure random
   'random-mixer': [],

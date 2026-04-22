@@ -55,13 +55,18 @@ const MIX_KEYWORDS = ['mix', 'mixtape', 'set', 'session', 'playlist', 'hour', 'm
 const LIVE_KEYWORDS = ['live', 'concert', 'festival', 'performance', 'show', 'tour'];
 const REMIX_KEYWORDS = ['remix', 'cover', 'version', 'edit', 'bootleg'];
 
-// Keywords for vibe detection
+// Keywords for vibe detection.
+// Kept aligned with src/store/intentStore.ts MODE_KEYWORDS (canonical) and
+// src/services/centralDJ.ts MODE_KEYWORDS. Purified 2026-04-22: dropped
+// 'mix'/'dj' from party (now in MIX_KEYWORDS above — different semantic),
+// 'love'/'essence'/'vibe' from chill, 'feels' from late-night, 'power'
+// from workout. If you update one, update all three.
 const VIBE_KEYWORDS: Record<string, string[]> = {
-  'afro-heat': ['afrobeats', 'afrobeat', 'amapiano', 'naija', 'african', 'lagos', 'nigeria', 'ghana'],
-  'chill-vibes': ['chill', 'relax', 'smooth', 'slow', 'calm', 'acoustic', 'rnb', 'r&b', 'soul'],
-  'party-mode': ['party', 'club', 'dance', 'turn up', 'lit', 'banger', 'hype', 'energy'],
-  'late-night': ['night', 'late', 'midnight', 'dark', 'moody', 'feels', 'sad', 'emotional'],
-  'workout': ['workout', 'gym', 'fitness', 'pump', 'motivation', 'power', 'beast']
+  'afro-heat': ['afrobeats', 'afrobeat', 'afro', 'amapiano', 'naija', 'lagos', 'burna', 'davido', 'wizkid', 'rema', 'asake', 'ayra', 'tems', 'ckay', 'tyla', 'nigeria', 'ghana', 'african'],
+  'chill-vibes': ['chill', 'slow', 'calm', 'relax', 'smooth', 'mellow', 'downtempo', 'acoustic', 'rnb', 'r&b', 'soul', 'ballad', 'lofi'],
+  'party-mode': ['party', 'banger', 'turn up', 'club', 'dance', 'anthem', 'edm', 'hype', 'afro house', 'amapiano', 'baile'],
+  'late-night': ['night', 'late', 'midnight', 'dark', 'moody', 'heartbreak', 'sad', 'emotional', 'last last'],
+  'workout': ['workout', 'gym', 'fitness', 'cardio', 'hiit', 'pump', 'motivation', 'sweat', 'hustle', 'beast', 'grind']
 };
 
 // ============================================
