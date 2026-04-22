@@ -12,6 +12,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import artistMasterData from '../data/artist_master.json';
 import { devWarn } from '../utils/logger';
+import { trace } from '../services/telemetry';
 
 // ============================================
 // TYPES
@@ -37,6 +38,10 @@ export interface ArtistTrack {
   voyo_play_count: number;
   genres: string[];
   moods: string[];
+  // Exposed so ArtistPage / callers can optionally show a "warming up" dot
+  // on uncached cards. Playback still works via iframe fallback; R2 hotswap
+  // upgrades it when extraction lands.
+  r2_cached: boolean;
 }
 
 export interface ArtistMoment {
@@ -219,6 +224,7 @@ export function useArtist(artistName: string): UseArtistReturn {
           voyo_play_count: 0,
           genres: [] as string[],
           moods: [] as string[],
+          r2_cached: false,
         })
       );
 
@@ -258,10 +264,11 @@ export function useArtist(artistName: string): UseArtistReturn {
 async function fetchTracks(artistName: string): Promise<ArtistTrack[]> {
   if (!supabase) return [];
 
-  // R2-cached-first: artist page shows only instantly-playable cards.
-  // We over-fetch (100) and filter — typical artists have <50 tracks cached
-  // but enough to fill a page. Uncached candidates get queued in the
-  // background so they become available on future visits.
+  // Return ALL tracks (cached + uncached). "Warm it up, slide it in":
+  // uncached tracks play via the iframe fallback (AudioPlayer's R2-first
+  // probe drops to iframe automatically). R2 hotswap upgrades them when
+  // extraction lands. Hiding them left 90%+ of artists showing a ghost
+  // "No tracks found" dead-end, which violates the no-retry philosophy.
   const { data, error } = await supabase
     .from('video_intelligence')
     .select('youtube_id, title, artist, thumbnail_url, duration_seconds, voyo_play_count, genres, moods, r2_cached')
@@ -275,8 +282,18 @@ async function fetchTracks(artistName: string): Promise<ArtistTrack[]> {
   }
 
   const rows = (data || []);
-  const cached = rows.filter(r => r.r2_cached === true);
   const uncached = rows.filter(r => r.r2_cached !== true);
+  const cachedCount = rows.length - uncached.length;
+
+  // Telemetry: ratio of cached vs uncached per artist page. Lets us see
+  // what fraction of artist plays are on iframe vs R2 after dropping the
+  // r2_cached filter — foundational for deciding whether to tighten later.
+  trace('artist_fetch_tracks', null, {
+    artist: artistName,
+    total: rows.length,
+    cached: cachedCount,
+    uncached: uncached.length,
+  });
 
   // Fire-and-forget: kick uncached artist tracks onto the lanes so they
   // become cached over time. Routed through oyo.prefetch (priority=5 =
@@ -296,7 +313,7 @@ async function fetchTracks(artistName: string): Promise<ArtistTrack[]> {
     })();
   }
 
-  return cached.map((row) => ({
+  return rows.map((row) => ({
     youtube_id: row.youtube_id,
     title: row.title || '',
     artist: row.artist || null,
@@ -305,6 +322,7 @@ async function fetchTracks(artistName: string): Promise<ArtistTrack[]> {
     voyo_play_count: row.voyo_play_count || 0,
     genres: row.genres || [],
     moods: row.moods || [],
+    r2_cached: row.r2_cached === true,
   }));
 }
 
