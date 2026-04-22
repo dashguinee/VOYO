@@ -388,18 +388,46 @@ export const AudioPlayer = () => {
       }
       const el = audioRef.current;
       if (!el) return;
-      if (!usePlayerStore.getState().isPlaying) return;
-      if (el.paused || el.readyState < 2) {
-        const bgDurationMs = wentHiddenAt ? Date.now() - wentHiddenAt : null;
-        const trackId = usePlayerStore.getState().currentTrack?.trackId ?? 'unknown';
-        devLog('[AudioPlayer] back from BG — audio paused, resuming');
-        logPlaybackEvent({
-          event_type: 'bg_disconnect',
-          track_id: trackId,
-          meta: { bg_duration_ms: bgDurationMs, ready_state: el.readyState, paused: el.paused },
-        });
-        el.play().catch(() => {});
-      }
+      const store = usePlayerStore.getState();
+      // Previous guard: `if (!store.isPlaying) return;`. That blocked the
+      // exact recovery case this effect was written for. In deep BG,
+      // Chrome Android (and iOS sometimes) pauses the <audio> element
+      // under us when autoplay permissions reset. The subsequent 'pause'
+      // event lands in handlePause whose play()-retry rejects in BG and
+      // flips isPlaying to false as a fallback. When the user returns to
+      // FG, isPlaying is false, so the old guard bailed — audio stays
+      // silent, user has to manually tap play. That's the "I still have
+      // to open the app" symptom.
+      //
+      // New condition: act whenever there IS a currentTrack, regardless
+      // of the flag. If play() succeeds, we reflect reality by setting
+      // isPlaying=true. If it rejects (genuinely needs a user gesture),
+      // we leave the flag alone so the UI still shows paused. Either way
+      // the element has a real shot at resuming instead of being locked
+      // out by a stale boolean.
+      if (!store.currentTrack) return;
+      if (!el.paused && el.readyState >= 2) return; // already playing cleanly
+      const bgDurationMs = wentHiddenAt ? Date.now() - wentHiddenAt : null;
+      const trackId = store.currentTrack.trackId ?? 'unknown';
+      devLog('[AudioPlayer] back from BG — audio paused, attempting resume');
+      logPlaybackEvent({
+        event_type: 'bg_disconnect',
+        track_id: trackId,
+        meta: {
+          bg_duration_ms: bgDurationMs,
+          ready_state: el.readyState,
+          paused: el.paused,
+          ended: el.ended,
+          store_is_playing: store.isPlaying,
+        },
+      });
+      el.play().then(() => {
+        if (!usePlayerStore.getState().isPlaying) {
+          usePlayerStore.getState().setIsPlaying(true);
+        }
+      }).catch(() => {
+        // Autoplay policy genuinely requires a gesture — leave UI paused.
+      });
     };
     document.addEventListener('visibilitychange', handleVisibility);
     return () => document.removeEventListener('visibilitychange', handleVisibility);
