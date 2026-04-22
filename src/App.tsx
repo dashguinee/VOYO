@@ -44,6 +44,7 @@ const UniversePanel = lazy(() => import('./components/universe/UniversePanel').t
 import { useReactionStore } from './store/reactionStore';
 import { devLog, devWarn } from './utils/logger';
 import { AuthProvider } from './providers/AuthProvider';
+import { useTabHistory } from './hooks/useTabHistory';
 
 // DEBUG: Load intent engine verification tools (available in browser console)
 import './utils/debugIntent';
@@ -774,6 +775,13 @@ function App() {
   useEffect(() => {
     try { localStorage.setItem('voyo-app-mode', appMode); } catch {}
   }, [appMode]);
+
+  // Back gesture peels the app-mode stack: Video → VOYO → Classic.
+  // Keeps the user inside the app across every mode flip instead of
+  // exiting on the first back press. Works alongside the voyo-tab
+  // stack inside PortraitVOYO (modals peel first, then voyo-tab,
+  // then app-mode, then the real exit).
+  useTabHistory(appMode, setAppMode, 'app-mode');
 
   // Get background image URL with fallback
   const getBackgroundUrl = () => {

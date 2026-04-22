@@ -23,6 +23,7 @@ import { PlaylistModal } from '../playlist/PlaylistModal';
 import { OyeButton } from '../oye/OyeButton';
 import { DiscoExplainer } from '../ui/DiscoExplainer';
 import { searchMusic, SearchResult } from '../../services/api';
+import { useTabHistory } from '../../hooks/useTabHistory';
 
 // Base filter tabs — five clean primary sets. "Disco" replaces the old
 // mix of 'offline' + 'recent' since our narralogy defines Disco = any
@@ -454,6 +455,11 @@ export const Library = ({ onTrackClick }: LibraryProps) => {
   // stay reachable across tab switches.
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const scrollMemoryRef = useRef<Map<string, number>>(new Map());
+
+  // System back peels the filter stack too — user taps All → Liked →
+  // Bucket, back press returns to Liked, then All, then up to the
+  // page-level back-guard. Feels layered like a native app.
+  useTabHistory(activeFilter, setActiveFilter, 'library-filter');
 
   // Primary filter row — the five fixed tabs. Playlists live in their
   // own sub-row below so they can intersect with whichever primary tab

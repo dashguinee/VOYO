@@ -15,6 +15,7 @@ import { usePlayerStore } from '../../store/playerStore';
 import { app } from '../../services/oyo';
 import { DJMode, Track } from '../../types';
 import { useAuth } from '../../hooks/useAuth';
+import { useTabHistory } from '../../hooks/useTabHistory';
 import { APP_CODES } from '../../lib/dahub/dahub-api';
 
 // Lightweight — always loaded
@@ -151,6 +152,13 @@ export const PortraitVOYO = ({ onSearch, onDahub, onHome }: PortraitVOYOProps) =
   const voyoActiveTab = usePlayerStore(s => s.voyoActiveTab);
   const setVoyoTab = usePlayerStore(s => s.setVoyoTab);
   const playTrack = usePlayerStore(s => s.playTrack);
+
+  // Back gesture peels the tab stack: Feed → Music, Dahub → wherever
+  // the user came from. Stack is in history state so the system back
+  // button (Android), swipe-from-edge (iOS), or browser back all fire
+  // the same path. Named 'voyo-tab' so nested modal guards can layer
+  // correctly above this.
+  useTabHistory(voyoActiveTab, setVoyoTab, 'voyo-tab');
 
   // DASH auth — for DaHub social layer
   const { dashId, displayName } = useAuth();
