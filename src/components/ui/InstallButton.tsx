@@ -1,7 +1,13 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { usePWA } from '../../hooks/usePWA';
 import { IOSInstallSheet } from './IOSInstallSheet';
 import { trace } from '../../services/telemetry';
+import {
+  getInstallSurfacePhase,
+  hasShownBeenLogged,
+  markShownLogged,
+  subscribeInstallSurface,
+} from '../../hooks/installSurface';
 
 /**
  * Subtle PWA Install Button — bottom-right floating pill.
@@ -18,15 +24,29 @@ export function InstallButton() {
   const [iosSheetOpen, setIosSheetOpen] = useState(false);
   const shownLogged = useRef(false);
 
-  // Fire pwa_install_shown once per mount when the pill actually renders.
+  // Wave E3 — banner owns the install moment. Pill stays hidden until the
+  // banner either dismisses itself or declines to render (cooldown /
+  // already seen this session). `phase === 'resolved'` is the green light.
+  const surfacePhase = useSyncExternalStore(
+    subscribeInstallSurface,
+    getInstallSurfacePhase,
+    getInstallSurfacePhase,
+  );
+  const pillAllowed = surfacePhase === 'resolved';
+
+  // Fire pwa_install_shown once per session — only if the banner didn't
+  // already claim it. Pill-as-fallback doesn't double-count.
   useEffect(() => {
-    if (isInstalled || !isInstallable) return;
+    if (isInstalled || !isInstallable || !pillAllowed) return;
     if (shownLogged.current) return;
     shownLogged.current = true;
-    trace('pwa_install_shown', null, { surface: 'pill', platform, has_native_prompt: hasNativePrompt });
-  }, [isInstallable, isInstalled, platform, hasNativePrompt]);
+    if (!hasShownBeenLogged()) {
+      markShownLogged();
+      trace('pwa_install_shown', null, { surface: 'pill', platform, has_native_prompt: hasNativePrompt });
+    }
+  }, [isInstallable, isInstalled, platform, hasNativePrompt, pillAllowed]);
 
-  if (isInstalled || !isInstallable) return null;
+  if (isInstalled || !isInstallable || !pillAllowed) return null;
 
   const handleClick = async () => {
     trace('pwa_install_clicked', null, { surface: 'pill', platform, has_native_prompt: hasNativePrompt });

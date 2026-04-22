@@ -2,6 +2,13 @@ import { useEffect, useRef, useState } from 'react';
 import { usePWA } from '../../hooks/usePWA';
 import { IOSInstallSheet } from './IOSInstallSheet';
 import { trace } from '../../services/telemetry';
+import {
+  bannerBecameVisible,
+  bannerResolved,
+  bannerSkipped,
+  hasShownBeenLogged,
+  markShownLogged,
+} from '../../hooks/installSurface';
 
 const DISMISS_KEY = 'voyo-install-banner-dismissed-at';
 const COOLDOWN_MS = 14 * 24 * 60 * 60 * 1000;
@@ -62,16 +69,35 @@ export function InstallBanner() {
   const dragActive = useRef(false);
 
   useEffect(() => {
-    if (isInstalled || !isInstallable) {
+    if (isInstalled) {
       setVisible(false);
+      // Terminal state — pill also won't render, but make the coordination
+      // state deterministic.
+      bannerResolved();
       return;
     }
-    if (wasSeenThisSession() || isDismissedRecently()) return;
+    // Wait for usePWA to settle isInstallable. While it's false (still
+    // resolving, or unsupported platform), leave the phase as 'pending'
+    // so the pill doesn't render prematurely. If we land on unsupported
+    // the pill's own `!isInstallable` guard keeps it hidden regardless.
+    if (!isInstallable) return;
+
+    if (wasSeenThisSession() || isDismissedRecently()) {
+      // Banner is suppressed this session — let the pill come up now.
+      bannerSkipped();
+      return;
+    }
 
     const showTimer = window.setTimeout(() => {
       setVisible(true);
       markSeenThisSession();
-      trace('pwa_install_shown', null, { surface: 'banner', platform, has_native_prompt: hasNativePrompt });
+      bannerBecameVisible();
+      // Consolidated shown telemetry — whichever surface renders first
+      // claims it. Pill skips shown if banner already logged.
+      if (!hasShownBeenLogged()) {
+        markShownLogged();
+        trace('pwa_install_shown', null, { surface: 'banner', platform, has_native_prompt: hasNativePrompt });
+      }
     }, SHOW_DELAY_MS);
     return () => window.clearTimeout(showTimer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -97,6 +123,8 @@ export function InstallBanner() {
     if (dismissType !== 'installed') {
       trace('pwa_install_dismissed', null, { surface: 'banner', platform, dismiss_type: dismissType });
     }
+    // Banner is on its way out — release the pill to render.
+    bannerResolved();
   };
 
   const handleInstall = async () => {

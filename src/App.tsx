@@ -1213,10 +1213,12 @@ function App() {
       {/* Universe Panel - Full Profile/Settings/Login/Backup */}
       <UniversePanel isOpen={isProfileOpen} onClose={() => setIsProfileOpen(false)} />
 
-      {/* PWA Install — bottom-right pill (always visible when installable) +
-          top banner (auto-shows once, 6s after boot, 14-day dismissal cooldown).
-          Both branch on platform: iOS Safari opens Share-sheet instructions
-          because beforeinstallprompt never fires there. */}
+      {/* PWA Install — the banner owns the install moment (top card, 8s
+          after boot, 10s auto-hide, 14-day dismiss cooldown). The pill
+          stays hidden until the banner either dismisses OR declines to
+          render (cooldown active / already seen this session) — then it
+          takes over as the persistent fallback. Coordinated via
+          src/hooks/installSurface.ts so pwa_install_shown fires once. */}
       <InstallButton />
       <InstallBanner />
 
