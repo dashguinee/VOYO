@@ -579,9 +579,12 @@ export const YouTubeIframe = memo(() => {
     };
   };
 
-  // Video styles (zoom to hide YouTube branding)
+  // Video styles (zoom to hide YouTube branding). Landscape was 1.2 —
+  // not aggressive enough to clip the bottom-right YT logo and the
+  // top-right "Watch on YouTube" pill on modern embeds. 1.55 pushes
+  // both off-screen while keeping ~65% of the centred frame visible.
   const getVideoStyle = (): React.CSSProperties => {
-    const zoom = videoTarget === 'landscape' ? 1.2 : 2;
+    const zoom = videoTarget === 'landscape' ? 1.55 : 2;
     return {
       width: '100%',
       height: '100%',
