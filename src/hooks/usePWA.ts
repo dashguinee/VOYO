@@ -78,9 +78,31 @@ function readInstalledFlag(): boolean {
   try { return !!localStorage.getItem(INSTALLED_KEY); } catch { return false; }
 }
 
+function readInstalledFlagAge(): number | null {
+  try {
+    const v = localStorage.getItem(INSTALLED_KEY);
+    if (!v) return null;
+    const t = parseInt(v, 10);
+    if (!Number.isFinite(t)) return null;
+    return Date.now() - t;
+  } catch { return null; }
+}
+
 function writeInstalledFlag() {
   try { localStorage.setItem(INSTALLED_KEY, String(Date.now())); } catch { /* private mode */ }
 }
+
+function clearInstalledFlag() {
+  try { localStorage.removeItem(INSTALLED_KEY); } catch { /* private mode */ }
+}
+
+// How long the localStorage latch is trusted without corroborating
+// evidence (standalone-display OR getInstalledRelatedApps). Uninstalling
+// a PWA doesn't clear origin localStorage on Chrome Android or iOS
+// Safari, so a stale latch can lock out genuine re-install intent. 48h
+// is short enough that uninstall-reinstall feels snappy, long enough that
+// routine visits don't re-probe every page load.
+const INSTALLED_FLAG_TTL_MS = 48 * 60 * 60 * 1000;
 
 export function usePWA() {
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
@@ -92,18 +114,55 @@ export function usePWA() {
     const p = detectPlatform();
     setPlatform(p);
 
+    // ── Latch reconciliation ──────────────────────────────────────────
+    // `voyo-pwa-installed-at` is a cache, not ground truth. If the user
+    // uninstalled, the origin's localStorage survives — so we periodically
+    // cross-check the latch against live signals:
+    //   - isStandaloneDisplay() — running AS the installed PWA now
+    //   - getInstalledRelatedApps() — Chrome reports an installed WebAPK
+    //   - beforeinstallprompt firing — authoritative "not installed right
+    //     now" signal from the browser
+    // Also: the latch expires after TTL_MS if none of the above confirm.
+    const reconcileLatch = async () => {
+      if (!readInstalledFlag()) return;
+      if (isStandaloneDisplay()) {
+        // Running as standalone — latch is accurate, refresh its timestamp.
+        writeInstalledFlag();
+        return;
+      }
+      const nav = navigator as NavigatorWithRelated;
+      if (typeof nav.getInstalledRelatedApps === 'function') {
+        try {
+          const related = await nav.getInstalledRelatedApps();
+          if (related.some((app) => app.platform === 'webapp')) {
+            // Confirmed installed — refresh.
+            writeInstalledFlag();
+            return;
+          }
+          // API responded empty AND we're not standalone. On Android /
+          // desktop Chrome this is reliable — clear the stale latch.
+          if (p === 'android' || p === 'desktop') {
+            clearInstalledFlag();
+            setIsInstalled(false);
+            return;
+          }
+        } catch { /* fall through to TTL path */ }
+      }
+      // No authoritative signal (iOS, old Chrome, API rejected). Fall
+      // back to TTL: if the flag is older than the window, assume the
+      // user uninstalled and let the install UI come back.
+      const age = readInstalledFlagAge();
+      if (age !== null && age > INSTALLED_FLAG_TTL_MS) {
+        clearInstalledFlag();
+        setIsInstalled(false);
+      }
+    };
+
     // Standalone display → definitely running as installed PWA. Stamp
     // the flag so future tab visits know too.
     if (isStandaloneDisplay()) {
       setIsInstalled(true);
       writeInstalledFlag();
-      return;
-    }
-
-    // Persisted flag from a prior appinstalled event — don't show install
-    // UI again on any future tab visit.
-    if (readInstalledFlag()) {
-      setIsInstalled(true);
       return;
     }
 
@@ -116,13 +175,26 @@ export function usePWA() {
       return;
     }
 
+    // Kick off reconciliation. If the latch was set but the user has
+    // actually uninstalled, this will flip isInstalled back to false and
+    // unlock the install flow.
+    void reconcileLatch();
+
+    // Persisted flag still holds (not reconciled away yet) — honour it,
+    // but keep listeners attached so a later beforeinstallprompt can
+    // reconcile via the cheap path.
+    const latchStillHeld = readInstalledFlag();
+    if (latchStillHeld) {
+      setIsInstalled(true);
+    }
+
     // Android Chrome can tell us whether a related web app is installed,
     // provided the manifest lists a self-reference in related_applications.
     // Desktop Chrome also supports this. Runs async so the first render
     // may still flash install UI briefly on installed devices — that's
     // why writeInstalledFlag() above latches the state permanently.
     const nav = navigator as NavigatorWithRelated;
-    if (typeof nav.getInstalledRelatedApps === 'function') {
+    if (!latchStillHeld && typeof nav.getInstalledRelatedApps === 'function') {
       nav.getInstalledRelatedApps().then((related) => {
         if (related.some((app) => app.platform === 'webapp')) {
           setIsInstalled(true);
@@ -136,10 +208,17 @@ export function usePWA() {
     // click handler routes to native prompt if Chrome fires one, else to
     // manual instructions. iOS Safari has no programmatic path so this
     // is the only way iOS users see the UI.
-    setIsInstallable(true);
+    if (!latchStillHeld) setIsInstallable(true);
 
     const handleBeforeInstall = (e: Event) => {
       e.preventDefault();
+      // The browser firing beforeinstallprompt is an authoritative
+      // "you can install right now" signal — which means we're NOT
+      // currently installed. Clear any stale latch and re-open the UI.
+      if (readInstalledFlag()) {
+        clearInstalledFlag();
+        setIsInstalled(false);
+      }
       setDeferredPrompt(e as BeforeInstallPromptEvent);
       setIsInstallable(true);
     };
@@ -152,12 +231,18 @@ export function usePWA() {
       trace('pwa_install_completed', null, { platform: p });
     };
 
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') void reconcileLatch();
+    };
+
     window.addEventListener('beforeinstallprompt', handleBeforeInstall);
     window.addEventListener('appinstalled', handleAppInstalled);
+    document.addEventListener('visibilitychange', handleVisibility);
 
     return () => {
       window.removeEventListener('beforeinstallprompt', handleBeforeInstall);
       window.removeEventListener('appinstalled', handleAppInstalled);
+      document.removeEventListener('visibilitychange', handleVisibility);
     };
   }, []);
 
