@@ -10,6 +10,7 @@
 import { useState } from 'react';
 import { X, ArrowLeft, Play, Search, Loader2, Music2, ExternalLink } from 'lucide-react';
 import { useArtist, ArtistTrack, ArtistMoment } from '../../hooks/useArtist';
+import { useBackGuard } from '../../hooks/useBackGuard';
 
 // ============================================
 // TYPES
@@ -526,6 +527,12 @@ export const ArtistPage: React.FC<ArtistPageProps> = ({
   } = useArtist(artistName);
 
   const [showDiscover, setShowDiscover] = useState(false);
+
+  // System back gesture peels artist → search → home. ArtistPage is rendered
+  // only when artistPageName is truthy (App.tsx), so `open` = true here; the
+  // parent unmounts this component when onClose fires. The hook pushes a
+  // history entry tagged 'artist-page' so popstate maps to onClose.
+  useBackGuard(true, onClose, 'artist-page');
 
   const handleDiscover = async () => {
     setShowDiscover(true);

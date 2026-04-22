@@ -1171,7 +1171,13 @@ function App() {
       <SearchOverlay
         isOpen={isSearchOpen}
         onClose={closeSearch}
-        onArtistTap={(name) => { setArtistPageName(name); closeSearch(); }}
+        // Keep search mounted underneath ArtistPage so back-gesture peels
+        // cleanly: artist → search → home. ArtistPage's useBackGuard pushes
+        // its own history entry on mount, which gets popped first on back;
+        // search's existing back-guard peels second. Previously closeSearch
+        // fired synchronously here, tearing down search's back marker before
+        // ArtistPage mounted → back from artist escaped the app.
+        onArtistTap={(name) => { setArtistPageName(name); }}
         onEnterVideoMode={openVideoOverlay}
       />
 
