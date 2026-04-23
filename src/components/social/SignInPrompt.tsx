@@ -189,8 +189,8 @@ export const VoyoLiveCard = ({ onSwitchToVOYO }: VoyoLiveCardProps = {}) => {
   }, [friendsListening.length]);
 
   // Smooth rotation animation — pauses when tab is hidden (battery fix).
-  // v356: throttled to ~20fps (50ms) instead of 60fps to cut re-render
-  // cost by 3x on the home feed — the ring animation is continuous and
+  // Throttled to ~20fps (50ms) instead of 60fps — 3x cheaper on the home feed,
+  // imperceptible for slow ring rotation.
   // users don't perceive the difference below 30fps for slow rotations.
   useEffect(() => {
     let lastTime = performance.now();

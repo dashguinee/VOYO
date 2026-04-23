@@ -55,12 +55,9 @@ const STALL_LOG_DELAY_MS = 800;
 //    transition is ever a hard cut. Even fast card-tapping feels smooth.
 //  - "Earned" DJ fade (LONG): when the outgoing track has been playing
 //    ≥FADE_OUT_MIN_ELAPSED_S, extend the ramps to a proper DJ blend.
-// Dash feedback (v330): gating fade entirely on elapsed made quick
-// taps feel harsh. Now the SHORT fade is the floor; LONG layers on
-// top when the user's actually been listening.
-// Single fade duration for every track change (2026-04-23): founder call
-// was "just fade out" — no three-tier complexity, no DJ-blend vs rapid-
-// skip branching. One gentle fade that feels intentional without lag.
+// Gating fade entirely on elapsed made quick taps feel harsh — SHORT is the
+// floor, LONG layers on top when the user has actually been listening.
+// One gentle fade for every track change: no DJ-blend vs rapid-skip branching.
 const UNIFIED_FADE_OUT_MS = 180;
 const UNIFIED_FADE_IN_MS  = 160;
 const SHORT_FADE_OUT_MS = 90;
@@ -278,11 +275,9 @@ export const AudioPlayer = () => {
     // know, go iframe-first — no HEAD gate. useHotSwap's 2s poll will
     // discover R2 and crossfade if the track is actually cached.
     //
-    // Pre-v395 this path did `await Promise.all([headPromise, fadePromise])`
-    // which made iframe playback wait on the HEAD (100-500ms typical,
-    // 1500ms worst case) for every not-yet-known track. The perceptible
-    // tap-to-audio delay is gone in v395: we only wait on the outgoing
-    // fade (240ms short / 600ms long), which is natural transition time.
+    // Previously: `await Promise.all([headPromise, fadePromise])` made iframe
+    // wait on the HEAD (100-1500ms) for every not-yet-known track. Now we only
+    // wait on the outgoing fade (240ms / 600ms) — natural transition time.
     const knownInR2Sync = useR2KnownStore.getState().has(currentTrack.trackId);
 
     (async () => {

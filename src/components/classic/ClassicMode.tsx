@@ -328,8 +328,7 @@ const BottomNav = ({
   onVOYOClick: () => void;
 }) => {
   // LEFT: DAHUB when on Home, otherwise Home
-  // Use MessageCircle (chat bubble) for DaHub — clearer than Users (silhouettes)
-  // which reads as "profile" and confused Dash (2026-04-23 audit).
+  // MessageCircle (chat bubble) for DaHub — Users (silhouettes) reads as "profile".
   const leftTab = activeTab === 'home' ? 'hub' : 'home';
   const LeftIcon = activeTab === 'home' ? MessageCircle : Home;
   const isLeftActive = (activeTab === 'home' && leftTab === 'hub') ? false : activeTab === leftTab;

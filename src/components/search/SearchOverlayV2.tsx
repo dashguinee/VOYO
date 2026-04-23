@@ -367,12 +367,8 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap, onEnterVideoMode
       return unique;
     };
 
-    // SECTIONED LAYOUT — Dash's call (2026-04-14):
-    //   "i wanna add below normal library search the youtube/player search
-    //    results and have the ui clearly reflect"
-    // Library (DB/pool) sits on top; YouTube fresh results below with a
-    // labeled divider. No more spaghetti — clean mental model: "what we
-    // already have" then "what's out there".
+    // Library (DB/pool) on top; YouTube results below with a labeled divider.
+    // Clean mental model: "what we already have" vs "what's out there".
 
     // PARALLEL fetch — DB returns in ~200ms, YT in 1-4s
     const essence = getVibeEssence();
@@ -855,10 +851,8 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap, onEnterVideoMode
                       <>
                         {library.length > 0 && (
                           <>
-                            {/* "Disco" — Dash's call (2026-04-14): "your disco" — your dance floor,
-                                your collection. Diaspora music-soul language. Faded bronze-gold,
-                                like an old jazz pressing label. Fades on scroll past 15% so the
-                                user sees results, not chrome. */}
+                            {/* "Disco" — your dance floor, your collection. Diaspora music-soul.
+                                Faded bronze-gold label aesthetic. Fades on scroll past 15%. */}
                             <div className="flex items-center gap-2 px-1 pt-1 pb-2 text-[10.5px] font-semibold tracking-[0.18em] uppercase"
                                  style={{ color: 'rgba(212, 175, 110, 0.85)', opacity: sectionHeaderOpacity, transition: 'opacity 200ms ease' }}>
                               <span style={{ textShadow: '0 0 12px rgba(212,175,110,0.18)' }}>My Disco</span>

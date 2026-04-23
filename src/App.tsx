@@ -172,12 +172,10 @@ class AppErrorBoundary extends Component<{ children: ReactNode }, ErrorBoundaryS
       // doesn't keep suppressing future bumps on real crashes.
       try { sessionStorage.removeItem(RETRY_FLAG); } catch {}
     }
-    // v354: NO auto-reload. Previous auto-reload-on-crash was escalating
-    // repeatable crashes into a full lock-out loop (spinner → reload →
-    // crash → spinner → … → nuke → reload → crash again). User controls
-    // retry via the Reload button below. Still bump the counter so if
-    // the user hits Reload and crashes a 3rd time we prefer the nuke
-    // path on their explicit tap (one-tap escape, not auto-loop).
+    // NO auto-reload — auto-reload on crash escalates repeatable crashes into
+    // a full lock-out loop (spinner → reload → crash → …). User controls
+    // retry via the Reload button. Still bump the counter so a 3rd crash
+    // prefers the nuke path on their explicit tap (one-tap escape, not loop).
     bumpCrashCounter();
     void info; // referenced for side-effect logging above
   }

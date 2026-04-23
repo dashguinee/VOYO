@@ -1,8 +1,7 @@
 /**
  * Shared coordination between the two install surfaces (banner + pill).
  *
- * Wave E3 decision: the banner is the primary install moment (v387's
- * intent). The pill is the persistent fallback, only allowed to render
+ * The banner is the primary install moment. The pill is the persistent fallback, only allowed to render
  * AFTER the banner has been shown AND dismissed, OR when the banner is
  * permanently suppressed (seen this session / dismiss cooldown active /
  * user has already engaged via another path).

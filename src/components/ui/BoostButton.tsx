@@ -344,9 +344,8 @@ export const BoostButton = ({ variant = 'toolbar', className = '' }: BoostButton
 
   if (!currentTrack?.trackId) return null;
 
-  // Use the DECODED YouTube id for download lookups — downloadStore keys
-  // by raw YT id, VOYO-prefixed track ids silently miss otherwise (same
-  // pattern as v377 fix on OyeButton).
+  // Use the DECODED YouTube id for download lookups — downloadStore keys by
+  // raw YT id, VOYO-prefixed track ids silently miss otherwise.
   const ytId = getYouTubeId(currentTrack.trackId);
   const downloadStatus = getDownloadStatus(ytId);
   const isDownloading = downloadStatus?.status === 'downloading';

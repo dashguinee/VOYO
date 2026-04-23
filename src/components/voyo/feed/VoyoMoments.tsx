@@ -593,11 +593,8 @@ const MomentCard = memo(({ moment, isOyed, onOye, isActive, isMuted, onToggleMut
             muted={isMuted}
             loop
             playsInline
-            // Pre-v402 used 'none' for inactive cards — the moment a
-            // card became active, first play() blinked the poster
-            // because nothing was buffered. 'metadata' on everything
-            // in the stack warms the header without streaming the
-            // full clip, so the active flip is instant.
+            // 'metadata' on all cards warms the header without streaming
+            // the full clip — active flip is instant, no poster blink on first play().
             preload={isActive ? 'auto' : 'metadata'}
             onError={handleVideoError}
           />

@@ -302,7 +302,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     // presence can go stale even while the user is active on another tab.
     // We only fire on visible→hidden transition (not on hide) because the
     // user may just be switching between VOYO tabs — going offline on hide
-    // would falsely mark them as away mid-session. [SOCIAL-1]
+    // would falsely mark them as away mid-session.
     // BroadcastChannel multi-tab coordination deferred — visibilitychange
     // covers the most common offline-false-positive case without added complexity.
     const onVisibilityChange = () => {

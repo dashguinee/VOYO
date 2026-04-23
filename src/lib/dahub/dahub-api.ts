@@ -556,7 +556,7 @@ export const messagesAPI = {
     onMessage: (msg: Message) => void,
     onReconnect?: () => void,
     /** Called when a message row is updated — e.g. read_at set → read
-     * receipt propagation. Receives the updated row. [SOCIAL-1] */
+     * receipt propagation. Receives the updated row. */
     onMessageUpdated?: (msg: Message) => void,
   ) {
     if (!ccSupabase) return () => {};
@@ -566,7 +566,7 @@ export const messagesAPI = {
     // onReconnect should re-fetch recent conversations so nothing is missed.
     //
     // event: '*' catches both INSERT (new messages) and UPDATE (read receipts).
-    // Previously INSERT-only — read_at updates were silently dropped. [SOCIAL-1]
+    // Previously INSERT-only — read_at updates were silently dropped.
     const sub = makeReconnectingChannel(
       () =>
         ccSupabase

@@ -18,7 +18,7 @@
  * transforms only. 28 particles is the sweet spot — visible texture without
  * eating frame budget on mid-range Android.
  *
- * Built 2026-04-14 — Dash's call: "build me the effect ... be creative".
+ * CSS transforms only — no canvas. 28 particles is the sweet spot for visible texture without frame budget cost on mid-range Android.
  */
 
 import { useEffect, useMemo } from 'react';
@@ -70,13 +70,9 @@ function buildParticles(seed: number): Particle[] {
 export const AtmosphereLayer = () => {
   const particles = useMemo(() => buildParticles(Math.floor(Date.now() / 86400000)), []);
 
-  // Scrollbar fade-down — Dash's call (2026-04-14):
-  //   "keep it like that only first 50% of screen the rest we make it
-  //    disappear or perhaps fade or black will do"
   // Drives --voyo-scroll-vis CSS var from 1 (top) → 0 (≥50% scrolled) so
-  // the bronze-gold scrollbar gracefully fades to nothing in the lower
-  // half. We watch every scrollable element via capture-phase listener
-  // because inner scroll containers are more common than window scroll.
+  // the bronze-gold scrollbar fades to nothing in the lower half.
+  // Capture-phase listener because inner scroll containers are more common than window scroll.
   useEffect(() => {
     let raf = 0;
     const update = (target: EventTarget | null) => {

@@ -1,5 +1,5 @@
 /**
- * predictUpcoming — v214 unit tests.
+ * predictUpcoming — unit tests.
  *
  * Covers: queue-first priority, discover-pool fallback, exclusion of
  * history + current + already-picked + blocklist, uniqueness, stops at
@@ -60,7 +60,7 @@ function mkTrack(id: string, title = id): Track {
   } as Track;
 }
 
-describe('predictUpcoming (v214)', () => {
+describe('predictUpcoming', () => {
   beforeEach(() => {
     BLOCKED.clear();
     usePlayerStore.setState({

@@ -143,9 +143,9 @@ export function logPlaybackEvent(
       session_id: sessionId,
     };
 
-    // BG REAL-TIME FLUSH: setTimeout is throttled 1/min in BG. We tried
-    // fetch(keepalive:true) in v190 — it also got deferred by Android
-    // Chrome in deep BG, events piling up until visibility returned.
+    // BG REAL-TIME FLUSH: setTimeout is throttled 1/min in BG.
+    // fetch(keepalive:true) is also deferred by Android Chrome in deep BG,
+    // causing events to pile up until visibility returns.
     //
     // sendBeacon is the ONE API specifically designed to bypass BG
     // throttling AND survive page unload. The catch: it can't set custom

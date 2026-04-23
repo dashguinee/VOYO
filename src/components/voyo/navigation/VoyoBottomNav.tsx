@@ -46,13 +46,8 @@ export const VoyoBottomNav = ({ onDahub, onHome, oyoSurface = 'home', playerMode
   const [promptCount, setPromptCount] = useState(0);
   const [unreadDMs, setUnreadDMs] = useState(0);
 
-  // HAND-MOTION TRACKING — Dash's call (2026-04-14):
-  //   "as they hold to scroll, hesitate, the nav bar fades, the voyo central
-  //    button fades less"
-  // While the user has any pointer down anywhere on screen (scrolling /
-  // hesitating / dragging), dim the side nav buttons aggressively but keep
-  // the VOYO central orb mostly visible — it's the player anchor, must
-  // stay accessible mid-gesture.
+  // While pointer is down (scroll / hesitate / drag), dim side nav buttons
+  // but keep the VOYO orb mostly visible — player anchor must stay accessible mid-gesture.
   const [isHolding, setIsHolding] = useState(false);
   useEffect(() => {
     const onDown = () => setIsHolding(true);
@@ -219,8 +214,7 @@ export const VoyoBottomNav = ({ onDahub, onHome, oyoSurface = 'home', playerMode
 
   // VOYO center button always lands on the player. The feed entry point lives
   // inside VoyoPortraitPlayer (the dedicated "onVoyoFeed" button), not here.
-  // Dash's call: tapping VOYO from anywhere — music, feed, dahub — should
-  // bring the player up. No more flip-flop.
+  // Tapping VOYO from anywhere always brings the player up — no flip-flop.
   const handleVoyoToggle = () => {
     wakeNav();
     setVoyoTab('music');

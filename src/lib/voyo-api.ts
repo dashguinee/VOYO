@@ -667,7 +667,6 @@ export const messagesAPI = {
     // stream before client-side filtering. RLS alone is not enough here
     // because realtime publication happens before row-level policy.
     // Supabase or() filter covers both directions in one expression.
-    // [SOCIAL-1]
     const serverFilter =
       `or(and(from_id.eq.${currentUser},to_id.eq.${otherUser}),and(from_id.eq.${otherUser},to_id.eq.${currentUser}))`;
 

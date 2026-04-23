@@ -63,10 +63,9 @@ function isAfricanVibe(vibe: VibeDefinition): boolean {
   return AFRICAN_PATTERN.test(text);
 }
 
-// Layered overlay for African vibes — golden-bronze leading (warmer, slightly
-// more gold than bronze per Dash's call), platform purple as the second wash
-// (so the card still reads as "VOYO surface, not generic"), base category
-// color as the closing hint. The diaspora-meets-platform handshake.
+// Layered overlay for African vibes — golden-bronze leading, platform purple
+// as the second wash (card reads as "VOYO surface, not generic"), base
+// category color as the closing hint. Diaspora-meets-platform handshake.
 function getAfricanCardStyle(vibe: VibeDefinition) {
   const base = getVibeColor(vibe);
   return {

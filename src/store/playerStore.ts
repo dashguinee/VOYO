@@ -983,13 +983,10 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       : TRACKS;
 
     // DEDUPLICATION: Remove recently played + collective-blocklist tracks.
-    // CRITICAL (2026-04-14): Until now the discover/hot fallback DID NOT
-    // apply the blocklist filter — only the queue path did. Result: when
-    // the queue emptied and we fell into discover-fallback, we'd land on a
-    // blocked track, loadTrack's isBlocked() check would immediately fire
-    // nextTrack() again, which would land on ANOTHER blocked track, and we
-    // got a 50+ track-per-second cascade visible in telemetry. Fix: filter
-    // both layers identically so the fallback never re-surfaces dead IDs.
+    // The discover/hot fallback must apply the same blocklist filter as the
+    // queue path — without it, the fallback lands on a blocked track,
+    // isBlocked() fires nextTrack() immediately, which lands on another blocked
+    // track, producing a 50+ track/s cascade visible in telemetry.
     let availableTracks = allAvailable.filter(t => {
       if (recentHistoryIds.has(t.id) || recentHistoryIds.has(t.trackId)) return false;
       if (t.trackId && (isKnownUnplayable(t.trackId) || isBlocklisted(t.trackId))) return false;
@@ -1050,14 +1047,9 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
         const randomIndex = Math.floor(Math.random() * availableTracks.length);
         nextTrack = availableTracks[randomIndex];
       } else {
-        // PRELOAD CONSISTENCY (v194 B1): picks availableTracks[0], matching
-        // predictNextTrack. Before: random pick → preload_check hit=False on
-        // every transition because preload cached what predict returned (first)
-        // but nextTrack picked random. Seen in v193 session: preload_complete
-        // fired for Fbd6L9zkuyc but nextTrack landed on sTUg9gjhiI4 instead.
-        // Filtering already excludes recent + blocked, so [0] rotates through
-        // discover pool as tracks get added to history — no stuck-on-one-track
-        // risk.
+        // Must match predictNextTrack — both pick [0] so preload cache hits.
+        // Random pick caused preload_check hit=False on every transition.
+        // Filtering already excludes recent + blocked, so [0] rotates naturally.
         nextTrack = availableTracks[0];
       }
 
@@ -1196,10 +1188,9 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     const curId = state.currentTrack?.id;
     const curTrackId = state.currentTrack?.trackId;
 
-    // If queue has items, scan for the first that isn't unplayable AND isn't
-    // the currently-playing track. v418 nextTrack also skips same-as-current
-    // so predict MUST match or preload will cache the wrong track and the
-    // actual advance stalls waiting for the right one to fetch.
+    // Scan for the first queue item that is playable and not the current track.
+    // nextTrack applies the same skip-same-as-current rule — predict must match
+    // or preload caches the wrong track and the advance stalls.
     if (state.queue.length > 0) {
       for (const qi of state.queue) {
         const t = qi.track;

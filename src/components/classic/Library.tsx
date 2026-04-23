@@ -878,9 +878,8 @@ export const Library = ({ onTrackClick }: LibraryProps) => {
           }}
           aria-label="What is Disco?"
         >
-          {/* Bronze shimmer headline — same gradient as the DiscoExplainer
-              title so the two surfaces rhyme. Heavier weight + glow than
-              v397 so the page has centre of gravity. */}
+          {/* Bronze shimmer headline — same gradient as DiscoExplainer title,
+              heavier weight + glow to give the page centre of gravity. */}
           <h1
             className="text-[34px] font-black leading-none tracking-tight"
             style={{

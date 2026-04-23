@@ -2,7 +2,7 @@
  * VOYO Video Intelligence - The Collective Brain
  *
  * Local IndexedDB cache + Supabase collective table. OCR discovery path
- * retired — HungryScouts disabled since v220 (324K tracks in DB already).
+ * retired — HungryScouts disabled (324K tracks in DB already).
  */
 
 import { videoIntelligenceAPI, isSupabaseConfigured } from '../lib/supabase';
