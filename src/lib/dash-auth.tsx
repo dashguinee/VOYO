@@ -9,7 +9,7 @@
 
 import { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
-import { devLog } from '../utils/logger';
+import { devLog, devWarn } from '../utils/logger';
 
 // Command Center Supabase - THE source of truth
 // Use env vars with fallback to hardcoded values for reliability
@@ -69,7 +69,7 @@ export async function signInWithDashId(
     });
 
     if (error) {
-      console.error('[DASH Auth] Sign in error:', error);
+      devWarn('[DASH Auth] Sign in error:', error);
       return { success: false, error: error.message };
     }
 
@@ -110,7 +110,7 @@ export async function signInWithDashId(
 
     return { success: true, session };
   } catch (e) {
-    console.error('[DASH Auth] Connection error:', e);
+    devWarn('[DASH Auth] Connection error:', e);
     return { success: false, error: 'Connection failed' };
   }
 }
@@ -363,7 +363,7 @@ export async function exchangeSSOToken(
     });
 
     if (error) {
-      console.error('[DASH SSO] Exchange error:', error);
+      devWarn('[DASH SSO] Exchange error:', error);
       return { success: false, error: error.message };
     }
 
@@ -399,7 +399,7 @@ export async function exchangeSSOToken(
     devLog('[DASH SSO] Token exchanged successfully for:', user.core_id);
     return { success: true };
   } catch (e) {
-    console.error('[DASH SSO] Exchange failed:', e);
+    devWarn('[DASH SSO] Exchange failed:', e);
     return { success: false, error: 'Failed to exchange token' };
   }
 }
@@ -446,7 +446,7 @@ export async function handleSSOCallback(): Promise<boolean> {
         return true;
       }
     } catch (e) {
-      console.error('[DASH SSO] Failed to parse dashAuth:', e);
+      devWarn('[DASH SSO] Failed to parse dashAuth:', e);
     }
   }
 
@@ -460,7 +460,7 @@ export async function handleSSOCallback(): Promise<boolean> {
       devLog('[DASH SSO] Auto sign-in successful via token!');
       return true;
     }
-    console.error('[DASH SSO] Token exchange failed:', result.error);
+    devWarn('[DASH SSO] Token exchange failed:', result.error);
   }
 
   return false;

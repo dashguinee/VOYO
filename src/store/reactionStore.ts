@@ -254,7 +254,7 @@ export const useReactionStore = create<ReactionStore>((set, get) => ({
       if (error) {
         const s = (error as any).status;
         if (s === 401 || s === 403) return false;
-        console.error('[Reactions] Error creating reaction:', error);
+        devWarn('[Reactions] Error creating reaction:', error);
         return false;
       }
 
@@ -282,7 +282,7 @@ export const useReactionStore = create<ReactionStore>((set, get) => ({
     } catch (err: any) {
       const s = err?.status || err?.response?.status;
       if (s === 401 || s === 403) return false;
-      console.error('[Reactions] Error:', err);
+      devWarn('[Reactions] Error:', err);
       return false;
     }
   },
@@ -322,7 +322,7 @@ export const useReactionStore = create<ReactionStore>((set, get) => ({
     } catch (err: any) {
       const s = err?.status || err?.response?.status;
       if (s === 401 || s === 403) return [];
-      console.error('[Reactions] Error fetching track reactions:', err);
+      devWarn('[Reactions] Error fetching track reactions:', err);
       return [];
     }
   },
@@ -343,7 +343,7 @@ export const useReactionStore = create<ReactionStore>((set, get) => ({
     } catch (err: any) {
       const s = err?.status || err?.response?.status;
       if (s === 401 || s === 403) return [];
-      console.error('[Reactions] Error fetching user reactions:', err);
+      devWarn('[Reactions] Error fetching user reactions:', err);
       return [];
     }
   },
@@ -380,7 +380,7 @@ export const useReactionStore = create<ReactionStore>((set, get) => ({
     } catch (err: any) {
       const s = err?.status || err?.response?.status;
       if (s === 401 || s === 403) return null;
-      console.error('[Reactions] Error fetching track stats:', err);
+      devWarn('[Reactions] Error fetching track stats:', err);
       return null;
     }
   },
@@ -405,7 +405,7 @@ export const useReactionStore = create<ReactionStore>((set, get) => ({
     } catch (err: any) {
       const s = err?.status || err?.response?.status;
       if (s === 401 || s === 403) return [];
-      console.error('[Reactions] Error fetching recent reactions:', err);
+      devWarn('[Reactions] Error fetching recent reactions:', err);
       return [];
     }
   },

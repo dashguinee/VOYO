@@ -35,7 +35,7 @@ import {
   NowPlaying,
 } from '../lib/supabase';
 import { TRACKS } from '../data/tracks';
-import { devLog } from '../utils/logger';
+import { devLog, devWarn } from '../utils/logger';
 
 // ============================================
 // TYPES
@@ -410,7 +410,7 @@ export const useUniverseStore = create<UniverseStore>((set, get) => ({
         return true;
       }
     } catch (e) {
-      console.error('[DASH Auth] Failed to parse callback:', e);
+      devWarn('[DASH Auth] Failed to parse callback:', e);
     }
     return false;
   },
@@ -607,7 +607,7 @@ export const useUniverseStore = create<UniverseStore>((set, get) => ({
       devLog('[VOYO] Synced from cloud:', currentUsername);
       return true;
     } catch (error) {
-      console.error('[VOYO] Sync from cloud failed:', error);
+      devWarn('[VOYO] Sync from cloud failed:', error);
       return false;
     }
   },
@@ -772,7 +772,7 @@ export const useUniverseStore = create<UniverseStore>((set, get) => ({
       window.location.reload();
       return true;
     } catch (error) {
-      console.error('[VOYO] Import failed:', error);
+      devWarn('[VOYO] Import failed:', error);
       set({ isImporting: false });
       return false;
     }
@@ -829,7 +829,7 @@ export const useUniverseStore = create<UniverseStore>((set, get) => ({
 
       return true;
     } catch (error) {
-      console.error('[VOYO] Backup failed:', error);
+      devWarn('[VOYO] Backup failed:', error);
       return false;
     }
   },
@@ -857,7 +857,7 @@ export const useUniverseStore = create<UniverseStore>((set, get) => ({
       const universe = JSON.parse(decrypted) as UniverseData;
       return get().importUniverse(universe);
     } catch (error) {
-      console.error('[VOYO] Restore failed:', error);
+      devWarn('[VOYO] Restore failed:', error);
       return false;
     }
   },

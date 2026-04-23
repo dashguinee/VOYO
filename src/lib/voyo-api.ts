@@ -147,7 +147,7 @@ export const profileAPI = {
     if (error) {
       const s = (error as any).status;
       if (s === 401 || s === 403) return null;
-      console.error('[VOYO] Profile error:', error);
+      devWarn('[VOYO] Profile error:', error);
       return null;
     }
 
@@ -348,7 +348,7 @@ export const friendsAPI = {
     if (error) {
       const s = (error as any).status;
       if (s === 401 || s === 403) return false;
-      console.error('[VOYO] Add friend error:', error.message);
+      devWarn('[VOYO] Add friend error:', error.message);
       return false;
     }
 
@@ -370,7 +370,7 @@ export const friendsAPI = {
     if (error) {
       const s = (error as any).status;
       if (s === 401 || s === 403) return false;
-      console.error('[VOYO] Remove friend error:', error.message);
+      devWarn('[VOYO] Remove friend error:', error.message);
       return false;
     }
 
@@ -501,7 +501,7 @@ export const messagesAPI = {
     if (error) {
       const s = (error as any).status;
       if (s === 401 || s === 403) return false;
-      console.error('[VOYO] Send message error:', error.message);
+      devWarn('[VOYO] Send message error:', error.message);
       return false;
     }
 
@@ -529,7 +529,7 @@ export const messagesAPI = {
     if (error) {
       const s = (error as any).status;
       if (s === 401 || s === 403) return [];
-      console.error('[VOYO] Get conversation error:', error.message);
+      devWarn('[VOYO] Get conversation error:', error.message);
       return [];
     }
 
@@ -572,7 +572,7 @@ export const messagesAPI = {
     if (error) {
       const s = (error as any).status;
       if (s === 401 || s === 403) return false;
-      console.error('[VOYO] Mark read error:', error.message);
+      devWarn('[VOYO] Mark read error:', error.message);
       return false;
     }
 
@@ -607,7 +607,7 @@ export const messagesAPI = {
     if (error) {
       const s = (error as any).status;
       if (s === 401 || s === 403) return [];
-      console.error('[VOYO] Get conversations error:', error.message);
+      devWarn('[VOYO] Get conversations error:', error.message);
       return [];
     }
 

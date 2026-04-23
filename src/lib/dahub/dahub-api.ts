@@ -203,7 +203,7 @@ export const friendsAPI = {
 
       return friends;
     } catch (err) {
-      console.error('[DAHUB] Failed to fetch friends:', err);
+      devWarn('[DAHUB] Failed to fetch friends:', err);
       return [];
     }
   },
@@ -220,7 +220,7 @@ export const friendsAPI = {
 
       return !error;
     } catch (err) {
-      console.error('[DAHUB] Failed to add friend:', err);
+      devWarn('[DAHUB] Failed to add friend:', err);
       return false;
     }
   },
@@ -236,7 +236,7 @@ export const friendsAPI = {
 
       return !error;
     } catch (err) {
-      console.error('[DAHUB] Failed to remove friend:', err);
+      devWarn('[DAHUB] Failed to remove friend:', err);
       return false;
     }
   },
@@ -258,7 +258,7 @@ export const friendsAPI = {
         name: u.full_name
       }));
     } catch (err) {
-      console.error('[DAHUB] Failed to search users:', err);
+      devWarn('[DAHUB] Failed to search users:', err);
       return [];
     }
   },
@@ -361,7 +361,7 @@ export const friendsAPI = {
 
       return Array.from(memberMap.values());
     } catch (err) {
-      console.error('[DAHUB] Failed to get shared account members:', err);
+      devWarn('[DAHUB] Failed to get shared account members:', err);
       return [];
     }
   },
@@ -384,7 +384,7 @@ export const friendsAPI = {
 
       return !error;
     } catch (err) {
-      console.error('[DAHUB] Failed to send friend request:', err);
+      devWarn('[DAHUB] Failed to send friend request:', err);
       return false;
     }
   },
@@ -406,7 +406,7 @@ export const friendsAPI = {
 
       return !error;
     } catch (err) {
-      console.error('[DAHUB] Failed to accept friend request:', err);
+      devWarn('[DAHUB] Failed to accept friend request:', err);
       return false;
     }
   }
@@ -426,7 +426,7 @@ export const messagesAPI = {
       });
 
       if (error) {
-        console.error('[DAHUB] Error fetching conversations:', error);
+        devWarn('[DAHUB] Error fetching conversations:', error);
         return [];
       }
 
@@ -442,7 +442,7 @@ export const messagesAPI = {
         current_app: undefined
       }));
     } catch (err) {
-      console.error('[DAHUB] Failed to fetch conversations:', err);
+      devWarn('[DAHUB] Failed to fetch conversations:', err);
       return [];
     }
   },
@@ -460,7 +460,7 @@ export const messagesAPI = {
       if (error) return [];
       return (data || []) as Message[];
     } catch (err) {
-      console.error('[DAHUB] Failed to fetch messages:', err);
+      devWarn('[DAHUB] Failed to fetch messages:', err);
       return [];
     }
   },
@@ -513,7 +513,7 @@ export const messagesAPI = {
 
       return true;
     } catch (err) {
-      console.error('[DAHUB] Failed to send message:', err);
+      devWarn('[DAHUB] Failed to send message:', err);
       return false;
     }
   },
@@ -529,7 +529,7 @@ export const messagesAPI = {
 
       return !error;
     } catch (err) {
-      console.error('[DAHUB] Failed to mark messages read:', err);
+      devWarn('[DAHUB] Failed to mark messages read:', err);
       return false;
     }
   },
@@ -624,7 +624,7 @@ export const presenceAPI = {
 
       return !error;
     } catch (err) {
-      console.error('[DAHUB] Failed to update presence:', err);
+      devWarn('[DAHUB] Failed to update presence:', err);
       return false;
     }
   },
@@ -703,7 +703,7 @@ export const activityAPI = {
 
       return activities;
     } catch (err) {
-      console.error('[DAHUB] Failed to get friends activity:', err);
+      devWarn('[DAHUB] Failed to get friends activity:', err);
       return [];
     }
   },

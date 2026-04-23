@@ -165,7 +165,7 @@ export const universeAPI = {
     if (error) {
       const s = (error as any).status;
       if (s === 401 || s === 403) return { success: false, error: 'Unauthorized' };
-      console.error('[VOYO] Create universe error:', error);
+      devWarn('[VOYO] Create universe error:', error);
       return { success: false, error: error.message };
     }
     return { success: true };
@@ -320,7 +320,7 @@ export const portalChatAPI = {
     if (error) {
       const s = (error as any).status;
       if (s === 401 || s === 403) return [];
-      console.error('[VOYO] Failed to fetch portal messages:', error);
+      devWarn('[VOYO] Failed to fetch portal messages:', error);
       return [];
     }
     return data || [];
@@ -337,7 +337,7 @@ export const portalChatAPI = {
     if (error) {
       const s = (error as any).status;
       if (s === 401 || s === 403) return false;
-      console.error('[VOYO] Failed to send portal message:', error);
+      devWarn('[VOYO] Failed to send portal message:', error);
       return false;
     }
     return true;
@@ -419,7 +419,7 @@ export const lyricsAPI = {
     if (error) {
       const s = (error as any).status;
       if (s === 401 || s === 403) return false;
-      console.error('[Lyrics] Save error:', error);
+      devWarn('[Lyrics] Save error:', error);
       return false;
     }
     devLog(`[Lyrics] Saved lyrics for ${lyrics.track_id}`);
@@ -684,7 +684,7 @@ export const videoIntelligenceAPI = {
     if (error) {
       const s = (error as any).status;
       if (s === 401 || s === 403) return 0;
-      console.error('[VideoIntelligence] Batch sync error:', error.message);
+      devWarn('[VideoIntelligence] Batch sync error:', error.message);
       return 0;
     }
     devLog(`[VideoIntelligence] Batch synced ${count} videos`);
@@ -788,7 +788,7 @@ export const playlistAPI = {
     if (error) {
       const s = (error as any).status;
       if (s === 401 || s === 403) return false;
-      console.error('[Playlist] Save error:', error.message);
+      devWarn('[Playlist] Save error:', error.message);
       return false;
     }
     devLog(`[Playlist] Saved: ${playlist.name} (${playlist.id})`);
@@ -805,7 +805,7 @@ export const playlistAPI = {
     if (error) {
       const s = (error as any).status;
       if (s === 401 || s === 403) return [];
-      console.error('[Playlist] Get error:', error.message);
+      devWarn('[Playlist] Get error:', error.message);
       return [];
     }
     return (data || []).map((row: PlaylistRow) => ({
@@ -829,7 +829,7 @@ export const playlistAPI = {
     if (error) {
       const s = (error as any).status;
       if (s === 401 || s === 403) return false;
-      console.error('[Playlist] Delete error:', error.message);
+      devWarn('[Playlist] Delete error:', error.message);
       return false;
     }
     devLog(`[Playlist] Deleted: ${playlistId}`);
@@ -854,7 +854,7 @@ export const playlistAPI = {
     if (error) {
       const s = (error as any).status;
       if (s === 401 || s === 403) return 0;
-      console.error('[Playlist] Batch save error:', error.message);
+      devWarn('[Playlist] Batch save error:', error.message);
       return 0;
     }
     devLog(`[Playlist] Batch saved ${count} playlists`);

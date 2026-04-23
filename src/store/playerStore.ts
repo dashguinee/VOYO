@@ -319,7 +319,7 @@ interface PlayerStore {
 
   // Actions - Playback
   setCurrentTrack: (track: Track) => void;
-  playTrack: (track: Track) => void; // CONSOLIDATED: Sets track AND starts playing in one atomic update
+  playTrack: (track: Track) => void;
   togglePlay: () => void;
   // Direct setter for the audio element to sync its actual state back to the
   // store. UI buttons should NOT call this — they call togglePlay. This is
@@ -594,8 +594,6 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     }
   },
 
-  // CONSOLIDATED: Play a track - sets track AND isPlaying in one atomic update
-  // Use this instead of setCurrentTrack + setTimeout + togglePlay pattern
   playTrack: (track) => {
     // First set the track (this resets playbackSource, bufferHealth, etc.)
     get().setCurrentTrack(track);
@@ -1549,15 +1547,12 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     else setTimeout(() => syncHistory(), 2000);
   },
 
-  // Recommendation Actions
-  // ACCUMULATOR MODE: Merge new discoveries, never lose good tracks
   refreshRecommendations: () => {
     const state = get();
 
-    // POOL CONFIG - Keep recommendations alive!
-    const MAX_HOT_POOL = 50;      // Was 15 - now accumulates
-    const MAX_DISCOVER_POOL = 50; // Was 15 - now accumulates
-    const FETCH_SIZE = 20;        // Fetch more each time
+    const MAX_HOT_POOL = 50;
+    const MAX_DISCOVER_POOL = 50;
+    const FETCH_SIZE = 20;
 
     // Exclude currently playing, queued, and recent history
     const excludeIds = new Set([
@@ -1740,11 +1735,8 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       ...state.discoverTracks.map((t) => t.id), // Don't duplicate existing
     ].filter(Boolean) as string[];
 
-    // POOL-AWARE v3.0: Pull from dynamic pool (VOYO intelligence learns from user)
     const relatedTracks = getPoolAwareDiscoveryTracks(track, 5, excludeIds);
 
-    // MERGE: Keep database tracks, add pool tracks on top (no replacement)
-    // Only add if pool returned meaningful results
     if (relatedTracks.length >= 3) {
       const merged = [...relatedTracks, ...state.discoverTracks];
       // Deduplicate by id
