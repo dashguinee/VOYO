@@ -18,6 +18,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { useTabHistory } from '../../hooks/useTabHistory';
 import { APP_CODES } from '../../lib/dahub/dahub-api';
 import { VoyoLoadOrb } from './VoyoLoadOrb';
+import { VoyoCloseX } from '../ui/VoyoCloseX';
 
 // Lightweight — always loaded
 import { VoyoBottomNav } from './navigation/VoyoBottomNav';
@@ -85,12 +86,9 @@ export const DJTextInput = ({ isOpen, onClose, onSubmit }: DJTextInputProps) => 
           <div
             className="relative z-10 bg-gradient-to-t from-[#0a0a0f] via-[#1a1a2e] to-transparent px-4 pb-8 pt-12 animate-[voyo-slide-up_0.3s_ease]"
           >
-            <button
-              className="absolute top-4 right-4 p-2 rounded-full bg-white/10"
-              onClick={onClose}
-            >
-              <X className="w-5 h-5 text-white/70" />
-            </button>
+            <div className="absolute top-4 right-4">
+              <VoyoCloseX onClose={onClose} size="md" />
+            </div>
 
             <div className="text-center mb-4">
               <p className="text-white/50 text-sm">Talk to OYO</p>

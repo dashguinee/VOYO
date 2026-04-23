@@ -42,6 +42,7 @@ import { getTrackThumbnailUrl } from '../../utils/thumbnail';
 import { useMobilePlay } from '../../hooks/useMobilePlay';
 import { useBackGuard } from '../../hooks/useBackGuard';
 import { PlaylistModal } from '../playlist/PlaylistModal';
+import { VoyoCloseX } from '../ui/VoyoCloseX';
 import { useReactionStore, Reaction, TrackStats } from '../../store/reactionStore';
 import { OyeButton } from '../oye/OyeButton';
 import { useAuth } from '../../hooks/useAuth';
@@ -680,12 +681,7 @@ export const NowPlaying = ({ isOpen, onClose }: NowPlayingProps) => {
                       <p className="text-white/50 text-xs">{queue.length} tracks in bucket</p>
                     </div>
                   </div>
-                  <button
-                    className="p-2"
-                    onClick={() => setShowQueue(false)}
-                  >
-                    <X className="w-6 h-6 text-white" />
-                  </button>
+                  <VoyoCloseX onClose={() => setShowQueue(false)} size="md" />
                 </div>
 
                 {/* Queue List */}

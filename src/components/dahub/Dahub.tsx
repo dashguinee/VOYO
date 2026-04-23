@@ -20,6 +20,7 @@ import {
 import { usePlayerStore } from '../../store/playerStore';
 import { DirectMessageChat } from './DirectMessageChat';
 import { useBackGuard } from '../../hooks/useBackGuard';
+import { VoyoCloseX } from '../ui/VoyoCloseX';
 
 // ==============================================
 // CONSTANTS & HELPERS
@@ -866,9 +867,7 @@ function AddFriendModal({ userId, onClose, onAdded }: { userId: string; onClose:
       >
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-white font-bold text-xl">Add Friend</h2>
-          <button aria-label="Close" onClick={onClose} className="p-2.5 -mr-2 rounded-xl hover:bg-white/10 active:scale-95 transition-transform">
-            <X size={22} className="text-white/60" />
-          </button>
+          <VoyoCloseX onClose={onClose} size="md" className="-mr-1" />
         </div>
 
         {status === 'success' ? (
@@ -1051,15 +1050,7 @@ export function Dahub({ userId, userName, userAvatar, coreId, appContext, onClos
               </span>
             )}
           </div>
-          {onClose && (
-            <button
-              onClick={onClose}
-              className="p-3 rounded-xl hover:bg-white/[0.06] text-white/55 active:scale-95 transition-transform min-h-[44px] min-w-[44px] flex items-center justify-center"
-              aria-label="Close"
-            >
-              <X size={22} />
-            </button>
-          )}
+          {onClose && <VoyoCloseX onClose={onClose} size="lg" />}
         </div>
       </div>
 

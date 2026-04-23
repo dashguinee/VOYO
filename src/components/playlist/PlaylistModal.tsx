@@ -6,6 +6,7 @@
 
 import { useEffect, useState } from 'react';
 import { X, Plus, Check, Music2, Globe, Lock } from 'lucide-react';
+import { VoyoCloseX } from '../ui/VoyoCloseX';
 import { usePlaylistStore, Playlist } from '../../store/playlistStore';
 import { useAuth } from '../../hooks/useAuth';
 import { useBackGuard } from '../../hooks/useBackGuard';
@@ -89,12 +90,7 @@ export const PlaylistModal = ({ isOpen, onClose, trackId, trackTitle }: Playlist
               <p className="text-white/50 text-sm truncate max-w-[250px]">{trackTitle}</p>
             )}
           </div>
-          <button
-            onClick={onClose}
-            className="p-2 rounded-full bg-white/5 hover:bg-white/10"
-          >
-            <X className="w-5 h-5 text-white/70" />
-          </button>
+          <VoyoCloseX onClose={onClose} size="md" />
         </div>
 
         {/* Content */}

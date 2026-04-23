@@ -16,6 +16,7 @@
 
 import { useRef, useEffect, useCallback } from 'react';
 import { Play, Pause, SkipBack, SkipForward, X, Volume2, VolumeX, Heart } from 'lucide-react';
+import { VoyoCloseX } from '../ui/VoyoCloseX';
 import { usePlayerStore } from '../../store/playerStore';
 import { usePreferenceStore } from '../../store/preferenceStore';
 import { getYouTubeThumbnail } from '../../data/tracks';
@@ -171,15 +172,9 @@ export const VideoMode = ({ onExit }: VideoModeProps) => {
           auto-hide + tap-to-reveal behaviour was removed). */}
       <div className="absolute inset-0 pointer-events-none">
         {/* Exit Button */}
-        <button
-          className="absolute top-4 right-4 p-3 rounded-full bg-black/50 backdrop-blur-sm pointer-events-auto"
-          onClick={(e) => {
-            e.stopPropagation();
-            onExit();
-          }}
-        >
-          <X className="w-6 h-6 text-white" />
-        </button>
+        <div className="absolute top-4 right-4 pointer-events-auto">
+          <VoyoCloseX onClose={onExit} size="lg" ariaLabel="Exit video mode" />
+        </div>
 
         {/* Volume Control */}
         <button

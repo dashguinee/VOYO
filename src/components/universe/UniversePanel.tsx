@@ -16,6 +16,7 @@ import { usePreferenceStore } from '../../store/preferenceStore';
 import { profileAPI, formatVoyoId } from '../../lib/voyo-api';
 import { UserSearch } from './UserSearch';
 import { openCommandCenterForSSO } from '../../lib/dash-auth';
+import { VoyoCloseX } from '../ui/VoyoCloseX';
 import { useBackGuard } from '../../hooks/useBackGuard';
 
 interface UniversePanelProps {
@@ -204,12 +205,9 @@ export const UniversePanel = ({ isOpen, onClose }: UniversePanelProps) => {
           >
             {/* Header */}
             <div className="relative p-6 pb-4 border-b border-white/10">
-              <button
-                onClick={onClose}
-                className="absolute right-4 top-4 p-2 rounded-full bg-white/5 hover:bg-white/10"
-              >
-                <X className="w-5 h-5 text-white/70" />
-              </button>
+              <div className="absolute right-4 top-4">
+                <VoyoCloseX onClose={onClose} size="md" />
+              </div>
 
               <div className="flex items-center gap-4">
                 <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-purple-500 to-violet-600 flex items-center justify-center">

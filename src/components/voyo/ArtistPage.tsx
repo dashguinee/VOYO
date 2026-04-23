@@ -9,6 +9,7 @@
 
 import { useState } from 'react';
 import { X, ArrowLeft, Play, Search, Loader2, Music2, ExternalLink } from 'lucide-react';
+import { VoyoCloseX } from '../ui/VoyoCloseX';
 import { useArtist, ArtistTrack, ArtistMoment } from '../../hooks/useArtist';
 import { useBackGuard } from '../../hooks/useBackGuard';
 
@@ -581,12 +582,8 @@ export const ArtistPage: React.FC<ArtistPageProps> = ({
           >
             <ArrowLeft size={20} />
           </button>
-          <button
-            style={S.headerBtn}
-            onClick={onClose}
-          >
-            <X size={20} />
-          </button>
+          <VoyoCloseX onClose={onClose} size="md" />
+
         </div>
 
         {/* PROFILE SECTION */}

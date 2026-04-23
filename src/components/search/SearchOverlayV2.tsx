@@ -5,6 +5,7 @@
 
 import { useState, useRef, useEffect, useCallback, memo } from 'react';
 import { Search, X, Music2, Clock, Play, Compass, Disc3, Radio, User } from 'lucide-react';
+import { VoyoCloseX } from '../ui/VoyoCloseX';
 import { OyeButton } from '../oye/OyeButton';
 import { VoyoIcon, VoyoIconName } from '../ui/VoyoIcon';
 import { VinylLoader } from '../ui/VinylLoader';
@@ -642,14 +643,7 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap, onEnterVideoMode
                 {/* Close X — dialed down to match the in-input clear X
                     (no bg pill, no 44×44 tap target chrome). Still meets
                     touch size via w-10. Fades opacity instead of shouting. */}
-                <button
-                  className="w-10 h-10 rounded-full active:scale-90 transition-all flex items-center justify-center text-white/40 hover:text-white/70"
-                  onClick={onClose}
-                  aria-label="Close search"
-                  style={{ opacity: query ? 0.5 : 0.85 }}
-                >
-                  <X className="w-[18px] h-[18px]" strokeWidth={2} />
-                </button>
+                <VoyoCloseX onClose={onClose} size="md" ariaLabel="Close search" />
               </div>
 
               {/* Tabs — Tracks is label-only (it's the default surface,
