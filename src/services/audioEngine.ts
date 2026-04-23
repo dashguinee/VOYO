@@ -149,7 +149,7 @@ export function connectAudioChain(audio: HTMLAudioElement): AudioChainResult | n
       _audioCtx = null; _sourceNode = null; _chainWired = false;
     }
 
-    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
     if (!AudioContextClass) return null;
 
     // latencyHint: 'playback' uses larger audio buffers (~256-512 samples

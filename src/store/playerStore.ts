@@ -65,6 +65,7 @@ let _volumePersistTimer: ReturnType<typeof setTimeout> | null = null;
 // drag value after the first one in each 500ms window. User's final
 // slider position never persisted.
 let _voyexPersistTimer: ReturnType<typeof setTimeout> | null = null;
+let _trackChangeCount = 0;
 
 // ============================================
 // PERSISTENCE HELPERS - Remember state on refresh
@@ -130,7 +131,7 @@ function getRecentHistory(limit = 10): PersistedHistoryItem[] {
 
 // Expose globally for easy console access
 if (typeof window !== 'undefined') {
-  (window as any).voyoHistory = () => {
+  window.voyoHistory = () => {
     const history = getRecentHistory(20);
     devLog('🎵 VOYO Recent History:');
     history.forEach((h, i) => {
@@ -534,9 +535,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
 
     // REFRESH HOT TRACKS: Every 3rd track change, refresh hot recommendations
     // (Not every track to avoid performance hit, but often enough to stay fresh)
-    const trackChangeCount = (window as any).__voyoTrackChangeCount || 0;
-    (window as any).__voyoTrackChangeCount = trackChangeCount + 1;
-    if (trackChangeCount % 3 === 0) {
+    if (_trackChangeCount++ % 3 === 0) {
       const refreshTimeoutId = setTimeout(() => {
         if (!signal.aborted) {
           get().refreshRecommendations();

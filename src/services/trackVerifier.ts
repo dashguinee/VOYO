@@ -542,7 +542,7 @@ export function getVerificationStats(): {
 }
 
 if (typeof window !== 'undefined') {
-  (window as any).trackVerifier = {
+  window.trackVerifier = {
     verify: verifyTrack,
     safeAdd: safeAddToPool,
     safeAddMany: safeAddManyToPool,

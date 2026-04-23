@@ -120,7 +120,7 @@ export const DynamicIsland = ({ appCode = 'voyo', dashId: dashIdProp = null }: D
 
   // Expose function to add notifications globally
   useEffect(() => {
-    (window as any).pushNotification = (notif: Notification) => {
+    window.pushNotification = (notif: Notification) => {
       setNotifications(prev => {
         const newList = [...prev, notif];
         // Navigate to the new notification (use callback to avoid stale closure)
@@ -132,7 +132,7 @@ export const DynamicIsland = ({ appCode = 'voyo', dashId: dashIdProp = null }: D
 
     // Demo: Auto-trigger notifications to show the full flow
     const demo1 = setTimeout(() => {
-      (window as any).pushNotification({
+      window.pushNotification?.({
         id: '1',
         type: 'music',  // Purple dot
         title: 'Burna Boy',
@@ -142,7 +142,7 @@ export const DynamicIsland = ({ appCode = 'voyo', dashId: dashIdProp = null }: D
 
     // Friend message after 8s (custom blue color)
     const demo2 = setTimeout(() => {
-      (window as any).pushNotification({
+      window.pushNotification?.({
         id: '2',
         type: 'message',  // Blue dot
         title: 'Aziz',
@@ -152,7 +152,7 @@ export const DynamicIsland = ({ appCode = 'voyo', dashId: dashIdProp = null }: D
 
     // System notification after 15s
     const demo3 = setTimeout(() => {
-      (window as any).pushNotification({
+      window.pushNotification?.({
         id: '3',
         type: 'system',  // Red dot
         title: 'VOYO',
@@ -391,7 +391,7 @@ export const DynamicIsland = ({ appCode = 'voyo', dashId: dashIdProp = null }: D
       updateWaveform();
 
       // Setup speech recognition for transcript
-      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
       if (SpeechRecognition) {
         recognitionRef.current = new SpeechRecognition();
         recognitionRef.current.continuous = true;

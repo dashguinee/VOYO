@@ -185,7 +185,7 @@ export function getDJStatus() {
 }
 
 if (typeof window !== 'undefined') {
-  (window as any).voyoDJ = { run: forceDJ, status: getDJStatus, reset: resetDJ };
+  window.voyoDJ = { run: forceDJ, status: getDJStatus, reset: resetDJ };
 }
 
 export default { recordPlay, runDJ, forceDJ, getDJStatus, resetDJ, setDJEnabled };

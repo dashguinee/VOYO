@@ -247,7 +247,7 @@ export function trace(subtype: string, trackId: string | null | undefined, meta:
  * `voyoTelemetry.disableDebug()` — turn trace OFF
  */
 if (typeof window !== 'undefined') {
-  (window as any).voyoTelemetry = {
+  window.voyoTelemetry = {
     flush,
     stats: () => ({ bufferSize: buffer.length, sessionId, consecutiveFailures, debug: typeof localStorage !== 'undefined' && localStorage.getItem('voyoDebug') === '1' }),
     enableDebug: () => { try { localStorage.setItem('voyoDebug', '1'); console.log('[VOYO] trace ON — session:', sessionId); } catch {} },

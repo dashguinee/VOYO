@@ -518,7 +518,7 @@ export async function syncSeedTracks(tracks: Track[]): Promise<number> {
 // ============================================
 
 if (typeof window !== 'undefined') {
-  (window as any).voyoCentral = {
+  window.voyoCentral = {
     getByMode: getTracksByMode,
     getByVibe: getTracksByVibe,
     getHot: getHotTracks,

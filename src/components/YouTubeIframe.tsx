@@ -141,14 +141,14 @@ export const YouTubeIframe = memo(() => {
   // After any user interaction the gesture requirement is satisfied, so defer is safe.
   useEffect(() => {
     const loadApi = () => {
-      if (isApiLoadedRef.current || (window as any).YT?.Player) {
+      if (isApiLoadedRef.current || window.YT?.Player) {
         isApiLoadedRef.current = true;
         return;
       }
       const tag = document.createElement('script');
       tag.src = 'https://www.youtube.com/iframe_api';
       document.head.appendChild(tag);
-      (window as any).onYouTubeIframeAPIReady = () => {
+      window.onYouTubeIframeAPIReady = () => {
         isApiLoadedRef.current = true;
         const store = usePlayerStore.getState();
         const trackId = store.currentTrack?.trackId;
@@ -162,7 +162,7 @@ export const YouTubeIframe = memo(() => {
     };
 
     // If API already present (e.g. hot reload), mark loaded immediately
-    if ((window as any).YT?.Player) { isApiLoadedRef.current = true; return; }
+    if (window.YT?.Player) { isApiLoadedRef.current = true; return; }
 
     const onGesture = () => {
       document.removeEventListener('click', onGesture);
@@ -195,7 +195,7 @@ export const YouTubeIframe = memo(() => {
   }, [playbackSource, videoTarget]);
 
   const initPlayer = useCallback((videoId: string) => {
-    if (!isApiLoadedRef.current || !(window as any).YT?.Player) return;
+    if (!isApiLoadedRef.current || !window.YT?.Player) return;
     if (!containerRef.current) return;
     if (initializingRef.current) return;
     if (playerRef.current && currentVideoIdRef.current === videoId) return;
@@ -213,7 +213,7 @@ export const YouTubeIframe = memo(() => {
     const ps = usePlayerStore.getState().playbackSource;
     const isBoosted = ps === 'cached' || ps === 'r2';
 
-    playerRef.current = new (window as any).YT.Player(containerRef.current, {
+    playerRef.current = new window.YT.Player(containerRef.current, {
       width: '100%',
       height: '100%',
       videoId,

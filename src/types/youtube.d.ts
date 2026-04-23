@@ -92,7 +92,7 @@ declare namespace YT {
 
 interface Window {
   YT: {
-    Player: new (elementId: string, options: YT.PlayerOptions) => YT.Player;
+    Player: new (elementId: string | HTMLElement, options: YT.PlayerOptions) => YT.Player;
     PlayerState: typeof YT.PlayerState;
   };
   onYouTubeIframeAPIReady: () => void;

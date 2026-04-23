@@ -2201,7 +2201,7 @@ const ReactionBar = memo(({
       updateWaveform();
 
       // Setup speech recognition for live transcript
-      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
       if (SpeechRecognition) {
         recognitionRef.current = new SpeechRecognition();
         recognitionRef.current.continuous = true;

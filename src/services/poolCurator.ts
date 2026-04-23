@@ -541,7 +541,7 @@ setTimeout(async () => {
 // ============================================
 
 if (typeof window !== 'undefined') {
-  (window as any).voyoPool = {
+  window.voyoPool = {
     seed: seedPool,
     bootstrap: () => bootstrapPool(false),
     forceBootstrap: () => bootstrapPool(true),

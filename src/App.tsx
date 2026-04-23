@@ -732,7 +732,7 @@ function App() {
               newReaction.reaction_type === 'fire' ? 'music' :
               newReaction.reaction_type === 'oye' ? 'message' : 'music';
 
-            (window as any).pushNotification?.({
+            window.pushNotification?.({
               id: `reaction-${newReaction.id}`,
               type: notifType,
               title: newReaction.username,
@@ -748,7 +748,7 @@ function App() {
 
         // Notify when category becomes hot
         if (pulse.isHot && !prevPulse.isHot && pulse.count > 5) {
-          (window as any).pushNotification?.({
+          window.pushNotification?.({
             id: `pulse-${category}-${Date.now()}`,
             type: 'music',
             title: 'MixBoard',
@@ -775,7 +775,7 @@ function App() {
         // Subscribe returns an unsubscribe function
         dmUnsubscribe = messagesAPI.subscribeToIncoming(dashId, (newMessage) => {
           // Push to DynamicIsland
-          (window as any).pushNotification?.({
+          window.pushNotification?.({
             id: `dm-${newMessage.id}`,
             type: 'message',
             title: newMessage.from_id,

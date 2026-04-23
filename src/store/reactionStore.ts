@@ -452,14 +452,14 @@ export const useReactionStore = create<ReactionStore>((set, get) => ({
     set({ isSubscribed: true });
 
     // Store sub reference for cleanup
-    (window as any).__voyoReactionChannel = sub;
+    window.__voyoReactionChannel = sub;
   },
 
   unsubscribeFromReactions: () => {
-    const sub = (window as any).__voyoReactionChannel;
+    const sub = window.__voyoReactionChannel;
     if (sub) {
       sub.unsubscribe();
-      delete (window as any).__voyoReactionChannel;
+      delete window.__voyoReactionChannel;
     }
     set({ isSubscribed: false });
   },

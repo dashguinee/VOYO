@@ -75,13 +75,7 @@ export function playTrack(track: Track, source: PlaySource = 'unknown'): void {
 export function addToQueue(track: Track, position?: number): void {
   const store = usePlayerStore.getState();
   if (typeof store.addToQueue === 'function') {
-    if (position !== undefined) {
-      // Some implementations accept a second arg; fall back if not.
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (store.addToQueue as any)(track, position);
-    } else {
-      store.addToQueue(track);
-    }
+    store.addToQueue(track, position);
   }
   // Low-priority prefetch so when they pop it off the queue it's already warm.
   void prefetch([track], 7);
@@ -153,8 +147,7 @@ export function oye(
 
   const reactionStore = useReactionStore.getState();
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (reactionStore as any).createReaction?.({
+    reactionStore.createReaction?.({
       username: opts.username ?? 'anonymous',
       trackId: track.id,
       trackTitle: track.title,
@@ -234,12 +227,7 @@ export function oyeCommit(
   try {
     const store = usePlayerStore.getState();
     if (typeof store.addToQueue === 'function') {
-      if (opts.position !== undefined) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (store.addToQueue as any)(track, opts.position);
-      } else {
-        store.addToQueue(track);
-      }
+      store.addToQueue(track, opts.position);
     }
   } catch { /* non-fatal */ }
 
