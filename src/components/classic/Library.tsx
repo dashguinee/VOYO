@@ -24,7 +24,6 @@ import { OyeButton } from '../oye/OyeButton';
 import { DiscoExplainer } from '../ui/DiscoExplainer';
 import { searchMusic, SearchResult } from '../../services/api';
 import { useTabHistory } from '../../hooks/useTabHistory';
-import { app } from '../../services/oyo';
 import { CardHoldActions } from '../ui/CardHoldActions';
 import { useKnowledgeStore } from '../../knowledge/KnowledgeStore';
 
