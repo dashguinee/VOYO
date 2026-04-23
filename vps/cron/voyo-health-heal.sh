@@ -18,14 +18,20 @@
 
 set -e
 LOG="/home/ubuntu/voyo-health-heal.log"
+ENV_FILE=/etc/voyo-health.env
 exec >>"$LOG" 2>&1
 echo ""
 echo "==== $(date -u +%Y-%m-%dT%H:%M:%SZ) ===="
 
-URL="https://anmgyxhnyhbyxzpjhxgx.supabase.co"
-KEY="$(sudo cat /proc/$(pgrep -f voyo-proxy.js | head -1)/environ 2>/dev/null \
-     | tr '\0' '\n' | grep ^VOYO_SUPABASE_ANON_KEY= | cut -d= -f2-)"
-if [ -z "$KEY" ]; then echo "no supabase key in voyo-audio env — skipping"; exit 0; fi
+# Load Supabase credentials from /etc/voyo-health.env (same file as
+# voyo-health-probe.sh). Decoupled from the voyo-proxy.js process env so
+# heal still works when voyo-audio is down — self-heal during outage is
+# the whole point. Expected vars: VOYO_SUPABASE_URL, VOYO_SUPABASE_ANON_KEY.
+[ -r "$ENV_FILE" ] && . "$ENV_FILE"
+
+URL="${VOYO_SUPABASE_URL:-https://anmgyxhnyhbyxzpjhxgx.supabase.co}"
+KEY="${VOYO_SUPABASE_ANON_KEY:-}"
+if [ -z "$KEY" ]; then echo "no VOYO_SUPABASE_ANON_KEY in $ENV_FILE — skipping"; exit 0; fi
 
 # ── 1. Chrome profile health check ───────────────────────────────────────
 

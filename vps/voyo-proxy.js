@@ -31,7 +31,7 @@
 const https = require("https");
 const http = require("http");
 const fs = require("fs");
-const { exec, spawn } = require("child_process");
+const { exec, execSync, spawn } = require("child_process");
 const { PassThrough } = require("stream");
 
 const PORT = 8443;
@@ -92,11 +92,117 @@ const MAX_CONCURRENT_FFMPEG = 6;
 // polls the cache path and serves from there once ready.
 const activeJobs = new Map();
 
+// ── Per-IP rate limiter (Finding #3 — P0) ────────────────────────────────
+//
+// Prevents unauthenticated abuse of /voyo/audio/:trackId. Two tiers share
+// one 60s rolling window per IP but have independent counters:
+//   • 60 req/min per IP — every /voyo/audio request (bumps entry.count)
+//   • 6  req/min per IP — yt-dlp spawns specifically (bumps entry.ytDlpCount)
+//
+// Since every request already costs 1 from the 60/min cap, the 6/min
+// extraction cap is the effective ceiling for cold-track bursts. An IP
+// that triggers 6 cold extractions still has 54 cached requests left
+// for the remainder of the window.
+//
+// Store: Map<ip, { count, ytDlpCount, windowStart }>. Localhost is exempted
+// so self-probes (health-probe.sh) bypass. Eviction: stale entries
+// (>2min since windowStart) are cleaned periodically so the Map stays bounded.
+const RATE_WINDOW_MS        = 60_000;
+const RATE_LIMIT_CACHED     = 60;   // general requests per minute per IP
+const RATE_LIMIT_EXTRACTION = 6;    // yt-dlp spawn requests per minute per IP
+const rateLimitStore = new Map();
 
-const ssl = {
-  key: fs.readFileSync("/etc/letsencrypt/live/stream.zionsynapse.online/privkey.pem"),
-  cert: fs.readFileSync("/etc/letsencrypt/live/stream.zionsynapse.online/fullchain.pem"),
-};
+function getClientIp(req) {
+  const xff = req.headers["x-forwarded-for"];
+  if (xff) return xff.split(",")[0].trim();
+  return req.connection.remoteAddress || "unknown";
+}
+
+function isLocalhost(ip) {
+  if (!ip) return false;
+  return ip === "127.0.0.1" || ip === "::1" || ip === "::ffff:127.0.0.1" || ip === "localhost";
+}
+
+// Two entrypoints:
+//   checkCachedRateLimit(ip) — call once per request at entry. Checks +
+//     bumps the 60/min cap. Returns { allowed, retryAfter, reason? }.
+//   checkExtractionRateLimit(ip) — call just before spawning yt-dlp.
+//     Checks + bumps the 6/min cap only (the 60/min was already bumped
+//     at entry). Does NOT double-count against the cached limit.
+function _ensureRateEntry(ip) {
+  const now = Date.now();
+  let entry = rateLimitStore.get(ip);
+  if (!entry || now - entry.windowStart >= RATE_WINDOW_MS) {
+    entry = { count: 0, ytDlpCount: 0, windowStart: now };
+    rateLimitStore.set(ip, entry);
+  }
+  return { entry, now };
+}
+
+function checkCachedRateLimit(ip) {
+  if (isLocalhost(ip)) return { allowed: true, retryAfter: 0 };
+  const { entry, now } = _ensureRateEntry(ip);
+  if (entry.count >= RATE_LIMIT_CACHED) {
+    const retryAfter = Math.max(1, Math.ceil((RATE_WINDOW_MS - (now - entry.windowStart)) / 1000));
+    return { allowed: false, retryAfter, reason: "rate_limit_exceeded" };
+  }
+  entry.count++;
+  return { allowed: true, retryAfter: 0 };
+}
+
+function checkExtractionRateLimit(ip) {
+  if (isLocalhost(ip)) return { allowed: true, retryAfter: 0 };
+  const { entry, now } = _ensureRateEntry(ip);
+  if (entry.ytDlpCount >= RATE_LIMIT_EXTRACTION) {
+    const retryAfter = Math.max(1, Math.ceil((RATE_WINDOW_MS - (now - entry.windowStart)) / 1000));
+    return { allowed: false, retryAfter, reason: "yt_dlp_rate_limit" };
+  }
+  entry.ytDlpCount++;
+  return { allowed: true, retryAfter: 0 };
+}
+
+// Periodic eviction: entries whose windowStart is > 2min old are stale.
+setInterval(() => {
+  const now = Date.now();
+  let evicted = 0;
+  for (const [ip, entry] of rateLimitStore) {
+    if (now - entry.windowStart > 2 * RATE_WINDOW_MS) {
+      rateLimitStore.delete(ip);
+      evicted++;
+    }
+  }
+  if (evicted) console.log(`[VOYO] rate-limit eviction: ${evicted} stale IP entries`);
+}, 5 * 60_000);
+
+
+// SSL loader — retries on ENOENT for up to 1min to tolerate certbot renewal
+// races (cert symlink briefly absent during renewal). After 12 attempts, exit
+// and let pm2 restart us with a fresh attempt.
+function loadSsl() {
+  const keyPath  = "/etc/letsencrypt/live/stream.zionsynapse.online/privkey.pem";
+  const certPath = "/etc/letsencrypt/live/stream.zionsynapse.online/fullchain.pem";
+  const maxAttempts = 12;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return {
+        key:  fs.readFileSync(keyPath),
+        cert: fs.readFileSync(certPath),
+      };
+    } catch (e) {
+      if (e.code !== "ENOENT") {
+        console.error(`[VOYO] SSL read failed (non-ENOENT): ${e.message} — exiting`);
+        process.exit(1);
+      }
+      console.warn(`[VOYO] SSL cert missing (attempt ${attempt}/${maxAttempts}) — retry in 5s`);
+      // Blocking sleep via child process — boot-time only, OK to block the
+      // event loop (no server yet, no in-flight requests).
+      try { execSync("sleep 5"); } catch {}
+    }
+  }
+  console.error(`[VOYO] SSL cert missing after ${maxAttempts} attempts — exiting (pm2 will restart)`);
+  process.exit(1);
+}
+const ssl = loadSsl();
 
 const bitrateMap = { low: "64k", medium: "128k", high: "256k", studio: "320k" };
 
@@ -132,6 +238,22 @@ setInterval(() => {
     if (cleaned) console.log(`[VOYO] tmp cleanup: ${cleaned} files`);
   } catch {}
 }, 1_800_000);
+
+// Evict stale cookiesBridgeCache entries — TTL is 10min per entry (checked
+// on read) but without this interval, a Map slot per rotated profile would
+// linger forever. Runs every 10min. Guard for the lazy-null init state.
+setInterval(() => {
+  if (!cookiesBridgeCache) return;
+  const now = Date.now();
+  let evicted = 0;
+  for (const [profile, entry] of cookiesBridgeCache) {
+    if (now - entry.at > 10 * 60_000) {
+      cookiesBridgeCache.delete(profile);
+      evicted++;
+    }
+  }
+  if (evicted) console.log(`[VOYO] cookiesBridgeCache eviction: ${evicted} stale entries`);
+}, 10 * 60_000);
 
 // ── HTTP server ───────────────────────────────────────────────────────────
 
@@ -330,6 +452,21 @@ async function handleAudio(req, res, trackId, quality) {
     return;
   }
 
+  // Rate limit (cached tier) — every /voyo/audio request counts against the
+  // 60/min per-IP cap. The extraction-tier check fires later before we
+  // actually spawn yt-dlp. Localhost is exempt for self-probes.
+  const clientIp = getClientIp(req);
+  const rlCached = checkCachedRateLimit(clientIp);
+  if (!rlCached.allowed) {
+    console.warn(`[VOYO] rate limit ${rlCached.reason} for ${clientIp} on ${trackId}`);
+    res.writeHead(429, {
+      "Content-Type": "application/json",
+      "Retry-After":  String(rlCached.retryAfter),
+    });
+    res.end(JSON.stringify({ error: "Too many requests", retryAfter: rlCached.retryAfter }));
+    return;
+  }
+
   // 1. /var/cache hot tier — local-disk hit is faster than R2 round-trip.
   //    Supports HTTP Range so seek-within-track works on a complete file.
   if (fs.existsSync(cachedPath)) {
@@ -449,6 +586,20 @@ async function handleAudio(req, res, trackId, quality) {
     console.log(`[VOYO] At capacity (${activeJobs.size}/${MAX_CONCURRENT_FFMPEG}) — rejecting ${trackId}`);
     res.writeHead(503, { "Content-Type": "application/json", "Retry-After": "5" });
     res.end(JSON.stringify({ error: "Server at capacity, retry in 5s" }));
+    return;
+  }
+
+  // 4b. Extraction-tier rate limit — we're about to spawn yt-dlp. Per-IP
+  // cap of 6/min. Already counted against the 60/min cached cap at entry;
+  // this call only bumps the dedicated yt-dlp counter.
+  const rlExtraction = checkExtractionRateLimit(clientIp);
+  if (!rlExtraction.allowed) {
+    console.warn(`[VOYO] extraction rate limit ${rlExtraction.reason} for ${clientIp} on ${trackId}`);
+    res.writeHead(429, {
+      "Content-Type": "application/json",
+      "Retry-After":  String(rlExtraction.retryAfter),
+    });
+    res.end(JSON.stringify({ error: "Extraction rate limit — try again later", retryAfter: rlExtraction.retryAfter }));
     return;
   }
 

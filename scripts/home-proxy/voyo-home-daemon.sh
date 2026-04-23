@@ -51,12 +51,11 @@ echo "tinyproxy ok ($(curl -sx http://127.0.0.1:8888 http://httpbin.org/ip --max
 
 while true; do
   echo "opening reverse tunnel: vps:${REMOTE_PORT} → 127.0.0.1:8888"
+  # First run: ssh vps manually to TOFU-accept the key. Subsequent runs use ~/.ssh/known_hosts normally.
   ssh \
     -o ExitOnForwardFailure=yes \
     -o ServerAliveInterval=30 \
     -o ServerAliveCountMax=3 \
-    -o StrictHostKeyChecking=no \
-    -o UserKnownHostsFile=/dev/null \
     -N -R ${REMOTE_PORT}:127.0.0.1:8888 vps
   echo "ssh tunnel exited (code=$?) — reconnecting in 5s"
   sleep 5
