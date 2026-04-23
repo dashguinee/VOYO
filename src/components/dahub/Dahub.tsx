@@ -131,6 +131,19 @@ function ProfileCard({
 
   const onlineCount = onlineFriends.length;
 
+  // Oyé dot color: green while music plays, orange after 10s of pause.
+  // Short pauses (track change, brief taps) stay green so it doesn't flicker.
+  const isPlaying = usePlayerStore(s => s.isPlaying);
+  const [dotColor, setDotColor] = useState<'green' | 'orange'>('green');
+  useEffect(() => {
+    if (isPlaying) {
+      setDotColor('green');
+      return;
+    }
+    const t = setTimeout(() => setDotColor('orange'), 10_000);
+    return () => clearTimeout(t);
+  }, [isPlaying]);
+
   return (
     <div className="px-6 pt-2 pb-6">
       <div
@@ -281,7 +294,13 @@ function ProfileCard({
             {/* Live text */}
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 mb-1">
-                <div className="w-2.5 h-2.5 rounded-full bg-green-500 animate-pulse" />
+                <div
+                  className="w-2.5 h-2.5 rounded-full animate-pulse"
+                  style={{
+                    background: dotColor === 'green' ? '#22c55e' : '#f97316',
+                    transition: 'background 600ms ease',
+                  }}
+                />
                 <h3 className="text-white font-bold text-xl leading-tight">
                   {onlineCount > 0 ? 'Oyé! We Live' : 'No One Live'}
                 </h3>
