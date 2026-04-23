@@ -97,9 +97,6 @@ export const AudioPlayer = () => {
   // overwriting el.src or logging play_start after the user has already
   // moved on.
   const trackChangeTokenRef = useRef(0);
-  // Interval ID for the inline R2 arrival poller (replaces useHotSwap).
-  // Cleared on every track change + on unmount.
-  const r2WatcherRef = useRef<ReturnType<typeof setInterval> | null>(null);
   // Wall-clock at which the current track-change effect started its
   // softFadeOut. handleCanPlay reads this to decide whether a fresh
   // canplay event is "the incoming track is ready — ramp it in" or "hot-
@@ -217,11 +214,6 @@ export const AudioPlayer = () => {
   // ── React to currentTrack changes ─────────────────────────────────────
   useEffect(() => {
     if (!currentTrack) return;
-    // Clear any R2 watcher from the previous track
-    if (r2WatcherRef.current) {
-      clearInterval(r2WatcherRef.current);
-      r2WatcherRef.current = null;
-    }
     // Reset completion signal on every track change
     completionSignaledRef.current = false;
     // Clear predictive pre-warm latch so the new track gets its own single
@@ -338,47 +330,29 @@ export const AudioPlayer = () => {
           });
         }, 300);
       } else {
-        // R2 not ready yet — hold audio focus with silent WAV while VPS extracts.
-        // Audio element stays alive (silent WAV loops); OS never revokes focus.
-        // handleCanPlay fires for the silent WAV and clears trackSwapInProgressRef.
+        // Track not in r2KnownStore — probe R2 once.
+        // Pool tracks land here on fresh session (store empty).
+        // Manual/search picks land here always.
+        // Found → play. Not found → skip to next track.
         engageSilentWav('pending_r2', currentTrack.trackId);
-        setTimeout(() => {
-          if (isStale()) return;
-          logPlaybackEvent({
-            event_type: 'play_start',
-            track_id: currentTrack.trackId,
-            source: null,
-            meta: { subtype: 'pending_r2' },
-          });
-        }, 300);
         void ensureTrackReady(currentTrack, null, { priority: 10 });
-        // Poll R2 every 3s. When extraction lands, swap from silent WAV to R2.
-        // Pool pre-extraction (v445) means this fires quickly for discover tracks.
-        r2WatcherRef.current = setInterval(async () => {
-          if (isStale()) {
-            clearInterval(r2WatcherRef.current!);
-            r2WatcherRef.current = null;
+        r2HasTrack(currentTrack.trackId).then(hasR2 => {
+          if (isStale()) return;
+          if (!hasR2) {
+            logPlaybackEvent({ event_type: 'skip_auto', track_id: currentTrack.trackId, meta: { reason: 'not_in_r2' } });
+            usePlayerStore.getState().nextTrack();
             return;
           }
-          const hasR2 = await r2HasTrack(currentTrack.trackId);
-          if (!hasR2) return;
-          clearInterval(r2WatcherRef.current!);
-          r2WatcherRef.current = null;
-          if (isStale()) return;
           const el2 = audioRef.current;
-          if (!el2) return;
-          // Re-guard so handlePause ignores the src change.
+          if (!el2 || isStale()) return;
           trackSwapInProgressRef.current = true;
           el2.loop = false;
           el2.src = `${R2_AUDIO}/${getYouTubeId(currentTrack.trackId)}?q=high`;
           setSource('r2');
-          // handleCanPlay takes over: fadeInMasterGain + play() + clears swap flag.
-          logPlaybackEvent({
-            event_type: 'trace',
-            track_id: currentTrack.trackId,
-            meta: { subtype: 'r2_from_pending' },
-          });
-        }, 3000);
+          logPlaybackEvent({ event_type: 'play_start', track_id: currentTrack.trackId, source: 'r2', meta: { subtype: 'probe_found' } });
+        }).catch(() => {
+          if (!isStale()) usePlayerStore.getState().nextTrack();
+        });
       }
     })();
 
@@ -400,12 +374,6 @@ export const AudioPlayer = () => {
       }
     }
 
-    return () => {
-      if (r2WatcherRef.current) {
-        clearInterval(r2WatcherRef.current);
-        r2WatcherRef.current = null;
-      }
-    };
   }, [currentTrack?.trackId]);
 
   // Background visibility + recovery is fully owned by bgEngine.

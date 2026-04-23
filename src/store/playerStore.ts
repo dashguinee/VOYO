@@ -1650,10 +1650,20 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
             ...mergedHot.filter(t => !freshIds.has(t.id)),
           ].slice(0, MAX_HOT_POOL);
 
+          // Gate pool: only R2-cached tracks enter. Filters out trending/
+          // hot tracks that haven't been extracted yet. Also hydrates
+          // r2KnownStore so pool tracks hit knownInR2Sync=true on tap
+          // and go straight to the fast R2 path — no probe needed.
+          const { gateToR2 } = await import('../services/r2Gate');
+          const [gatedHot, gatedDiscover] = await Promise.all([
+            gateToR2(finalHot),
+            gateToR2(mergedDiscover),
+          ]);
+
           set({
-            hotTracks: finalHot,
-            aiPicks: aiPicks,
-            discoverTracks: mergedDiscover,
+            hotTracks: gatedHot.length > 0 ? gatedHot : finalHot,
+            aiPicks: (gatedDiscover.length > 0 ? gatedDiscover : mergedDiscover).slice(0, 5),
+            discoverTracks: gatedDiscover.length > 0 ? gatedDiscover : mergedDiscover,
           });
 
           // ── POOL PRE-EXTRACTION ───────────────────────────────────────
