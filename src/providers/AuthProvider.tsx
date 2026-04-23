@@ -296,10 +296,27 @@ export function AuthProvider({ children }: AuthProviderProps) {
     // Update every 30 seconds
     presenceIntervalRef.current = setInterval(updatePresence, 30000);
 
+    // visibilitychange: re-ping immediately when the tab comes back to the
+    // foreground. Browsers throttle setInterval to 1-2min on hidden tabs so
+    // presence can go stale even while the user is active on another tab.
+    // We only fire on visible→hidden transition (not on hide) because the
+    // user may just be switching between VOYO tabs — going offline on hide
+    // would falsely mark them as away mid-session. [SOCIAL-1]
+    // NOTE: BroadcastChannel multi-tab coordination deferred — the
+    // visibilitychange fix covers the most common offline-false-positive
+    // case without added complexity.
+    const onVisibilityChange = () => {
+      if (!document.hidden) {
+        updatePresence();
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+
     return () => {
       if (presenceIntervalRef.current) {
         clearInterval(presenceIntervalRef.current);
       }
+      document.removeEventListener('visibilitychange', onVisibilityChange);
     };
   }, [isLoggedIn, updatePresence]);
 

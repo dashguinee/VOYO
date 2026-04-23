@@ -662,6 +662,15 @@ export const messagesAPI = {
 
     const channelId = [currentUser, otherUser].sort().join(':');
 
+    // Server-side filter: only receive rows where this pair is the
+    // from/to — prevents other users' messages reaching the realtime
+    // stream before client-side filtering. RLS alone is not enough here
+    // because realtime publication happens before row-level policy.
+    // Supabase or() filter covers both directions in one expression.
+    // [SOCIAL-1]
+    const serverFilter =
+      `or(and(from_id.eq.${currentUser},to_id.eq.${otherUser}),and(from_id.eq.${otherUser},to_id.eq.${currentUser}))`;
+
     const sub = makeReconnectingChannel(
       () =>
         commandCenter!
@@ -670,22 +679,17 @@ export const messagesAPI = {
             event: 'INSERT',
             schema: 'public',
             table: 'messages',
+            filter: serverFilter,
           }, (payload) => {
             const m = payload.new as any;
-            // Filter to only this conversation
-            if (
-              (m.from_id === currentUser && m.to_id === otherUser) ||
-              (m.from_id === otherUser && m.to_id === currentUser)
-            ) {
-              onMessage({
-                id: m.id,
-                from_user: m.from_id,
-                to_user: m.to_id,
-                message: m.message,
-                read_at: m.read_at,
-                created_at: m.created_at,
-              });
-            }
+            onMessage({
+              id: m.id,
+              from_user: m.from_id,
+              to_user: m.to_id,
+              message: m.message,
+              read_at: m.read_at,
+              created_at: m.created_at,
+            });
           }),
       onReconnect,
     );

@@ -68,13 +68,18 @@ export async function hot(): Promise<Track[]> {
   const now = Date.now();
   if (_hotCache && now - _hotCache.at < TTL_MS) return _hotCache.tracks;
 
-  // Prefer local pool — has curator tags + poolScore + accumulates over time.
+  // Prefer local pool only when it's rich enough that server content
+  // adds marginal value. Raised from 20 → 50: at 20 items the local pool
+  // was thin enough that server had meaningfully richer content, but we
+  // never fetched it. At 50 the local pool is broad enough to serve well;
+  // below that, fall through to getHotTracks so server surfaces more.
+  // [SEARCH-2 P0-5]
   const localPool = useTrackPoolStore.getState().hotPool;
   let raw: Track[] = [];
-  if (localPool && localPool.length >= 20) {
+  if (localPool && localPool.length >= 50) {
     raw = localPool as Track[];
   } else {
-    raw = await getHotTracks(60); // server fallback, first visit
+    raw = await getHotTracks(60); // server fallback, first visit or thin local
   }
 
   const prefs = usePreferenceStore.getState().trackPreferences;

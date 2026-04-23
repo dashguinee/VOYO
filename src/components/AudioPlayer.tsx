@@ -303,11 +303,12 @@ export const AudioPlayer = () => {
         : Promise.resolve();
       await fadePromise;
       if (isStale()) return;
-      // If outgoing was iframe, silence it hard now — the bridge ramp
-      // reached 0 by this point; pause+mute ensures it doesn't resume
-      // accidentally while the new R2/iframe track takes over.
+      // If outgoing was iframe, kill the YouTube stream entirely — stop()
+      // calls stopVideo() which terminates the network fetch, not just
+      // pauses playback. Without this, YouTube keeps buffering for up to
+      // 60s after the hot-swap. [AUDIT-2 #3]
       if (wasIframe) {
-        iframeBridge.pause();
+        iframeBridge.stop();
         iframeBridge.resetVolume();
       }
       if (knownInR2Sync && el) {

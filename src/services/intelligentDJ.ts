@@ -624,8 +624,11 @@ function getDominantMode(context: ListeningContext): MixBoardMode {
   if (context.timeOfDay === 'late night') return 'late-night';
   if (context.timeOfDay === 'morning') return 'chill-vibes';
 
-  // Default
-  return 'afro-heat';
+  // Default — rotate through neutral moods instead of always falling into
+  // afro-heat. Deterministic by time so a session stays consistent but
+  // doesn't monoculture on a single bucket. [SEARCH-2 P0-3]
+  const _neutralModes: MixBoardMode[] = ['afro-heat', 'chill-vibes', 'late-night', 'random-mixer'];
+  return _neutralModes[Math.floor(Date.now() / 60_000) % _neutralModes.length];
 }
 
 /**

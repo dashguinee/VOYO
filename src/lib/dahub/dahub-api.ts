@@ -551,12 +551,22 @@ export const messagesAPI = {
     }
   },
 
-  subscribeToMessages(userId: string, onMessage: (msg: Message) => void, onReconnect?: () => void) {
+  subscribeToMessages(
+    userId: string,
+    onMessage: (msg: Message) => void,
+    onReconnect?: () => void,
+    /** Called when a message row is updated — e.g. read_at set → read
+     * receipt propagation. Receives the updated row. [SOCIAL-1] */
+    onMessageUpdated?: (msg: Message) => void,
+  ) {
     if (!ccSupabase) return () => {};
 
     // makeReconnectingChannel auto-retries on TIMED_OUT / CLOSED / CHANNEL_ERROR
     // so long-backgrounded tabs resume without a full page reload.
     // onReconnect should re-fetch recent conversations so nothing is missed.
+    //
+    // event: '*' catches both INSERT (new messages) and UPDATE (read receipts).
+    // Previously INSERT-only — read_at updates were silently dropped. [SOCIAL-1]
     const sub = makeReconnectingChannel(
       () =>
         ccSupabase
@@ -564,13 +574,22 @@ export const messagesAPI = {
           .on(
             'postgres_changes',
             {
-              event: 'INSERT',
+              event: '*',
               schema: 'public',
               table: 'messages',
               filter: `to_id=eq.${userId}`,
             },
             (payload) => {
-              onMessage(payload.new as Message);
+              if (payload.eventType === 'INSERT') {
+                onMessage(payload.new as Message);
+              } else if (payload.eventType === 'UPDATE') {
+                // Read receipt: read_at was set for the first time.
+                const updated = payload.new as Message;
+                const wasUnread = (payload.old as Partial<Message>)?.read_at == null;
+                if (wasUnread && updated.read_at != null && onMessageUpdated) {
+                  onMessageUpdated(updated);
+                }
+              }
             },
           ),
       onReconnect,

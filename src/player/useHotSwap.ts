@@ -38,6 +38,12 @@ const HOT_SWAP_POLL_MS = 2_000;
 // (constant perceived loudness, no dip), 2s fade. Iframe fades out on
 // cos(p·π/2), R2 fades in on sin(p·π/2) — sum of squares stays ≈1.
 const HOT_SWAP_FADE_MS = 2_000;
+
+// Monotonic counter — incremented at the START of every performHotSwap call.
+// Captured at canplay-listener registration; if the value differs at callback
+// time (user skipped → new swap started) the listener discards the event.
+// Dual-check with el.src: both must match, defence-in-depth. [AUDIT-2 #1]
+let _swapToken = 0;
 const HOT_SWAP_STEPS   = 40;
 
 /**
@@ -57,6 +63,11 @@ async function performHotSwap(
   snapshot: { trackId: string; seconds: number } | null,
   iframeStartedAt: number,
 ): Promise<boolean> {
+  // Claim a unique token for this swap invocation. Incremented before any
+  // async work so parallel calls (unlikely but possible if trigger fires
+  // twice) each hold a distinct value. [AUDIT-2 #1]
+  const myToken = ++_swapToken;
+
   // playerStore.volume is 0-100 (see playerStore.ts:409). HTMLMediaElement.volume
   // requires [0, 1]. Normalize once so every el.volume = storeVol * r2Gain below
   // stays in range. Prior bug: 100% of hotswaps threw "volume property outside
@@ -152,7 +163,9 @@ async function performHotSwap(
     const canplayFired = await new Promise<boolean>((resolve) => {
       const onReady = () => {
         el.removeEventListener('canplay', onReady);
-        if (el.src !== ourSrc) { resolve(false); return; }
+        // Dual stale-check: el.src guard (commit 1af7671) + token guard [AUDIT-2 #1].
+        // Either mismatch means a newer swap has taken over the element.
+        if (el.src !== ourSrc || _swapToken !== myToken) { resolve(false); return; }
         resolve(true);
       };
       el.addEventListener('canplay', onReady);
@@ -216,7 +229,9 @@ async function performHotSwap(
       return bail('hotswap_abort_stale', { stage: 'post_fade' });
     }
 
-    iframeBridge.pause();
+    // stop() kills the YouTube network stream (not just pauses) so it stops
+    // buffering in background post-swap. [AUDIT-2 #3]
+    iframeBridge.stop();
     iframeBridge.resetVolume();
     // Re-read volume at the final assignment — user may have moved the
     // slider during the 2s fade, and storeVol captured at the top of

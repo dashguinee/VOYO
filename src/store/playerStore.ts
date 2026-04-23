@@ -784,13 +784,23 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     // playerStore.nextTrack is the single boundary where this happens, so
     // every surface (Portrait, Landscape, Classic, queue, hotkey, media
     // keys) gets the same consistent signal graph for free.
+    //
+    // AUDIT-1 #1: Signals MUST fire AFTER set({ currentTrack }) so the
+    // AudioPlayer track-change effect sees the new track before play_start
+    // telemetry tries to attach. Emitting before set() left oyo.onSkip /
+    // oyo.onComplete firing while the OLD track's effect scope was still
+    // live → play_start never fired for auto-advanced tracks.
+    // Fix: capture signal data now (old track + time still in `state`),
+    // then dispatch via queueMicrotask so the signal lands in the next
+    // microtask flush — after set() has synchronously updated the store.
+    let _pendingSignal: (() => void) | null = null;
     if (state.currentTrack && state.duration > 0) {
-      const completionRate = (state.currentTime / state.duration) * 100;
-      if (completionRate < 30) {
-        oyo.onSkip(state.currentTrack, state.currentTime);
-      } else {
-        oyo.onComplete(state.currentTrack, completionRate);
-      }
+      const _track = state.currentTrack;
+      const _time = state.currentTime;
+      const _completionRate = (_time / state.duration) * 100;
+      _pendingSignal = _completionRate < 30
+        ? () => oyo.onSkip(_track, _time)
+        : () => oyo.onComplete(_track, _completionRate);
     }
 
     // Check queue first - filter out any unplayable tracks
@@ -858,6 +868,11 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
           playbackRate: 1,
           isSkeeping: false,
         });
+
+        // Emit OYO signal AFTER set() — new currentTrack is in store now,
+        // so AudioPlayer's track-change effect mounts correctly before any
+        // play_start telemetry fires. [AUDIT-1 #1]
+        if (_pendingSignal) queueMicrotask(_pendingSignal);
 
         // PERSIST current track — nextTrack uses set() directly, not
         // setCurrentTrack action. Without this, the track was never saved
@@ -1091,6 +1106,9 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
         playbackRate: 1,
         isSkeeping: false,
       });
+
+      // Emit OYO signal AFTER set() — discover path. [AUDIT-1 #1]
+      if (_pendingSignal) queueMicrotask(_pendingSignal);
 
       // PERSIST — same fix as queue path above.
       const cur = loadPersistedState();

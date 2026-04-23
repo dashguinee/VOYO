@@ -9,6 +9,7 @@ type YTPlayer = {
   getCurrentTime: () => number;
   setVolume: (v: number) => void;
   pauseVideo: () => void;
+  stopVideo: () => void;
   playVideo: () => void;
   mute: () => void;
   unMute: () => void;
@@ -49,6 +50,18 @@ class IframeBridge {
 
   pause(): void {
     try { this.player?.pauseVideo?.(); } catch {}
+    try { this.player?.mute?.(); } catch {}
+  }
+
+  /**
+   * Stop the YouTube video entirely — kills the network stream, not just
+   * pauses it. Call this after a hot-swap completes so YouTube doesn't
+   * continue buffering for up to 60s in the background. Uses stopVideo()
+   * (YT IFrame API) which terminates media fetch, unlike pauseVideo which
+   * only halts playback while buffering continues.
+   */
+  stop(): void {
+    try { this.player?.stopVideo?.(); } catch {}
     try { this.player?.mute?.(); } catch {}
   }
 
