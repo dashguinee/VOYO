@@ -1,48 +1,28 @@
 /**
- * VOYO Music - Intelligent DJ Service
+ * Intelligent DJ — Central DB flywheel.
  *
- * THE KILLER ARCHITECTURE:
- * AI understands your vibe → Finds actual YouTube videos → Verified playable content
- *
- * Flow:
- * 1. Collect listening context (mood, patterns, favorites)
- * 2. Ask Gemini to find ACTUAL YouTube video URLs that match
- * 3. Extract video IDs from URLs
- * 4. Verify with our backend → Add to pool
- *
- * The app doesn't need a static database - it discovers content in real-time!
+ * After DJ_TRIGGER_TRACKS plays, queries Central DB for vibe-matched
+ * tracks and adds them to the live pool. Triggers a recommendation
+ * refresh after each run. Falls back to YouTube search if Central DB
+ * is thin. No AI calls.
  */
 
 import { Track } from '../types';
 import { searchMusic } from './api';
-import { useTrackPoolStore } from '../store/trackPoolStore';
-import { getThumb } from '../utils/thumbnail';
-import { encodeVoyoId } from '../utils/voyoId';
 import { safeAddToPool } from './trackVerifier';
-import centralDJ, {
-  getTracksByMode,
-  getTracksByVibe,
-  saveVerifiedTrack,
-  centralToTracks,
-  MixBoardMode,
-  VibeProfile,
-} from './centralDJ';
+import { getTracksByMode, centralToTracks, MixBoardMode } from './centralDJ';
 import { useReactionStore } from '../store/reactionStore';
+import { useTrackPoolStore } from '../store/trackPoolStore';
 import { devLog, devWarn } from '../utils/logger';
 
-// Gemini Configuration
-const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY || '';
-const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
+const DJ_TRIGGER_TRACKS = 4;
+const DJ_MIN_INTERVAL = 90_000;
+const MAX_VIDEOS_PER_RUN = 8;
 
-// DJ Configuration
-const DJ_TRIGGER_TRACKS = 4;       // DJ kicks in after 4 tracks
-const DJ_MIN_INTERVAL = 90000;    // Minimum 1.5 minutes between DJ runs
-const MAX_VIDEOS_PER_RUN = 8;     // Find up to 8 videos per run
+// ── Types ─────────────────────────────────────────────────────────────────
 
-// ============================================
-// TYPES
-// ============================================
-
+interface TrackSnapshot { title: string; artist: string; wasLoved: boolean; wasSkipped: boolean; }
+interface CategoryPreference { category: string; score: number; reactionCount: number; isHot: boolean; }
 interface ListeningContext {
   recentTracks: TrackSnapshot[];
   favoriteArtists: string[];
@@ -50,722 +30,162 @@ interface ListeningContext {
   timeOfDay: string;
   skipRate: number;
   lovedTracks: string[];
-  // Rich engagement data
   categoryPreferences: CategoryPreference[];
   queuedTracks: string[];
   replayedTracks: string[];
-  tasteShift: string; // What direction is their taste moving?
+  tasteShift: string;
 }
 
-interface CategoryPreference {
-  category: string;
-  score: number;
-  reactionCount: number;
-  isHot: boolean;
-}
-
-interface TrackSnapshot {
-  title: string;
-  artist: string;
-  wasLoved: boolean;
-  wasSkipped: boolean;
-}
-
-interface DJSuggestion {
-  youtubeUrl: string;
-  title: string;
-  artist: string;
-  reason: string;
-}
-
-interface DJResponse {
-  vibe: string;
-  suggestions: DJSuggestion[];
-}
-
-// ============================================
-// STATE
-// ============================================
+// ── State ─────────────────────────────────────────────────────────────────
 
 let listeningHistory: TrackSnapshot[] = [];
 let lastDJRun = 0;
 let djEnabled = true;
 
-// ============================================
-// YOUTUBE URL PARSING
-// ============================================
+// ── Context building ──────────────────────────────────────────────────────
 
-/**
- * Extract YouTube video ID from various URL formats
- */
-function extractYouTubeId(url: string): string | null {
-  const patterns = [
-    /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/|youtube\.com\/v\/)([a-zA-Z0-9_-]{11})/,
-    /^([a-zA-Z0-9_-]{11})$/, // Just the ID
-  ];
-
-  for (const pattern of patterns) {
-    const match = url.match(pattern);
-    if (match) return match[1];
-  }
-
-  return null;
+function inferMood(tracks: TrackSnapshot[]): string {
+  if (tracks.length === 0) return 'exploring';
+  if (tracks.filter(t => t.wasLoved).length > 2) return 'vibing';
+  if (tracks.filter(t => t.wasSkipped).length > tracks.length / 2) return 'searching';
+  return 'flowing';
 }
 
-/**
- * Validate YouTube ID format
- */
-function isValidYouTubeId(id: string): boolean {
-  return /^[a-zA-Z0-9_-]{11}$/.test(id);
-}
-
-// ============================================
-// CONTEXT BUILDING
-// ============================================
-
-/**
- * Build listening context for the AI
- * Gathers rich data from all our engines!
- */
 function buildContext(): ListeningContext {
   const recent = listeningHistory.slice(-10);
-
-  // Find favorite artists (appeared 2+ times or were loved)
   const artistCounts: Record<string, number> = {};
   const lovedTracks: string[] = [];
-
   recent.forEach(t => {
     artistCounts[t.artist] = (artistCounts[t.artist] || 0) + 1;
     if (t.wasLoved) lovedTracks.push(`${t.artist} - ${t.title}`);
   });
-
-  const favoriteArtists = Object.entries(artistCounts)
-    .filter(([_, count]) => count >= 2)
-    .map(([artist]) => artist);
-
-  // Calculate skip rate
-  const skipRate = recent.length > 0
-    ? recent.filter(t => t.wasSkipped).length / recent.length
-    : 0;
-
-  // Determine time of day
+  const favoriteArtists = Object.entries(artistCounts).filter(([, c]) => c >= 2).map(([a]) => a);
+  const skipRate = recent.length > 0 ? recent.filter(t => t.wasSkipped).length / recent.length : 0;
   const hour = new Date().getHours();
-  const timeOfDay = hour < 6 ? 'late night'
-    : hour < 12 ? 'morning'
-    : hour < 18 ? 'afternoon'
-    : 'evening';
+  const timeOfDay = hour < 6 ? 'late night' : hour < 12 ? 'morning' : hour < 18 ? 'afternoon' : 'evening';
 
-  // Infer mood from recent tracks
-  const currentMood = inferMood(recent);
-
-  // === RICH DATA FROM OUR ENGINES ===
-
-  // Get category preferences from reaction store
   let categoryPreferences: CategoryPreference[] = [];
+  let queuedTracks: string[] = [];
+  let replayedTracks: string[] = [];
+  let tasteShift = 'stable';
+
   try {
     const reactionState = useReactionStore.getState();
     const prefs = reactionState.userCategoryPreferences;
     const pulse = reactionState.categoryPulse as Record<string, { isHot?: boolean }>;
     categoryPreferences = Object.values(prefs).map((p: any) => ({
-      category: p.category,
-      score: p.score,
-      reactionCount: p.reactionCount,
+      category: p.category, score: p.score, reactionCount: p.reactionCount,
       isHot: pulse[p.category]?.isHot || false,
     }));
-  } catch (e) {
-    devWarn('[DJ] Could not load category preferences');
-  }
-
-  // Get queued and replayed tracks from pool
-  let queuedTracks: string[] = [];
-  let replayedTracks: string[] = [];
-  try {
-    const poolStore = useTrackPoolStore.getState();
-    const hotPool = poolStore.hotPool;
-
-    // Tracks that were queued multiple times = user really wants them
-    queuedTracks = hotPool
-      .filter(t => t.queuedCount >= 2)
-      .map(t => `${t.artist} - ${t.title}`);
-
-    // Tracks with high completion + multiple plays = replayed favorites
-    replayedTracks = hotPool
-      .filter(t => t.playCount >= 2 && t.completionRate > 80)
-      .map(t => `${t.artist} - ${t.title}`);
-  } catch (e) {
-    devWarn('[DJ] Could not load pool data');
-  }
-
-  // Detect taste shift - compare early vs recent reactions
-  let tasteShift = 'stable';
-  if (categoryPreferences.length > 0) {
-    const sorted = [...categoryPreferences].sort((a, b) => b.score - a.score);
-    if (sorted[0].score > 70) {
-      tasteShift = `leaning towards ${sorted[0].category}`;
+    if (categoryPreferences.length > 0) {
+      const top = [...categoryPreferences].sort((a, b) => b.score - a.score)[0];
+      if (top.score > 70) tasteShift = `leaning towards ${top.category}`;
     }
-  }
-
-  return {
-    recentTracks: recent,
-    favoriteArtists,
-    currentMood,
-    timeOfDay,
-    skipRate,
-    lovedTracks,
-    categoryPreferences,
-    queuedTracks,
-    replayedTracks,
-    tasteShift,
-  };
-}
-
-function inferMood(tracks: TrackSnapshot[]): string {
-  if (tracks.length === 0) return 'exploring';
-
-  const loved = tracks.filter(t => t.wasLoved);
-  if (loved.length > 2) return 'vibing';
-
-  const skipped = tracks.filter(t => t.wasSkipped);
-  if (skipped.length > tracks.length / 2) return 'searching';
-
-  return 'flowing';
-}
-
-// ============================================
-// GEMINI INTEGRATION
-// ============================================
-
-/**
- * Build the DJ prompt for Gemini
- */
-function buildDJPrompt(context: ListeningContext): string {
-  const trackList = context.recentTracks
-    .map((t, i) => {
-      const status = t.wasSkipped ? '⏭️ skipped' : t.wasLoved ? '❤️ loved' : '✓ played';
-      return `${i + 1}. ${t.artist} - ${t.title} [${status}]`;
-    })
-    .join('\n');
-
-  // Build category preferences string
-  const categoryInfo = context.categoryPreferences
-    .sort((a, b) => b.score - a.score)
-    .map(c => `${c.category}: ${c.score}/100 (${c.reactionCount} reactions${c.isHot ? ', HOT NOW' : ''})`)
-    .join('\n  ');
-
-  // Build queued/replayed info
-  const queuedInfo = context.queuedTracks.length > 0
-    ? `Frequently queued: ${context.queuedTracks.slice(0, 5).join(', ')}`
-    : 'No queue favorites yet';
-
-  const replayedInfo = context.replayedTracks.length > 0
-    ? `Replayed favorites: ${context.replayedTracks.slice(0, 5).join(', ')}`
-    : 'No replay data yet';
-
-  return `You are VOYO's intelligent DJ. Your job is to find REAL YouTube music videos that match the listener's vibe.
-
-CURRENT LISTENING SESSION:
-${trackList || '(Just started)'}
-
-LISTENER PROFILE:
-- Time: ${context.timeOfDay}
-- Mood: ${context.currentMood}
-- Skip rate: ${(context.skipRate * 100).toFixed(0)}%
-- Taste shift: ${context.tasteShift}
-- Favorite artists: ${context.favoriteArtists.join(', ') || 'Still learning...'}
-- Loved tracks: ${context.lovedTracks.join(', ') || 'None yet'}
-
-CATEGORY PREFERENCES (from their reactions):
-  ${categoryInfo || 'No category data yet'}
-
-ENGAGEMENT SIGNALS:
-- ${queuedInfo}
-- ${replayedInfo}
-
-YOUR MISSION:
-Find ${MAX_VIDEOS_PER_RUN} YouTube music videos that would PERFECTLY fit what this person wants to hear next.
-
-HOW TO FIND REAL YOUTUBE URLS:
-1. Think of the song: "Artist Name - Song Title"
-2. You have Google Search - USE IT to find: "Artist Name Song Title official video youtube"
-3. The official video URL is usually the FIRST result
-4. Extract the real youtube.com/watch?v=XXXX URL from search results
-5. If you can't search, use your training data knowledge
-
-MUSIC FOCUS:
-- African music: Afrobeats, Amapiano, Afro-soul, Afro-pop, Highlife, Dancehall
-- If they loved certain artists, find more from those artists OR similar vibes
-- If they're skipping a lot, try something different but still African
-- Match the time of day energy (late night = chill, morning = uplifting)
-
-RESPOND WITH VALID JSON ONLY:
-{
-  "vibe": "One sentence describing the vibe you're curating for",
-  "suggestions": [
-    {
-      "youtubeUrl": "https://www.youtube.com/watch?v=REAL_VIDEO_ID",
-      "title": "Exact Song Title as on YouTube",
-      "artist": "Exact Artist Name",
-      "reason": "Why this fits (one sentence)"
-    }
-  ]
-}
-
-CRITICAL - FINDING REAL URLS:
-- Search your training data for "Song Title Artist youtube" to find real URLs
-- The 11-character video ID at the end of youtube.com/watch?v= is what matters
-- Example: Burna Boy "Last Last" → search "Burna Boy Last Last youtube" → https://www.youtube.com/watch?v=VLR3yaus0Cg
-- DO NOT guess or fabricate video IDs - only use URLs you've actually seen
-- If you can't find the real URL, still include the song with your best guess - we verify it`;
-}
-
-/**
- * Call Gemini API to get DJ suggestions
- */
-async function callGeminiDJ(prompt: string): Promise<DJResponse | null> {
-  if (!GEMINI_API_KEY) {
-    devWarn('[Intelligent DJ] No API key configured');
-    return null;
-  }
+  } catch { devWarn('[DJ] Could not load category preferences'); }
 
   try {
-    const response = await fetch(`${GEMINI_API_URL}?key=${GEMINI_API_KEY}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: {
-          temperature: 0.8,
-          topK: 40,
-          topP: 0.95,
-          maxOutputTokens: 2048,
-        },
-        // Enable Google Search grounding - Gemini can SEARCH for real YouTube URLs!
-        tools: [{
-          googleSearch: {}
-        }],
-        safetySettings: [
-          { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' },
-          { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_NONE' },
-          { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_NONE' },
-          { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' },
-        ],
-      }),
-      // Gemini can stall; give it 25s then abort.
-      signal: AbortSignal.timeout(25000),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('[Intelligent DJ] API error:', response.status, errorText);
-      return null;
-    }
-
-    const data = await response.json();
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-
-    if (!text) {
-      console.error('[Intelligent DJ] No text in response');
-      return null;
-    }
-
-    // Parse JSON from response
-    let jsonStr = text.trim();
-    if (jsonStr.startsWith('```')) {
-      jsonStr = jsonStr.replace(/```json?\n?/g, '').replace(/```/g, '').trim();
-    }
-
-    const result: DJResponse = JSON.parse(jsonStr);
-    devLog(`[Intelligent DJ] 🎧 Vibe: "${result.vibe}"`);
-
-    return result;
-
-  } catch (error) {
-    console.error('[Intelligent DJ] Error:', error);
-    return null;
-  }
-}
-
-// ============================================
-// TRACK PROCESSING
-// ============================================
-
-/**
- * Convert DJ suggestion to VOYO Track
- */
-function suggestionToTrack(suggestion: DJSuggestion, youtubeId: string): Track {
-  const voyoId = encodeVoyoId(youtubeId);
+    const hotPool = useTrackPoolStore.getState().hotPool;
+    queuedTracks = hotPool.filter(t => t.queuedCount >= 2).map(t => `${t.artist} - ${t.title}`);
+    replayedTracks = hotPool.filter(t => t.playCount >= 2 && t.completionRate > 80).map(t => `${t.artist} - ${t.title}`);
+  } catch { devWarn('[DJ] Could not load pool data'); }
 
   return {
-    id: `dj_${youtubeId}`,
-    title: suggestion.title,
-    artist: suggestion.artist,
-    album: 'DJ Discovery',
-    trackId: voyoId,
-    coverUrl: getThumb(youtubeId),
-    duration: 0, // Will be determined on play
-    tags: ['dj-pick', 'discovery'],
-    mood: 'afro',
-    region: 'NG',
-    oyeScore: 0,
-    createdAt: new Date().toISOString(),
+    recentTracks: recent, favoriteArtists, currentMood: inferMood(recent),
+    timeOfDay, skipRate, lovedTracks, categoryPreferences,
+    queuedTracks, replayedTracks, tasteShift,
   };
 }
 
-/**
- * Process DJ suggestions and add valid ones to pool
- *
- * SMART VERIFICATION:
- * Gemini suggests artist + title → We search our backend → Use VERIFIED IDs
- * This prevents hallucinated URLs from breaking the app
- *
- * THE FLYWHEEL:
- * Every verified track gets saved to Central DB → Next user gets it FREE
- */
-async function processSuggestions(suggestions: DJSuggestion[], dominantMode?: MixBoardMode): Promise<number> {
-  // Run suggestions in parallel batches. Each suggestion does:
-  //   searchMusic → safeAddToPool → saveVerifiedTrack (fire-and-forget)
-  // The old code was serial with a 150ms sleep between suggestions, so
-  // 8 suggestions = ~1.2s of pure waiting. Now they overlap.
-  const CONCURRENCY = 4;
-  let added = 0;
-
-  const processOne = async (suggestion: DJSuggestion): Promise<boolean> => {
-    const searchQuery = `${suggestion.artist} ${suggestion.title}`;
-
-    try {
-      const searchResults = await searchMusic(searchQuery, 3);
-
-      if (searchResults.length > 0) {
-        const verified = searchResults[0];
-
-        const track: Track = {
-          id: `dj_${verified.voyoId}`,
-          title: verified.title || suggestion.title,
-          artist: verified.artist || suggestion.artist,
-          album: 'DJ Discovery',
-          trackId: verified.voyoId,
-          coverUrl: verified.thumbnail || getThumb(verified.voyoId),
-          duration: verified.duration || 0,
-          tags: ['dj-pick', 'discovery', 'verified'],
-          mood: 'afro',
-          region: 'NG',
-          oyeScore: verified.views || 0,
-          createdAt: new Date().toISOString(),
-        };
-
-        const wasAdded = await safeAddToPool(track, 'llm');
-        if (wasAdded) {
-          // THE FLYWHEEL: Save to Central DB (fire-and-forget)
-          saveVerifiedTrack(track, undefined, 'gemini').then(saved => {
-            if (saved) {
-              devLog(`[Intelligent DJ] 💾 Saved to Central DB for future users!`);
-            }
-          }).catch(() => {});
-
-          devLog(`[Intelligent DJ] ✅ VERIFIED: ${suggestion.artist} - ${suggestion.title}`);
-          return true;
-        } else {
-          devWarn(`[Intelligent DJ] ❌ Thumbnail validation failed: ${suggestion.artist} - ${suggestion.title}`);
-          return false;
-        }
-      } else {
-        devWarn(`[Intelligent DJ] ❌ Could not verify: ${suggestion.artist} - ${suggestion.title}`);
-        return false;
-      }
-    } catch (error) {
-      devWarn(`[Intelligent DJ] ❌ Search failed for: ${suggestion.artist} - ${suggestion.title}`);
-      return false;
-    }
-  };
-
-  for (let i = 0; i < suggestions.length; i += CONCURRENCY) {
-    const batch = suggestions.slice(i, i + CONCURRENCY);
-    const results = await Promise.all(batch.map(processOne));
-    added += results.filter(Boolean).length;
-  }
-
-  return added;
-}
-
-// ============================================
-// PUBLIC API
-// ============================================
-
-/**
- * Record a track play for DJ context
- */
-export function recordPlay(track: Track, wasLoved: boolean = false, wasSkipped: boolean = false): void {
-  listeningHistory.push({
-    title: track.title,
-    artist: track.artist,
-    wasLoved,
-    wasSkipped,
-  });
-
-  // Keep only last 20
-  if (listeningHistory.length > 20) {
-    listeningHistory = listeningHistory.slice(-20);
-  }
-
-  // Check if DJ should run
-  checkDJTrigger();
-}
-
-/**
- * Check if we should trigger the DJ
- */
-async function checkDJTrigger(): Promise<void> {
-  if (!djEnabled) return;
-
-  const now = Date.now();
-  const timeSinceLastRun = now - lastDJRun;
-
-  if (listeningHistory.length >= DJ_TRIGGER_TRACKS && timeSinceLastRun >= DJ_MIN_INTERVAL) {
-    await runDJ();
-  }
-}
-
-/**
- * Run the intelligent DJ
- *
- * THE FLYWHEEL FLOW:
- * 1. Check Central DB first (FREE, instant)
- * 2. If enough tracks → Use them (no Gemini call!)
- * 3. If not enough → Gemini discovers → Save to Central DB
- * 4. Next user benefits from the discovery
- */
-export async function runDJ(): Promise<number> {
-  lastDJRun = Date.now();
-
-  devLog('[Intelligent DJ] 🎧 DJ is finding tracks for you...');
-
-  // Build context
-  const context = buildContext();
-
-  // ============================================
-  // STEP 1: Check Central DB first (THE FLYWHEEL!)
-  // ============================================
-  const dominantMode = getDominantMode(context);
-  devLog(`[Intelligent DJ] 🎯 Dominant vibe: ${dominantMode}`);
-
-  const centralTracks = await getTracksByMode(dominantMode, MAX_VIDEOS_PER_RUN);
-
-  if (centralTracks.length >= MAX_VIDEOS_PER_RUN / 2) {
-    // We have enough tracks in Central DB - use them!
-    devLog(`[Intelligent DJ] ✨ Using ${centralTracks.length} tracks from Central DB (no Gemini call!)`);
-
-    const tracks = centralToTracks(centralTracks);
-    let addedCount = 0;
-
-    // Validate in parallel batches (was serial).
-    const CONCURRENCY = 5;
-    for (let i = 0; i < tracks.length; i += CONCURRENCY) {
-      const batch = tracks.slice(i, i + CONCURRENCY);
-      const results = await Promise.all(
-        batch.map(t => safeAddToPool(t, 'related').catch(() => false))
-      );
-      addedCount += results.filter(Boolean).length;
-    }
-
-    devLog(`[Intelligent DJ] ✨ Added ${addedCount}/${tracks.length} validated tracks from Central DB`);
-
-    // Trigger recommendation refresh
-    import('../store/playerStore').then(({ usePlayerStore }) => {
-      usePlayerStore.getState().refreshRecommendations?.();
-    }).catch(() => {});
-
-    return addedCount;
-  }
-
-  // ============================================
-  // STEP 2: Not enough in Central DB - ask Gemini
-  // ============================================
-  devLog(`[Intelligent DJ] 🔍 Central DB has ${centralTracks.length} tracks, need more - calling Gemini...`);
-
-  const prompt = buildDJPrompt(context);
-  const response = await callGeminiDJ(prompt);
-
-  if (!response || !response.suggestions || response.suggestions.length === 0) {
-    devLog('[Intelligent DJ] No suggestions, falling back to search');
-    return await fallbackToSearch(context);
-  }
-
-  // Process suggestions and save to Central DB
-  const added = await processSuggestions(response.suggestions, dominantMode);
-
-  devLog(`[Intelligent DJ] 🎉 Added ${added} tracks to your queue (and Central DB!)`);
-
-  // Trigger recommendation refresh
-  import('../store/playerStore').then(({ usePlayerStore }) => {
-    usePlayerStore.getState().refreshRecommendations?.();
-  }).catch(() => {});
-
-  return added;
-}
-
-/**
- * Determine the dominant MixBoard mode from listening context
- */
 function getDominantMode(context: ListeningContext): MixBoardMode {
-  // Check category preferences
   if (context.categoryPreferences.length > 0) {
-    const sorted = [...context.categoryPreferences].sort((a, b) => b.score - a.score);
-    const topCategory = sorted[0].category as MixBoardMode;
-    if (topCategory && ['afro-heat', 'chill-vibes', 'party-mode', 'late-night', 'workout'].includes(topCategory)) {
-      return topCategory;
-    }
+    const top = [...context.categoryPreferences].sort((a, b) => b.score - a.score)[0].category as MixBoardMode;
+    if (['afro-heat', 'chill-vibes', 'party-mode', 'late-night', 'workout'].includes(top)) return top;
   }
-
-  // Infer from mood
   if (context.currentMood === 'vibing') return 'afro-heat';
   if (context.currentMood === 'searching') return 'random-mixer';
-
-  // Infer from time of day
   if (context.timeOfDay === 'late night') return 'late-night';
   if (context.timeOfDay === 'morning') return 'chill-vibes';
-
-  // Default — rotate through neutral moods instead of always falling into
-  // afro-heat. Deterministic by time so a session stays consistent but
-  // doesn't monoculture on a single bucket. [SEARCH-2 P0-3]
-  const _neutralModes: MixBoardMode[] = ['afro-heat', 'chill-vibes', 'late-night', 'random-mixer'];
-  return _neutralModes[Math.floor(Date.now() / 60_000) % _neutralModes.length];
+  // Rotate through neutral modes by minute to avoid monoculture
+  const neutralModes: MixBoardMode[] = ['afro-heat', 'chill-vibes', 'late-night', 'random-mixer'];
+  return neutralModes[Math.floor(Date.now() / 60_000) % neutralModes.length];
 }
 
-/**
- * Fallback to search-based discovery if Gemini fails
- */
+// ── Fallback: YouTube search ──────────────────────────────────────────────
+
 async function fallbackToSearch(context: ListeningContext): Promise<number> {
   const query = context.favoriteArtists.length > 0
     ? `${context.favoriteArtists[0]} ${context.currentMood === 'vibing' ? 'hits' : 'songs'}`
     : 'afrobeats trending 2024';
-
-  devLog(`[Intelligent DJ] Fallback search: "${query}"`);
-
   try {
     const results = await searchMusic(query, 10);
-
-    const tracks: Track[] = results.map(result => ({
-      id: result.voyoId,
-      title: result.title,
-      artist: result.artist,
-      album: 'VOYO',
-      trackId: result.voyoId,
-      coverUrl: result.thumbnail,
-      duration: result.duration,
-      tags: ['fallback'],
-      mood: 'afro' as const,
-      region: 'NG',
-      oyeScore: result.views || 0,
+    const tracks: Track[] = results.map(r => ({
+      id: r.voyoId, title: r.title, artist: r.artist, album: 'VOYO', trackId: r.voyoId,
+      coverUrl: r.thumbnail, duration: r.duration, tags: ['fallback'],
+      mood: 'afro' as const, region: 'NG', oyeScore: r.views || 0,
       createdAt: new Date().toISOString(),
     }));
-
-    // Parallel validation, was serial.
     const CONCURRENCY = 5;
     let added = 0;
     for (let i = 0; i < tracks.length; i += CONCURRENCY) {
       const batch = tracks.slice(i, i + CONCURRENCY);
-      const addedResults = await Promise.all(
-        batch.map(t => safeAddToPool(t, 'related').catch(() => false))
-      );
-      added += addedResults.filter(Boolean).length;
+      const res = await Promise.all(batch.map(t => safeAddToPool(t, 'related').catch(() => false)));
+      added += res.filter(Boolean).length;
     }
-
     return added;
-  } catch (error) {
-    console.error('[Intelligent DJ] Fallback also failed:', error);
-    return 0;
-  }
+  } catch { return 0; }
 }
 
-/**
- * Force DJ to run now (for testing)
- */
-export async function forceDJ(): Promise<number> {
-  devLog('[Intelligent DJ] 🎧 Force running DJ...');
-  return await runDJ();
-}
+// ── Run ───────────────────────────────────────────────────────────────────
 
-/**
- * Enable/disable DJ
- */
-export function setDJEnabled(enabled: boolean): void {
-  djEnabled = enabled;
-  devLog(`[Intelligent DJ] DJ ${enabled ? 'enabled' : 'disabled'}`);
-}
+export async function runDJ(): Promise<number> {
+  lastDJRun = Date.now();
+  const context = buildContext();
+  const dominantMode = getDominantMode(context);
+  const centralTracks = await getTracksByMode(dominantMode, MAX_VIDEOS_PER_RUN);
 
-/**
- * Get DJ status
- */
-export function getDJStatus() {
-  return {
-    enabled: djEnabled,
-    historyLength: listeningHistory.length,
-    lastRun: lastDJRun,
-    timeSinceLastRun: Date.now() - lastDJRun,
-  };
-}
-
-/**
- * Reset DJ state
- */
-export function resetDJ(): void {
-  listeningHistory = [];
-  lastDJRun = 0;
-  devLog('[Intelligent DJ] DJ reset');
-}
-
-/**
- * Test Gemini connection
- */
-export async function testConnection(): Promise<boolean> {
-  try {
-    const response = await fetch(`${GEMINI_API_URL}?key=${GEMINI_API_KEY}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: 'Say "VOYO DJ ready" and nothing else.' }] }],
-        generationConfig: { maxOutputTokens: 20 },
-      }),
-      signal: AbortSignal.timeout(8000),
-    });
-
-    if (!response.ok) {
-      console.error('[Intelligent DJ] Connection test failed:', response.status);
-      return false;
+  if (centralTracks.length >= MAX_VIDEOS_PER_RUN / 2) {
+    const tracks = centralToTracks(centralTracks);
+    const CONCURRENCY = 5;
+    let addedCount = 0;
+    for (let i = 0; i < tracks.length; i += CONCURRENCY) {
+      const batch = tracks.slice(i, i + CONCURRENCY);
+      const res = await Promise.all(batch.map(t => safeAddToPool(t, 'related').catch(() => false)));
+      addedCount += res.filter(Boolean).length;
     }
+    devLog(`[DJ] +${addedCount}/${tracks.length} from Central DB (${dominantMode})`);
+    import('../store/playerStore').then(({ usePlayerStore }) => {
+      usePlayerStore.getState().refreshRecommendations?.();
+    }).catch(() => {});
+    return addedCount;
+  }
 
-    const data = await response.json();
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-    devLog('[Intelligent DJ] Connection test:', text);
-    return text?.toLowerCase().includes('voyo') || text?.toLowerCase().includes('ready');
-  } catch (error) {
-    console.error('[Intelligent DJ] Connection test error:', error);
-    return false;
+  return fallbackToSearch(context);
+}
+
+async function checkDJTrigger(): Promise<void> {
+  if (!djEnabled) return;
+  if (listeningHistory.length >= DJ_TRIGGER_TRACKS && Date.now() - lastDJRun >= DJ_MIN_INTERVAL) {
+    await runDJ();
   }
 }
 
-// ============================================
-// DEBUG HELPERS
-// ============================================
+// ── Public API ────────────────────────────────────────────────────────────
+
+export function recordPlay(track: Track, wasLoved = false, wasSkipped = false): void {
+  listeningHistory.push({ title: track.title, artist: track.artist, wasLoved, wasSkipped });
+  if (listeningHistory.length > 20) listeningHistory = listeningHistory.slice(-20);
+  checkDJTrigger();
+}
+
+export async function forceDJ(): Promise<number> { return runDJ(); }
+export function setDJEnabled(enabled: boolean): void { djEnabled = enabled; }
+export function resetDJ(): void { listeningHistory = []; lastDJRun = 0; }
+export function getDJStatus() {
+  return { enabled: djEnabled, historyLength: listeningHistory.length, lastRun: lastDJRun, timeSinceLastRun: Date.now() - lastDJRun };
+}
 
 if (typeof window !== 'undefined') {
-  (window as any).voyoDJ = {
-    run: forceDJ,
-    test: testConnection,
-    status: getDJStatus,
-    reset: resetDJ,
-    enable: () => setDJEnabled(true),
-    disable: () => setDJEnabled(false),
-  };
-  devLog('🎧 [Intelligent DJ] Debug: window.voyoDJ.run() / .test() / .status()');
+  (window as any).voyoDJ = { run: forceDJ, status: getDJStatus, reset: resetDJ };
 }
 
-export default {
-  recordPlay,
-  runDJ,
-  forceDJ,
-  testConnection,
-  getDJStatus,
-  resetDJ,
-  setDJEnabled,
-};
+export default { recordPlay, runDJ, forceDJ, getDJStatus, resetDJ, setDJEnabled };

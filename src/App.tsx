@@ -603,51 +603,6 @@ function App() {
     detectNetworkQuality();
   }, []);
 
-  // BRAIN: Lazy-load the intelligent DJ signal capture once the browser is
-  // idle. Defers ~110 KB out of the initial bundle. Cleanup is wired through
-  // the closure so unmount-during-load is safe.
-  useEffect(() => {
-    let cleanup: (() => void) | null = null;
-    let cancelled = false;
-
-    const scheduleIdle = (cb: () => void): (() => void) => {
-      const w = window as unknown as {
-        requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number;
-        cancelIdleCallback?: (id: number) => void;
-      };
-      if (typeof w.requestIdleCallback === 'function') {
-        const id = w.requestIdleCallback(cb, { timeout: 3000 });
-        return () => w.cancelIdleCallback?.(id);
-      }
-      // Safari etc. — fall back to a 1.5s timeout (after first paint)
-      const id = window.setTimeout(cb, 1500);
-      return () => window.clearTimeout(id);
-    };
-
-    const cancelIdle = scheduleIdle(async () => {
-      if (cancelled) return;
-      try {
-        devLog('[Brain] Lazy-loading VOYO Brain integration...');
-        const brain = await import('./brain');
-        if (cancelled) return;
-        brain.initializeBrainIntegration();
-        (window as unknown as { brainStats: typeof brain.getBrainStats }).brainStats = brain.getBrainStats;
-        cleanup = brain.cleanupBrainIntegration;
-        devLog('[Brain] ready');
-      } catch (err) {
-        devWarn('[Brain] Failed to lazy-load:', err);
-      }
-    });
-
-    return () => {
-      cancelled = true;
-      cancelIdle();
-      if (cleanup) {
-        devLog('[Brain] Cleaning up VOYO Brain integration');
-        cleanup();
-      }
-    };
-  }, []);
 
   // SCOUTS: Start hungry knowledge discovery agents
   // DISABLED: HungryScouts make 64+ YouTube API calls per session
