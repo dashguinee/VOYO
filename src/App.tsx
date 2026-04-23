@@ -58,21 +58,8 @@ import './utils/debugIntent';
 // sessionExecutor.getHotBelt()), so deferring it to requestIdleCallback
 // reclaims initial-load time with zero UX regression.
 
-// SCOUTS: Hungry agents that feed knowledge to the Brain.
-// The scout patrol useEffect is currently disabled (see commented block below
-// near line 1083 — 64 YouTube API calls per session was too much). The
-// startScoutPatrol/getScoutStats imports were dead but kept the entire
-// /scouts/ tree in the eager bundle. When the patrol re-enables, these become
-// dynamic imports inside the useEffect — same pattern as the Brain lazy-load.
-//
-// DATABASE FEEDER side-effect import (window.feedDatabase debug global) also
-// removed for the same reason; re-add via dynamic import behind a debug flag
-// when needed.
-
 // TRACK POOL: Start pool maintenance for dynamic track management
 import { startPoolMaintenance } from './store/trackPoolStore';
-import { bootstrapPool, curateAllSections } from './services/poolCurator';
-import { runStartupHeal } from './services/trackVerifier';
 import { syncSeedTracks } from './services/centralDJ';
 import { TRACKS } from './data/tracks';
 import { syncManyToDatabase } from './services/databaseSync';
@@ -604,20 +591,6 @@ function App() {
   }, []);
 
 
-  // SCOUTS: Start hungry knowledge discovery agents
-  // DISABLED: HungryScouts make 64+ YouTube API calls per session
-  // With 324K tracks in Supabase, we don't need real-time scouting
-  // Re-enable when YouTube API key is configured and rate limiting is implemented
-  // useEffect(() => {
-  //   console.log('[Scouts] Starting Hungry Scouts for African music discovery...');
-  //   startScoutPatrol(30);
-  //   (window as any).scoutStats = getScoutStats;
-  //   (window as any).knowledgeStats = getKnowledgeStats;
-  //   return () => {
-  //     console.log('[Scouts] Stopping scout patrol');
-  //     stopScoutPatrol();
-  //   };
-  // }, []);
 
   // FIRST-TIME EXPERIENCE: Prime the player with a curated track on cold boot.
   // DEFERRED to after first paint so it doesn't block the splash + cold boot

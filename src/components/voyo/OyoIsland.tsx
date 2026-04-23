@@ -35,35 +35,14 @@ import { pipedTrackToVoyoTrack } from '../../data/tracks';
 // Auto-hide timeout
 const AUTO_HIDE_DELAY = 5000; // 5 seconds
 
-// Gemini for cultural context
-const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY || '';
-const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
-
 async function getCulturalContext(phonetics: string, matchedSong?: string, matchedArtist?: string): Promise<string> {
-  if (!GEMINI_API_KEY) return '';
-
   try {
-    const prompt = matchedSong
-      ? `The user sang/hummed: "${phonetics}"
-         This matched: "${matchedSong}" by ${matchedArtist}
-
-         In 1-2 short sentences, explain any cultural meaning, language (if not English), or interesting facts about the lyrics/song. Be casual and friendly like a DJ. If it's a common song, mention what makes it special.`
-      : `The user sang/hummed: "${phonetics}"
-
-         What language might this be? Any cultural context? Keep it to 1 sentence, casual DJ style.`;
-
-    const response = await fetch(`${GEMINI_API_URL}?key=${GEMINI_API_KEY}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0.7, maxOutputTokens: 100 },
-      }),
-    });
-
-    if (!response.ok) return '';
-    const data = await response.json();
-    return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    const { callGemini } = await import('../../oyo/providers/gemini');
+    const userMessage = matchedSong
+      ? `The user sang/hummed: "${phonetics}". This matched: "${matchedSong}" by ${matchedArtist}. In 1-2 short sentences, explain any cultural meaning, language (if not English), or interesting facts. Be casual and friendly like a DJ.`
+      : `The user sang/hummed: "${phonetics}". What language might this be? Any cultural context? Keep it to 1 sentence, casual DJ style.`;
+    const result = await callGemini({ systemPrompt: 'You are a knowledgeable music DJ.', userMessage });
+    return result.text ?? '';
   } catch {
     return '';
   }
