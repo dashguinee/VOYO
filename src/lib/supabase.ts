@@ -13,6 +13,7 @@
  */
 
 import { createClient } from '@supabase/supabase-js';
+import type { RealtimeChannel } from '@supabase/supabase-js';
 import { devLog, devWarn } from '../utils/logger';
 
 // Get from environment or use defaults for development
@@ -117,6 +118,9 @@ async function verifyPin(pin: string, hash: string): Promise<boolean> {
   const pinHash = await hashPin(pin);
   return pinHash === hash;
 }
+
+// Row shapes returned from universe DB queries (internal only)
+type UniverseSearchRow = { username: string; public_profile: { displayName?: string; avatarUrl?: string } | null; portal_open: boolean };
 
 // ============================================
 // UNIVERSE API - DEPRECATED (still consumed by universeStore)
@@ -267,7 +271,7 @@ export const universeAPI = {
       .subscribe();
   },
 
-  unsubscribe(channel: any) {
+  unsubscribe(channel: RealtimeChannel) {
     if (!supabase || !channel) return;
     supabase.removeChannel(channel);
   },
@@ -286,7 +290,7 @@ export const universeAPI = {
       .limit(limit);
 
     if (error || !data) return [];
-    return data.map((u: any) => ({
+    return (data as UniverseSearchRow[]).map(u => ({
       username: u.username,
       displayName: u.public_profile?.displayName || u.username,
       avatarUrl: u.public_profile?.avatarUrl || null,
@@ -358,7 +362,7 @@ export const portalChatAPI = {
       .subscribe();
   },
 
-  unsubscribe(channel: any) {
+  unsubscribe(channel: RealtimeChannel) {
     if (!supabase || !channel) return;
     supabase.removeChannel(channel);
   },
@@ -492,7 +496,7 @@ export const lyricsAPI = {
       .or(`phonetic_raw.ilike.%${query}%,phonetic_clean.ilike.%${query}%`)
       .limit(limit);
     if (error || !data) return [];
-    return data.map((row: any) => ({
+    return (data as Pick<LyricsRow, 'track_id' | 'title' | 'artist' | 'phonetic_raw'>[]).map(row => ({
       track_id: row.track_id,
       title: row.title,
       artist: row.artist,
@@ -704,7 +708,7 @@ export const videoIntelligenceAPI = {
         .select('*', { count: 'exact', head: true })
         .gte('created_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
     ]);
-    const totalPlays = (playsRes.data || []).reduce((sum: number, v: any) => sum + (v.voyo_play_count || 0), 0);
+    const totalPlays = (playsRes.data || []).reduce((sum: number, v: { voyo_play_count?: number }) => sum + (v.voyo_play_count || 0), 0);
     return {
       totalVideos: countRes.count || 0,
       totalPlays,
