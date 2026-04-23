@@ -759,20 +759,26 @@ WideTrackCard.displayName = 'WideTrackCard';
 // ============================================
 const ClassicsDiskCard = memo(({ track, index, onPlay }: { track: Track; index: number; onPlay: (track: Track) => void }) => {
   const thumbnailUrl = getThumb(track.trackId, 'high');
+  // Each card gets its own drift phase so they breathe independently
+  const driftDuration = 6 + (index % 4) * 0.9;
+  const driftDelay = (index % 6) * 0.55;
   return (
     <button
-      className="flex-shrink-0 active:scale-[0.96] transition-transform"
+      className="flex-shrink-0 flex flex-col items-center gap-2 active:scale-[0.94] transition-transform duration-150"
       onClick={() => onPlay(track)}
       aria-label={`Play ${track.title} by ${track.artist}`}
       style={{ scrollSnapAlign: 'start' }}
     >
+      {/* Disk */}
       <div
-        className="relative w-[130px] h-[130px] rounded-full overflow-hidden classics-disk-drift"
+        className="relative rounded-full overflow-hidden classics-disk-drift"
         style={{
-          opacity: 0.9,
-          animationDelay: `${(index % 5) * 0.8}s`,
+          width: 120,
+          height: 120,
+          ['--drift-dur' as string]: `${driftDuration}s`,
+          ['--drift-delay' as string]: `${driftDelay}s`,
           boxShadow:
-            '0 0 0 1px rgba(212,160,83,0.5), 0 8px 22px rgba(0,0,0,0.55), inset 0 0 20px rgba(0,0,0,0.35)',
+            '0 0 0 2px rgba(212,160,83,0.45), 0 0 0 4px rgba(212,160,83,0.12), 0 10px 28px rgba(0,0,0,0.65), inset 0 0 24px rgba(0,0,0,0.4)',
         }}
       >
         <SmartImage
@@ -782,8 +788,47 @@ const ClassicsDiskCard = memo(({ track, index, onPlay }: { track: Track; index: 
           trackId={track.trackId}
           artist={track.artist}
           title={track.title}
-          style={{ transform: 'scale(1.4)' }}
+          style={{ transform: 'scale(1.45)' }}
         />
+        {/* Vinyl groove overlay */}
+        <div
+          className="absolute inset-0 rounded-full pointer-events-none"
+          style={{
+            background:
+              'radial-gradient(circle at 50% 50%, transparent 28%, rgba(0,0,0,0.18) 30%, transparent 32%, rgba(0,0,0,0.10) 46%, transparent 48%, rgba(0,0,0,0.08) 62%, transparent 64%)',
+          }}
+        />
+        {/* Warm sepia tone */}
+        <div
+          className="absolute inset-0 rounded-full pointer-events-none"
+          style={{ background: 'rgba(160, 100, 20, 0.12)', mixBlendMode: 'multiply' }}
+        />
+        {/* Center spindle dot */}
+        <div
+          className="absolute rounded-full pointer-events-none"
+          style={{
+            width: 10, height: 10,
+            top: '50%', left: '50%',
+            transform: 'translate(-50%, -50%)',
+            background: 'radial-gradient(circle, #D4A053 0%, #8B5E1A 100%)',
+            boxShadow: '0 0 4px rgba(212,160,83,0.6)',
+          }}
+        />
+      </div>
+      {/* Track label */}
+      <div className="text-center w-[120px]">
+        <p
+          className="text-white/80 text-[10px] font-semibold leading-tight truncate"
+          style={{ fontFamily: 'Satoshi, system-ui, sans-serif' }}
+        >
+          {track.title}
+        </p>
+        <p
+          className="text-[10px] leading-tight truncate mt-0.5"
+          style={{ color: 'rgba(212,160,83,0.7)', fontFamily: 'Satoshi, system-ui, sans-serif' }}
+        >
+          {track.artist}
+        </p>
       </div>
     </button>
   );
@@ -1969,6 +2014,131 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
       {/* VoyoLiveCard - "Vibes on Vibes" → Opens VOYO Player */}
       <Safe name="SignInPrompt"><SignInPrompt onSwitchToVOYO={onSwitchToVOYO} /></Safe>
 
+      {/* ═══ CLASSICS ═══ All-time African hits, vinyl disk carousel.
+          Placed early so the gold warmth anchors the feed before
+          personalized sections kick in. Always renders (seed fallback). */}
+      <Safe name="Classics">
+        {classicsTracks.length > 0 && (
+          <div className="mb-8 relative overflow-hidden">
+            <style>{`
+              @keyframes classics-disk-drift {
+                0%, 100% { transform: translateY(0px); }
+                50%      { transform: translateY(-6px); }
+              }
+              .classics-disk-drift {
+                animation: classics-disk-drift var(--drift-dur, 7s) ease-in-out infinite;
+                animation-delay: var(--drift-delay, 0s);
+                will-change: transform;
+              }
+              @media (prefers-reduced-motion: reduce) {
+                .classics-disk-drift { animation: none; }
+              }
+            `}</style>
+
+            {/* Ambient gold glow — wide, soft, doesn't compete with content */}
+            <div
+              className="absolute inset-0 pointer-events-none"
+              style={{
+                background:
+                  'radial-gradient(ellipse 100% 90% at 20% 50%, rgba(212,160,83,0.13) 0%, rgba(212,160,83,0.04) 50%, transparent 80%)',
+              }}
+            />
+
+            {/* Gold hairline top */}
+            <div
+              className="absolute top-0 left-6 right-6 h-px pointer-events-none"
+              style={{
+                background:
+                  'linear-gradient(90deg, transparent, rgba(212,160,83,0.35), rgba(230,184,101,0.7), rgba(212,160,83,0.35), transparent)',
+              }}
+            />
+
+            <div className="relative pt-8 pb-8">
+              {/* Header */}
+              <div className="px-5 mb-5 flex items-center gap-3">
+                {/* Vinyl icon stamp */}
+                <div
+                  className="flex-shrink-0 relative rounded-full"
+                  style={{
+                    width: 34, height: 34,
+                    background: 'radial-gradient(circle at 50% 50%, #2a1a08 0%, #1a1008 60%, #0d0804 100%)',
+                    boxShadow: '0 0 0 1.5px rgba(212,160,83,0.5), 0 4px 12px rgba(0,0,0,0.6)',
+                  }}
+                >
+                  <div
+                    className="absolute rounded-full"
+                    style={{
+                      width: 10, height: 10,
+                      top: '50%', left: '50%',
+                      transform: 'translate(-50%,-50%)',
+                      background: 'radial-gradient(circle, #D4A053 0%, #8B5E1A 100%)',
+                    }}
+                  />
+                  {/* Groove rings */}
+                  <div className="absolute inset-0 rounded-full" style={{ border: '1px solid rgba(212,160,83,0.15)', margin: 5 }} />
+                  <div className="absolute inset-0 rounded-full" style={{ border: '1px solid rgba(212,160,83,0.08)', margin: 9 }} />
+                </div>
+
+                <div>
+                  <h2
+                    className="leading-none"
+                    style={{
+                      fontFamily: "'Fraunces', 'Playfair Display', Georgia, serif",
+                      fontStyle: 'italic',
+                      fontSize: 22,
+                      fontWeight: 400,
+                      background: 'linear-gradient(100deg, #F4D999 0%, #E6B865 40%, #C4943D 100%)',
+                      WebkitBackgroundClip: 'text',
+                      WebkitTextFillColor: 'transparent',
+                      filter: 'drop-shadow(0 1px 3px rgba(0,0,0,0.5))',
+                    }}
+                  >
+                    All-Time Classics
+                  </h2>
+                  <p
+                    className="text-[9px] font-semibold tracking-widest uppercase mt-1"
+                    style={{ color: 'rgba(212,160,83,0.55)', fontFamily: 'Satoshi, system-ui, sans-serif' }}
+                  >
+                    African Bangers · Forever
+                  </p>
+                </div>
+              </div>
+
+              {/* Disk carousel */}
+              <div
+                className="flex gap-4 px-5 overflow-x-auto scrollbar-hide"
+                style={{
+                  scrollSnapType: 'x proximity',
+                  WebkitOverflowScrolling: 'touch',
+                  maskImage:
+                    'linear-gradient(to right, transparent 0, black 6%, black 94%, transparent 100%)',
+                  WebkitMaskImage:
+                    'linear-gradient(to right, transparent 0, black 6%, black 94%, transparent 100%)',
+                }}
+              >
+                {classicsTracks.map((track, index) => (
+                  <ClassicsDiskCard
+                    key={track.id}
+                    track={track}
+                    index={index}
+                    onPlay={playTrackFull}
+                  />
+                ))}
+              </div>
+            </div>
+
+            {/* Gold hairline bottom */}
+            <div
+              className="absolute bottom-0 left-6 right-6 h-px pointer-events-none"
+              style={{
+                background:
+                  'linear-gradient(90deg, transparent, rgba(212,160,83,0.2), rgba(230,184,101,0.45), rgba(212,160,83,0.2), transparent)',
+              }}
+            />
+          </div>
+        )}
+      </Safe>
+
       {/* Back in the Mood — subtle brand atmosphere behind the cards.
           Single element, two stacked gradients:
             · radial purple breath across the whole section (brand wash)
@@ -2081,169 +2251,6 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
         </ShelfWithRefresh>
       )}
 
-      {/* Classics — all-time African classics, disk-style cards. */}
-      <Safe name="Classics">
-        {classicsTracks.length > 0 && (
-          <div
-            className="mb-10 pt-12 pb-10 relative overflow-hidden"
-            style={{
-              background:
-                'radial-gradient(ellipse 120% 80% at 30% 0%, rgba(212,160,83,0.16) 0%, rgba(212,160,83,0.06) 40%, transparent 75%)',
-            }}
-          >
-            {/* Gold foil hairlines — top + bottom, atmosphere only */}
-            <div
-              className="absolute top-0 left-8 right-8 h-px pointer-events-none"
-              style={{
-                background:
-                  'linear-gradient(90deg, transparent, rgba(212,160,83,0.4), rgba(230,184,101,0.75), rgba(212,160,83,0.4), transparent)',
-              }}
-            />
-            <div
-              className="absolute bottom-0 left-8 right-8 h-px pointer-events-none"
-              style={{
-                background:
-                  'linear-gradient(90deg, transparent, rgba(212,160,83,0.25), rgba(230,184,101,0.5), rgba(212,160,83,0.25), transparent)',
-              }}
-            />
-
-            {/* Header — tap → friend search pill; long-press (500ms) → live friends sheet. */}
-            <div
-              ref={vibesHeaderRef}
-              className="px-6 mb-6 relative select-none"
-              onPointerDown={handleVibesPointerDown}
-              onPointerUp={handleVibesPointerUp}
-              onPointerLeave={handleVibesPointerUp}
-              onPointerMove={handleVibesPointerMove}
-              onClick={openSearchPill}
-              style={{ touchAction: 'pan-x pan-y', cursor: 'pointer' }}
-            >
-              <div className="flex items-end gap-3 flex-wrap">
-                <h2
-                  className="leading-none vibes-heading-fade"
-                  style={{
-                    fontFamily: "'Fraunces', 'Playfair Display', Georgia, serif",
-                    fontStyle: 'italic',
-                    fontSize: 'clamp(28px, 7vw, 40px)',
-                    fontWeight: 400,
-                    margin: 0,
-                    whiteSpace: 'nowrap',
-                    background:
-                      'linear-gradient(100deg, #F4D999 0%, #E6B865 35%, #D4A053 65%, #8B6228 100%)',
-                    backgroundSize: '220% 100%',
-                    backgroundPosition: '0% 50%',
-                    WebkitBackgroundClip: 'text',
-                    WebkitTextFillColor: 'transparent',
-                    filter:
-                      'drop-shadow(0 1px 3px rgba(0,0,0,0.55)) drop-shadow(0 0 14px rgba(212,160,83,0.18))',
-                    letterSpacing: '-0.005em',
-                  }}
-                >
-                  Vibes on Vibes
-                </h2>
-
-                {/* Live count suffix — only when authenticated + friends online */}
-                {isLoggedIn && liveCount > 0 && (
-                  <span
-                    className="leading-none mb-1 flex items-center gap-1.5"
-                    style={{
-                      fontFamily: 'Satoshi, system-ui, sans-serif',
-                      fontSize: 'clamp(11px, 3vw, 14px)',
-                      fontWeight: 600,
-                      color: 'rgba(255,255,255,0.7)',
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
-                    <span style={{ color: 'rgba(212,160,83,0.6)', fontWeight: 400 }}>·</span>
-                    {liveCount} vibing now
-                    {/* Pulsing dot — tappable shortcut to sheet */}
-                    <button
-                      onClick={(e) => { e.stopPropagation(); openVibesSheet(); }}
-                      aria-label="See who's vibing"
-                      className="ml-0.5"
-                      style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
-                    >
-                      <span
-                        className="inline-block w-2 h-2 rounded-full"
-                        style={{
-                          background: '#22c55e',
-                          boxShadow: '0 0 6px rgba(34,197,94,0.7)',
-                          animation: 'vibes-live-pulse 2s ease-in-out infinite',
-                        }}
-                      />
-                    </button>
-                  </span>
-                )}
-              </div>
-
-              {/* Hint: subtle long-press affordance for unauthenticated or zero-friends */}
-              {isLoggedIn && liveCount === 0 && (
-                <p className="text-white/20 text-[10px] mt-1" style={{ fontFamily: 'Satoshi, system-ui, sans-serif' }}>
-                  Hold to see who's vibing
-                </p>
-              )}
-            </div>
-
-            <style>{`
-              @keyframes vibes-live-pulse {
-                0%, 100% { opacity: 1; transform: scale(1); }
-                50% { opacity: 0.6; transform: scale(1.3); }
-              }
-              /* Heading disappears like a sunset — gold sweeps off to the
-                 right, text drifts up slightly, opacity fades. Gestures on
-                 the parent container stay live whether text is visible or
-                 not. ~2.5s hold → ~3.5s graceful dissolve. */
-              .vibes-heading-fade {
-                animation: vibes-heading-dissolve 3.5s cubic-bezier(0.32, 0, 0.2, 1) 2.5s forwards;
-                will-change: opacity, background-position, transform, filter;
-              }
-              @keyframes vibes-heading-dissolve {
-                0%   { opacity: 1; background-position: 0% 50%;   transform: translateY(0);    filter: drop-shadow(0 1px 3px rgba(0,0,0,0.55)) drop-shadow(0 0 14px rgba(212,160,83,0.18)) blur(0px); }
-                55%  { opacity: 0.85; background-position: 60% 50%;  transform: translateY(-2px); }
-                100% { opacity: 0; background-position: 120% 50%; transform: translateY(-6px); filter: drop-shadow(0 1px 3px rgba(0,0,0,0)) drop-shadow(0 0 6px rgba(212,160,83,0)) blur(0.6px); }
-              }
-              @media (prefers-reduced-motion: reduce) {
-                .vibes-heading-fade { animation: none; opacity: 0.9; }
-              }
-            `}</style>
-
-            <style>{`
-              @keyframes classics-disk-drift {
-                0%, 100% { transform: translateY(0); }
-                50%      { transform: translateY(-5px); }
-              }
-              .classics-disk-drift {
-                animation: classics-disk-drift 7s ease-in-out infinite;
-                will-change: transform;
-              }
-              @media (prefers-reduced-motion: reduce) {
-                .classics-disk-drift { animation: none; }
-              }
-            `}</style>
-
-            <div
-              className="flex gap-5 px-6 overflow-x-auto scrollbar-hide"
-              style={{
-                scrollSnapType: 'x proximity',
-                WebkitOverflowScrolling: 'touch',
-                maskImage:
-                  'linear-gradient(to right, transparent 0, black 8%, black 92%, transparent 100%)',
-                WebkitMaskImage:
-                  'linear-gradient(to right, transparent 0, black 8%, black 92%, transparent 100%)',
-              }}
-            >
-              {classicsTracks.map((track, index) => (
-                <ClassicsDiskCard
-                  key={track.id}
-                  track={track}
-                  index={index}
-                  onPlay={playTrackFull}
-                />
-              ))}
-            </div>
-          </div>
-        )}
-      </Safe>
 
       {/* Top 10 on VOYO */}
       {hasTrending && (
