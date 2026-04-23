@@ -60,6 +60,11 @@ const STALL_LOG_DELAY_MS = 800;
 // Dash feedback (v330): gating fade entirely on elapsed made quick
 // taps feel harsh. Now the SHORT fade is the floor; LONG layers on
 // top when the user's actually been listening.
+// Single fade duration for every track change (2026-04-23): founder call
+// was "just fade out" — no three-tier complexity, no DJ-blend vs rapid-
+// skip branching. One gentle fade that feels intentional without lag.
+const UNIFIED_FADE_OUT_MS = 180;
+const UNIFIED_FADE_IN_MS  = 160;
 const SHORT_FADE_OUT_MS = 90;
 const SHORT_FADE_IN_MS  = 170;
 const LONG_FADE_OUT_MS  = 180;
@@ -245,10 +250,9 @@ export const AudioPlayer = () => {
     const isHidden = typeof document !== 'undefined' && document.hidden;
     const wasIframe = playbackSource === 'iframe';
     const wasR2 = playbackSource === 'r2';
-    const elapsedS = el?.currentTime ?? 0;
-    const earnedLong = elapsedS >= FADE_OUT_MIN_ELAPSED_S;
-    const fadeOutMs = earnedLong ? LONG_FADE_OUT_MS : SHORT_FADE_OUT_MS;
-    const fadeInMs  = earnedLong ? LONG_FADE_IN_MS  : SHORT_FADE_IN_MS;
+    // One fade for every track change — founder-simplified 2026-04-23.
+    const fadeOutMs = UNIFIED_FADE_OUT_MS;
+    const fadeInMs  = UNIFIED_FADE_IN_MS;
     const shouldFade = !!el && !isHidden && (wasR2 || wasIframe);
     if (shouldFade) {
       if (wasR2) softFadeOut(fadeOutMs);
