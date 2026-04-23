@@ -1986,6 +1986,73 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
   const hasTrending = trending.length > 0;
   const hasDiscoverMore = discoverMoreTracks.length > 0;
 
+  // Defined once, placed in two possible positions depending on hasHistory
+  const classicsShelf = (
+    <Safe name="Classics">
+      {classicsTracks.length > 0 && (
+        <div className="mb-8 relative overflow-hidden">
+          <style>{`
+            @keyframes classics-disk-drift {
+              0%, 100% { transform: translateY(0px); }
+              50%      { transform: translateY(-6px); }
+            }
+            .classics-disk-drift {
+              animation: classics-disk-drift var(--drift-dur, 7s) ease-in-out infinite;
+              animation-delay: var(--drift-delay, 0s);
+              will-change: transform;
+            }
+            @media (prefers-reduced-motion: reduce) {
+              .classics-disk-drift { animation: none; }
+            }
+          `}</style>
+          <div
+            className="absolute inset-0 pointer-events-none"
+            style={{ background: 'radial-gradient(ellipse 100% 90% at 20% 50%, rgba(212,160,83,0.13) 0%, rgba(212,160,83,0.04) 50%, transparent 80%)' }}
+          />
+          <div
+            className="absolute top-0 left-6 right-6 h-px pointer-events-none"
+            style={{ background: 'linear-gradient(90deg, transparent, rgba(212,160,83,0.35), rgba(230,184,101,0.7), rgba(212,160,83,0.35), transparent)' }}
+          />
+          <div className="relative pt-8 pb-8">
+            <div className="px-5 mb-5 flex items-center gap-3">
+              <div
+                className="flex-shrink-0 relative rounded-full"
+                style={{ width: 34, height: 34, background: 'radial-gradient(circle at 50% 50%, #2a1a08 0%, #1a1008 60%, #0d0804 100%)', boxShadow: '0 0 0 1.5px rgba(212,160,83,0.5), 0 4px 12px rgba(0,0,0,0.6)' }}
+              >
+                <div className="absolute rounded-full" style={{ width: 10, height: 10, top: '50%', left: '50%', transform: 'translate(-50%,-50%)', background: 'radial-gradient(circle, #D4A053 0%, #8B5E1A 100%)' }} />
+                <div className="absolute inset-0 rounded-full" style={{ border: '1px solid rgba(212,160,83,0.15)', margin: 5 }} />
+                <div className="absolute inset-0 rounded-full" style={{ border: '1px solid rgba(212,160,83,0.08)', margin: 9 }} />
+              </div>
+              <div>
+                <h2
+                  className="leading-none"
+                  style={{ fontFamily: "'Fraunces', 'Playfair Display', Georgia, serif", fontStyle: 'italic', fontSize: 22, fontWeight: 400, background: 'linear-gradient(100deg, #F4D999 0%, #E6B865 40%, #C4943D 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', filter: 'drop-shadow(0 1px 3px rgba(0,0,0,0.5))' }}
+                >
+                  All-Time Classics
+                </h2>
+                <p className="text-[9px] font-semibold tracking-widest uppercase mt-1" style={{ color: 'rgba(212,160,83,0.55)', fontFamily: 'Satoshi, system-ui, sans-serif' }}>
+                  African Bangers · Forever
+                </p>
+              </div>
+            </div>
+            <div
+              className="flex gap-4 px-5 overflow-x-auto scrollbar-hide"
+              style={{ scrollSnapType: 'x proximity', WebkitOverflowScrolling: 'touch', maskImage: 'linear-gradient(to right, transparent 0, black 6%, black 94%, transparent 100%)', WebkitMaskImage: 'linear-gradient(to right, transparent 0, black 6%, black 94%, transparent 100%)' }}
+            >
+              {classicsTracks.map((track, index) => (
+                <ClassicsDiskCard key={track.id} track={track} index={index} onPlay={playTrackFull} />
+              ))}
+            </div>
+          </div>
+          <div
+            className="absolute bottom-0 left-6 right-6 h-px pointer-events-none"
+            style={{ background: 'linear-gradient(90deg, transparent, rgba(212,160,83,0.2), rgba(230,184,101,0.45), rgba(212,160,83,0.2), transparent)' }}
+          />
+        </div>
+      )}
+    </Safe>
+  );
+
   return (
     <div className="flex flex-col h-full overflow-y-auto pb-52 scrollbar-hide">
       {/* Header — fully transparent, floats over the continuous canvas (April 2026) */}
@@ -2011,131 +2078,8 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
           tale of what's happening in the app right now. */}
       <Safe name="GreetingArea"><GreetingArea /></Safe>
 
-      {/* ═══ CLASSICS ═══ All-time African hits, vinyl disk carousel.
-          Placed early so the gold warmth anchors the feed before
-          personalized sections kick in. Always renders (seed fallback). */}
-      <Safe name="Classics">
-        {classicsTracks.length > 0 && (
-          <div className="mb-8 relative overflow-hidden">
-            <style>{`
-              @keyframes classics-disk-drift {
-                0%, 100% { transform: translateY(0px); }
-                50%      { transform: translateY(-6px); }
-              }
-              .classics-disk-drift {
-                animation: classics-disk-drift var(--drift-dur, 7s) ease-in-out infinite;
-                animation-delay: var(--drift-delay, 0s);
-                will-change: transform;
-              }
-              @media (prefers-reduced-motion: reduce) {
-                .classics-disk-drift { animation: none; }
-              }
-            `}</style>
-
-            {/* Ambient gold glow — wide, soft, doesn't compete with content */}
-            <div
-              className="absolute inset-0 pointer-events-none"
-              style={{
-                background:
-                  'radial-gradient(ellipse 100% 90% at 20% 50%, rgba(212,160,83,0.13) 0%, rgba(212,160,83,0.04) 50%, transparent 80%)',
-              }}
-            />
-
-            {/* Gold hairline top */}
-            <div
-              className="absolute top-0 left-6 right-6 h-px pointer-events-none"
-              style={{
-                background:
-                  'linear-gradient(90deg, transparent, rgba(212,160,83,0.35), rgba(230,184,101,0.7), rgba(212,160,83,0.35), transparent)',
-              }}
-            />
-
-            <div className="relative pt-8 pb-8">
-              {/* Header */}
-              <div className="px-5 mb-5 flex items-center gap-3">
-                {/* Vinyl icon stamp */}
-                <div
-                  className="flex-shrink-0 relative rounded-full"
-                  style={{
-                    width: 34, height: 34,
-                    background: 'radial-gradient(circle at 50% 50%, #2a1a08 0%, #1a1008 60%, #0d0804 100%)',
-                    boxShadow: '0 0 0 1.5px rgba(212,160,83,0.5), 0 4px 12px rgba(0,0,0,0.6)',
-                  }}
-                >
-                  <div
-                    className="absolute rounded-full"
-                    style={{
-                      width: 10, height: 10,
-                      top: '50%', left: '50%',
-                      transform: 'translate(-50%,-50%)',
-                      background: 'radial-gradient(circle, #D4A053 0%, #8B5E1A 100%)',
-                    }}
-                  />
-                  {/* Groove rings */}
-                  <div className="absolute inset-0 rounded-full" style={{ border: '1px solid rgba(212,160,83,0.15)', margin: 5 }} />
-                  <div className="absolute inset-0 rounded-full" style={{ border: '1px solid rgba(212,160,83,0.08)', margin: 9 }} />
-                </div>
-
-                <div>
-                  <h2
-                    className="leading-none"
-                    style={{
-                      fontFamily: "'Fraunces', 'Playfair Display', Georgia, serif",
-                      fontStyle: 'italic',
-                      fontSize: 22,
-                      fontWeight: 400,
-                      background: 'linear-gradient(100deg, #F4D999 0%, #E6B865 40%, #C4943D 100%)',
-                      WebkitBackgroundClip: 'text',
-                      WebkitTextFillColor: 'transparent',
-                      filter: 'drop-shadow(0 1px 3px rgba(0,0,0,0.5))',
-                    }}
-                  >
-                    All-Time Classics
-                  </h2>
-                  <p
-                    className="text-[9px] font-semibold tracking-widest uppercase mt-1"
-                    style={{ color: 'rgba(212,160,83,0.55)', fontFamily: 'Satoshi, system-ui, sans-serif' }}
-                  >
-                    African Bangers · Forever
-                  </p>
-                </div>
-              </div>
-
-              {/* Disk carousel */}
-              <div
-                className="flex gap-4 px-5 overflow-x-auto scrollbar-hide"
-                style={{
-                  scrollSnapType: 'x proximity',
-                  WebkitOverflowScrolling: 'touch',
-                  maskImage:
-                    'linear-gradient(to right, transparent 0, black 6%, black 94%, transparent 100%)',
-                  WebkitMaskImage:
-                    'linear-gradient(to right, transparent 0, black 6%, black 94%, transparent 100%)',
-                }}
-              >
-                {classicsTracks.map((track, index) => (
-                  <ClassicsDiskCard
-                    key={track.id}
-                    track={track}
-                    index={index}
-                    onPlay={playTrackFull}
-                  />
-                ))}
-              </div>
-            </div>
-
-            {/* Gold hairline bottom */}
-            <div
-              className="absolute bottom-0 left-6 right-6 h-px pointer-events-none"
-              style={{
-                background:
-                  'linear-gradient(90deg, transparent, rgba(212,160,83,0.2), rgba(230,184,101,0.45), rgba(212,160,83,0.2), transparent)',
-              }}
-            />
-          </div>
-        )}
-      </Safe>
-
+      {/* New users (no history): Classics leads — it's their entry to the catalog */}
+      {!hasHistory && classicsShelf}
       {/* VoyoLiveCard - "Vibes on Vibes" → Opens VOYO Player */}
       <Safe name="SignInPrompt"><SignInPrompt onSwitchToVOYO={onSwitchToVOYO} /></Safe>
 
@@ -2174,6 +2118,8 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
         </div>
       )}
 
+      {/* Returning users: Classics sits right after personal history */}
+      {hasHistory && classicsShelf}
 
       {/* 🌍 African Vibes - cultural pillar, holds its ground.
           Watch More moved OFF the header (Apr 2026): it now only appears at the
