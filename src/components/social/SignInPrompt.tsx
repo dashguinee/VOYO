@@ -436,11 +436,45 @@ export const VoyoLiveCard = ({ onSwitchToVOYO }: VoyoLiveCardProps = {}) => {
                 </div>
               </div>
 
+              {/* Plush velvet play button — rich dark purple, textured depth.
+                  Radial highlight top-left = soft cushion light. Inset shadows
+                  = pressed-into-velvet depth. Outer glow + shimmer sweep echoes
+                  the My Disco bronze shimmer language, shifted to purple. */}
               <div
-                className="w-11 h-11 rounded-full bg-black/30 backdrop-blur flex items-center justify-center"
+                className="relative w-11 h-11 rounded-full flex items-center justify-center overflow-hidden voyo-plush-play"
+                style={{
+                  background:
+                    'radial-gradient(circle at 32% 24%, rgba(167,139,250,0.55) 0%, rgba(88,28,135,1) 42%, rgba(39,15,69,1) 100%)',
+                  boxShadow:
+                    'inset 0 1px 1px rgba(255,255,255,0.22), inset 0 -3px 6px rgba(0,0,0,0.45), 0 6px 14px rgba(0,0,0,0.45), 0 0 0 1px rgba(167,139,250,0.18), 0 0 18px rgba(139,92,246,0.22)',
+                }}
               >
-                <Play className="w-5 h-5 text-white" fill="white" />
+                {/* Shimmer sweep — subtle, matches My Disco's gradient-shift cadence */}
+                <div
+                  className="absolute inset-0 pointer-events-none"
+                  style={{
+                    background:
+                      'linear-gradient(110deg, transparent 30%, rgba(196,181,253,0.18) 48%, transparent 66%)',
+                    backgroundSize: '220% 100%',
+                    animation: 'voyo-plush-shimmer 4.2s ease-in-out infinite',
+                  }}
+                />
+                <Play
+                  className="w-5 h-5 text-white relative z-10"
+                  fill="white"
+                  style={{ filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.45))' }}
+                />
               </div>
+              <style>{`
+                @keyframes voyo-plush-shimmer {
+                  0%, 100% { background-position: 200% 0; }
+                  50%      { background-position: -100% 0; }
+                }
+                @media (prefers-reduced-motion: reduce) {
+                  .voyo-plush-play div[aria-hidden],
+                  .voyo-plush-play > div:first-child { animation: none !important; }
+                }
+              `}</style>
             </div>
           </div>
         </div>
