@@ -37,6 +37,8 @@ import { useBackGuard } from '../../hooks/useBackGuard';
 import { friendsAPI, type Friend } from '../../lib/voyo-api';
 import { VoyoLoadOrb } from '../voyo/VoyoLoadOrb';
 import { useNavigate } from 'react-router-dom';
+import { CardHoldActions, CARD_ACTIONS } from '../ui/CardHoldActions';
+import { PlaylistModal } from '../playlist/PlaylistModal';
 
 // ============================================
 // HELPER FUNCTIONS
@@ -1599,6 +1601,8 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
   const cachedTracks = useDownloadStore(s => s.cachedTracks);
   // Set of boosted track IDs — OYE badge only shows on actually cached tracks
   const boostedIds = useMemo(() => new Set(cachedTracks.map(t => t.id)), [cachedTracks]);
+  const setExplicitLike = usePreferenceStore(s => s.setExplicitLike);
+  const [playlistModalTrack, setPlaylistModalTrack] = useState<Track | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   // Session seed drives shelf rotation — every reload / pull-to-refresh gets
   // a fresh number, so shelves surface different tracks from the big pool
@@ -1992,7 +1996,13 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
             style={{ scrollSnapType: 'x proximity', WebkitOverflowScrolling: 'touch' }}
           >
             {recentlyPlayed.slice(0, 12).map((track) => (
-              <WideTrackCard key={track.id} track={track} onPlay={playTrack} showBoostBadge isBoosted={boostedIds.has(track.trackId)} />
+              <CardHoldActions
+                key={track.id}
+                leftAction={{ ...CARD_ACTIONS.like, onFire: () => setExplicitLike(track.id, true) }}
+                rightAction={{ ...CARD_ACTIONS.playlist, onFire: () => setPlaylistModalTrack(track) }}
+              >
+                <WideTrackCard track={track} onPlay={playTrack} showBoostBadge isBoosted={boostedIds.has(track.trackId)} />
+              </CardHoldActions>
             ))}
           </div>
         </div>
@@ -2106,7 +2116,19 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
       {hasDiscoverMore && (
         <ShelfWithRefresh title="Next Voyage" onRefresh={handleRefresh} isRefreshing={isRefreshing}>
           {discoverMoreTracks.slice(0, 12).map((track) => (
-            <TrackCard key={track.id} track={track} onPlay={playTrackFull} />
+            <CardHoldActions
+              key={track.id}
+              leftAction={{ ...CARD_ACTIONS.oye, onFire: () => app.oyeCommit(track, {}) }}
+              rightAction={{
+                ...CARD_ACTIONS.download,
+                onFire: () => {
+                  console.log('[Download] Not yet implemented — infra coming', track.trackId);
+                  alert('Download coming soon!');
+                },
+              }}
+            >
+              <TrackCard track={track} onPlay={playTrackFull} />
+            </CardHoldActions>
           ))}
         </ShelfWithRefresh>
       )}
@@ -2506,6 +2528,16 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
         onClose={() => setShowSearchPill(false)}
         onFriendTap={(friendDashId) => navigate(`/${friendDashId}`)}
       />
+
+      {/* Playlist modal — opened by CardHoldActions on WideTrackCard */}
+      {playlistModalTrack && (
+        <PlaylistModal
+          isOpen={!!playlistModalTrack}
+          onClose={() => setPlaylistModalTrack(null)}
+          trackId={playlistModalTrack.trackId}
+          trackTitle={playlistModalTrack.title}
+        />
+      )}
     </div>
   );
 };

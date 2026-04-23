@@ -24,6 +24,8 @@ import { OyeButton } from '../oye/OyeButton';
 import { DiscoExplainer } from '../ui/DiscoExplainer';
 import { searchMusic, SearchResult } from '../../services/api';
 import { useTabHistory } from '../../hooks/useTabHistory';
+import { CardHoldActions, CARD_ACTIONS } from '../ui/CardHoldActions';
+import { app } from '../../services/oyo';
 
 // Base filter tabs — five clean primary sets. "Disco" replaces the old
 // mix of 'offline' + 'recent' since our narralogy defines Disco = any
@@ -991,16 +993,27 @@ export const Library = ({ onTrackClick }: LibraryProps) => {
 
         {orderedTracks.length > 0 ? (
           orderedTracks.map((track, index) => (
-            <SongRow
+            <CardHoldActions
               key={track.id}
-              track={track}
-              index={index}
-              isLiked={likedTracks.has(track.id)}
-              cacheQuality={trackQualityMap.get(track.trackId) || null}
-              onClick={() => handleTrackClick(track)}
-              onLike={() => handleLike(track.id)}
-              onAddToPlaylist={() => setPlaylistModalTrack(track)}
-            />
+              leftAction={{ ...CARD_ACTIONS.oye, onFire: () => app.oyeCommit(track, {}) }}
+              rightAction={{
+                ...CARD_ACTIONS.download,
+                onFire: () => {
+                  console.log('[Download] Not yet implemented — infra coming', track.trackId);
+                  alert('Download coming soon!');
+                },
+              }}
+            >
+              <SongRow
+                track={track}
+                index={index}
+                isLiked={likedTracks.has(track.id)}
+                cacheQuality={trackQualityMap.get(track.trackId) || null}
+                onClick={() => handleTrackClick(track)}
+                onLike={() => handleLike(track.id)}
+                onAddToPlaylist={() => setPlaylistModalTrack(track)}
+              />
+            </CardHoldActions>
           ))
         ) : !showFallback && (
           <div className="flex flex-col items-center justify-center py-12 text-white/40">
