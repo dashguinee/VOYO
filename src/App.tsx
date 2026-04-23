@@ -47,14 +47,6 @@ import { devLog, devWarn } from './utils/logger';
 import { AuthProvider } from './providers/AuthProvider';
 import { useTabHistory } from './hooks/useTabHistory';
 
-// BRAIN: Initialize the intelligent DJ system
-// Brain subsystem is lazy-loaded inside the boot useEffect via dynamic import.
-// This pulls the ~110 KB app-brain chunk out of the initial bundle — Brain
-// isn't on the playback hot path yet (the playback flow reads from
-// playerStore.hotTracks/discoverTracks fed by databaseDiscovery, not from
-// sessionExecutor.getHotBelt()), so deferring it to requestIdleCallback
-// reclaims initial-load time with zero UX regression.
-
 // TRACK POOL: Start pool maintenance for dynamic track management
 import { startPoolMaintenance } from './store/trackPoolStore';
 import { syncSeedTracks } from './services/centralDJ';

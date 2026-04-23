@@ -337,7 +337,7 @@ interface PlayerStore {
   nextTrack: () => void;
   prevTrack: () => void;
   predictNextTrack: () => Track | null; // Predict what track will play next (for preloading)
-  predictUpcoming: (n?: number) => Track[];   // v214 — predict N-deep for warm-ahead preload
+  predictUpcoming: (n?: number) => Track[];   // predict N-deep for warm-ahead preload
   toggleShuffle: () => void;
   cycleRepeat: () => void;
 
@@ -444,7 +444,6 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     try { return localStorage.getItem('voyo-oye-prewarm') !== 'false'; } catch { return true; }
   })(),
 
-  // FIX 2: Persist queue and history across refreshes
   queue: getPersistedQueue(),
   history: getPersistedHistory(),
 
@@ -799,7 +798,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
 
     // Check queue first - filter out any unplayable tracks
     if (state.queue.length > 0) {
-      // FIX 6: Skip any known unplayable tracks in queue
+      // Skip any known unplayable tracks in queue
       // FIX (2026-04-23): ALSO skip the current track. Without this guard,
       // if the queue's head is the same track that's currently playing
       // (duplicate add, repeat-all rebuild race, OYO re-queueing current),
@@ -1247,10 +1246,9 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       ? state.hotTracks
       : TRACKS;
 
-    // v194.1 CONSISTENCY FIX: filter must MATCH nextTrack's filter exactly,
-    // otherwise predictNextTrack[0] and nextTrack[0] diverge and preload
-    // caches the wrong track. Previously we were missing the blocklist +
-    // unplayable checks — v193 telemetry showed the divergence: preload
+    // filter must MATCH nextTrack's filter exactly, otherwise predictNextTrack[0]
+    // and nextTrack[0] diverge and preload caches the wrong track. Previously
+    // missing the blocklist + unplayable checks caused divergence: preload
     // completed for EhyzYPSHRQU, but nextTrack landed on ewt2-_OuFR8
     // because EhyzYPSHRQU was blocklisted and filtered out at play-time.
     let availableTracks = allAvailable.filter(t => {
@@ -1279,7 +1277,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     return availableTracks[0];
   },
 
-  // v214 — predict up to N upcoming tracks for deep preloading.
+  // Predict up to N upcoming tracks for deep preloading.
   // Queue first, then discover-pool fallback. Sequential picks simulate
   // what nextTrack() would actually land on after each advance, so the
   // prefetched blobs line up with what the user really hears.
@@ -1346,12 +1344,12 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   // Queue Actions
   addToQueue: (track, position) => {
     set((state) => {
-      // FIX 4: Duplicate detection
+      // Duplicate detection
       if (state.queue.some(q => q.track.id === track.id)) {
-        return state; // Don't add duplicate
+        return state;
       }
 
-      // FIX 5: Reject known unplayable / blocklisted tracks
+      // Reject known unplayable / blocklisted tracks
       if (track.trackId && (isKnownUnplayable(track.trackId) || isBlocklisted(track.trackId))) {
         devWarn(`[PlayerStore] Rejected unplayable/blocked track from queue: ${track.title}`);
         return state; // Don't add unplayable track
@@ -1394,7 +1392,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       return { queue: [...state.queue, newItem] };
     });
 
-    // FIX 3: Persist queue to localStorage
+    // Persist queue
     setTimeout(() => {
       const state = get();
       const current = loadPersistedState();
@@ -1451,7 +1449,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       queue: state.queue.filter((_, i) => i !== index),
     }));
 
-    // FIX 3: Persist queue after removal
+    // Persist queue after removal
     setTimeout(() => {
       const state = get();
       const current = loadPersistedState();
@@ -1472,7 +1470,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   clearQueue: () => {
     set({ queue: [] });
 
-    // FIX 3: Persist empty queue
+    // Persist empty queue
     setTimeout(() => {
       const current = loadPersistedState();
       savePersistedState({ ...current, queue: [] });
@@ -1487,7 +1485,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       return { queue: newQueue };
     });
 
-    // FIX 3: Persist queue after reorder
+    // Persist queue after reorder
     setTimeout(() => {
       const state = get();
       const current = loadPersistedState();
