@@ -38,8 +38,8 @@ export const UserSearch = ({ onSelectUser, onClose }: UserSearchProps) => {
       // Map to SearchResult format
       setResults(users.map(u => ({
         dashId: u.dash_id,
-        displayName: u.preferences?.display_name || formatVoyoId(u.dash_id),
-        avatarUrl: u.preferences?.avatar_url || null,
+        displayName: (u.preferences?.display_name as string) || formatVoyoId(u.dash_id),
+        avatarUrl: (u.preferences?.avatar_url as string) || null,
         portalOpen: u.portal_open,
       })));
       setIsSearching(false);

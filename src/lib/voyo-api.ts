@@ -129,6 +129,11 @@ export interface DirectMessage {
   created_at: string;
 }
 
+// Row shapes returned by RPC functions (not exported — internal mapping only)
+type FriendRow = { friend_id: string; nickname: string | null; full_name: string | null; status: string | null; current_app: string | null; activity: string | null; last_seen: string | null };
+type ConversationRow = { friend_id: string; friend_name: string; last_message: string | null; last_message_at: string | null; unread_count: number };
+type PresenceRow = { core_id: string; status: string; current_app: string; activity: string };
+
 // ============================================
 // PROFILE API
 // ============================================
@@ -177,7 +182,7 @@ export const profileAPI = {
   /**
    * Search users by DASH ID prefix
    */
-  async search(query: string): Promise<{ dash_id: string; preferences: any; portal_open: boolean }[]> {
+  async search(query: string): Promise<{ dash_id: string; preferences: Record<string, unknown>; portal_open: boolean }[]> {
     if (!supabase || query.length < 2) return [];
 
     const { data } = await supabase
@@ -298,7 +303,7 @@ export const friendsAPI = {
         .rpc('get_friends_with_presence', { p_user_id: dashId });
 
       if (!error && data) {
-        return data.map((f: any) => ({
+        return data.map((f: FriendRow) => ({
           dash_id: f.friend_id,
           name: f.nickname || f.full_name || `V${f.friend_id}`,
           nickname: f.nickname,
@@ -406,7 +411,7 @@ export const friendsAPI = {
     dashId: string,
     status: 'online' | 'away' | 'offline' = 'online',
     activity?: string,
-    activityData?: any
+    activityData?: Record<string, unknown>
   ): Promise<void> {
     if (!commandCenter) return;
 
@@ -438,7 +443,7 @@ export const friendsAPI = {
             schema: 'public',
             table: 'user_presence',
           }, (payload) => {
-            const p = payload.new as any;
+            const p = payload.new as PresenceRow;
             if (friendIds.includes(p.core_id)) {
               onUpdate({
                 coreId: p.core_id,
@@ -467,7 +472,7 @@ export interface MessageAttachment {
     title?: string;
     thumbnail?: string;
     url?: string;
-    [key: string]: any;
+    [key: string]: unknown;
   };
 }
 
@@ -534,7 +539,7 @@ export const messagesAPI = {
     }
 
     // Map to VoyoMessage format (Command Center uses same fields)
-    return (data || []).map((m: any) => ({
+    return (data || []).map((m: VoyoMessage) => ({
       id: m.id,
       from_id: m.from_id,
       to_id: m.to_id,
@@ -611,10 +616,10 @@ export const messagesAPI = {
       return [];
     }
 
-    return (data || []).map((c: any) => ({
+    return (data || []).map((c: ConversationRow) => ({
       username: c.friend_id,
       displayName: c.friend_name,
-      avatarUrl: null, // Would need to fetch from profiles
+      avatarUrl: null,
       lastMessage: c.last_message,
       lastMessageTime: c.last_message_at,
       unreadCount: c.unread_count,
@@ -639,7 +644,7 @@ export const messagesAPI = {
             table: 'messages',
             filter: `to_id=eq.${dashId}`,
           }, (payload) => {
-            const m = payload.new as any;
+            const m = payload.new as VoyoMessage;
             onMessage({
               id: m.id,
               from_id: m.from_id,
@@ -680,7 +685,7 @@ export const messagesAPI = {
             table: 'messages',
             filter: serverFilter,
           }, (payload) => {
-            const m = payload.new as any;
+            const m = payload.new as VoyoMessage;
             onMessage({
               id: m.id,
               from_user: m.from_id,
@@ -724,7 +729,7 @@ export const messagesAPI = {
             table: 'messages',
             filter: `to_id=eq.${dashId}`,
           }, (payload) => {
-            const m = payload.new as any;
+            const m = payload.new as VoyoMessage;
             onMessage({
               id: m.id,
               from_id: m.from_id,
