@@ -32,6 +32,7 @@ import { Safe } from './components/ui/Safe';
 import { VoyoSplash } from './components/voyo/VoyoSplash';
 import { FirstTimeLoader } from './components/voyo/FirstTimeLoader';
 import { usePullToRefresh } from './hooks/usePullToRefresh';
+import { useIdleDim } from './hooks/useIdleDim';
 
 // Lazy-loaded mode components (code splitting — only load active mode)
 const PortraitVOYO = lazy(() => import('./components/voyo/PortraitVOYO'));
@@ -878,6 +879,9 @@ function App() {
   // then app-mode, then the real exit).
   useTabHistory(appMode, setAppMode, 'app-mode');
 
+  // Ambient idle dim — disabled during video mode (video already creates mood)
+  const { dimLevel } = useIdleDim({ disabled: appMode === 'video' });
+
   // Get background image URL with fallback
   const getBackgroundUrl = () => {
     if (!currentTrack) return '';
@@ -1224,6 +1228,21 @@ function App() {
 
       {/* Offline Indicator - Shows when network is lost */}
       <OfflineIndicator />
+
+      {/* Ambient idle dim — fades in after inactivity, restores instantly on input */}
+      <div
+        aria-hidden
+        style={{
+          position: 'fixed',
+          inset: 0,
+          zIndex: 9999,
+          pointerEvents: 'none',
+          background: '#000',
+          opacity: dimLevel === 0 ? 0 : dimLevel === 1 ? 0.25 : 0.5,
+          transition: 'opacity 1.8s ease',
+          willChange: 'opacity',
+        }}
+      />
     </div>
     </Suspense>
     </AuthProvider>
