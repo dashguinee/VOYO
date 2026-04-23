@@ -12,6 +12,7 @@
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { devWarn } from '../utils/logger';
+import { makeReconnectingChannel } from './realtime/reconnect';
 
 // ============================================
 // DUAL SUPABASE SETUP
@@ -410,30 +411,34 @@ export const friendsAPI = {
    */
   subscribeToFriendsPresence(
     friendIds: string[],
-    onUpdate: (presence: { coreId: string; status: string; app: string; activity: string }) => void
+    onUpdate: (presence: { coreId: string; status: string; app: string; activity: string }) => void,
+    onReconnect?: () => void,
   ): (() => void) | null {
     if (!commandCenter || friendIds.length === 0) return null;
 
-    const channel = commandCenter
-      .channel('friends_presence')
-      .on('postgres_changes', {
-        event: 'UPDATE',
-        schema: 'public',
-        table: 'user_presence',
-      }, (payload) => {
-        const p = payload.new as any;
-        if (friendIds.includes(p.core_id)) {
-          onUpdate({
-            coreId: p.core_id,
-            status: p.status,
-            app: p.current_app,
-            activity: p.activity,
-          });
-        }
-      })
-      .subscribe();
+    const sub = makeReconnectingChannel(
+      () =>
+        commandCenter!
+          .channel('friends_presence')
+          .on('postgres_changes', {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'user_presence',
+          }, (payload) => {
+            const p = payload.new as any;
+            if (friendIds.includes(p.core_id)) {
+              onUpdate({
+                coreId: p.core_id,
+                status: p.status,
+                app: p.current_app,
+                activity: p.activity,
+              });
+            }
+          }),
+      onReconnect,
+    );
 
-    return () => commandCenter.removeChannel(channel);
+    return () => sub.unsubscribe();
   },
 };
 
@@ -604,99 +609,119 @@ export const messagesAPI = {
   },
 
   /**
-   * Subscribe to incoming messages (real-time)
+   * Subscribe to incoming messages (real-time).
+   * Uses makeReconnectingChannel so the channel auto-reconnects after
+   * TIMED_OUT / CLOSED events that occur during long BG sessions.
    */
-  subscribe(dashId: string, onMessage: (msg: VoyoMessage) => void) {
+  subscribe(dashId: string, onMessage: (msg: VoyoMessage) => void, onReconnect?: () => void) {
     if (!commandCenter) return null;
 
-    return commandCenter
-      .channel(`messages:${dashId}`)
-      .on('postgres_changes', {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'messages',
-        filter: `to_id=eq.${dashId}`,
-      }, (payload) => {
-        const m = payload.new as any;
-        onMessage({
-          id: m.id,
-          from_id: m.from_id,
-          to_id: m.to_id,
-          message: m.message,
-          read_at: m.read_at,
-          created_at: m.created_at,
-        });
-      })
-      .subscribe();
+    const sub = makeReconnectingChannel(
+      () =>
+        commandCenter!
+          .channel(`messages:${dashId}`)
+          .on('postgres_changes', {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'messages',
+            filter: `to_id=eq.${dashId}`,
+          }, (payload) => {
+            const m = payload.new as any;
+            onMessage({
+              id: m.id,
+              from_id: m.from_id,
+              to_id: m.to_id,
+              message: m.message,
+              read_at: m.read_at,
+              created_at: m.created_at,
+            });
+          }),
+      onReconnect,
+    );
+
+    // Return a channel-like object so existing callers using unsubscribe(channel) still work.
+    return sub;
   },
 
   // Subscribe to conversation - DirectMessageChat compatibility
-  subscribeToConversation(currentUser: string, otherUser: string, onMessage: (msg: DirectMessage) => void) {
+  subscribeToConversation(currentUser: string, otherUser: string, onMessage: (msg: DirectMessage) => void, onReconnect?: () => void) {
     if (!commandCenter) return null;
 
     const channelId = [currentUser, otherUser].sort().join(':');
 
-    return commandCenter
-      .channel(`convo:${channelId}`)
-      .on('postgres_changes', {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'messages',
-      }, (payload) => {
-        const m = payload.new as any;
-        // Filter to only this conversation
-        if (
-          (m.from_id === currentUser && m.to_id === otherUser) ||
-          (m.from_id === otherUser && m.to_id === currentUser)
-        ) {
-          onMessage({
-            id: m.id,
-            from_user: m.from_id,
-            to_user: m.to_id,
-            message: m.message,
-            read_at: m.read_at,
-            created_at: m.created_at,
-          });
-        }
-      })
-      .subscribe();
+    const sub = makeReconnectingChannel(
+      () =>
+        commandCenter!
+          .channel(`convo:${channelId}`)
+          .on('postgres_changes', {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'messages',
+          }, (payload) => {
+            const m = payload.new as any;
+            // Filter to only this conversation
+            if (
+              (m.from_id === currentUser && m.to_id === otherUser) ||
+              (m.from_id === otherUser && m.to_id === currentUser)
+            ) {
+              onMessage({
+                id: m.id,
+                from_user: m.from_id,
+                to_user: m.to_id,
+                message: m.message,
+                read_at: m.read_at,
+                created_at: m.created_at,
+              });
+            }
+          }),
+      onReconnect,
+    );
+
+    return sub;
   },
 
   unsubscribe(channel: any) {
-    if (commandCenter && channel) commandCenter.removeChannel(channel);
+    // Support both old RealtimeChannel refs and new reconnecting sub objects.
+    if (!channel) return;
+    if (typeof channel.unsubscribe === 'function') {
+      channel.unsubscribe();
+    } else if (commandCenter) {
+      commandCenter.removeChannel(channel);
+    }
   },
 
   /**
-   * Subscribe to incoming messages - returns an unsubscribe function
-   * Used by App.tsx for DynamicIsland notifications
+   * Subscribe to incoming messages — returns an unsubscribe function.
+   * Used by App.tsx for DynamicIsland notifications.
+   * Auto-reconnects on channel death so lock-screen notifications survive BG.
    */
-  subscribeToIncoming(dashId: string, onMessage: (msg: VoyoMessage) => void): () => void {
+  subscribeToIncoming(dashId: string, onMessage: (msg: VoyoMessage) => void, onReconnect?: () => void): () => void {
     if (!commandCenter) return () => {};
 
-    const channel = commandCenter
-      .channel(`incoming:${dashId}`)
-      .on('postgres_changes', {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'messages',
-        filter: `to_id=eq.${dashId}`,
-      }, (payload) => {
-        const m = payload.new as any;
-        onMessage({
-          id: m.id,
-          from_id: m.from_id,
-          to_id: m.to_id,
-          message: m.message,
-          read_at: m.read_at,
-          created_at: m.created_at,
-        });
-      })
-      .subscribe();
+    const sub = makeReconnectingChannel(
+      () =>
+        commandCenter!
+          .channel(`incoming:${dashId}`)
+          .on('postgres_changes', {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'messages',
+            filter: `to_id=eq.${dashId}`,
+          }, (payload) => {
+            const m = payload.new as any;
+            onMessage({
+              id: m.id,
+              from_id: m.from_id,
+              to_id: m.to_id,
+              message: m.message,
+              read_at: m.read_at,
+              created_at: m.created_at,
+            });
+          }),
+      onReconnect,
+    );
 
-    // Return cleanup function
-    return () => {
-      if (channel) commandCenter.removeChannel(channel);
-    };
+    return () => sub.unsubscribe();
   },
 };
 

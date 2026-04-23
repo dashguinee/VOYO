@@ -52,6 +52,7 @@ import { app } from '../../services/oyo';
 
 // OYO Island - DJ Voice Search & Chat
 import { OyoIsland } from './OyoIsland';
+import { VoyoLoadOrb } from './VoyoLoadOrb';
 
 // YouTube Iframe - Unified streaming + video display
 // YouTubeIframe is GLOBAL (App.tsx) - removed duplicate import
@@ -3340,9 +3341,7 @@ const LyricsOverlay = memo(({ track, isOpen, onClose, currentTime }: LyricsOverl
         {/* Loading state */}
         {progress && (
           <div className="text-center">
-            <div
-              className="w-16 h-16 rounded-full border-4 border-purple-500/30 border-t-purple-500 mx-auto mb-4 animate-spin"
-            />
+            <VoyoLoadOrb size={72} className="mx-auto mb-4" />
             <p className="text-white/80 text-sm">{progress.message}</p>
             <p className="text-white/40 text-xs mt-1">{progress.progress}%</p>
           </div>

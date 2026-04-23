@@ -52,6 +52,7 @@ import { trace } from '../../services/telemetry';
 import { getBatteryState } from '../../services/battery';
 import { devLog, devWarn } from '../../utils/logger';
 import { playbackState } from '../playback/playbackState';
+import { teardownAudioChain } from '../../services/audioEngine';
 
 interface UseBgEngineParams {
   audioRef: RefObject<HTMLAudioElement | null>;
@@ -188,7 +189,18 @@ export function useBgEngine(params: UseBgEngineParams): BgEngineApi {
       // canplay gain ramp fires against a frozen clock. The element kick
       // (play()) is still guarded below so it doesn't race canplay.
       const ctx = audioContextRef.current;
-      if (ctx && (ctx.state === 'suspended' || (ctx.state as string) === 'interrupted')) {
+
+      if (ctx && ctx.state === 'closed') {
+        // Long-BG AudioContext death: iOS/Safari can fully close the context
+        // after extended backgrounding. teardownAudioChain releases the dead
+        // node references so the useAudioChain hook re-wires on next render.
+        // User tapped play, then got interrupted (call, unplug, another app).
+        // Store still says isPlaying=true. On return, restore reality.
+        devWarn('[BG] AudioContext closed on FG return — tearing down chain for re-wire');
+        trace('ctx_closed_teardown', usePlayerStore.getState().currentTrack?.trackId, { hidden: document.hidden });
+        try { teardownAudioChain(); } catch {}
+        // The useAudioChain hook will re-wire on next render cycle.
+      } else if (ctx && (ctx.state === 'suspended' || (ctx.state as string) === 'interrupted')) {
         ctx.resume().catch(() => {});
         devLog('🔄 [BG] AudioContext resumed on FG return');
       }
@@ -198,6 +210,8 @@ export function useBgEngine(params: UseBgEngineParams): BgEngineApi {
       // handler will call play() once the new src is ready. Double-play
       // here races with that and causes duplicate play_success events.
       if (isLoadingTrackRef.current) return;
+      // User tapped play, then got interrupted (call, unplug, another app).
+      // Store still says isPlaying=true. On return, restore reality.
       if (sp && audioRef.current?.paused && audioRef.current.src) {
         audioRef.current.play().catch(() => {});
         devLog('🔄 [BG] Re-kicked element on foreground return');

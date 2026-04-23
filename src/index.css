@@ -502,6 +502,11 @@ body {
 }
 
 /* Ambient glow breathing - for backgrounds */
+@keyframes voyo-orb-breathe {
+  0%, 100% { transform: scale(0.85); opacity: 0.55; }
+  50%      { transform: scale(1.05); opacity: 1; }
+}
+
 @keyframes ambient-breathe {
   0%, 100% {
     transform: scale(1);

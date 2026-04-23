@@ -693,6 +693,32 @@ export const AudioPlayer = () => {
       }
     });
 
+    // Lock-screen / CarPlay seek controls.
+    navigator.mediaSession.setActionHandler('seekto', (details) => {
+      const el = audioRef.current;
+      if (!el || details.seekTime == null) return;
+      try { el.currentTime = Math.min(Math.max(details.seekTime, 0), el.duration || 0); } catch {}
+    });
+
+    navigator.mediaSession.setActionHandler('seekforward', () => {
+      const el = audioRef.current;
+      if (!el) return;
+      try { el.currentTime = Math.min(el.currentTime + 10, el.duration || el.currentTime); } catch {}
+    });
+
+    navigator.mediaSession.setActionHandler('seekbackward', () => {
+      const el = audioRef.current;
+      if (!el) return;
+      try { el.currentTime = Math.max(el.currentTime - 10, 0); } catch {}
+    });
+
+    navigator.mediaSession.setActionHandler('stop', () => {
+      voyoStream.intentionalPause = true;
+      usePlayerStore.getState().setIsPlaying(false);
+      const el = audioRef.current;
+      if (el) { el.pause(); try { el.currentTime = 0; } catch {} }
+    });
+
     navigator.mediaSession.playbackState = usePlayerStore.getState().isPlaying ? 'playing' : 'paused';
   }, [currentTrack?.trackId]);
 

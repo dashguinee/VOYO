@@ -11,6 +11,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { supabase } from '../supabase';
 import { devLog, devWarn } from '../../utils/logger';
+import { makeReconnectingChannel } from '../realtime/reconnect';
 
 // Command Center's Supabase credentials (social + notifications data).
 // Two naming schemes coexist — accept either so legacy deployments and
@@ -550,28 +551,32 @@ export const messagesAPI = {
     }
   },
 
-  subscribeToMessages(userId: string, onMessage: (msg: Message) => void) {
+  subscribeToMessages(userId: string, onMessage: (msg: Message) => void, onReconnect?: () => void) {
     if (!ccSupabase) return () => {};
 
-    const channel = ccSupabase
-      .channel(`messages:${userId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'messages',
-          filter: `to_id=eq.${userId}`
-        },
-        (payload) => {
-          onMessage(payload.new as Message);
-        }
-      )
-      .subscribe();
+    // makeReconnectingChannel auto-retries on TIMED_OUT / CLOSED / CHANNEL_ERROR
+    // so long-backgrounded tabs resume without a full page reload.
+    // onReconnect should re-fetch recent conversations so nothing is missed.
+    const sub = makeReconnectingChannel(
+      () =>
+        ccSupabase
+          .channel(`messages:${userId}`)
+          .on(
+            'postgres_changes',
+            {
+              event: 'INSERT',
+              schema: 'public',
+              table: 'messages',
+              filter: `to_id=eq.${userId}`,
+            },
+            (payload) => {
+              onMessage(payload.new as Message);
+            },
+          ),
+      onReconnect,
+    );
 
-    return () => {
-      ccSupabase.removeChannel(channel);
-    };
+    return () => sub.unsubscribe();
   }
 };
 
@@ -622,28 +627,32 @@ export const presenceAPI = {
     }
   },
 
-  subscribeToPresence(friendIds: string[], onUpdate: (presence: UserPresence) => void) {
+  subscribeToPresence(friendIds: string[], onUpdate: (presence: UserPresence) => void, onReconnect?: () => void) {
     if (!ccSupabase || friendIds.length === 0) return () => {};
 
-    const channel = ccSupabase
-      .channel('presence-updates')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'user_presence',
-          filter: `core_id=in.(${friendIds.join(',')})`
-        },
-        (payload) => {
-          onUpdate(payload.new as UserPresence);
-        }
-      )
-      .subscribe();
+    // Reconnecting wrapper: presence channel dies during long BG sessions.
+    // onReconnect re-pings so the friend list reflects current reality.
+    const filter = `core_id=in.(${friendIds.join(',')})`;
+    const sub = makeReconnectingChannel(
+      () =>
+        ccSupabase
+          .channel('presence-updates')
+          .on(
+            'postgres_changes',
+            {
+              event: '*',
+              schema: 'public',
+              table: 'user_presence',
+              filter,
+            },
+            (payload) => {
+              onUpdate(payload.new as UserPresence);
+            },
+          ),
+      onReconnect,
+    );
 
-    return () => {
-      ccSupabase.removeChannel(channel);
-    };
+    return () => sub.unsubscribe();
   }
 };
 

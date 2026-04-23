@@ -17,6 +17,7 @@ import { DJMode, Track } from '../../types';
 import { useAuth } from '../../hooks/useAuth';
 import { useTabHistory } from '../../hooks/useTabHistory';
 import { APP_CODES } from '../../lib/dahub/dahub-api';
+import { VoyoLoadOrb } from './VoyoLoadOrb';
 
 // Lightweight — always loaded
 import { VoyoBottomNav } from './navigation/VoyoBottomNav';
@@ -284,10 +285,7 @@ export const PortraitVOYO = ({ onSearch, onDahub, onHome }: PortraitVOYOProps) =
         >
           <Suspense fallback={
             <div className="h-full flex items-center justify-center bg-[#0a0a0c]">
-              <div
-                className="w-10 h-10 rounded-full border-2 border-white/10 border-t-white/60 animate-spin"
-                aria-label="Loading player"
-              />
+              <VoyoLoadOrb size={56} />
             </div>
           }>
             <VoyoPortraitPlayer

@@ -16,6 +16,7 @@ import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { onTrackReaction as oyoOnTrackReaction } from '../services/oyoDJ';
 import { devLog, devWarn } from '../utils/logger';
 import type { Track } from '../types';
+import { makeReconnectingChannel } from '../lib/realtime/reconnect';
 
 // ============================================
 // TYPES
@@ -415,53 +416,55 @@ export const useReactionStore = create<ReactionStore>((set, get) => ({
   subscribeToReactions: () => {
     if (!isSupabaseConfigured || !supabase || get().isSubscribed) return;
 
-    devLog('[Reactions] Subscribing to realtime updates...');
+    devLog('[Reactions] Subscribing to realtime updates (reconnecting)...');
 
-    const channel = supabase
-      .channel('reactions-realtime')
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'reactions',
-        },
-        (payload) => {
-          const newReaction = payload.new as Reaction;
-          devLog('[Reactions] New reaction received:', newReaction);
+    const sub = makeReconnectingChannel(
+      () =>
+        supabase!
+          .channel('reactions-realtime')
+          .on(
+            'postgres_changes',
+            {
+              event: 'INSERT',
+              schema: 'public',
+              table: 'reactions',
+            },
+            (payload) => {
+              const newReaction = payload.new as Reaction;
+              devLog('[Reactions] New reaction received:', newReaction);
 
-          // Add to recent reactions
-          set((state) => ({
-            recentReactions: [newReaction, ...state.recentReactions].slice(0, 50),
-          }));
+              // Add to recent reactions
+              set((state) => ({
+                recentReactions: [newReaction, ...state.recentReactions].slice(0, 50),
+              }));
 
-          // Add to track reactions if we're tracking that track
-          set((state) => {
-            const trackReactions = state.trackReactions.get(newReaction.track_id);
-            if (trackReactions) {
-              const newMap = new Map(state.trackReactions);
-              newMap.set(newReaction.track_id, [newReaction, ...trackReactions].slice(0, 100));
-              return { trackReactions: newMap };
-            }
-            return state;
-          });
+              // Add to track reactions if we're tracking that track
+              set((state) => {
+                const trackReactions = state.trackReactions.get(newReaction.track_id);
+                if (trackReactions) {
+                  const newMap = new Map(state.trackReactions);
+                  newMap.set(newReaction.track_id, [newReaction, ...trackReactions].slice(0, 100));
+                  return { trackReactions: newMap };
+                }
+                return state;
+              });
 
-          // Pulse the category
-          get().pulseCategory(newReaction.category);
-        }
-      )
-      .subscribe();
+              // Pulse the category
+              get().pulseCategory(newReaction.category);
+            },
+          ),
+    );
 
     set({ isSubscribed: true });
 
-    // Store channel reference for cleanup
-    (window as any).__voyoReactionChannel = channel;
+    // Store sub reference for cleanup
+    (window as any).__voyoReactionChannel = sub;
   },
 
   unsubscribeFromReactions: () => {
-    const channel = (window as any).__voyoReactionChannel;
-    if (channel && supabase) {
-      supabase.removeChannel(channel);
+    const sub = (window as any).__voyoReactionChannel;
+    if (sub) {
+      sub.unsubscribe();
       delete (window as any).__voyoReactionChannel;
     }
     set({ isSubscribed: false });
