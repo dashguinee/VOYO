@@ -223,24 +223,6 @@ export function useBgEngine(params: UseBgEngineParams): BgEngineApi {
     // different return-from-BG handling in future.
   }, [audioRef, audioContextRef, gainNodeRef, isLoadingTrackRef, playbackSource]);
 
-  // ── CONTEXT KEEPALIVE VIA TIMEUPDATE ────────────────────────────────
-  // iOS interrupts the AudioContext when the app backgrounds, and the
-  // JS heartbeat (MessageChannel) is throttled to nothing in BG — so it
-  // can't call ctx.resume(). However, timeupdate fires from the OS native
-  // audio stack and IS NOT throttled. We use it to resume an interrupted
-  // context while the element is actively playing in BG.
-  useEffect(() => {
-    const el = audioRef.current;
-    const handleTimeUpdate = () => {
-      const ctx = audioContextRef.current;
-      if (ctx && (ctx.state === 'suspended' || (ctx.state as string) === 'interrupted')) {
-        ctx.resume().catch(() => {});
-      }
-    };
-    el?.addEventListener('timeupdate', handleTimeUpdate, { passive: true });
-    return () => el?.removeEventListener('timeupdate', handleTimeUpdate);
-  }, [audioRef, audioContextRef]);
-
   // ── BATTERY-SUSPEND TIMER ────────────────────────────────────────────
   // 5s after paused + hidden, suspend the context for battery. Cancels
   // immediately on play or unhide. Separate from the capture-phase

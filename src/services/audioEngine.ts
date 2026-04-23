@@ -20,6 +20,7 @@
 
 import { devWarn } from '../utils/logger';
 import { trace } from './telemetry';
+import { usePlayerStore } from '../store/playerStore';
 
 export type BitrateLevel = 'low' | 'medium' | 'high';
 export type BufferStatus = 'healthy' | 'warning' | 'emergency';
@@ -34,6 +35,8 @@ let _sourceNode: MediaElementAudioSourceNode | null = null;
 let _analyserNode: AnalyserNode | null = null;
 let _connectedElement: HTMLAudioElement | null = null;
 let _chainWired = false;
+// Set by the document-block below so connectAudioChain's onstatechange can trigger it
+let _installGestureListener: (() => void) | null = null;
 
 export interface AudioChainResult {
   ctx: AudioContext;
@@ -114,13 +117,10 @@ if (typeof document !== 'undefined') {
     document.addEventListener('touchstart', resumeOnce, { once: false, passive: true });
     document.addEventListener('click', resumeOnce, { passive: true });
   };
-  // Watch for context state changes — install gesture listener when needed.
-  const watchContextState = setInterval(() => {
-    if (_audioCtx && (_audioCtx.state === 'suspended' || (_audioCtx as any).state === 'interrupted')) {
-      installGestureListener();
-    }
-  }, 2000);
-  window.addEventListener('beforeunload', () => clearInterval(watchContextState));
+  // Expose installGestureListener so connectAudioChain's onstatechange can call it.
+  // onstatechange fires from the audio thread (not throttled), so this is the
+  // correct moment to install a gesture listener if ctx.resume() can't fire alone.
+  _installGestureListener = installGestureListener;
 }
 
 /**
@@ -157,7 +157,27 @@ export function connectAudioChain(audio: HTMLAudioElement): AudioChainResult | n
     // pressure on weak devices. For music playback this is invisible — the
     // user doesn't care about ~10ms more latency. The trade-off prevents
     // the audio thread from underrunning when CPU spikes (= audible cracks).
-    if (!_audioCtx) _audioCtx = new AudioContextClass({ latencyHint: 'playback' });
+    if (!_audioCtx) {
+      _audioCtx = new AudioContextClass({ latencyHint: 'playback' });
+      // onstatechange fires from the OS audio thread — NOT from JS timers, NOT
+      // throttled in background. When Chrome/Android suspends the context for
+      // power management, this fires immediately and we can resume before the
+      // user hears a gap. This is the correct fix; setTimeout/MessageChannel
+      // polling is throttled to ~1/min in background tabs.
+      _audioCtx.onstatechange = () => {
+        const ctx = _audioCtx;
+        if (!ctx) return;
+        const state = ctx.state as string;
+        if (state === 'suspended' || state === 'interrupted') {
+          if (usePlayerStore.getState().isPlaying) {
+            // Try immediate resume (works if Chrome hasn't fully gated it)
+            ctx.resume().catch(() => {});
+            // Also install touch/click gesture listener in case resume needs user gesture
+            _installGestureListener?.();
+          }
+        }
+      };
+    }
     if (_audioCtx.state === 'suspended' || (_audioCtx as any).state === 'interrupted') {
       _audioCtx.resume().catch(() => {});
     }
