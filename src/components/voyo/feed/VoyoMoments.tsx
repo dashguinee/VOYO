@@ -41,7 +41,7 @@ function getSpring(action: NavAction) {
 // API base for R2 feed video streaming — Edge Worker (300+ locations)
 const VOYO_API = import.meta.env.VITE_API_URL || 'https://voyo-edge.dash-webtv.workers.dev';
 
-const css = (obj: Record<string, any>) => obj as React.CSSProperties;
+const css = (obj: React.CSSProperties) => obj;
 
 function formatCount(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
@@ -131,7 +131,7 @@ const S = {
     transition: 'max-height 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
   }),
   // Title — primary line in the glass card
-  bioTitle: css({ fontSize: 13, fontWeight: 600, color: '#fff', lineHeight: 1.35, marginBottom: 4, textShadow: '0 1px 3px rgba(0,0,0,0.5)' } as any),
+  bioTitle: css({ fontSize: 13, fontWeight: 600, color: '#fff', lineHeight: 1.35, marginBottom: 4, textShadow: '0 1px 3px rgba(0,0,0,0.5)' }),
   // Bio body — collapsed by default (~2 lines), expanded scrollable on tap
   bioBodyCollapsed: css({
     fontSize: 12,
@@ -141,7 +141,7 @@ const S = {
     maxHeight: 36, // ~2 lines
     overflow: 'hidden',
     position: 'relative',
-  } as any),
+  }),
   bioBodyExpanded: css({
     fontSize: 12,
     fontWeight: 400,
@@ -151,7 +151,7 @@ const S = {
     overflowY: 'auto',
     paddingRight: 4,
     position: 'relative',
-  } as any),
+  }),
   // Bottom fade overlay on the collapsed bio so the cut-off feels intentional
   bioFade: css({
     position: 'absolute', bottom: 0, left: 0, right: 0, height: 18,
@@ -206,7 +206,7 @@ const S = {
   commentsList: css({
     flex: 1, overflowY: 'auto', padding: '12px 18px 6px',
     display: 'flex', flexDirection: 'column-reverse', gap: 14,
-  } as any),
+  }),
   commentRow: css({
     display: 'flex', alignItems: 'flex-start', gap: 10,
   }),
@@ -223,7 +223,7 @@ const S = {
   }),
   commentName: css({ fontSize: 12, fontWeight: 600, color: 'rgba(255,255,255,0.85)' }),
   commentTime: css({ fontSize: 10, color: 'rgba(255,255,255,0.35)' }),
-  commentText: css({ fontSize: 12.5, color: 'rgba(255,255,255,0.78)', lineHeight: 1.45, wordBreak: 'break-word' } as any),
+  commentText: css({ fontSize: 12.5, color: 'rgba(255,255,255,0.78)', lineHeight: 1.45, wordBreak: 'break-word' }),
   commentReactBtn: css({
     display: 'flex', alignItems: 'center', gap: 4, padding: '2px 8px',
     borderRadius: 999, background: 'rgba(167,139,250,0.1)',
