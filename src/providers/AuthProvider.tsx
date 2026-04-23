@@ -9,7 +9,7 @@
  */
 
 import { createContext, useContext, useEffect, useCallback, useRef, useState, ReactNode } from 'react';
-import { profileAPI, friendsAPI, VoyoProfile } from '../lib/voyo-api';
+import { profileAPI, friendsAPI, VoyoProfile, HostNowPlaying } from '../lib/voyo-api';
 import { usePlayerStore } from '../store/playerStore';
 import { usePreferenceStore } from '../store/preferenceStore';
 import { getDashSession, DashSession } from '../lib/dash-auth';
@@ -328,36 +328,108 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }, [isLoggedIn, syncToCloud]);
 
   // ========================================
-  // EFFECT: Update now_playing when track changes
+  // EFFECT: Update now_playing when track changes (Verse v1 — timestamp-based)
   // ========================================
   useEffect(() => {
     if (!dashId) return;
 
-    const unsubscribe = usePlayerStore.subscribe((state, prevState) => {
-      // Track changed or playback state changed
-      if (
-        state.currentTrack?.trackId !== prevState.currentTrack?.trackId ||
-        state.isPlaying !== prevState.isPlaying
-      ) {
-        const track = state.currentTrack;
+    // Debounce timer — max 1 write/second (seek fires rapidly)
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
-        if (track && state.isPlaying) {
-          profileAPI.updateNowPlaying(dashId, {
-            trackId: track.trackId,
-            title: track.title,
-            artist: track.artist,
-            thumbnail: track.coverUrl,
-            currentTime: state.currentTime,
-            duration: state.duration,
-            isPlaying: state.isPlaying,
+    // Track the last written payload so pause/resume/seek can diff-patch it
+    let lastWritten: HostNowPlaying | null = null;
+
+    const scheduleWrite = (payload: HostNowPlaying | null) => {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(async () => {
+        await profileAPI.updateNowPlaying(dashId, payload);
+        lastWritten = payload;
+      }, 300); // 300 ms — catches burst seeking, still feels instant
+    };
+
+    const unsubscribe = usePlayerStore.subscribe((state, prevState) => {
+      const track = state.currentTrack;
+
+      // Privacy gate: only write when portal is open
+      // universeStore imported lazily inside the closure — avoids module-level circular dep
+      let portalOpen = false;
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const { useUniverseStore } = require('../store/universeStore') as typeof import('../store/universeStore');
+        portalOpen = useUniverseStore.getState().isPortalOpen;
+      } catch {}
+
+      const trackChanged = state.currentTrack?.trackId !== prevState.currentTrack?.trackId;
+      const playStateChanged = state.isPlaying !== prevState.isPlaying;
+      const seekChanged = state.seekPosition !== null && state.seekPosition !== prevState.seekPosition;
+
+      if (!trackChanged && !playStateChanged && !seekChanged) return;
+
+      if (!track || !portalOpen) {
+        // Clear now_playing when no track or portal closed
+        if (lastWritten !== null) scheduleWrite(null);
+        return;
+      }
+
+      const now = Date.now();
+      const base: Omit<HostNowPlaying, 'startedAtMs' | 'pausedAtMs'> = {
+        trackId: track.trackId,
+        title: track.title,
+        artist: track.artist,
+        thumbnail: track.coverUrl || '',
+        currentTime: state.currentTime,
+        duration: state.duration,
+        isPlaying: state.isPlaying,
+      };
+
+      if (trackChanged) {
+        // 1. New track — anchor startedAt to now
+        scheduleWrite({
+          ...base,
+          startedAtMs: now,
+          pausedAtMs: null,
+        });
+        return;
+      }
+
+      // For pause/resume/seek we need the previous startedAtMs
+      const prev = lastWritten;
+      const prevStartedAtMs = prev?.startedAtMs ?? now - (state.currentTime * 1000);
+
+      if (seekChanged && state.seekPosition !== null) {
+        // 4. Seek — rebase startedAt so derived position equals seeked position
+        scheduleWrite({
+          ...base,
+          startedAtMs: now - (state.seekPosition * 1000),
+          pausedAtMs: null,
+        });
+        return;
+      }
+
+      if (playStateChanged) {
+        if (!state.isPlaying) {
+          // 2. Pause — record wall-clock of pause
+          scheduleWrite({
+            ...base,
+            startedAtMs: prevStartedAtMs,
+            pausedAtMs: now,
           });
         } else {
-          profileAPI.updateNowPlaying(dashId, null);
+          // 3. Resume — shift startedAt forward by pause duration
+          const pausedAt = prev?.pausedAtMs ?? now;
+          scheduleWrite({
+            ...base,
+            startedAtMs: prevStartedAtMs + (now - pausedAt),
+            pausedAtMs: null,
+          });
         }
       }
     });
 
-    return unsubscribe;
+    return () => {
+      unsubscribe();
+      if (debounceTimer) clearTimeout(debounceTimer);
+    };
   }, [dashId]);
 
   // ========================================

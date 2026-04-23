@@ -75,6 +75,17 @@ export interface NowPlaying {
   isPlaying: boolean;
 }
 
+/**
+ * HostNowPlaying — extended shape written by the host for Verse / jam sync.
+ * Position is derived from timestamps, no polling required:
+ *   playing → pos = (Date.now() - startedAtMs) / 1000
+ *   paused  → pos = (pausedAtMs - startedAtMs) / 1000
+ */
+export interface HostNowPlaying extends NowPlaying {
+  startedAtMs: number;        // wall-clock when this track started (or was rebased)
+  pausedAtMs: number | null;  // wall-clock when paused; null while playing
+}
+
 export interface VoyoProfile {
   dash_id: string;
   preferences: VoyoPreferences;
@@ -83,7 +94,7 @@ export interface VoyoProfile {
   likes: string[];
   total_listens: number;
   total_minutes: number;
-  now_playing: NowPlaying | null;
+  now_playing: HostNowPlaying | NowPlaying | null;
   portal_open: boolean;
   created_at: string;
   last_active: string;
@@ -194,8 +205,10 @@ export const profileAPI = {
 
   /**
    * Update now playing (for portal)
+   * Accepts the extended HostNowPlaying shape (with startedAtMs / pausedAtMs)
+   * so position can be derived from timestamps without polling.
    */
-  async updateNowPlaying(dashId: string, nowPlaying: NowPlaying | null): Promise<boolean> {
+  async updateNowPlaying(dashId: string, nowPlaying: HostNowPlaying | NowPlaying | null): Promise<boolean> {
     if (!supabase) return false;
 
     const { error } = await supabase

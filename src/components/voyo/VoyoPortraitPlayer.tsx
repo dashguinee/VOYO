@@ -10,6 +10,7 @@
  */
 
 import { useState, useEffect, useRef, useCallback, memo, useMemo } from 'react';
+import { useNavigate as useRouterNavigate } from 'react-router-dom';
 import {
   Play, Pause, SkipForward, SkipBack, Zap, Flame, Plus, Film, Settings, Heart,
   Shuffle, Repeat, Repeat1, Share2, Mic, Mic2, X
@@ -3538,6 +3539,9 @@ export const VoyoPortraitPlayer = ({
   const addReaction = usePlayerStore(s => s.addReaction);
   const reactions = usePlayerStore(s => s.reactions);
   const seekTo = usePlayerStore(s => s.seekTo);
+  const jammingWith = usePlayerStore(s => s.jammingWith);
+  const endJam = usePlayerStore(s => s.endJam);
+  const navigateToProfile = useRouterNavigate();
   const playbackRate = usePlayerStore(s => s.playbackRate);
   const isSkeeping = usePlayerStore(s => s.isSkeeping);
   const setPlaybackRate = usePlayerStore(s => s.setPlaybackRate);
@@ -4831,6 +4835,39 @@ export const VoyoPortraitPlayer = ({
         className="sticky top-0 z-20 flex flex-col flex-shrink-0"
         style={{ height: 'calc(100% - 264px)' }}
       >
+
+      {/* JAM CHIP — shown when visitor is locked to a host's verse */}
+      {jammingWith && (
+        <div
+          className="absolute top-0 left-0 right-0 z-30 flex justify-center"
+          style={{ paddingTop: 'calc(max(0.5rem, env(safe-area-inset-top)) + 8px)' }}
+        >
+          <div
+            className="flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-semibold"
+            style={{
+              background: 'radial-gradient(ellipse at top, rgba(168,85,247,0.28) 0%, rgba(212,160,83,0.14) 60%, rgba(0,0,0,0.55) 100%)',
+              border: '1px solid rgba(168,85,247,0.35)',
+              backdropFilter: 'blur(12px)',
+              WebkitBackdropFilter: 'blur(12px)',
+            }}
+          >
+            <span>🎧</span>
+            <button
+              onClick={() => navigateToProfile(`/${jammingWith.dashId}`)}
+              className="text-purple-300 hover:text-white transition-colors"
+            >
+              Jamming {jammingWith.name}'s verse
+            </button>
+            <span className="text-white/30">•</span>
+            <button
+              onClick={() => endJam()}
+              className="text-white/50 hover:text-white transition-colors"
+            >
+              Leave
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* --- TOP SECTION (History/Queue) --- Part of the anchor.
            Visible in step 1 of the portal scroll. In step 2 (canvas

@@ -11,16 +11,18 @@
  * - Add friends via Command Center
  */
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Play, Pause, Music2, Radio, Lock, Unlock, Eye, Users,
-  ArrowLeft, User, Edit3, Heart, Share2, ExternalLink, QrCode, Copy, Check, X
+  ArrowLeft, User, Edit3, Heart, Share2, ExternalLink, QrCode, Copy, Check, X,
+  MessageCircle
 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import { usePlayerStore } from '../../store/playerStore';
 import { app } from '../../services/oyo';
-import { profileAPI, friendsAPI, NowPlaying } from '../../lib/voyo-api';
+import { profileAPI, friendsAPI, NowPlaying, HostNowPlaying, supabase } from '../../lib/voyo-api';
+import { makeReconnectingChannel } from '../../lib/realtime/reconnect';
 import { openCommandCenterForSSO } from '../../lib/dash-auth';
 import type { VoyoProfile } from '../../lib/voyo-api';
 import { PortalChat } from '../portal/PortalChat';
@@ -41,6 +43,11 @@ export const ProfilePage = () => {
   const setCurrentTrack = usePlayerStore(s => s.setCurrentTrack);
   const currentTrack = usePlayerStore(s => s.currentTrack);
   const isPlaying = usePlayerStore(s => s.isPlaying);
+  const seekTo = usePlayerStore(s => s.seekTo);
+  const togglePlay = usePlayerStore(s => s.togglePlay);
+  const jammingWith = usePlayerStore(s => s.jammingWith);
+  const startJam = usePlayerStore(s => s.startJam);
+  const endJam = usePlayerStore(s => s.endJam);
 
   // Local state
   const [profile, setProfile] = useState<VoyoProfile | null>(null);
@@ -162,8 +169,119 @@ export const ProfilePage = () => {
   const [hasJoinedPortal, setHasJoinedPortal] = useState(false);
   const lastTrackIdRef = useRef<string | null>(null);
 
-  // TODO: Implement real-time portal sync via Supabase subscription
-  // For now, portal viewing works one-way (see what host is playing, join to sync)
+  // Build a minimal Track object from a HostNowPlaying payload
+  const buildTrack = useCallback((np: HostNowPlaying | NowPlaying) => ({
+    id: np.trackId,
+    trackId: np.trackId,
+    title: np.title,
+    artist: np.artist,
+    coverUrl: np.thumbnail,
+  }), []);
+
+  // Compute host's current position from timestamps
+  const deriveHostPosition = useCallback((np: HostNowPlaying): number => {
+    if (np.pausedAtMs !== null) {
+      return (np.pausedAtMs - np.startedAtMs) / 1000;
+    }
+    return (Date.now() - np.startedAtMs) / 1000;
+  }, []);
+
+  // Handle a now_playing update from the host
+  const handleHostUpdate = useCallback((np: HostNowPlaying | NowPlaying) => {
+    const hostNp = np as HostNowPlaying;
+    const hasTimestamps = typeof hostNp.startedAtMs === 'number';
+
+    // Swap track if host changed
+    if (np.trackId !== lastTrackIdRef.current) {
+      lastTrackIdRef.current = np.trackId;
+      app.playTrack(buildTrack(np) as any, 'library');
+    }
+
+    if (!hasTimestamps) return; // old shape, skip position sync
+
+    const targetPos = deriveHostPosition(hostNp);
+    const visitorPos = usePlayerStore.getState().currentTime;
+    const hostIsPaused = hostNp.pausedAtMs !== null;
+
+    // Sync play/pause state
+    const visitorIsPlaying = usePlayerStore.getState().isPlaying;
+    if (hostIsPaused && visitorIsPlaying) {
+      togglePlay(); // pause visitor
+    } else if (!hostIsPaused && !visitorIsPlaying) {
+      togglePlay(); // resume visitor
+    }
+
+    // Drift correction: only seek if >2 seconds off
+    if (Math.abs(visitorPos - targetPos) > 2.0) {
+      seekTo(Math.max(0, targetPos));
+    }
+  }, [buildTrack, deriveHostPosition, togglePlay, seekTo]);
+
+  // Realtime subscription when hasJoinedPortal
+  useEffect(() => {
+    if (!hasJoinedPortal || !urlDashId || !supabase) return;
+
+    const sub = makeReconnectingChannel(
+      () =>
+        supabase!
+          .channel(`jam-${urlDashId}`)
+          .on('postgres_changes', {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'voyo_profiles',
+            filter: `dash_id=eq.${urlDashId}`,
+          }, (payload: any) => {
+            const np = payload.new?.now_playing as HostNowPlaying | null;
+            if (!np) {
+              // Host closed portal
+              endJam();
+              setHasJoinedPortal(false);
+              return;
+            }
+            handleHostUpdate(np);
+          }),
+      () => {
+        // onReconnect: re-fetch profile to catch any missed updates
+        profileAPI.getProfile(urlDashId).then((updated) => {
+          if (updated?.now_playing) {
+            handleHostUpdate(updated.now_playing as HostNowPlaying);
+          }
+        });
+      },
+    );
+
+    return () => sub.unsubscribe();
+  }, [hasJoinedPortal, urlDashId, handleHostUpdate, endJam]);
+
+  // Detect manual track change while jamming → end jam
+  useEffect(() => {
+    if (!hasJoinedPortal) return;
+
+    const unsub = usePlayerStore.subscribe((state) => {
+      const currentJammedTrack = lastTrackIdRef.current;
+      if (
+        currentJammedTrack &&
+        state.currentTrack?.trackId &&
+        state.currentTrack.trackId !== currentJammedTrack
+      ) {
+        // User manually switched tracks — leave jam silently
+        endJam();
+        setHasJoinedPortal(false);
+      }
+    });
+
+    return unsub;
+  }, [hasJoinedPortal, endJam]);
+
+  // Cleanup jam on unmount
+  useEffect(() => {
+    return () => {
+      if (hasJoinedPortal) {
+        endJam();
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Handle PIN login (redirects to Command Center with SSO)
   const handlePinLogin = () => {
@@ -175,21 +293,26 @@ export const ProfilePage = () => {
     if (!nowPlaying) return;
 
     // Create a track object from nowPlaying
-    const track = {
-      id: nowPlaying.trackId,
-      trackId: nowPlaying.trackId,
-      title: nowPlaying.title,
-      artist: nowPlaying.artist,
-      coverUrl: nowPlaying.thumbnail,
-    };
+    const track = buildTrack(nowPlaying);
 
     // Set as current track and play — central orchestrator handles
     // signals, telemetry, and prefetch priority.
     app.playTrack(track as any, 'library');
 
+    // Seek to host's current position if timestamps are available
+    const hostNp = nowPlaying as HostNowPlaying;
+    if (typeof hostNp.startedAtMs === 'number') {
+      const targetPos = deriveHostPosition(hostNp);
+      setTimeout(() => seekTo(Math.max(0, targetPos)), 400); // small delay for audio unlock
+    }
+
     // Mark as joined - enables auto-sync for future track changes
     setHasJoinedPortal(true);
     lastTrackIdRef.current = nowPlaying.trackId;
+
+    // Register jam session
+    const hostName = profile?.preferences?.display_name || `V${urlDashId}`;
+    startJam(urlDashId!, hostName);
   };
 
   // Loading state
@@ -236,6 +359,11 @@ export const ProfilePage = () => {
 
   // Not found
   if (!profile) {
+    const inviteText = myDashId
+      ? `yo, you gotta get on VOYO Music. claim your verse here → https://voyomusic.com (and i'll be waiting at /${myDashId})`
+      : 'yo, you gotta get on VOYO Music. claim your verse here → https://voyomusic.com';
+    const waUrl = `https://wa.me/?text=${encodeURIComponent(inviteText)}`;
+
     return (
       <div className="min-h-screen bg-[#0a0a0c] flex items-center justify-center p-8">
         <div className="text-center">
@@ -247,12 +375,23 @@ export const ProfilePage = () => {
           <p className="text-white/30 text-sm mb-8">
             Know them? Invite them to VOYO Music!
           </p>
-          <button
-            onClick={() => navigate('/')}
-            className="px-6 py-3 rounded-full bg-gradient-to-r from-purple-500 to-[#D4A053] text-white font-semibold"
-          >
-            Open VOYO
-          </button>
+          <div className="flex flex-col gap-3 items-center">
+            <a
+              href={waUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-full max-w-xs px-6 py-3 rounded-full bg-[#25D366] text-white font-semibold flex items-center justify-center gap-2"
+            >
+              <MessageCircle className="w-4 h-4" />
+              Invite via WhatsApp
+            </a>
+            <button
+              onClick={() => navigate('/')}
+              className="w-full max-w-xs px-6 py-3 rounded-full bg-gradient-to-r from-purple-500 to-[#D4A053] text-white font-semibold"
+            >
+              Open VOYO
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -457,27 +596,37 @@ export const ProfilePage = () => {
                   </div>
                 </div>
 
-                {/* Join Button */}
-                <button
-                  onClick={handleJoinPortal}
-                  className={`w-full mt-4 py-3 rounded-xl font-semibold flex items-center justify-center gap-2 ${
-                    hasJoinedPortal
-                      ? 'bg-purple-500/20 border border-purple-500/30 text-purple-400'
-                      : 'bg-gradient-to-r from-purple-500 to-violet-600 text-white'
-                  }`}
-                >
-                  {hasJoinedPortal ? (
-                    <>
-                      <Radio className="w-5 h-5" />
-                      Synced • Following Along
-                    </>
-                  ) : (
-                    <>
-                      <Play className="w-5 h-5" fill="white" />
-                      Join Portal • Listen Along
-                    </>
-                  )}
-                </button>
+                {/* Join Button — gated on portal_open */}
+                {portalOpen ? (
+                  <button
+                    onClick={handleJoinPortal}
+                    className={`w-full mt-4 py-3 rounded-xl font-semibold flex items-center justify-center gap-2 ${
+                      hasJoinedPortal
+                        ? 'bg-purple-500/20 border border-purple-500/30 text-purple-400'
+                        : 'bg-gradient-to-r from-purple-500 to-violet-600 text-white'
+                    }`}
+                  >
+                    {hasJoinedPortal ? (
+                      <>
+                        <Radio className="w-5 h-5" />
+                        Synced • Following Along
+                      </>
+                    ) : (
+                      <>
+                        <Play className="w-5 h-5" fill="white" />
+                        Jam this
+                      </>
+                    )}
+                  </button>
+                ) : (
+                  <button
+                    disabled
+                    className="w-full mt-4 py-3 rounded-xl font-semibold flex items-center justify-center gap-2 bg-white/5 border border-white/10 text-white/30 cursor-not-allowed"
+                  >
+                    <Lock className="w-5 h-5" />
+                    Portal closed
+                  </button>
+                )}
               </div>
             </div>
           </div>

@@ -395,6 +395,11 @@ interface PlayerStore {
   setVoyexSpatial: (value: number) => void;
   setOyeBarBehavior: (behavior: 'fade' | 'disappear') => void;
   setOyePrewarm: (enabled: boolean) => void;
+
+  // Verse Jam — visitor is locked to a host's playback
+  jammingWith: { dashId: string; name: string } | null;
+  startJam: (dashId: string, name: string) => void;
+  endJam: () => void;
 }
 
 // Load persisted state once at init
@@ -461,6 +466,9 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
 
   isRouletteMode: false,
   rouletteTracks: [], // Will be populated from database
+
+  // Verse Jam state
+  jammingWith: null,
 
   // VOYO Superapp Tab - restored from localStorage
   voyoActiveTab: _persistedState.voyoActiveTab || 'music',
@@ -1915,4 +1923,12 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       }
     };
   })(),
+
+  // Verse Jam actions
+  startJam: (dashId, name) => {
+    set({ jammingWith: { dashId, name } });
+  },
+  endJam: () => {
+    set({ jammingWith: null });
+  },
 }));
