@@ -411,6 +411,21 @@ export const AudioPlayer = () => {
   // the heartbeat + element-kick + AudioContext resume. The prior v407
   // and v408 visibility handler here was doing a competing el.load() on
   // FG return which tore down bgEngine's in-flight kick. Removed.
+  //
+  // IFRAME FG-RETURN: bgEngine's re-kick (bgEngine.ts:215) gates on el.src
+  // being truthy — which it never is for iframe tracks (src intentionally
+  // blanked at line 358 so the audio element is silent while YouTube plays).
+  // We handle the iframe case here by calling iframeBridge.play() directly.
+  useEffect(() => {
+    if (playbackSource !== 'iframe') return;
+    const handleFgReturn = () => {
+      if (document.visibilityState === 'visible' && usePlayerStore.getState().isPlaying) {
+        iframeBridge.play();
+      }
+    };
+    document.addEventListener('visibilitychange', handleFgReturn, true);
+    return () => document.removeEventListener('visibilitychange', handleFgReturn, true);
+  }, [playbackSource]);
 
   // ── MediaSession playback state sync ─────────────────────────────────
   useEffect(() => {
@@ -519,7 +534,11 @@ export const AudioPlayer = () => {
     // element to resume; on rejection fall back to honouring the pause.
     if (usePlayerStore.getState().isPlaying) {
       const el = audioRef.current;
-      if (el) {
+      // el.ended = track finished naturally. Don't resume a completed track —
+      // handleEnded already engaged the silent-WAV bridge and called nextTrack().
+      // Without this guard, a race between handleEnded setting trackSwapInProgress
+      // and the browser's pause event fires el.play() on the dead element → replay.
+      if (el && !el.ended) {
         el.play().catch(() => setIsPlaying(false));
         return;
       }

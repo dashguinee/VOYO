@@ -48,6 +48,12 @@ class IframeBridge {
     });
   }
 
+  play(): void {
+    try { this.player?.unMute?.(); } catch {}
+    try { this.player?.setVolume?.(100); } catch {}
+    try { this.player?.playVideo?.(); } catch {}
+  }
+
   pause(): void {
     try { this.player?.pauseVideo?.(); } catch {}
     try { this.player?.mute?.(); } catch {}
