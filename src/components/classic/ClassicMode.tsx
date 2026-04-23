@@ -9,7 +9,7 @@
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Home, Radio, Library as LibraryIcon, Users, Plus, Shuffle, Repeat, Repeat1 } from 'lucide-react';
+import { Home, Radio, Library as LibraryIcon, Users, MessageCircle, Plus, Shuffle, Repeat, Repeat1 } from 'lucide-react';
 import { HomeFeed } from './HomeFeed';
 import { Library } from './Library';
 import { Dahub } from '../dahub/Dahub';
@@ -328,8 +328,10 @@ const BottomNav = ({
   onVOYOClick: () => void;
 }) => {
   // LEFT: DAHUB when on Home, otherwise Home
+  // Use MessageCircle (chat bubble) for DaHub — clearer than Users (silhouettes)
+  // which reads as "profile" and confused Dash (2026-04-23 audit).
   const leftTab = activeTab === 'home' ? 'hub' : 'home';
-  const LeftIcon = activeTab === 'home' ? Users : Home;
+  const LeftIcon = activeTab === 'home' ? MessageCircle : Home;
   const isLeftActive = (activeTab === 'home' && leftTab === 'hub') ? false : activeTab === leftTab;
 
   // RIGHT: Always Library (highlighted when active)

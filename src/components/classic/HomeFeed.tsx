@@ -32,6 +32,11 @@ import { Track } from '../../types';
 import { SignInPrompt } from '../social/SignInPrompt';
 import { StationHero, type Station } from './StationHero';
 import { supabase } from '../../lib/supabase';
+import { useAuth } from '../../hooks/useAuth';
+import { useBackGuard } from '../../hooks/useBackGuard';
+import { friendsAPI, type Friend } from '../../lib/voyo-api';
+import { VoyoLoadOrb } from '../voyo/VoyoLoadOrb';
+import { useNavigate } from 'react-router-dom';
 
 // ============================================
 // HELPER FUNCTIONS
@@ -1244,6 +1249,145 @@ const AfricanVibesEndSentinel = memo(({
 
 
 // ============================================
+// VIBES ON VIBES — LIVE FRIENDS SHEET
+// ============================================
+
+interface VibesLiveFriendsSheetProps {
+  friends: Friend[];
+  loading: boolean;
+  onClose: () => void;
+  onFriendTap: (dashId: string) => void;
+}
+
+const VibesLiveFriendsSheet = ({ friends, loading, onClose, onFriendTap }: VibesLiveFriendsSheetProps) => {
+  useBackGuard(true, onClose, 'vibes-live-friends');
+
+  const handleBackdropClick = (e: React.MouseEvent) => {
+    if (e.target === e.currentTarget) onClose();
+  };
+
+  // WhatsApp share invite CTA
+  const handleInvite = () => {
+    const text = encodeURIComponent('Come vibe with me on VOYO Music 🎵 voyomusic.com');
+    window.open(`https://wa.me/?text=${text}`, '_blank');
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end"
+      style={{ background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(4px)' }}
+      onClick={handleBackdropClick}
+    >
+      <div
+        className="w-full rounded-t-3xl overflow-hidden"
+        style={{
+          background: 'linear-gradient(180deg, rgba(22,18,36,0.98) 0%, rgba(12,10,20,0.99) 100%)',
+          boxShadow: '0 -4px 40px rgba(0,0,0,0.6), 0 -1px 0 rgba(255,255,255,0.07)',
+          paddingBottom: 'max(28px, calc(env(safe-area-inset-bottom, 0px) + 20px))',
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Sheet handle */}
+        <div className="flex justify-center pt-3 pb-1">
+          <div className="w-10 h-1 rounded-full bg-white/20" />
+        </div>
+
+        {/* Header */}
+        <div className="px-6 pt-3 pb-4 flex items-center justify-between">
+          <div>
+            <h3
+              className="leading-none"
+              style={{
+                fontFamily: "'Italianno', cursive",
+                fontSize: '2rem',
+                fontWeight: 400,
+                background: 'linear-gradient(135deg, #FFF3D6 0%, #F4D999 15%, #E6B865 35%, #D4A053 55%, #C4943D 75%, #8B6228 100%)',
+                WebkitBackgroundClip: 'text',
+                WebkitTextFillColor: 'transparent',
+              }}
+            >
+              Vibing Now
+            </h3>
+            <p className="text-white/40 text-xs mt-0.5">Friends on VOYO right now</p>
+          </div>
+          <button
+            onClick={onClose}
+            className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center"
+            aria-label="Close"
+          >
+            <span className="text-white/60 text-sm leading-none">&times;</span>
+          </button>
+        </div>
+
+        {/* Content */}
+        <div className="px-6 pb-2 min-h-[120px]">
+          {loading ? (
+            <div className="flex items-center justify-center py-10">
+              <VoyoLoadOrb size={48} />
+            </div>
+          ) : friends.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-10 text-center">
+              <p className="text-white/40 text-sm mb-4">No friends vibing right now</p>
+              <button
+                onClick={handleInvite}
+                className="px-5 py-2.5 rounded-full text-sm font-medium text-white"
+                style={{
+                  background: 'linear-gradient(135deg, rgba(139,92,246,0.4) 0%, rgba(139,92,246,0.2) 100%)',
+                  border: '1px solid rgba(139,92,246,0.3)',
+                }}
+              >
+                Invite friends via WhatsApp
+              </button>
+            </div>
+          ) : (
+            <div className="flex gap-5 overflow-x-auto scrollbar-hide pb-2">
+              {friends.map((friend) => (
+                <button
+                  key={friend.dash_id}
+                  className="flex-shrink-0 flex flex-col items-center gap-2"
+                  onClick={() => {
+                    onFriendTap(friend.dash_id);
+                    onClose();
+                  }}
+                >
+                  <div
+                    className="w-14 h-14 rounded-full flex items-center justify-center text-white font-bold text-base relative"
+                    style={{
+                      background: friend.avatar
+                        ? undefined
+                        : 'linear-gradient(135deg, #8B5CF6, #6D28D9)',
+                      boxShadow: '0 0 0 2px rgba(212,160,83,0.5)',
+                    }}
+                  >
+                    {friend.avatar ? (
+                      <img
+                        src={friend.avatar}
+                        alt={friend.name}
+                        className="w-full h-full rounded-full object-cover"
+                      />
+                    ) : (
+                      <span>{friend.name.charAt(0).toUpperCase()}</span>
+                    )}
+                    {/* Live dot */}
+                    <span
+                      className="absolute bottom-0.5 right-0.5 w-3 h-3 rounded-full border-2 border-[#0c0a14]"
+                      style={{ background: '#22c55e' }}
+                    />
+                  </div>
+                  <span className="text-white/70 text-xs text-center max-w-[56px] truncate">
+                    {friend.nickname || friend.name}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ============================================
 // HOME FEED COMPONENT
 // ============================================
 
@@ -1294,6 +1438,85 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
     })();
     return () => { cancelled = true; };
   }, []);
+
+  // ── Vibes on Vibes — live friend presence ──────────────────────────────────
+  const { isLoggedIn, dashId } = useAuth();
+  const navigate = useNavigate();
+  const [liveFriends, setLiveFriends] = useState<Friend[]>([]);
+  const [liveCount, setLiveCount] = useState(0);
+  const [vibesSheetOpen, setVibesSheetOpen] = useState(false);
+  const [vibesFriendsLoading, setVibesFriendsLoading] = useState(false);
+  const vibesHeaderRef = useRef<HTMLDivElement>(null);
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const longPressMoved = useRef(false);
+
+  // Poll live friend count every 30s while mounted
+  useEffect(() => {
+    if (!isLoggedIn || !dashId) return;
+    let cancelled = false;
+
+    const fetchOnlineFriends = async () => {
+      try {
+        const friends = await friendsAPI.getFriends(dashId);
+        if (cancelled) return;
+        const online = friends.filter(f => f.status === 'online');
+        setLiveFriends(online);
+        setLiveCount(online.length);
+      } catch { /* silent — presence is decorative */ }
+    };
+
+    fetchOnlineFriends();
+    const interval = setInterval(fetchOnlineFriends, 30_000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, [isLoggedIn, dashId]);
+
+  // Long-press handler for "Vibes on Vibes" header block
+  const handleVibesPointerDown = useCallback((e: React.PointerEvent) => {
+    longPressMoved.current = false;
+    longPressTimerRef.current = setTimeout(() => {
+      if (longPressMoved.current) return;
+      setVibesSheetOpen(true);
+    }, 500);
+  }, []);
+
+  const handleVibesPointerUp = useCallback(() => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  }, []);
+
+  const handleVibesPointerMove = useCallback((e: React.PointerEvent) => {
+    if (Math.abs(e.movementX) > 5 || Math.abs(e.movementY) > 5) {
+      longPressMoved.current = true;
+      if (longPressTimerRef.current) {
+        clearTimeout(longPressTimerRef.current);
+        longPressTimerRef.current = null;
+      }
+    }
+  }, []);
+
+  // Open sheet — also fetch fresh friends list
+  const openVibesSheet = useCallback(async () => {
+    setVibesSheetOpen(true);
+    if (!isLoggedIn || !dashId) return;
+    setVibesFriendsLoading(true);
+    try {
+      const friends = await friendsAPI.getFriends(dashId);
+      const online = friends.filter(f => f.status === 'online');
+      setLiveFriends(online);
+      setLiveCount(online.length);
+    } catch { /* silent */ }
+    finally { setVibesFriendsLoading(false); }
+  }, [isLoggedIn, dashId]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+    };
+  }, []);
+  // ───────────────────────────────────────────────────────────────────────────
 
   // Ref for TIVI+ immersive section (nav hides when in view)
   const tiviBreakRef = useRef<HTMLDivElement>(null);
@@ -1698,28 +1921,85 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
               }}
             />
 
-            {/* Header — single visible mark. One signature element. */}
-            <div className="px-6 mb-6 relative">
-              <h2
-                className="leading-none"
-                style={{
-                  fontFamily: "'Italianno', cursive",
-                  fontSize: 'clamp(44px, 13vw, 64px)',
-                  fontWeight: 400,
-                  margin: 0,
-                  whiteSpace: 'nowrap',
-                  background:
-                    'linear-gradient(135deg, #FFF3D6 0%, #F4D999 15%, #E6B865 35%, #D4A053 55%, #C4943D 75%, #8B6228 100%)',
-                  WebkitBackgroundClip: 'text',
-                  WebkitTextFillColor: 'transparent',
-                  filter:
-                    'drop-shadow(0 2px 6px rgba(0,0,0,0.7)) drop-shadow(0 0 24px rgba(212,160,83,0.3))',
-                  letterSpacing: '0.005em',
-                }}
-              >
-                Vibes on Vibes
-              </h2>
+            {/* Header — single visible mark. Long-press (500ms) opens live friends sheet. */}
+            <div
+              ref={vibesHeaderRef}
+              className="px-6 mb-6 relative select-none"
+              onPointerDown={handleVibesPointerDown}
+              onPointerUp={handleVibesPointerUp}
+              onPointerLeave={handleVibesPointerUp}
+              onPointerMove={handleVibesPointerMove}
+              style={{ touchAction: 'pan-x pan-y', cursor: 'default' }}
+            >
+              <div className="flex items-end gap-3 flex-wrap">
+                <h2
+                  className="leading-none"
+                  style={{
+                    fontFamily: "'Italianno', cursive",
+                    fontSize: 'clamp(44px, 13vw, 64px)',
+                    fontWeight: 400,
+                    margin: 0,
+                    whiteSpace: 'nowrap',
+                    background:
+                      'linear-gradient(135deg, #FFF3D6 0%, #F4D999 15%, #E6B865 35%, #D4A053 55%, #C4943D 75%, #8B6228 100%)',
+                    WebkitBackgroundClip: 'text',
+                    WebkitTextFillColor: 'transparent',
+                    filter:
+                      'drop-shadow(0 2px 6px rgba(0,0,0,0.7)) drop-shadow(0 0 24px rgba(212,160,83,0.3))',
+                    letterSpacing: '0.005em',
+                  }}
+                >
+                  Vibes on Vibes
+                </h2>
+
+                {/* Live count suffix — only when authenticated + friends online */}
+                {isLoggedIn && liveCount > 0 && (
+                  <span
+                    className="leading-none mb-1 flex items-center gap-1.5"
+                    style={{
+                      fontFamily: 'Satoshi, system-ui, sans-serif',
+                      fontSize: 'clamp(11px, 3vw, 14px)',
+                      fontWeight: 600,
+                      color: 'rgba(255,255,255,0.7)',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    <span style={{ color: 'rgba(212,160,83,0.6)', fontWeight: 400 }}>·</span>
+                    {liveCount} vibing now
+                    {/* Pulsing dot — tappable shortcut to sheet */}
+                    <button
+                      onClick={(e) => { e.stopPropagation(); openVibesSheet(); }}
+                      aria-label="See who's vibing"
+                      className="ml-0.5"
+                      style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
+                    >
+                      <span
+                        className="inline-block w-2 h-2 rounded-full"
+                        style={{
+                          background: '#22c55e',
+                          boxShadow: '0 0 6px rgba(34,197,94,0.7)',
+                          animation: 'vibes-live-pulse 2s ease-in-out infinite',
+                        }}
+                      />
+                    </button>
+                  </span>
+                )}
+              </div>
+
+              {/* Hint: subtle long-press affordance for unauthenticated or zero-friends */}
+              {isLoggedIn && liveCount === 0 && (
+                <p className="text-white/20 text-[10px] mt-1" style={{ fontFamily: 'Satoshi, system-ui, sans-serif' }}>
+                  Hold to see who's vibing
+                </p>
+              )}
             </div>
+
+            <style>{`
+              @keyframes vibes-live-pulse {
+                0%, 100% { opacity: 1; transform: scale(1); }
+                50% { opacity: 0.6; transform: scale(1.3); }
+              }
+            `}</style>
 
             <style>{`
               @keyframes classics-disk-drift {
@@ -1970,6 +2250,16 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
             Discover Music
           </button>
         </div>
+      )}
+
+      {/* Vibes on Vibes — Live Friends Sheet (portal-like, renders on top) */}
+      {vibesSheetOpen && (
+        <VibesLiveFriendsSheet
+          friends={liveFriends}
+          loading={vibesFriendsLoading}
+          onClose={() => setVibesSheetOpen(false)}
+          onFriendTap={(friendDashId) => navigate(`/${friendDashId}`)}
+        />
       )}
     </div>
   );
