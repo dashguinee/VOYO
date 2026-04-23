@@ -54,7 +54,6 @@ import { app } from '../../services/oyo';
 // OYO Island - DJ Voice Search & Chat
 import { OyoIsland } from './OyoIsland';
 import { VoyoLoadOrb } from './VoyoLoadOrb';
-import { CardHoldActions, CARD_ACTIONS } from '../ui/CardHoldActions';
 
 // YouTube Iframe - Unified streaming + video display
 // YouTubeIframe is GLOBAL (App.tsx) - removed duplicate import
@@ -4908,22 +4907,7 @@ export const VoyoPortraitPlayer = ({
             {historyTracks.length > 0 ? (
               historyTracks.slice(0, 10).map((track, i) => (
                 <div key={track.id} style={{ scrollSnapAlign: 'start', flexShrink: 0 }}>
-                  <CardHoldActions
-                    leftAction={{ ...CARD_ACTIONS.oye, onFire: () => app.oyeCommit(track, {}) }}
-                    rightAction={{
-                      ...CARD_ACTIONS.download,
-                      onFire: () => {
-                        console.log('[Download] Not yet implemented — infra coming', track.trackId);
-                        alert('Download coming soon!');
-                      },
-                    }}
-                  >
-                    <SmallCard
-                      track={track}
-                      onTap={() => playTrack(track)}
-                      isPlayed={true}
-                    />
-                  </CardHoldActions>
+                  <SmallCard track={track} onTap={() => playTrack(track)} isPlayed={true} />
                 </div>
               ))
             ) : (
@@ -4966,23 +4950,7 @@ export const VoyoPortraitPlayer = ({
             {queueTracks.length > 0 ? (
               queueTracks.slice(0, 10).map((track, i) => (
                 <div key={track.id} style={{ scrollSnapAlign: 'start', flexShrink: 0 }}>
-                  <CardHoldActions
-                    leftAction={{ ...CARD_ACTIONS.oye, onFire: () => app.oyeCommit(track, {}) }}
-                    rightAction={{
-                      ...CARD_ACTIONS.download,
-                      onFire: () => {
-                        console.log('[Download] Not yet implemented — infra coming', track.trackId);
-                        alert('Download coming soon!');
-                      },
-                    }}
-                  >
-                    <SmallCard
-                      track={track}
-                      onTap={() => playTrack(track)}
-                      isPlayed={playedTrackIds.has(track.id)}
-                      isNextUp={i === 0}
-                    />
-                  </CardHoldActions>
+                  <SmallCard track={track} onTap={() => playTrack(track)} isPlayed={playedTrackIds.has(track.id)} isNextUp={i === 0} />
                 </div>
               ))
             ) : (
