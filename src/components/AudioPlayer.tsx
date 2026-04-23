@@ -503,6 +503,13 @@ export const AudioPlayer = () => {
       setIsPlaying(false);
       return;
     }
+    // BG transition: bgEngine fires capture-phase visibilitychange BEFORE this
+    // pause event, setting isTransitioningToBackgroundRef. The browser forcibly
+    // pauses the element on screen-lock — don't let that kill isPlaying or we
+    // wake up to a dead player. bgEngine re-kicks on FG return.
+    if (isTransitioningToBackgroundRef.current) {
+      return;
+    }
     // Involuntary pause on R2 — typically a brief buffer underrun in the
     // first seconds after a skip (R2 first chunk hasn't arrived by the
     // time the element starts playback). Prior guard was `sessionId &&
