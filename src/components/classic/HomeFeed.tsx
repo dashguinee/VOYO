@@ -1249,6 +1249,196 @@ const AfricanVibesEndSentinel = memo(({
 
 
 // ============================================
+// FRIEND SEARCH PILL — tap "Vibes on Vibes"
+// ============================================
+
+// Inline getInitials — same logic as Dahub.tsx:42 (no import needed, same file scope)
+function getInitials(name: string): string {
+  return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+}
+
+interface FriendSearchPillProps {
+  open: boolean;
+  friends: Friend[];
+  loading: boolean;
+  onClose: () => void;
+  onFriendTap: (dashId: string) => void;
+}
+
+const FriendSearchPill = ({ open, friends, loading, onClose, onFriendTap }: FriendSearchPillProps) => {
+  useBackGuard(open, onClose, 'friend-search-pill');
+  const [query, setQuery] = useState('');
+  const [debouncedQuery, setDebouncedQuery] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // Debounce 120ms — no library
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedQuery(query.trim().toLowerCase()), 120);
+    return () => clearTimeout(t);
+  }, [query]);
+
+  // Focus input when opened
+  useEffect(() => {
+    if (open) {
+      setTimeout(() => inputRef.current?.focus(), 80);
+      setQuery('');
+      setDebouncedQuery('');
+    }
+  }, [open]);
+
+  const filtered = debouncedQuery
+    ? friends.filter(
+        f =>
+          f.name.toLowerCase().includes(debouncedQuery) ||
+          f.dash_id.toLowerCase().includes(debouncedQuery)
+      )
+    : friends;
+
+  const handleInvite = () => {
+    const text = encodeURIComponent('Come vibe with me on VOYO Music 🎵 voyomusic.com');
+    window.open(`https://wa.me/?text=${text}`, '_blank');
+  };
+
+  if (!open) return null;
+
+  return (
+    <>
+      {/* Backdrop — tap outside to dismiss */}
+      <div
+        className="fixed inset-0 z-[55]"
+        onClick={onClose}
+        aria-label="Close friend search"
+      />
+
+      {/* Pill */}
+      <div
+        className="fixed z-[56] left-4 right-4 rounded-[28px] overflow-hidden"
+        style={{
+          bottom: '20%',
+          maxWidth: 380,
+          margin: '0 auto',
+          background: 'rgba(20, 20, 28, 0.72)',
+          backdropFilter: 'blur(24px) saturate(180%)',
+          WebkitBackdropFilter: 'blur(24px) saturate(180%)',
+          border: '1px solid rgba(255,255,255,0.08)',
+          boxShadow: '0 20px 60px rgba(0,0,0,0.4)',
+          maxHeight: '60vh',
+          display: 'flex',
+          flexDirection: 'column',
+          // Center horizontally within left:16px right:16px
+          left: '50%',
+          transform: 'translateX(-50%)',
+          width: 'calc(100% - 32px)',
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Search input row — same tokens as SearchOverlayV2 */}
+        <div className="px-4 pt-4 pb-2 flex-shrink-0">
+          <div
+            className="flex items-center gap-2.5 px-3.5 rounded-full"
+            style={{
+              height: 44,
+              background: 'rgba(255,255,255,0.08)',
+              border: '1px solid rgba(255,255,255,0.10)',
+              backdropFilter: 'blur(20px)',
+              WebkitBackdropFilter: 'blur(20px)',
+            }}
+          >
+            <Search className="w-4 h-4 text-white/40 flex-shrink-0" strokeWidth={2} />
+            <input
+              ref={inputRef}
+              type="text"
+              placeholder="Search friends"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              className="flex-1 bg-transparent text-white placeholder:text-white/30 focus:outline-none text-[15px]"
+            />
+          </div>
+        </div>
+
+        {/* Scrollable friend list */}
+        <div className="overflow-y-auto flex-1 px-4 pb-4 scrollbar-hide">
+          {loading ? (
+            <div className="flex items-center justify-center py-8">
+              <VoyoLoadOrb size={40} />
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-8 text-center gap-3">
+              <p className="text-white/40 text-sm">
+                {friends.length === 0
+                  ? 'No friends yet. Invite someone!'
+                  : 'No match found'}
+              </p>
+              {friends.length === 0 && (
+                <button
+                  onClick={handleInvite}
+                  className="px-5 py-2.5 rounded-full text-sm font-medium text-white"
+                  style={{
+                    background: 'linear-gradient(135deg, rgba(139,92,246,0.4) 0%, rgba(139,92,246,0.2) 100%)',
+                    border: '1px solid rgba(139,92,246,0.3)',
+                  }}
+                >
+                  Invite via WhatsApp
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="flex flex-col gap-1 pt-1">
+              {filtered.map((friend) => (
+                <button
+                  key={friend.dash_id}
+                  className="flex items-center gap-3 w-full px-2 py-2.5 rounded-2xl text-left active:bg-white/10 transition-colors"
+                  onClick={() => {
+                    onFriendTap(friend.dash_id);
+                    onClose();
+                  }}
+                >
+                  {/* 36px avatar — image or gradient initials (Dahub pattern lines 287-293) */}
+                  <div
+                    className="w-9 h-9 rounded-full flex-shrink-0 flex items-center justify-center text-white text-xs font-bold overflow-hidden"
+                    style={
+                      friend.avatar
+                        ? undefined
+                        : {
+                            background:
+                              'linear-gradient(135deg, #8B5CF6, #6D28D9)',
+                          }
+                    }
+                  >
+                    {friend.avatar ? (
+                      <img
+                        src={friend.avatar}
+                        alt={friend.name}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      getInitials(friend.name)
+                    )}
+                  </div>
+
+                  {/* Name + Dash ID */}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-white text-sm font-medium truncate leading-snug">
+                      {friend.nickname || friend.name}
+                    </p>
+                    <p className="text-white/40 text-xs truncate leading-snug">
+                      {friend.dash_id}
+                    </p>
+                  </div>
+
+                  {/* Chevron */}
+                  <span className="text-white/20 text-xs flex-shrink-0">›</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </>
+  );
+};
+
+// ============================================
 // VIBES ON VIBES — LIVE FRIENDS SHEET
 // ============================================
 
@@ -1443,12 +1633,16 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
   const { isLoggedIn, dashId } = useAuth();
   const navigate = useNavigate();
   const [liveFriends, setLiveFriends] = useState<Friend[]>([]);
+  const [allFriends, setAllFriends] = useState<Friend[]>([]);
   const [liveCount, setLiveCount] = useState(0);
   const [vibesSheetOpen, setVibesSheetOpen] = useState(false);
   const [vibesFriendsLoading, setVibesFriendsLoading] = useState(false);
+  const [showSearchPill, setShowSearchPill] = useState(false);
+  const [searchPillLoading, setSearchPillLoading] = useState(false);
   const vibesHeaderRef = useRef<HTMLDivElement>(null);
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const longPressMoved = useRef(false);
+  const longPressFired = useRef(false);
 
   // Poll live friend count every 30s while mounted
   useEffect(() => {
@@ -1460,6 +1654,7 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
         const friends = await friendsAPI.getFriends(dashId);
         if (cancelled) return;
         const online = friends.filter(f => f.status === 'online');
+        setAllFriends(friends);
         setLiveFriends(online);
         setLiveCount(online.length);
       } catch { /* silent — presence is decorative */ }
@@ -1473,8 +1668,10 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
   // Long-press handler for "Vibes on Vibes" header block
   const handleVibesPointerDown = useCallback((e: React.PointerEvent) => {
     longPressMoved.current = false;
+    longPressFired.current = false;
     longPressTimerRef.current = setTimeout(() => {
       if (longPressMoved.current) return;
+      longPressFired.current = true;
       setVibesSheetOpen(true);
     }, 500);
   }, []);
@@ -1504,11 +1701,30 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
     try {
       const friends = await friendsAPI.getFriends(dashId);
       const online = friends.filter(f => f.status === 'online');
+      setAllFriends(friends);
       setLiveFriends(online);
       setLiveCount(online.length);
     } catch { /* silent */ }
     finally { setVibesFriendsLoading(false); }
   }, [isLoggedIn, dashId]);
+
+  // Open search pill — reuse allFriends already fetched; re-query only if empty
+  const openSearchPill = useCallback(async () => {
+    // Guard: if long-press just fired, don't also open the pill
+    if (longPressFired.current) { longPressFired.current = false; return; }
+    setShowSearchPill(true);
+    if (!isLoggedIn || !dashId) return;
+    if (allFriends.length > 0) return; // already have data — no refetch
+    setSearchPillLoading(true);
+    try {
+      const friends = await friendsAPI.getFriends(dashId);
+      setAllFriends(friends);
+      const online = friends.filter(f => f.status === 'online');
+      setLiveFriends(online);
+      setLiveCount(online.length);
+    } catch { /* silent */ }
+    finally { setSearchPillLoading(false); }
+  }, [isLoggedIn, dashId, allFriends.length]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -1921,7 +2137,7 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
               }}
             />
 
-            {/* Header — single visible mark. Long-press (500ms) opens live friends sheet. */}
+            {/* Header — tap → friend search pill; long-press (500ms) → live friends sheet. */}
             <div
               ref={vibesHeaderRef}
               className="px-6 mb-6 relative select-none"
@@ -1929,7 +2145,8 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
               onPointerUp={handleVibesPointerUp}
               onPointerLeave={handleVibesPointerUp}
               onPointerMove={handleVibesPointerMove}
-              style={{ touchAction: 'pan-x pan-y', cursor: 'default' }}
+              onClick={openSearchPill}
+              style={{ touchAction: 'pan-x pan-y', cursor: 'pointer' }}
             >
               <div className="flex items-end gap-3 flex-wrap">
                 <h2
@@ -2261,6 +2478,15 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
           onFriendTap={(friendDashId) => navigate(`/${friendDashId}`)}
         />
       )}
+
+      {/* Friend Search Pill — tap "Vibes on Vibes" heading */}
+      <FriendSearchPill
+        open={showSearchPill}
+        friends={allFriends}
+        loading={searchPillLoading}
+        onClose={() => setShowSearchPill(false)}
+        onFriendTap={(friendDashId) => navigate(`/${friendDashId}`)}
+      />
     </div>
   );
 };
