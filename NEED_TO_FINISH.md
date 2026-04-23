@@ -8,12 +8,12 @@ schema decisions that should be made deliberately, not dispatched.
 
 ## In flight (dispatched, landing soon)
 
-- [ ] **CardHoldActions** — global hold/swipe action system
-  - Long-press: plush pills rise, themed edge-beam, dim backdrop, haptic
-  - Swipe L/R: card follows finger, themed trail, threshold action
-  - Two variants: has OYÉ (Like + Playlist) / no OYÉ (OYÉ + Download)
-  - Wrapping: WideTrackCard, TrackCard, SongRow, portrait deck cards
-  - Download action is stubbed — infra pass needed
+- [x] **CardHoldActions** — shipped `85e9655` (2026-04-23)
+  - Long-press: plush pills rise, themed edge-beam, dim backdrop, haptic ✓
+  - Swipe L/R: card follows finger, themed trail, threshold action ✓
+  - Two variants: has OYÉ (Like + Playlist) / no OYÉ (OYÉ + Download) ✓
+  - Applied to: WideTrackCard, TrackCard, SongRow, SmallCard ✓
+  - Download action is stubbed — infra pass still needed (see UX polish below)
 
 ---
 
@@ -29,17 +29,17 @@ schema decisions that should be made deliberately, not dispatched.
 - [ ] **Dual signal system dedup** — `src/brain/*` and `centralDJ` both subscribe to the same actions, double-counting locally. Pick one subscriber, delete the other. (AUDIT-5 F-01)
 - [ ] **Grow LAST RESORT seed from 27 → 500+** — `data/tracks.ts` has 27 rows; when fallback chain tiers down, users hear the same 27 forever. Deferred in continuity batch — needs `video_intelligence` schema confirmation (safe SELECT cols, stable ordering at 324k rows). (AUDIT-4 P0-3)
 - [ ] **afro-heat universal default bucket** — mood detection failures all fall into afro-heat. Mood-aware fallback. (SEARCH-2 P0-3)
-- [ ] **pools.hot() local-preference** — prefers local `hotPool` when ≥20 items even if server has better content. Tilt the scale back to server. (SEARCH-2 P0-5)
+- [x] **pools.hot() local-preference** — threshold raised 20→50, shipped `62d1660` (SEARCH-2 P0-5)
 
 ### Audio lifecycle leftovers
-- [ ] **Iframe post-swap streaming leak (up to 60s)** — pause+mute doesn't actually stop YouTube. Kill the iframe src, don't just mute. (AUDIT-2 #3)
-- [ ] **nextTrack fires signals BEFORE AudioPlayer effect** — `play_start` never fires for auto-advanced tracks. Reorder so the effect mounts before signal emission. (AUDIT-1 #1)
-- [ ] **Hot-swap canplay race can prime a stale src** — add a token check like we did for useHotSwap, but in the canplay listener. (AUDIT-2 #1)
+- [x] **Iframe post-swap streaming leak (up to 60s)** — iframeBridge.stop() calls stopVideo() to kill stream, shipped `62d1660` (AUDIT-2 #3)
+- [x] **nextTrack fires signals BEFORE AudioPlayer effect** — queueMicrotask defers signal emission after set(), shipped `62d1660` (AUDIT-1 #1)
+- [x] **Hot-swap canplay race can prime a stale src** — token check added to canplay listener in useHotSwap, shipped `62d1660` (AUDIT-2 #1)
 
 ### Social messaging
-- [ ] **Messages realtime is INSERT-only** — read receipts never propagate because UPDATE isn't subscribed. Add `UPDATE` to the filter. (SOCIAL-1)
+- [x] **Messages realtime is INSERT-only** — event filter changed to `*` (INSERT+UPDATE), shipped `62d1660` (SOCIAL-1)
 - [ ] **Presence ping dies on BG tabs** — 30s interval throttles to 1-2min when hidden, friends see you as offline. Use `visibilitychange` + `BroadcastChannel` so hidden tabs still report online. (SOCIAL-1)
-- [ ] **Conversation channel subscribes to ALL messages** — filters client-side, bandwidth waste + RLS leak. Server-side filter via the realtime filter arg. (SOCIAL-1)
+- [x] **Conversation channel subscribes to ALL messages** — server-side `or(and(...))` filter applied in voyo-api.ts, shipped `62d1660` (SOCIAL-1)
 
 ---
 
