@@ -284,17 +284,10 @@ export function CardHoldActions({
       }
     }
 
-    // Swipe detection — only when hold NOT open and horizontal drag ≥ SWIPE_START_X
-    if (!holdOpen && Math.abs(dx) >= SWIPE_START_X && Math.abs(dy) < 30) {
+    // Swipe — ONLY after hold is open. Never on a raw touch (would fight scroll).
+    if (holdOpen && Math.abs(dx) >= SWIPE_START_X && Math.abs(dy) < 30) {
       swipeActiveRef.current = true;
-      if (holdTimerRef.current) { clearTimeout(holdTimerRef.current); holdTimerRef.current = null; }
       setSwipeX(dx);
-    }
-
-    // If hold IS open, cancel any lingering hold timer (shouldn't exist but safe)
-    if (holdOpen && holdTimerRef.current) {
-      clearTimeout(holdTimerRef.current);
-      holdTimerRef.current = null;
     }
   }, [holdOpen]);
 
@@ -305,11 +298,11 @@ export function CardHoldActions({
     const threshold = cardWidth * SWIPE_THRESHOLD;
     const dx = swipeX;
 
-    if (swipeActiveRef.current && Math.abs(dx) >= threshold) {
+    if (holdOpen && swipeActiveRef.current && Math.abs(dx) >= threshold) {
       // Fire action based on direction
       const action = dx < 0 ? leftAction : rightAction;
       fireAction(action);
-    } else if (swipeActiveRef.current) {
+    } else if (holdOpen && swipeActiveRef.current) {
       // Below threshold — spring back
       setSpringing(true);
       setSwipeX(0);
