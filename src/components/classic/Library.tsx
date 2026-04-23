@@ -17,6 +17,8 @@ import { useDownloadStore } from '../../store/downloadStore';
 import { usePreferenceStore } from '../../store/preferenceStore';
 import { usePlaylistStore } from '../../store/playlistStore';
 import { getYouTubeThumbnail, TRACKS } from '../../data/tracks';
+import { getThumb } from '../../utils/thumbnail';
+import { getUserTopTracks } from '../../services/personalization';
 import { SmartImage } from '../ui/SmartImage';
 import { Track } from '../../types';
 import { PlaylistModal } from '../playlist/PlaylistModal';
@@ -465,6 +467,8 @@ export const Library = ({ onTrackClick }: LibraryProps) => {
   const history = usePlayerStore(s => s.history);
   const playlists = usePlaylistStore(s => s.playlists);
   const knowledgeTracks = useKnowledgeStore(s => s.tracks);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const inYourLoop = useMemo(() => getUserTopTracks(10), [history]);
 
   // Unified track lookup — covers every source a user may have encountered:
   // history (persisted), queue, KnowledgeStore (persisted), and the curated seed.
@@ -1031,6 +1035,59 @@ export const Library = ({ onTrackClick }: LibraryProps) => {
             onPlay={handlePlayAll}
             onLongPress={() => setPlayMenuOpen(true)}
           />
+        )}
+
+        {/* In your Loop — only surfaces on the Liked tab when the user
+            has repeat-played tracks. Circle carousel, lives between the
+            Play button and the full list so it feels like a personal
+            context block, not a catalogue shelf. */}
+        {activeFilter === 'liked' && inYourLoop.length > 0 && (
+          <div className="mb-5 mt-1">
+            <div className="px-4 mb-3 flex items-center gap-2">
+              <span
+                className="text-[11px] font-semibold tracking-[0.18em] uppercase"
+                style={{
+                  background: 'linear-gradient(90deg, rgba(139,92,246,0.9) 0%, rgba(167,139,250,0.7) 100%)',
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent',
+                }}
+              >
+                In your Loop
+              </span>
+              <div className="h-[1px] flex-1" style={{ background: 'linear-gradient(90deg, rgba(139,92,246,0.25) 0%, transparent 100%)' }} />
+            </div>
+            <div className="flex gap-4 px-4 overflow-x-auto scrollbar-hide pb-1">
+              {inYourLoop.map((track, i) => (
+                <button
+                  key={track.id}
+                  className="flex-shrink-0 w-[72px]"
+                  onClick={() => handleTrackClick(track)}
+                >
+                  <div
+                    className="relative w-[72px] h-[72px] rounded-full overflow-hidden mb-1.5 mx-auto"
+                    style={{
+                      boxShadow: i === 0
+                        ? '0 0 0 2px rgba(139,92,246,0.55), 0 0 16px rgba(139,92,246,0.35)'
+                        : '0 0 0 1px rgba(139,92,246,0.18)',
+                    }}
+                  >
+                    <SmartImage
+                      src={getThumb(track.trackId, 'medium')}
+                      trackId={track.trackId}
+                      alt={track.title}
+                      artist={track.artist}
+                      title={track.title}
+                      className="w-full h-full object-cover"
+                      style={{ objectPosition: 'center 30%', transform: 'scale(1.25)' }}
+                      lazy={false}
+                    />
+                    <div className="absolute inset-0 rounded-full" style={{ background: 'linear-gradient(to bottom, transparent 40%, rgba(0,0,0,0.45) 100%)' }} />
+                  </div>
+                  <p className="text-white/80 text-[10px] font-medium truncate text-center leading-tight">{track.title.split('|')[0].trim()}</p>
+                </button>
+              ))}
+            </div>
+          </div>
         )}
 
         {orderedTracks.length > 0 ? (

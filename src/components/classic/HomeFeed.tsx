@@ -2004,44 +2004,6 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
         </div>
       )}
 
-      {/* Heavy Rotation - circles, only first one rotates gently */}
-      {hasPreferences && (
-        <div className="mb-10">
-          <div className="px-4 mb-4">
-            <h2 className="text-white font-semibold text-base">In your Loop</h2>
-          </div>
-          <div className="flex gap-5 px-4 overflow-x-auto scrollbar-hide">
-            {heavyRotation.slice(0, 12).map((track, index) => {
-              const isFirst = index === 0;
-              return (
-                <button
-                  key={track.id}
-                  className="flex-shrink-0 w-32"
-                  onClick={() => onTrackPlay(track)}
-                >
-                  <div
-                    className="relative w-32 h-32 rounded-full overflow-hidden mb-2 bg-white/5 mx-auto shadow-lg shadow-black/40"
-                  >
-                    <SmartImage
-                      src={getThumb(track.trackId, 'high')}
-                      trackId={track.trackId}
-                      alt={track.title}
-                      artist={track.artist}
-                      title={track.title}
-                      className="w-full h-full object-cover"
-                      style={{ objectPosition: 'center 35%', transform: 'scale(1.3)' }}
-                      lazy={false}
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent" />
-                  </div>
-                  <p className="text-white text-sm font-medium truncate text-center mt-1">{track.title.split('|')[0].trim()}</p>
-                  <p className="text-white/50 text-xs truncate text-center">{track.artist}</p>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
 
       {/* 🌍 African Vibes - cultural pillar, holds its ground.
           Watch More moved OFF the header (Apr 2026): it now only appears at the
