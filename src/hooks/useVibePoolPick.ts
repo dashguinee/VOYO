@@ -8,6 +8,7 @@
  */
 
 import { useMemo } from 'react';
+import { useShallow } from 'zustand/shallow';
 import { useTrackPoolStore } from '../store/trackPoolStore';
 import type { VibeMode } from '../store/intentStore';
 import type { Track } from '../types';
@@ -15,9 +16,11 @@ import type { Track } from '../types';
 const DEFAULT_BATCH = 5;
 
 export function useVibePoolBatch(vibeId: VibeMode | string, size: number = DEFAULT_BATCH): Track[] {
-  const matches = useTrackPoolStore(s =>
+  // useShallow prevents infinite re-render: inline .filter() returns a new
+  // array reference every call, which Zustand treats as a state change.
+  const matches = useTrackPoolStore(useShallow(s =>
     s.hotPool.filter(t => t.detectedMode === vibeId),
-  );
+  ));
   return useMemo(() => {
     return [...matches]
       .sort((a, b) => (b.poolScore ?? 0) - (a.poolScore ?? 0))
