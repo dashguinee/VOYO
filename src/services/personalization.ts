@@ -560,31 +560,6 @@ export function getMixedTracks(limit: number = 10): Track[] {
   return result.sort(() => Math.random() - 0.5);
 }
 
-/**
- * Debug: Print preference stats
- */
-export function debugPreferences(): void {
-  const state = usePreferenceStore.getState();
-  const prefs = Object.values(state.trackPreferences);
-
-  if (prefs.length === 0) {
-    return;
-  }
-}
-
-/**
- * Debug: Print intent stats
- */
-export function debugIntent(): void {
-  const intentStore = useIntentStore.getState();
-  const dominantModes = intentStore.getDominantModes(3);
-  const weights = intentStore.getIntentWeights();
-
-  devLog('[VOYO Intent Engine]');
-  devLog('Dominant Modes:', dominantModes);
-  devLog('Mode Weights:', weights);
-}
-
 // ============================================
 // POOL-AWARE ENGINES (v3.0)
 // Uses dynamic Track Pool instead of static TRACKS
