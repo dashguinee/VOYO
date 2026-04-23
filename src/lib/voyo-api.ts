@@ -11,6 +11,7 @@
  */
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import type { RealtimeChannel } from '@supabase/supabase-js';
 import { devWarn } from '../utils/logger';
 import { makeReconnectingChannel } from './realtime/reconnect';
 
@@ -261,7 +262,7 @@ export const profileAPI = {
       .subscribe();
   },
 
-  unsubscribe(channel: any) {
+  unsubscribe(channel: RealtimeChannel) {
     if (supabase && channel) supabase.removeChannel(channel);
   },
 };
@@ -701,13 +702,12 @@ export const messagesAPI = {
     return sub;
   },
 
-  unsubscribe(channel: any) {
-    // Support both old RealtimeChannel refs and new reconnecting sub objects.
+  unsubscribe(channel: RealtimeChannel | { unsubscribe: () => void } | null) {
     if (!channel) return;
     if (typeof channel.unsubscribe === 'function') {
       channel.unsubscribe();
     } else if (commandCenter) {
-      commandCenter.removeChannel(channel);
+      commandCenter.removeChannel(channel as RealtimeChannel);
     }
   },
 
