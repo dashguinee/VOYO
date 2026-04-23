@@ -1002,6 +1002,24 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       shuffle: state.shuffleMode,
     });
 
+    // POOL REFILL: if history exclusion + filters have eaten ≥50% of the
+    // pool, kick a background refresh so the next nextTrack() call sees
+    // fresh candidates. Fire-and-forget; today's pick still uses what's
+    // left. Only fires when we're pulling from hot/discover (not TRACKS
+    // static seed — refreshing doesn't help that path).
+    if (
+      allAvailable.length > 0 &&
+      availableTracks.length <= allAvailable.length / 2 &&
+      (state.discoverTracks.length > 0 || state.hotTracks.length > 0)
+    ) {
+      trace('nt_pool_refill_kick', currentTrackId || null, {
+        poolSize: allAvailable.length,
+        availableAfterFilter: availableTracks.length,
+        filteredPct: Math.round(((allAvailable.length - availableTracks.length) / allAvailable.length) * 100),
+      });
+      try { get().refreshRecommendations(); } catch {}
+    }
+
     if (availableTracks.length > 0) {
       let nextTrack;
 
