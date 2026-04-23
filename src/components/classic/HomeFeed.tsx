@@ -9,6 +9,7 @@
  */
 
 import { useState, useMemo, useEffect, useRef, memo, useCallback } from 'react';
+import { devWarn } from '../../utils/logger';
 import { Search, Play, Zap } from 'lucide-react';
 import { AfricaIcon } from '../ui/AfricaIcon';
 import { getThumb } from '../../utils/thumbnail';
@@ -1836,7 +1837,7 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
         ...filtered.filter(t => !favs.has((t.artist ?? '').toLowerCase())),
       ].slice(0, 15);
     } catch (e) {
-      if (import.meta.env.DEV) console.warn('[HomeFeed] oyosPicks failed:', e);
+      devWarn('[HomeFeed] oyosPicks failed:', e);
       return [];
     }
   }, [pools.hot, discoverMoreTracks]);
@@ -1868,7 +1869,7 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
       const fallback = getPoolAwareHotTracks(45) || [];
       return seededShuffle(fallback, sessionSeed).slice(0, 15);
     } catch (e) {
-      if (import.meta.env.DEV) console.warn('[HomeFeed] africanVibes failed:', e);
+      devWarn('[HomeFeed] africanVibes failed:', e);
       return [];
     }
   }, [hotPool, trackPreferences, sessionSeed]);
@@ -1896,7 +1897,7 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
       if (merged.length < 5) return [];
       return seededShuffle(merged, sessionSeed).slice(0, 12);
     } catch (e) {
-      if (import.meta.env.DEV) console.warn('[HomeFeed] classicsTracks failed:', e);
+      devWarn('[HomeFeed] classicsTracks failed:', e);
       return [];
     }
   }, [hotPool, sessionSeed]);
@@ -1918,7 +1919,7 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
       const fallback = getTrendingTracks(pool, 50).filter(t => t?.id && !usedIds.has(t.id));
       return seededShuffle(fallback, sessionSeed).slice(0, 10);
     } catch (e) {
-      if (import.meta.env.DEV) console.warn('[HomeFeed] trending failed:', e);
+      devWarn('[HomeFeed] trending failed:', e);
       return [];
     }
   }, [hotPool, oyosPicks, discoverMoreTracks, africanVibes, sessionSeed]);

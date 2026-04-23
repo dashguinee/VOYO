@@ -12,6 +12,7 @@
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { devWarn } from '../../utils/logger';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Play, Pause, Music2, Radio, Lock, Unlock, Eye, Users,
@@ -116,7 +117,7 @@ export const ProfilePage = () => {
           setPortalOpen(voyoProfile.portal_open || false);
         }
       } catch (err) {
-        console.error('[ProfilePage] Failed to load profile:', err);
+        devWarn('[ProfilePage] Failed to load profile:', err);
         // Surface the failure so the user sees "couldn't load" instead
         // of an infinite loader. Distinguishes from the legitimate
         // "profile not found" state (profile === null after success).
@@ -147,7 +148,7 @@ export const ProfilePage = () => {
         setFollowerCount(0);
         setFollowingCount(0);
       } catch (err) {
-        console.error('[ProfilePage] Failed to load friend status:', err);
+        devWarn('[ProfilePage] Failed to load friend status:', err);
       }
     };
     loadFriendStatus();

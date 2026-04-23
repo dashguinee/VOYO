@@ -230,7 +230,7 @@ export function useArtist(artistName: string): UseArtistReturn {
 
       setSearchResults(results);
     } catch (err) {
-      console.error('[useArtist] Discover more failed:', err);
+      devWarn('[useArtist] Discover more failed:', err);
       setError(err instanceof Error ? err.message : 'Search failed');
     } finally {
       setIsSearching(false);
@@ -277,7 +277,7 @@ async function fetchTracks(artistName: string): Promise<ArtistTrack[]> {
     .limit(100);
 
   if (error) {
-    console.error('[useArtist] fetchTracks error:', error.message);
+    devWarn('[useArtist] fetchTracks error:', error.message);
     throw error;
   }
 
@@ -337,7 +337,7 @@ async function fetchMoments(artistName: string): Promise<ArtistMoment[]> {
     .limit(20);
 
   if (error) {
-    console.error('[useArtist] fetchMoments error:', error.message);
+    devWarn('[useArtist] fetchMoments error:', error.message);
     throw error;
   }
 

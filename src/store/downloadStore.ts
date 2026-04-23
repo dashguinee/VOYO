@@ -421,7 +421,7 @@ export const useDownloadStore = create<DownloadStore>((set, get) => ({
         // Use boostTrack for actual download
         await get().boostTrack(trackId, title, artist, duration, thumbnail);
       } catch (error) {
-        console.error(`[VOYO] Failed to boost track ${trackId}:`, error);
+        devWarn(`[VOYO] Failed to boost track ${trackId}:`, error);
         // Continue processing next item even if this one fails
       }
 

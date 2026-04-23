@@ -12,6 +12,7 @@
  *   - Short timeout (20s) — OYO turns should feel snappy
  */
 
+import { devWarn } from '../../utils/logger';
 import type { OyoContext } from '../schema';
 import { formatHistoryForGemini } from '../session';
 import { fingerprint, getCached, setCached } from '../cache';
@@ -43,8 +44,7 @@ function recordFailure(): void {
     const cooldown = Math.min(10 * 60 * 1000 * Math.pow(2, steps), 60 * 60 * 1000);
     disabledUntil = Date.now() + cooldown;
     if (!warnedForWindow) {
-      // eslint-disable-next-line no-console
-      console.warn(
+      devWarn(
         `[OYO:Gemini] Circuit open — disabled for ${Math.round(cooldown / 60000)}min`,
       );
       warnedForWindow = true;

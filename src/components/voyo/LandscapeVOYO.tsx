@@ -15,6 +15,7 @@
  */
 
 import { useRef, useEffect, useState, useCallback, memo } from 'react';
+import { devWarn } from '../../utils/logger';
 import { SkipBack, SkipForward, Play, Pause, Plus, Volume2, Loader2 } from 'lucide-react';
 import { usePlayerStore } from '../../store/playerStore';
 import { voyoStream } from '../../services/voyoStream';
@@ -342,7 +343,7 @@ const YouTubeInterceptor = ({ onVideoExtracted }: InterceptorProps) => {
       }, 2000);
 
     } catch (err) {
-      console.error('[Interceptor] Error:', err);
+      devWarn('[Interceptor] Error:', err);
       setFeedback('Oops! Try again');
       setTimeout(() => setFeedback(null), 2000);
     } finally {

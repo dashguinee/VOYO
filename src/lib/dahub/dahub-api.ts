@@ -508,7 +508,7 @@ export const messagesAPI = {
         .then((res) => {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const err = (res as any)?.error;
-          if (err) console.warn('[DAHUB] notification insert failed:', err.message);
+          if (err) devWarn('[DAHUB] notification insert failed:', err.message);
         });
 
       return true;

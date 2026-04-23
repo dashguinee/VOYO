@@ -4,6 +4,7 @@
  */
 
 import { useState, useCallback, useEffect } from 'react';
+import { devWarn } from '../../utils/logger';
 import { Disc3, Play, ChevronLeft } from 'lucide-react';
 import { VinylLoader } from '../ui/VinylLoader';
 import { PipedPlaylist, PipedTrack, searchAlbums, getAlbumTracks } from '../../services/piped';
@@ -43,7 +44,7 @@ export const AlbumSection = ({ query, isVisible }: AlbumSectionProps) => {
       const results = await searchAlbums(query, 8);
       setAlbums(results);
     } catch (error) {
-      console.error('Album search failed:', error);
+      devWarn('Album search failed:', error);
       setAlbums([]);
     } finally {
       setIsLoading(false);
@@ -65,7 +66,7 @@ export const AlbumSection = ({ query, isVisible }: AlbumSectionProps) => {
       const tracks = await getAlbumTracks(album.id);
       setAlbumTracks(tracks);
     } catch (error) {
-      console.error('Failed to load album tracks:', error);
+      devWarn('Failed to load album tracks:', error);
       setAlbumTracks([]);
     } finally {
       setIsLoadingTracks(false);

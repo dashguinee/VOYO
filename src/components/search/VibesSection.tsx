@@ -5,6 +5,7 @@
  */
 
 import { useState, useCallback, useEffect, useMemo } from 'react';
+import { devWarn } from '../../utils/logger';
 import { Play, ChevronLeft, Music2, Zap } from 'lucide-react';
 import { VoyoIcon } from '../ui/VoyoIcon';
 import { usePlayerStore } from '../../store/playerStore';
@@ -138,7 +139,7 @@ export const VibesSection = ({ query, isVisible }: VibesSectionProps) => {
       const tracks = await vibeEngine.getTracksForVibe(vibe.id, 30);
       setVibeTracks(tracks as VibeTrack[]);
     } catch (error) {
-      console.error('Failed to load vibe tracks:', error);
+      devWarn('Failed to load vibe tracks:', error);
       setVibeTracks([]);
     } finally {
       setIsLoadingTracks(false);

@@ -286,7 +286,7 @@ export async function getAudioStream(videoId: string, quality?: string): Promise
     return `iframe:${youtubeId}`;
 
   } catch (err) {
-    console.error('[VOYO] Stream error:', err);
+    devWarn('[VOYO] Stream error:', err);
     return `iframe:${youtubeId}`;
   }
 }

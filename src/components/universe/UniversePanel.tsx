@@ -6,6 +6,7 @@
  */
 
 import { useState, useEffect, useRef } from 'react';
+import { devWarn } from '../../utils/logger';
 import {
   X, Download, Upload, Key, Users, Music, Heart, Clock, Zap,
   Copy, Check, RefreshCw, Shield, Globe, Smartphone, LogIn,
@@ -136,7 +137,7 @@ export const UniversePanel = ({ isOpen, onClose }: UniversePanelProps) => {
         setMessage({ type: 'error', text: 'Failed to save profile' });
       }
     } catch (err) {
-      console.error('[UniversePanel] save profile threw:', err);
+      devWarn('[UniversePanel] save profile threw:', err);
       setMessage({ type: 'error', text: 'Could not save — try again' });
     } finally {
       setIsSavingProfile(false);
@@ -172,7 +173,7 @@ export const UniversePanel = ({ isOpen, onClose }: UniversePanelProps) => {
         setMessage({ type: 'success', text: 'Portal closed' });
       }
     } catch (err) {
-      console.error('[UniversePanel] toggle portal threw:', err);
+      devWarn('[UniversePanel] toggle portal threw:', err);
       setMessage({ type: 'error', text: 'Network error — try again' });
     }
   };

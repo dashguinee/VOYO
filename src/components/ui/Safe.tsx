@@ -8,6 +8,7 @@
  */
 
 import { Component, type ReactNode } from 'react';
+import { criticalError } from '../../utils/logger';
 
 interface Props {
   name: string;
@@ -26,7 +27,7 @@ export class Safe extends Component<Props, State> {
   componentDidCatch(error: Error, info: { componentStack: string }) {
     // Log in prod too — we need this info from real users to find
     // rendering bugs that only surface in their session state.
-    console.error(
+    criticalError(
       `[Safe:${this.props.name}] crashed:`,
       error?.message || error,
       '\nComponent stack:',

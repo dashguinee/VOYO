@@ -8,7 +8,7 @@
  */
 
 import { supabase, isSupabaseConfigured } from './supabase';
-import { devLog } from '../utils/logger';
+import { devLog, devWarn } from '../utils/logger';
 
 // ============================================
 // VIBE TYPES
@@ -471,7 +471,7 @@ export const vibeEngine = {
     const { data, error } = await query;
 
     if (error) {
-      console.error(`[VibeEngine] Query error for ${vibeId}:`, error.message);
+      devWarn(`[VibeEngine] Query error for ${vibeId}:`, error.message);
       return [];
     }
 

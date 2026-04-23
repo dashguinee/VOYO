@@ -19,7 +19,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useDashNotifications, type DashNotification } from '../../hooks/useDashNotifications';
 import { useAuth } from '../../hooks/useAuth';
-import { devLog } from '../../utils/logger';
+import { devLog, devWarn } from '../../utils/logger';
 
 // Dynamic Island - iPhone-style notification pill
 interface Notification {
@@ -411,7 +411,7 @@ export const DynamicIsland = ({ appCode = 'voyo', dashId: dashIdProp = null }: D
 
       setIsRecording(true);
     } catch (err) {
-      console.error('Mic access denied:', err);
+      devWarn('Mic access denied:', err);
       setIsVoiceMode(false);
       setCountdown(null);
     }

@@ -43,7 +43,7 @@ const SearchOverlay = lazy(() => import('./components/search/SearchOverlayV2'));
 const ArtistPage = lazy(() => import('./components/voyo/ArtistPage'));
 const UniversePanel = lazy(() => import('./components/universe/UniversePanel').then(m => ({ default: m.UniversePanel })));
 import { useReactionStore } from './store/reactionStore';
-import { devLog, devWarn } from './utils/logger';
+import { devLog, devWarn, criticalError } from './utils/logger';
 import { AuthProvider } from './providers/AuthProvider';
 import { useTabHistory } from './hooks/useTabHistory';
 
@@ -143,7 +143,7 @@ class AppErrorBoundary extends Component<{ children: ReactNode }, ErrorBoundaryS
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
-    console.error('[VOYO] Render crash caught by ErrorBoundary:', error, info.componentStack);
+    criticalError('[VOYO] Render crash caught by ErrorBoundary:', error, info.componentStack);
     // ChunkLoadError isn't a real crash — it's a flaky-network symptom.
     // On Guinea / SL LTE, bumping the counter for these would trivially
     // hit the 3-strike threshold and trigger a NUKE that then has to

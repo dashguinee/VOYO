@@ -179,7 +179,7 @@ export async function searchAlbums(query: string, limit: number = 10): Promise<P
         trackCount: item.videos || 0,
       }));
   } catch (error) {
-    console.error('Album search failed:', error);
+    devWarn('Album search failed:', error);
     return []; // Return empty array, don't crash
   }
 }
@@ -200,7 +200,7 @@ export async function getAlbumTracks(playlistId: string): Promise<PipedTrack[]> 
     const data = await response.json();
 
     if (!data.relatedStreams || !Array.isArray(data.relatedStreams)) {
-      console.error('Invalid album data structure');
+      devWarn('Invalid album data structure');
       return [];
     }
 
@@ -212,7 +212,7 @@ export async function getAlbumTracks(playlistId: string): Promise<PipedTrack[]> 
       thumbnail: stream.thumbnail || data.thumbnailUrl || '',
     }));
   } catch (error) {
-    console.error('Album fetch failed:', error);
+    devWarn('Album fetch failed:', error);
     return []; // Return empty array, don't crash
   }
 }

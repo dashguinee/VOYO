@@ -90,7 +90,7 @@ export async function loadLexicon(): Promise<void> {
     isLoaded = true;
 
   } catch (error) {
-    console.error('[Lexicon] Failed to load:', error);
+    devWarn('[Lexicon] Failed to load:', error);
     // Initialize with empty lexicon - translations won't work but app won't crash
     lexicon = [];
     isLoaded = true;
@@ -409,7 +409,7 @@ function loadUserContributions(): void {
       buildIndex();  // Rebuild index with user words
     }
   } catch (error) {
-    console.error('[Lexicon] Failed to load user contributions:', error);
+    devWarn('[Lexicon] Failed to load user contributions:', error);
   }
 }
 

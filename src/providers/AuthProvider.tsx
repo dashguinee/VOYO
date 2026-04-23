@@ -13,7 +13,7 @@ import { profileAPI, friendsAPI, VoyoProfile, HostNowPlaying } from '../lib/voyo
 import { usePlayerStore } from '../store/playerStore';
 import { usePreferenceStore } from '../store/preferenceStore';
 import { getDashSession, DashSession } from '../lib/dash-auth';
-import { devLog } from '../utils/logger';
+import { devLog, devWarn } from '../utils/logger';
 import { useUniverseStore } from '../store/universeStore';
 
 // ============================================
@@ -99,7 +99,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         }
       }
     } catch (err) {
-      console.error('[VOYO Auth] Profile load error:', err);
+      devWarn('[VOYO Auth] Profile load error:', err);
     } finally {
       setIsProfileLoading(false);
     }
@@ -195,7 +195,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
       devLog('[VOYO Auth] Synced to cloud:', { totalListens, totalMinutes });
     } catch (err) {
-      console.error('[VOYO Auth] Sync error:', err);
+      devWarn('[VOYO Auth] Sync error:', err);
     }
   }, [dashId, profile]);
 
@@ -244,7 +244,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
           setProfile(null);
         }
         } catch (err) {
-          console.error('[VOYO Auth] Storage change error:', err);
+          devWarn('[VOYO Auth] Storage change error:', err);
         }
       }
     };
@@ -266,7 +266,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
           return prev;
         });
       } catch (err) {
-        console.error('[VOYO Auth] Focus handler error:', err);
+        devWarn('[VOYO Auth] Focus handler error:', err);
       }
     };
 

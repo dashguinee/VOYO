@@ -9,7 +9,7 @@
  */
 
 import { uploadToR2 } from './api';
-import { devLog } from '../utils/logger';
+import { devLog, devWarn } from '../utils/logger';
 
 const DB_NAME = 'voyo-music-cache';
 const DB_VERSION = 1;
@@ -509,7 +509,7 @@ export async function migrateVoyoIds(): Promise<void> {
       }
     }
   } catch (error) {
-    console.error('Migration failed:', error);
+    devWarn('Migration failed:', error);
   }
 }
 

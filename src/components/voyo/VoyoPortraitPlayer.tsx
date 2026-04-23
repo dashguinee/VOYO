@@ -28,7 +28,7 @@ import { BoostButton } from '../ui/BoostButton';
 import { BoostSettings } from '../ui/BoostSettings';
 import { haptics, getReactionHaptic } from '../../utils/haptics';
 import { useReactionStore, ReactionCategory, initReactionSubscription } from '../../store/reactionStore';
-import { devLog } from '../../utils/logger';
+import { devLog, devWarn } from '../../utils/logger';
 import { pipService } from '../../services/pipService';
 // TiviPlusCrossPromo moved to HomeFeed.tsx (classic homepage)
 import { useAuth } from '../../hooks/useAuth';
@@ -1382,7 +1382,7 @@ const PortalBelt = memo(({ tracks, onTap, onQueueAdd, playedTrackIds, type, mixM
         animationId = requestAnimationFrame(animate);
       } catch (error) {
         // FIX: Graceful error handling for animation loop
-        console.error('[VOYO PortalBelt] Animation error:', error);
+        devWarn('[VOYO PortalBelt] Animation error:', error);
         mounted = false;
       }
     };
@@ -2224,7 +2224,7 @@ const ReactionBar = memo(({
 
       setIsRecording(true);
     } catch (err) {
-      console.error('Mic access denied:', err);
+      devWarn('Mic access denied:', err);
       setIsVoiceMode(false);
       setVoiceCountdown(null);
       setChatResponse('Mic access denied');
@@ -2328,7 +2328,7 @@ const ReactionBar = memo(({
         setChatResponse(`Couldn't find that one. Try again!`);
       }
     } catch (error) {
-      console.error('Voice search error:', error);
+      devWarn('Voice search error:', error);
       setChatResponse('Voice search failed');
     } finally {
       setIsProcessing(false);
@@ -2952,7 +2952,7 @@ const CommunityEditModal = memo(({ isOpen, onClose, originalText, segmentIndex, 
       // Auto-close after success
       setTimeout(() => onClose(), 1500);
     } catch (err) {
-      console.error('[CommunityEdit] Failed to save:', err);
+      devWarn('[CommunityEdit] Failed to save:', err);
     } finally {
       setIsSaving(false);
     }
@@ -3058,7 +3058,7 @@ const LyricsActionButtons = memo(({ lyrics, track, onEditRequest }: LyricsAction
       haptics.success();
       setTimeout(() => setCopied(false), 2000);
     } catch {
-      console.error('Failed to copy');
+      devWarn('Failed to copy');
     }
   }, [lyrics, track]);
 

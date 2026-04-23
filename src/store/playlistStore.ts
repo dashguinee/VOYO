@@ -7,7 +7,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { playlistAPI, isSupabaseConfigured } from '../lib/supabase';
-import { devLog } from '../utils/logger';
+import { devLog, devWarn } from '../utils/logger';
 
 export interface Playlist {
   id: string;
@@ -166,7 +166,7 @@ export const usePlaylistStore = create<PlaylistStore>()(
 
           return true;
         } catch (error) {
-          console.error('[PlaylistStore] syncFromCloud error:', error);
+          devWarn('[PlaylistStore] syncFromCloud error:', error);
           return false;
         }
       },

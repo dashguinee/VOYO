@@ -276,7 +276,7 @@ export async function searchYouTube(query: string): Promise<VideoIntelligence | 
 
     return null;
   } catch (err) {
-    console.error('[VOYO Intelligence] Search error:', err);
+    devWarn('[VOYO Intelligence] Search error:', err);
     return null;
   }
 }
@@ -314,7 +314,7 @@ export async function getRelatedVideos(videoId: string, limit = 5): Promise<Rela
     devLog(`[VOYO Intelligence] Got ${data.videos?.length || 0} related videos`);
     return data.videos || [];
   } catch (err) {
-    console.error('[VOYO Intelligence] Related videos error:', err);
+    devWarn('[VOYO Intelligence] Related videos error:', err);
     return [];
   }
 }
