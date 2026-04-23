@@ -14,6 +14,7 @@ import { usePlayerStore } from '../store/playerStore';
 import { usePreferenceStore } from '../store/preferenceStore';
 import { getDashSession, DashSession } from '../lib/dash-auth';
 import { devLog } from '../utils/logger';
+import { useUniverseStore } from '../store/universeStore';
 
 // ============================================
 // TYPES
@@ -368,13 +369,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       const track = state.currentTrack;
 
       // Privacy gate: only write when portal is open
-      // universeStore imported lazily inside the closure — avoids module-level circular dep
-      let portalOpen = false;
-      try {
-        // eslint-disable-next-line @typescript-eslint/no-var-requires
-        const { useUniverseStore } = require('../store/universeStore') as typeof import('../store/universeStore');
-        portalOpen = useUniverseStore.getState().isPortalOpen;
-      } catch {}
+      const portalOpen = useUniverseStore.getState().isPortalOpen;
 
       const trackChanged = state.currentTrack?.trackId !== prevState.currentTrack?.trackId;
       const playStateChanged = state.isPlaying !== prevState.isPlaying;
