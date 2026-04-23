@@ -703,7 +703,11 @@ export const AudioPlayer = () => {
     // of treating the resulting 'pause' event as a buffer underrun.
     navigator.mediaSession.setActionHandler('play', () => {
       usePlayerStore.getState().setIsPlaying(true);
-      audioRef.current?.play().catch(() => {});
+      if (usePlayerStore.getState().playbackSource === 'iframe') {
+        iframeBridge.play();
+      } else {
+        audioRef.current?.play().catch(() => {});
+      }
     });
     navigator.mediaSession.setActionHandler('pause', () => {
       voyoStream.intentionalPause = true;
