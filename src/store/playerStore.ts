@@ -125,8 +125,7 @@ function savePersistedState(state: PersistedState): void {
   }
 }
 
-// HELPER: Get recent history with FULL track info (for console access)
-export function getRecentHistory(limit = 10): PersistedHistoryItem[] {
+function getRecentHistory(limit = 10): PersistedHistoryItem[] {
   const { history } = loadPersistedState();
   return (history || []).slice(-limit).reverse();
 }

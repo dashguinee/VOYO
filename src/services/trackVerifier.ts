@@ -201,7 +201,7 @@ async function doVerification(
     return newThumbnail;
 
   } catch (error) {
-    console.error(`[TrackVerifier] Error verifying ${artist} - ${title}:`, error);
+    devWarn(`[TrackVerifier] Error verifying ${artist} - ${title}:`, error);
     verificationResults.set(cacheKey, null);
     // Use longer TTL for failures to avoid hammering
     setTimeout(() => verificationResults.delete(cacheKey), FAILED_CACHE_TTL);

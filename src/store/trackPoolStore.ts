@@ -575,10 +575,9 @@ export function startPoolMaintenance(): void {
   devLog('[VOYO Track Pool] Maintenance started (idle-deferred)');
 }
 
-export function stopPoolMaintenance(): void {
+function stopPoolMaintenance(): void {
   if (maintenanceInterval) {
     clearInterval(maintenanceInterval);
     maintenanceInterval = null;
-    devLog('[VOYO Track Pool] Maintenance stopped');
   }
 }

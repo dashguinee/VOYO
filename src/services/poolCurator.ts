@@ -1,11 +1,12 @@
 /**
- * VOYO Music - Pool Curator Service
+ * Pool Curator — Session-aware track pool expansion.
  *
- * CLEAN ARCHITECTURE:
- * Session tracking → Smart queries → Our backend search → Pool
+ * Watches the listening session. After CURATOR_TRIGGER_TRACKS plays,
+ * fires targeted search queries against the VOYO backend and validates
+ * results through trackVerifier before they enter the pool.
  *
- * No Gemini (API expired), No Piped (500 errors)
- * Just our backend which returns VERIFIED working VOYO IDs
+ * Also owns section curation (classics, west-african, trending) so
+ * shelf components always have properly tagged content.
  */
 
 import { Track } from '../types';

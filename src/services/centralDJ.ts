@@ -1,13 +1,13 @@
 /**
- * VOYO Central DJ - Collective Intelligence System
+ * VOYO Central DJ — Collective Intelligence Layer
  *
- * THE FLYWHEEL:
- * 1. User A vibes → DJ discovers via Gemini → Supabase stores
- * 2. User B (similar vibe) → Gets tracks INSTANTLY from Supabase (no Gemini call!)
- * 3. User B reactions → Update collective scores → System gets smarter
+ * Owns the shared Supabase track graph (voyo_tracks).
+ * Surfaces tracks by vibe mode, records playback signals to voyo_signals,
+ * and trains vibe scores when users queue/boost/react.
  *
- * After ~100 users, Gemini calls drop 80%+
- * The system learns what WORKS (high completion, low skips)
+ * The flywheel: every user interaction votes on a track's mode affinity
+ * so getTracksByMode() returns better results with each session.
+ * No AI — pure collective behavior.
  */
 
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
@@ -15,6 +15,7 @@ import { Track } from '../types';
 import { getThumb } from '../utils/thumbnail';
 import { devLog, devWarn } from '../utils/logger';
 import { getUserHash } from '../utils/userHash';
+import { MODE_KEYWORDS, type VibeMode } from '../store/intentStore';
 // Re-export so existing consumers of `centralDJ.getUserHash` still work.
 export { getUserHash };
 
@@ -39,8 +40,8 @@ export interface CentralTrack {
   discovered_by: string;
 }
 
-// MixBoard mode types (matches VoyoPortraitPlayer.tsx)
-export type MixBoardMode = 'afro-heat' | 'chill-vibes' | 'party-mode' | 'late-night' | 'workout' | 'random-mixer';
+// Alias intentStore's VibeMode — same values, keeps existing callers (VoyoPortraitPlayer, intelligentDJ) working.
+export type MixBoardMode = VibeMode;
 
 export interface VibeProfile {
   'afro-heat': number;    // 0-100
@@ -50,20 +51,7 @@ export interface VibeProfile {
   'workout': number;      // 0-100
 }
 
-// Keywords for auto-detecting vibe from track metadata.
-// Kept aligned with the canonical list in src/store/intentStore.ts
-// (MODE_KEYWORDS). If you change one, change both. See comments in
-// intentStore for rationale on the 2026-04-22 purification (dropped
-// 'mix'/'dj' from party, 'love'/'essence'/'vibe' from chill, 'vibe' from
-// late-night, 'run'/'energy' from workout).
-const MODE_KEYWORDS: Record<MixBoardMode, string[]> = {
-  'afro-heat': ['afrobeats', 'afrobeat', 'afro', 'amapiano', 'naija', 'lagos', 'burna', 'davido', 'wizkid', 'rema', 'asake', 'ayra', 'tems', 'ckay', 'tyla', 'nigeria', 'ghana', 'african'],
-  'chill-vibes': ['chill', 'slow', 'calm', 'relax', 'smooth', 'mellow', 'downtempo', 'acoustic', 'rnb', 'r&b', 'soul', 'ballad', 'lofi'],
-  'party-mode': ['party', 'banger', 'turn up', 'club', 'dance', 'anthem', 'edm', 'hype', 'afro house', 'amapiano', 'baile'],
-  'late-night': ['night', 'late', 'midnight', 'dark', 'moody', 'heartbreak', 'sad', 'emotional', 'last last'],
-  'workout': ['workout', 'gym', 'fitness', 'cardio', 'hiit', 'pump', 'motivation', 'sweat', 'hustle', 'beast', 'grind'],
-  'random-mixer': [],
-};
+// Single source of truth for vibe keywords lives in intentStore.MODE_KEYWORDS.
 
 /**
  * Vibe training signal - when user adds track to a mode
@@ -124,8 +112,7 @@ function modesToVibeProfile(modes: MixBoardMode[]): VibeProfile {
 // ============================================
 
 /**
- * Get tracks by specific MixBoard mode
- * This is the FAST PATH - no Gemini call needed!
+ * Get tracks by specific MixBoard mode from the collective track graph.
  */
 export async function getTracksByMode(
   mode: MixBoardMode,
@@ -143,14 +130,14 @@ export async function getTracksByMode(
     });
 
     if (error) {
-      console.error('[Central DJ] Query error:', error);
+      devWarn('[Central DJ] Query error:', error);
       return [];
     }
 
     devLog(`[Central DJ] Found ${data?.length || 0} tracks for ${mode}`);
     return data || [];
   } catch (err) {
-    console.error('[Central DJ] Error:', err);
+    devWarn('[Central DJ] Error:', err);
     return [];
   }
 }
@@ -178,14 +165,14 @@ export async function getTracksByVibe(
     });
 
     if (error) {
-      console.error('[Central DJ] Query error:', error);
+      devWarn('[Central DJ] Query error:', error);
       return [];
     }
 
     devLog(`[Central DJ] Found ${data?.length || 0} tracks matching vibe profile`);
     return data || [];
   } catch (err) {
-    console.error('[Central DJ] Error:', err);
+    devWarn('[Central DJ] Error:', err);
     return [];
   }
 }
@@ -202,20 +189,20 @@ export async function getHotTracks(limit: number = 20): Promise<CentralTrack[]> 
     });
 
     if (error) {
-      console.error('[Central DJ] Hot tracks error:', error);
+      devWarn('[Central DJ] Hot tracks error:', error);
       return [];
     }
 
     devLog(`[Central DJ] 🔥 Found ${data?.length || 0} hot tracks`);
     return data || [];
   } catch (err) {
-    console.error('[Central DJ] Error:', err);
+    devWarn('[Central DJ] Error:', err);
     return [];
   }
 }
 
 /**
- * Check if we have enough tracks for a vibe (to decide if we need Gemini)
+ * Check if the central DB has enough tracks for a given vibe profile.
  */
 export async function hasEnoughTracks(
   vibe: VibeProfile,
@@ -230,14 +217,13 @@ export async function hasEnoughTracks(
 // ============================================
 
 /**
- * Save a verified track to the central database
- * Called after Gemini suggests + backend verifies
- * Auto-detects vibes from track metadata if not provided
+ * Save a verified track to the central database.
+ * Auto-detects vibe modes from track metadata if not provided.
  */
 export async function saveVerifiedTrack(
   track: Track,
   vibe?: VibeProfile,
-  discoveredBy: 'gemini' | 'user_search' | 'related' | 'seed' = 'gemini'
+  discoveredBy: 'gemini' | 'user_search' | 'related' | 'seed' = 'related'
 ): Promise<boolean> {
   if (!supabase || !isSupabaseConfigured) {
     devLog('[Central DJ] Cannot save - Supabase not configured');
@@ -289,14 +275,14 @@ export async function saveVerifiedTrack(
     });
 
     if (error) {
-      console.error('[Central DJ] Save error:', error);
+      devWarn('[Central DJ] Save error:', error);
       return false;
     }
 
     devLog(`[Central DJ] ✅ Saved: ${track.artist} - ${track.title} [${detectedModes.join(', ')}]`);
     return true;
   } catch (err) {
-    console.error('[Central DJ] Save error:', err);
+    devWarn('[Central DJ] Save error:', err);
     return false;
   }
 }
@@ -426,7 +412,7 @@ export async function trainVibe(signal: VibeTrainSignal): Promise<boolean> {
     devLog(`[Central DJ] 🎯 Trained: ${signal.trackId.substring(0, 10)}... → ${signal.modeId} +${increment}`);
     return true;
   } catch (err) {
-    console.error('[Central DJ] Vibe train error:', err);
+    devWarn('[Central DJ] Vibe train error:', err);
     return false;
   }
 }

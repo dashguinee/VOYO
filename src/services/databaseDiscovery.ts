@@ -354,13 +354,13 @@ export async function getFamiliarTracks(limit: number = 10): Promise<Track[]> {
     });
 
     if (error) {
-      console.error('[Discovery] Familiar tracks error:', error);
+      devWarn('[Discovery] Familiar tracks error:', error);
       return [];
     }
 
     return (data || []).map(toTrack);
   } catch (err) {
-    console.error('[Discovery] Familiar tracks exception:', err);
+    devWarn('[Discovery] Familiar tracks exception:', err);
     return [];
   }
 }

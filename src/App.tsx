@@ -47,9 +47,6 @@ import { devLog, devWarn } from './utils/logger';
 import { AuthProvider } from './providers/AuthProvider';
 import { useTabHistory } from './hooks/useTabHistory';
 
-// DEBUG: Load intent engine verification tools (available in browser console)
-import './utils/debugIntent';
-
 // BRAIN: Initialize the intelligent DJ system
 // Brain subsystem is lazy-loaded inside the boot useEffect via dynamic import.
 // This pulls the ~110 KB app-brain chunk out of the initial bundle — Brain
