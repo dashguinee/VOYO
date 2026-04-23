@@ -1656,6 +1656,27 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
             discoverTracks: mergedDiscover,
           });
 
+          // ── POOL PRE-EXTRACTION ───────────────────────────────────────
+          // Fire ensureTrackReady at priority 3 (background) for every
+          // track in the discover + hot pool. By the time nextTrack()
+          // picks from this pool, the worker has had time to extract to R2
+          // — eliminating the default iframe path for auto-advance sessions.
+          // Priority 3 sits below queue additions (7) and direct plays (10)
+          // so it never competes with the user's immediate intent.
+          // Spread over 200ms chunks to avoid flooding Supabase with 50
+          // parallel RPCs on a single pool refresh.
+          import('../services/voyoStream').then(({ ensureTrackReady }) => {
+            const poolTracks = [...finalHot, ...mergedDiscover];
+            const unique = poolTracks.filter((t, i) =>
+              poolTracks.findIndex(x => (x.trackId || x.id) === (t.trackId || t.id)) === i
+            );
+            unique.forEach((t, i) => {
+              setTimeout(() => {
+                void ensureTrackReady(t, null, { priority: 3 });
+              }, Math.floor(i / 5) * 200); // 5 tracks per 200ms burst
+            });
+          }).catch(() => {});
+
           // ── VOYO SPIRIT: STAGE TRACK ON FIRST LOAD ───────────────────
           // Pick the first OYO-sorted hot track and stage it so the player
           // is immediately loaded, artwork visible, ready to go on first
