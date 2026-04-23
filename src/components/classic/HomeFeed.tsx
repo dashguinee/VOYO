@@ -1695,6 +1695,12 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
   const longPressMoved = useRef(false);
   const longPressFired = useRef(false);
 
+  // Classics disk timeline — center-focused scroll
+  const [diskCenterIndex, setDiskCenterIndex] = useState(0);
+  const diskScrollRef = useRef<HTMLDivElement>(null);
+  const diskRafRef = useRef<number | null>(null);
+  const diskCenterRef = useRef(0);
+
   // Poll live friend count every 30s while mounted
   useEffect(() => {
     if (!isLoggedIn || !dashId) return;

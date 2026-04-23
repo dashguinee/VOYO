@@ -366,50 +366,6 @@ export const friendsAPI = {
     }
   },
 
-  /**
-   * Send friend request to a shared account member
-   */
-  async sendFriendRequest(userId: string, friendId: string): Promise<boolean> {
-    if (!ccSupabase) return false;
-
-    try {
-      const { error } = await ccSupabase
-        .from('friendships')
-        .upsert({
-          user_id: userId,
-          friend_id: friendId,
-          status: 'pending',
-          created_at: new Date().toISOString()
-        }, { onConflict: 'user_id,friend_id' });
-
-      return !error;
-    } catch (err) {
-      devWarn('[DAHUB] Failed to send friend request:', err);
-      return false;
-    }
-  },
-
-  /**
-   * Accept a friend request (or upgrade suggested to accepted)
-   */
-  async acceptFriendRequest(userId: string, friendId: string): Promise<boolean> {
-    if (!ccSupabase) return false;
-
-    try {
-      // Upsert both directions for mutual friendship
-      const { error } = await ccSupabase
-        .from('friendships')
-        .upsert([
-          { user_id: userId, friend_id: friendId, status: 'accepted', created_at: new Date().toISOString() },
-          { user_id: friendId, friend_id: userId, status: 'accepted', created_at: new Date().toISOString() }
-        ], { onConflict: 'user_id,friend_id' });
-
-      return !error;
-    } catch (err) {
-      devWarn('[DAHUB] Failed to accept friend request:', err);
-      return false;
-    }
-  }
 };
 
 // ==============================================

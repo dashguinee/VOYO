@@ -130,31 +130,31 @@ export const DynamicIsland = ({ appCode = 'voyo', dashId: dashIdProp = null }: D
       triggerNewNotification(); // Wave for new notifications
     };
 
-    // Demo: Auto-trigger notifications to show the full flow
+    if (!import.meta.env.DEV) return;
+
+    // Demo: Auto-trigger notifications to show the full flow (dev only)
     const demo1 = setTimeout(() => {
       window.pushNotification?.({
         id: '1',
-        type: 'music',  // Purple dot
+        type: 'music',
         title: 'Burna Boy',
         subtitle: 'Higher just dropped'
       });
     }, 1000);
 
-    // Friend message after 8s (custom blue color)
     const demo2 = setTimeout(() => {
       window.pushNotification?.({
         id: '2',
-        type: 'message',  // Blue dot
+        type: 'message',
         title: 'Aziz',
         subtitle: 'yo come check this out'
       });
     }, 8000);
 
-    // System notification after 15s
     const demo3 = setTimeout(() => {
       window.pushNotification?.({
         id: '3',
-        type: 'system',  // Red dot
+        type: 'system',
         title: 'VOYO',
         subtitle: 'notification system ready'
       });

@@ -1231,8 +1231,13 @@ export const VoyoMoments: React.FC<VoyoMomentsProps> = ({ onPlayFullTrack, onArt
   const volTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const starHoldTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Record play when moment changes
-  useEffect(() => { if (currentMoment) recordPlay(currentMoment.id); }, [currentMoment?.id, recordPlay]);
+  // Record play after 1.5s dwell — rapid swipes don't inflate voyo_plays
+  useEffect(() => {
+    if (!currentMoment) return;
+    const id = currentMoment.id;
+    const t = window.setTimeout(() => recordPlay(id), 1500);
+    return () => window.clearTimeout(t);
+  }, [currentMoment?.id, recordPlay]);
 
   // Navigate with animation direction
   const nav = useCallback((dir: SlideDir, fn: () => void) => {
@@ -1391,8 +1396,8 @@ export const VoyoMoments: React.FC<VoyoMomentsProps> = ({ onPlayFullTrack, onArt
       switch (e.key) {
         case 'ArrowUp': e.preventDefault(); nav('up', mixGoUp); break;
         case 'ArrowDown': e.preventDefault(); nav('down', mixGoDown); break;
-        case 'ArrowLeft': e.preventDefault(); nav('right', goLeft); break;
-        case 'ArrowRight': e.preventDefault(); nav('left', goRight); break;
+        case 'ArrowLeft': e.preventDefault(); nav('left', goLeft); break;
+        case 'ArrowRight': e.preventDefault(); nav('right', goRight); break;
         case ' ': e.preventDefault(); showVolBadge(); break;
       }
     };

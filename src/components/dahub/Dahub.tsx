@@ -1027,7 +1027,7 @@ export function Dahub({ userId, userName, userAvatar, coreId, appContext, onClos
 
   const handleConnect = async (member: SharedAccountMember) => {
     setConnectingId(member.dash_id);
-    const success = await friendsAPI.sendFriendRequest(userId, member.dash_id);
+    const success = await friendsAPI.addFriend(userId, member.dash_id);
     if (success) setSharedMembers(prev => prev.map(m => m.dash_id === member.dash_id ? { ...m, friend_status: 'pending' as const } : m));
     setConnectingId(null);
   };
