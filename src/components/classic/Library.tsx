@@ -840,6 +840,16 @@ export const Library = ({ onTrackClick }: LibraryProps) => {
     setPlayMenuOpen(false);
   }, [orderedTracks, playTrackAction, clearQueue, addToQueue]);
 
+  const handleLoopPlay = useCallback((track: Track) => {
+    if (inYourLoop.length === 0) return;
+    try { clearQueue?.(); } catch { /* optional */ }
+    const idx = inYourLoop.findIndex(t => t.id === track.id);
+    const ordered = idx > 0 ? [...inYourLoop.slice(idx), ...inYourLoop.slice(0, idx)] : inYourLoop;
+    const [first, ...rest] = ordered;
+    playTrackAction(first);
+    for (const t of rest) { addToQueue(t); }
+  }, [inYourLoop, playTrackAction, clearQueue, addToQueue]);
+
   const modeLabel =
     playMode === 'magic'    ? 'Magic Mix'
     : playMode === 'shuffle' ? 'Shuffle'
@@ -1061,7 +1071,7 @@ export const Library = ({ onTrackClick }: LibraryProps) => {
                 <button
                   key={track.id}
                   className="flex-shrink-0 w-[72px]"
-                  onClick={() => handleTrackClick(track)}
+                  onClick={() => handleLoopPlay(track)}
                 >
                   <div
                     className="relative w-[72px] h-[72px] rounded-full overflow-hidden mb-1.5 mx-auto"
