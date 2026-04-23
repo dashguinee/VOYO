@@ -19,8 +19,7 @@
 import { searchMusic } from './api';
 import { saveVerifiedTrack } from './centralDJ';
 import { useTrackPoolStore, PooledTrack } from '../store/trackPoolStore';
-// Dynamic import to break circular dep (playerStore → personalization → trackVerifier → playerStore)
-// import { usePlayerStore } from '../store/playerStore';
+// Dynamic import breaks circular dep: playerStore → personalization → trackVerifier → playerStore
 import { getThumb } from '../utils/thumbnail';
 import { Track } from '../types';
 import { devLog, devWarn } from '../utils/logger';

@@ -27,6 +27,7 @@ import { makeReconnectingChannel } from '../../lib/realtime/reconnect';
 import { openCommandCenterForSSO } from '../../lib/dash-auth';
 import type { VoyoProfile } from '../../lib/voyo-api';
 import { PortalChat } from '../portal/PortalChat';
+import { formatTime } from '../../utils/format';
 
 export const ProfilePage = () => {
   // URL param is now dash_id (e.g., /0046AAD)
@@ -856,11 +857,5 @@ export const ProfilePage = () => {
   );
 };
 
-// Helper to format time
-function formatTime(seconds: number): string {
-  const mins = Math.floor(seconds / 60);
-  const secs = Math.floor(seconds % 60);
-  return `${mins}:${secs.toString().padStart(2, '0')}`;
-}
 
 export default ProfilePage;

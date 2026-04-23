@@ -27,6 +27,7 @@ import { getVibeEssence } from '../../services/essenceEngine';
 import { voyoStream } from '../../services/voyoStream';
 import { onSignal as oyaPlanSignal } from '../../services/oyoPlan';
 import { useBackGuard } from '../../hooks/useBackGuard';
+import { formatTime as formatDuration, formatViews } from '../../utils/format';
 
 interface SearchOverlayProps {
   isOpen: boolean;
@@ -519,17 +520,6 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap, onEnterVideoMode
     showToast('Finding similar', 'discovery');
   }, [resultToTrack, updateDiscoveryForTrack, showToast]);
 
-  const formatDuration = useCallback((seconds: number): string => {
-    const mins = Math.floor(seconds / 60);
-    const secs = Math.floor(seconds % 60);
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  }, []);
-
-  const formatViews = useCallback((views: number): string => {
-    if (views >= 1000000) return `${(views / 1000000).toFixed(1)}M`;
-    if (views >= 1000) return `${(views / 1000).toFixed(0)}K`;
-    return views.toString();
-  }, []);
 
   return (
     <>

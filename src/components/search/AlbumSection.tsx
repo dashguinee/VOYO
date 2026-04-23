@@ -13,6 +13,7 @@ import { usePlayerStore } from '../../store/playerStore';
 import { app } from '../../services/oyo';
 import { Track } from '../../types';
 import { useBackGuard } from '../../hooks/useBackGuard';
+import { formatTime as formatDuration } from '../../utils/format';
 
 interface AlbumSectionProps {
   query: string;
@@ -100,12 +101,6 @@ export const AlbumSection = ({ query, isVisible }: AlbumSectionProps) => {
     const voyoTrack = pipedTrackToVoyoTrack(track, selectedAlbum?.name);
     addToQueue(voyoTrack);
   }, [selectedAlbum, addToQueue]);
-
-  const formatDuration = (seconds: number): string => {
-    const mins = Math.floor(seconds / 60);
-    const secs = Math.floor(seconds % 60);
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
 
   if (!isVisible) return null;
 

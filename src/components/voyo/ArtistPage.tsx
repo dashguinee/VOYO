@@ -12,6 +12,7 @@ import { X, ArrowLeft, Play, Search, Loader2, Music2, ExternalLink } from 'lucid
 import { VoyoCloseX } from '../ui/VoyoCloseX';
 import { useArtist, ArtistTrack, ArtistMoment } from '../../hooks/useArtist';
 import { useBackGuard } from '../../hooks/useBackGuard';
+import { formatTime as formatDuration } from '../../utils/format';
 
 // ============================================
 // TYPES
@@ -78,13 +79,6 @@ const COUNTRY_NAMES: Record<string, string> = {
 // ============================================
 
 const css = (obj: Record<string, unknown>) => obj as React.CSSProperties;
-
-function formatDuration(seconds: number | null): string {
-  if (!seconds || seconds <= 0) return '';
-  const m = Math.floor(seconds / 60);
-  const s = seconds % 60;
-  return `${m}:${s.toString().padStart(2, '0')}`;
-}
 
 function formatCount(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;

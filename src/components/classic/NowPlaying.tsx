@@ -46,6 +46,7 @@ import { VoyoCloseX } from '../ui/VoyoCloseX';
 import { useReactionStore, Reaction, TrackStats } from '../../store/reactionStore';
 import { OyeButton } from '../oye/OyeButton';
 import { useAuth } from '../../hooks/useAuth';
+import { formatTime } from '../../utils/format';
 
 // ============================================
 // ALBUM ART BACKGROUND
@@ -317,13 +318,6 @@ export const NowPlaying = ({ isOpen, onClose }: NowPlayingProps) => {
       setVideoTarget('hidden');
     }
   }, [isOpen, videoTarget, setVideoTarget]);
-
-  // Format time
-  const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = Math.floor(seconds % 60);
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
 
   const currentTime = (progress / 100) * duration;
 
