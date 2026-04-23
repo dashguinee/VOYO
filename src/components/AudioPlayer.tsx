@@ -94,6 +94,13 @@ export const AudioPlayer = () => {
   // overwriting el.src or logging play_start after the user has already
   // moved on.
   const trackChangeTokenRef = useRef(0);
+  // Wall-clock at which the current track-change effect started its
+  // softFadeOut. handleCanPlay reads this to decide whether a fresh
+  // canplay event is "the incoming track is ready — ramp it in" or "hot-
+  // swap rewrote el.src mid-fade — let the fade-out finish, we'll ramp
+  // up later" (DSP audit Finding #1).
+  const lastTrackChangeAtRef = useRef(0);
+  const lastFadeOutMsRef = useRef(0);
 
   // Fine-grained selectors — destructuring the full store re-ran this whole
   // component on every progress / currentTime tick (4Hz) during playback,
@@ -246,6 +253,14 @@ export const AudioPlayer = () => {
     if (shouldFade) {
       if (wasR2) softFadeOut(fadeOutMs);
       if (wasIframe) void iframeBridge.fadeOut(fadeOutMs);
+      // Record the track-change timestamp so handleCanPlay can decide
+      // whether a fresh canplay event is "new track ready" or "hot-swap
+      // rewrote src mid-fade" (DSP audit Finding #1).
+      lastTrackChangeAtRef.current = Date.now();
+      lastFadeOutMsRef.current = fadeOutMs;
+    } else {
+      lastTrackChangeAtRef.current = 0;
+      lastFadeOutMsRef.current = 0;
     }
     // Incoming ramp — halve in BG; Web Audio clock isn't throttled so
     // the ramp still fires reliably, just shorter (user can't see it).
@@ -412,7 +427,19 @@ export const AudioPlayer = () => {
     // ease-in. Buffer recoveries leave it null → short anti-click default.
     const fadeMs = nextFadeInMsRef.current ?? 100;
     nextFadeInMsRef.current = null;
-    fadeInMasterGain(fadeMs);
+    // Guard the fade-in against mid-swap canplay. If we're still inside
+    // the softFadeOut window of the outgoing track (useHotSwap rewriting
+    // el.src while fade is in flight fires a fresh canplay), skip the
+    // fadeInMasterGain call — the gain intent coordinator inside
+    // fadeInMasterGain ALSO catches this, but guarding here avoids the
+    // warn-log noise and is strictly symmetric with the audit's #1 fix.
+    const sinceTrackChange = Date.now() - lastTrackChangeAtRef.current;
+    const withinFadeWindow =
+      lastTrackChangeAtRef.current > 0 &&
+      sinceTrackChange < lastFadeOutMsRef.current + 50;
+    if (!withinFadeWindow) {
+      fadeInMasterGain(fadeMs);
+    }
     // New track has data ready → track-change is fully committed. Clear
     // the guard so subsequent user-initiated pauses actually pause.
     trackSwapInProgressRef.current = false;

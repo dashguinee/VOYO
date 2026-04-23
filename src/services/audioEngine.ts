@@ -202,6 +202,29 @@ export function connectAudioChain(audio: HTMLAudioElement): AudioChainResult | n
 }
 
 /**
+ * Teardown the audio chain's source connections WITHOUT closing the context
+ * or destroying the source node. Used by AudioErrorBoundary before remount
+ * (Finding #5 in outputs/AUDIT-DSP-voyex.md): the crashed mount's chain
+ * nodes are orphaned by hook-ref teardown, but the _sourceNode → chain
+ * connection survives at this (singleton) layer and would cause a doubly-
+ * connected graph after remount.
+ *
+ * We disconnect the source from whatever it's connected to, then flip
+ * _chainWired = false so the next connectAudioChain() call will treat this
+ * as "fresh wire-up" and the hook can rebuild the processing graph. We
+ * deliberately keep _sourceNode alive — createMediaElementSource can only
+ * be called ONCE per audio element, so tearing it down would lock the
+ * element out of Web Audio for the rest of the session.
+ */
+export function teardownAudioChain(): void {
+  if (_sourceNode) {
+    try { _sourceNode.disconnect(); } catch {}
+  }
+  _chainWired = false;
+  _connectedElement = null;
+}
+
+/**
  * Get the singleton AudioContext (if created). Used for suspend/resume battery optimization.
  */
 export function getAudioContext(): AudioContext | null {

@@ -35,6 +35,7 @@ import { Component, type ReactNode } from 'react';
 import { trace } from '../services/telemetry';
 import { devWarn } from '../utils/logger';
 import { usePlayerStore } from '../store/playerStore';
+import { teardownAudioChain } from '../services/audioEngine';
 
 interface Props {
   children: ReactNode;
@@ -90,6 +91,15 @@ export class AudioErrorBoundary extends Component<Props, State> {
     // need to force-rerun when the track is unchanged.
     const savedTrackId =
       usePlayerStore.getState().currentTrack?.trackId ?? null;
+
+    // Disconnect the audioEngine singleton's source → chain wiring BEFORE
+    // remount (Finding #5). The crashed mount's hook cleanup effect stops
+    // the LFOs and disconnects the top of the processing graph, but the
+    // source node → EQ → master → destination chain still holds
+    // references through the singleton. Without this teardown, the fresh
+    // mount's setupAudioEnhancement would wire a SECOND chain while the
+    // old one still runs in parallel → phase comb-filtering + double CPU.
+    try { teardownAudioChain(); } catch (e) { devWarn('[AudioErrorBoundary] teardown failed', e); }
 
     setTimeout(() => {
       this.setState(

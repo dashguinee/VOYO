@@ -39,6 +39,13 @@ import { usePlayerStore } from '../../store/playerStore';
 import { devLog, devWarn } from '../../utils/logger';
 import { BOOST_PRESETS, type BoostPreset } from './boostPresets';
 
+// Gain intent — see Finding #1/#2 in outputs/AUDIT-DSP-voyex.md.
+// Every helper that touches masterGain sets its intent BEFORE scheduling a
+// ramp. Non-overriding helpers (applyMasterGain, fadeInMasterGain) bail when
+// another helper's ramp is in flight. Overriding helpers (softFadeOut,
+// muteMasterGainInstantly) always win.
+type GainIntent = 'idle' | 'fade-in' | 'fade-out' | 'mute';
+
 export interface AudioChainApi {
   // Core refs for external readers.
   audioContextRef: RefObject<AudioContext | null>;
@@ -110,6 +117,19 @@ export function useAudioChain(params: UseAudioChainParams): AudioChainApi {
   const spatialEnhancedRef = useRef<boolean>(false);
   const currentProfileRef = useRef<BoostPreset>('boosted');
 
+  // Gain-intent coordinator (see Findings #1 + #2). Shared state read by
+  // every helper that writes to masterGain.gain. A setTimeout at ramp-end
+  // time restores the intent to 'idle' — but only if the intent is still
+  // what this ramp set it to (some other helper may have taken over).
+  const gainIntentRef = useRef<GainIntent>('idle');
+
+  // Spatial LFOs — stashed in refs so the unmount cleanup effect (Finding #5)
+  // can .stop() them. Previously only local vars inside setupAudioEnhancement,
+  // which meant they kept ticking forever after AudioErrorBoundary remounts.
+  const lfo1Ref = useRef<OscillatorNode | null>(null);
+  const lfo2Ref = useRef<OscillatorNode | null>(null);
+  const lfo3Ref = useRef<OscillatorNode | null>(null);
+
   // Gain watchdog — setTimeout for FG, MC for BG. Both must be cancelable
   // (orphaned MCs accumulate across track loads otherwise).
   const watchdogTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -152,8 +172,14 @@ export function useAudioChain(params: UseAudioChainParams): AudioChainApi {
 
   // ── APPLY MASTER GAIN ────────────────────────────────────────────────
   // Called from preset/spatial/volume effects. 25ms ramp — felt-instant.
+  // Intent-aware: if a fade-out or mute ramp is in flight, skip the write.
+  // Otherwise a volume/preset/spatial change mid-softFadeOut would wipe the
+  // fade and pop the outgoing track back to target volume (Finding #2).
   const applyMasterGain = useCallback(() => {
     if (!gainNodeRef.current) return;
+    if (gainIntentRef.current === 'fade-out' || gainIntentRef.current === 'mute') {
+      return;
+    }
     const target = computeMasterTarget();
     const ctx = audioContextRef.current;
     if (ctx) {
@@ -232,15 +258,20 @@ export function useAudioChain(params: UseAudioChainParams): AudioChainApi {
   // ── MUTE & FADE-IN HELPERS ───────────────────────────────────────────
   // 8ms fade-out before a src swap — click-free via Web Audio gain ramp
   // (not audio.volume which is a digital jump that leaks as a click).
+  // Overrides any other intent (fade-in, fade-out).
   const muteMasterGainInstantly = useCallback(() => {
     if (!gainNodeRef.current || !audioContextRef.current) return;
     const ctx = audioContextRef.current;
     const now = ctx.currentTime;
     const param = gainNodeRef.current.gain;
+    gainIntentRef.current = 'mute';
     param.cancelScheduledValues(now);
     param.setValueAtTime(param.value, now);
     param.linearRampToValueAtTime(0.0001, now + 0.008);
     armGainWatchdog('mute-before-load');
+    // Hold 'mute' intent for the full ramp window so no in-flight ramp writer
+    // can unmute us mid-swap. fadeInMasterGain is what clears 'mute' back to
+    // 'idle' (next canplay); otherwise the next src swap wins naturally.
   }, [armGainWatchdog]);
 
   // Ramp master gain from current value to the computed target over
@@ -253,6 +284,14 @@ export function useAudioChain(params: UseAudioChainParams): AudioChainApi {
   const fadeInMasterGain = useCallback((durationMs: number = 80) => {
     disarmGainWatchdog();
     if (!gainNodeRef.current || !audioContextRef.current) return;
+    // NEVER override an in-flight softFadeOut. The whole point of the
+    // race is that a stale canplay (mid-track-change, hot-swap src rewrite)
+    // fires fadeIn and obliterates the outgoing track's ramp to silence.
+    // Let the fade-out complete; the next real canplay will do the ramp-up.
+    if (gainIntentRef.current === 'fade-out') {
+      devWarn('[gain] fadeIn suppressed while fade-out in flight');
+      return;
+    }
     const ctx = audioContextRef.current;
     if (ctx.state === 'suspended' || (ctx as any).state === 'interrupted') {
       ctx.resume().catch(() => {});
@@ -260,6 +299,7 @@ export function useAudioChain(params: UseAudioChainParams): AudioChainApi {
     const now = ctx.currentTime;
     const param = gainNodeRef.current.gain;
     const target = computeMasterTarget();
+    gainIntentRef.current = 'fade-in';
     param.cancelScheduledValues(now);
     // Use param.value (actual current gain) not hardcoded 0.0001.
     // If pauseOutgoing() ran and left gain mid-ramp (e.g. 0.12), starting
@@ -268,20 +308,34 @@ export function useAudioChain(params: UseAudioChainParams): AudioChainApi {
     param.setValueAtTime(param.value, now);
     const seconds = Math.max(0.003, durationMs / 1000);
     param.linearRampToValueAtTime(target, now + seconds);
+    // Clear intent at ramp-end — but only if we still own it. Another
+    // helper may have taken over mid-flight (e.g. user paused → 'fade-out').
+    const ownedAt = gainIntentRef.current;
+    setTimeout(() => {
+      if (gainIntentRef.current === ownedAt) gainIntentRef.current = 'idle';
+    }, durationMs);
   }, [computeMasterTarget, disarmGainWatchdog]);
 
   /**
    * Slow gain ramp to near-silence over durationMs.
    * Used for search crossfade transitions — tasteful, not abrupt.
+   * Claims 'fade-out' intent so concurrent volume/preset writes via
+   * applyMasterGain can't clobber the ramp (Finding #2).
    */
   const softFadeOut = useCallback((durationMs: number) => {
     if (!gainNodeRef.current || !audioContextRef.current) return;
     const ctx = audioContextRef.current;
     const now = ctx.currentTime;
     const param = gainNodeRef.current.gain;
+    gainIntentRef.current = 'fade-out';
     param.cancelScheduledValues(now);
     param.setValueAtTime(param.value, now);
     param.linearRampToValueAtTime(0.0001, now + durationMs / 1000);
+    // Clear intent at ramp-end — but only if we still own it.
+    const ownedAt = gainIntentRef.current;
+    setTimeout(() => {
+      if (gainIntentRef.current === ownedAt) gainIntentRef.current = 'idle';
+    }, durationMs);
   }, []);
 
   // ── UPDATE BOOST PRESET ──────────────────────────────────────────────
@@ -518,6 +572,10 @@ export function useAudioChain(params: UseAudioChainParams): AudioChainApi {
       const lfo1 = ctx.createOscillator(); lfo1.type = 'sine'; lfo1.frequency.value = 0.037;
       const lfo2 = ctx.createOscillator(); lfo2.type = 'sine'; lfo2.frequency.value = 0.071;
       const lfo3 = ctx.createOscillator(); lfo3.type = 'sine'; lfo3.frequency.value = 0.113;
+      // Stash in refs so the unmount cleanup (Finding #5) can .stop() them.
+      // Without this, LFOs keep ticking on the audio thread forever after
+      // AudioErrorBoundary remounts — 12 oscillators after 3 crashes.
+      lfo1Ref.current = lfo1; lfo2Ref.current = lfo2; lfo3Ref.current = lfo3;
       const panD = ctx.createGain(); panD.gain.value = 0; panDepthGainRef.current = panD;
       lfo1.connect(panD); lfo2.connect(panD); lfo3.connect(panD); panD.connect(panner.pan);
       lfo1.start(); lfo2.start(); lfo3.start();
@@ -710,9 +768,14 @@ export function useAudioChain(params: UseAudioChainParams): AudioChainApi {
   useEffect(() => {
     if (playbackSource === 'iframe' || !audioRef.current) return;
     if (audioEnhancedRef.current && gainNodeRef.current) {
-      audioRef.current.volume = 1.0;
+      // Only force HTML volume to 1.0 if it isn't already — avoids a 25ms
+      // burst of unattenuated audio when masterGain is about to ramp to 0
+      // on mute. Post-setupAudioEnhancement, HTML volume is always 1.0 so
+      // this is a no-op most of the time (Finding #3).
+      if (audioRef.current.volume !== 1.0) audioRef.current.volume = 1.0;
       applyMasterGain();
     } else {
+      // No chain active — write HTML volume directly.
       audioRef.current.volume = volume / 100;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -817,6 +880,48 @@ export function useAudioChain(params: UseAudioChainParams): AudioChainApi {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isPlaying]);
+
+  // ── UNMOUNT CLEANUP (Finding #5) ─────────────────────────────────────
+  // Minimum-viable teardown. The full chain is owned by the audioEngine
+  // singleton for the source node, but every other node downstream lives
+  // in refs scoped to this hook. On AudioErrorBoundary crash remount, the
+  // old hook instance is discarded — without this cleanup the old chain's
+  // LFOs keep ticking (12 oscillators after 3 crashes) and the old master/
+  // spatial top-of-chain stays connected to ctx.destination.
+  //
+  // This doesn't free every node (the per-band filters/comps/waveshaper
+  // are orphan islands still held by the old source connections) — the
+  // `teardownAudioChain` call from AudioErrorBoundary disconnects the
+  // source, which breaks the chain's upstream and lets GC collect the
+  // islands on the next major cycle.
+  useEffect(() => {
+    return () => {
+      try { lfo1Ref.current?.stop(); } catch {}
+      try { lfo2Ref.current?.stop(); } catch {}
+      try { lfo3Ref.current?.stop(); } catch {}
+      lfo1Ref.current = null;
+      lfo2Ref.current = null;
+      lfo3Ref.current = null;
+      // Disconnect top of chain so orphan nodes aren't held by ctx.destination.
+      try { gainNodeRef.current?.disconnect(); } catch {}
+      try { spatialInputRef.current?.disconnect(); } catch {}
+      try { spatialBypassDirectRef.current?.disconnect(); } catch {}
+      try { spatialBypassMainRef.current?.disconnect(); } catch {}
+      try { diveReverbWetRef.current?.disconnect(); } catch {}
+      try { immerseReverbWetRef.current?.disconnect(); } catch {}
+      try { subHarmonicGainRef.current?.disconnect(); } catch {}
+      // Cancel any pending watchdog (setTimeout/MessageChannel) so it
+      // doesn't fire against a disconnected chain after remount.
+      if (watchdogTimerRef.current) {
+        clearTimeout(watchdogTimerRef.current);
+        watchdogTimerRef.current = null;
+      }
+      if (watchdogMcRef.current) {
+        try { watchdogMcRef.current.port1.close(); } catch {}
+        watchdogMcRef.current = null;
+      }
+    };
+  }, []);
 
   return {
     audioContextRef,
