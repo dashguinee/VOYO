@@ -188,11 +188,21 @@ function ActionPill({
 
 const HOLD_MS = 500;
 const DISMISS_MS = 4000;
-const MOVE_CANCEL_Y = 10;  // vertical pixels — cancels hold (scroll protection)
-const MOVE_CANCEL_X = 5;   // horizontal pixels — cancels hold (shelf scroll protection)
-const SWIPE_START_X = 20;  // pixels before swipe activates
-const SWIPE_THRESHOLD = 0.6; // fraction of card width
+const MOVE_CANCEL_Y = 10;   // vertical pixels — cancels hold (scroll protection)
+const MOVE_CANCEL_X = 5;    // horizontal pixels — cancels hold (shelf scroll protection)
+const SWIPE_START_X = 20;   // pixels before swipe tracking begins
+const SWIPE_MAX_X = 72;     // hard cap on visual travel — card never flies off screen
+const SWIPE_FIRE_X = 56;    // px to fire action (≈78% of max — clear intent)
 const SPRING_DURATION = 240; // ms, spring-back transition
+
+// Rubber-band clamp: full travel up to SWIPE_MAX_X, then progressively resists
+const clampSwipe = (raw: number) => {
+  const sign = raw < 0 ? -1 : 1;
+  const abs = Math.abs(raw);
+  if (abs <= SWIPE_MAX_X) return raw;
+  // Beyond cap: sqrt decay so it slows to a crawl (never truly stops but feels bounded)
+  return sign * (SWIPE_MAX_X + Math.sqrt(abs - SWIPE_MAX_X) * 4);
+};
 
 export function CardHoldActions({
   children,
@@ -287,18 +297,16 @@ export function CardHoldActions({
     // Swipe — ONLY after hold is open. Never on a raw touch (would fight scroll).
     if (holdOpen && Math.abs(dx) >= SWIPE_START_X && Math.abs(dy) < 30) {
       swipeActiveRef.current = true;
-      setSwipeX(dx);
+      setSwipeX(clampSwipe(dx));
     }
   }, [holdOpen]);
 
   const handlePointerUp = useCallback((e: React.PointerEvent) => {
     if (holdTimerRef.current) { clearTimeout(holdTimerRef.current); holdTimerRef.current = null; }
 
-    const cardWidth = containerRef.current?.offsetWidth ?? 200;
-    const threshold = cardWidth * SWIPE_THRESHOLD;
     const dx = swipeX;
 
-    if (holdOpen && swipeActiveRef.current && Math.abs(dx) >= threshold) {
+    if (holdOpen && swipeActiveRef.current && Math.abs(dx) >= SWIPE_FIRE_X) {
       // Fire action based on direction
       const action = dx < 0 ? leftAction : rightAction;
       fireAction(action);
@@ -406,7 +414,7 @@ export function CardHoldActions({
       <div
         ref={containerRef}
         className={className}
-        style={{ position: 'relative', zIndex: holdOpen ? 50 : undefined, touchAction: 'pan-y' }}
+        style={{ position: 'relative', zIndex: holdOpen ? 50 : undefined, touchAction: holdOpen ? 'none' : 'pan-y' }}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
