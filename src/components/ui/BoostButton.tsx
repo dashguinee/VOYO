@@ -21,9 +21,6 @@ import { computeOyeState } from '../oye/OyeButton';
 import { getYouTubeId } from '../../utils/voyoId';
 import { devLog } from '../../utils/logger';
 
-// NOTE: getThumbnailUrl no longer needed here — the local-cache download
-// now flows through app.oyeCommit -> boostTrack, which sources its own
-// thumbnail via getThumb(track.trackId, 'medium').
 
 interface BoostButtonProps {
   variant?: 'toolbar' | 'floating' | 'mini' | 'inline';

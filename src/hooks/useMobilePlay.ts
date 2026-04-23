@@ -48,7 +48,7 @@ export function useMobilePlay() {
       await unlockMobileAudio();
     }
 
-    // FIX: Get fresh state to avoid race conditions
+    // Get fresh state to avoid race conditions
     const currentState = usePlayerStore.getState().isPlaying;
 
     if (currentState) {

@@ -73,8 +73,6 @@ export interface UseMomentsReturn {
 }
 
 // ============================================
-// FIXED CATEGORY PRESETS
-// ============================================
 
 export const CATEGORY_PRESETS: Record<CategoryAxis, string[]> = {
   countries: [

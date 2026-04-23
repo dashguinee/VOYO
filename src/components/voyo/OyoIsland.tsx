@@ -81,11 +81,8 @@ export function OyoIsland({ visible, onHide, onActivity }: OyoIslandProps) {
   const autoHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const currentTrack = usePlayerStore(state => state.currentTrack);
-  // NOTE: currentTime is deliberately NOT subscribed at this level. The
-  // lyrics-segment sync lives in an isolated LyricsSegmentSync sub-
-  // component at the bottom of this file — it subscribes to currentTime
-  // in a render-null wrapper, so the ~900-line OyoIsland tree doesn't
-  // re-render at 4Hz during playback.
+  // currentTime is NOT subscribed here — LyricsSegmentSync (render-null sub-component)
+  // handles it in isolation so the ~900-line tree doesn't re-render at 4Hz.
 
   const djProfile = getProfile();
 

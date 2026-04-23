@@ -51,7 +51,6 @@ export const VideoMode = ({ onExit }: VideoModeProps) => {
   const trackPreferences = usePreferenceStore(s => s.trackPreferences);
   const setExplicitLike = usePreferenceStore(s => s.setExplicitLike);
   const isLiked = !!(currentTrack && trackPreferences[currentTrack.id]?.explicitLike === true);
-  // FIX: Derive mute state from volume instead of separate state
   const isMuted = volume === 0;
   const previousVolume = useRef(volume > 0 ? volume : 80); // Default to 80 if currently muted
 

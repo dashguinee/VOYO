@@ -906,8 +906,7 @@ const AfricanVibesVideoCard = memo(({
     return () => clearTimeout(t);
   }, [isActive]);
 
-  // NOTE: Previews are always muted - audio only through AudioPlayer
-  // Removed unmute logic to ensure single audio source
+  // Previews are always muted — audio only through AudioPlayer
 
   return (
     <button

@@ -218,11 +218,9 @@ export const useReactionStore = create<ReactionStore>((set, get) => ({
       if (trackPosition !== undefined) {
         get().computeHotspots(trackId);
       }
-      // NOTE: Pool reactionCount + voyo_signals row are written by the
-      // canonical OYE path (services/oyo/app.ts oye() → onOye() →
-      // recordPoolEngagement('react') + recordRemoteSignal('react')).
-      // Firing useTrackPoolStore.recordReaction here duplicated the local
-      // pool bump 2x per tap (C1 fix).
+      // Pool reactionCount + voyo_signals are written by the canonical OYE path
+      // (oye() → onOye() → recordPoolEngagement + recordRemoteSignal).
+      // Calling useTrackPoolStore.recordReaction here would double-bump the local count.
       // FEED THE BRAIN — OYO DJ learns favorite artists from reactions.
       // Without this wire, oyoDJ.getInsights().favoriteArtists stays empty
       // and the playerStore.refreshRecommendations boost is a no-op.
@@ -266,9 +264,7 @@ export const useReactionStore = create<ReactionStore>((set, get) => ({
       if (trackPosition !== undefined) {
         get().computeHotspots(trackId);
       }
-      // NOTE: Pool reactionCount + voyo_signals row handled by the canonical
-      // onOye() fanout (oyo/index.ts). See matching note in the offline
-      // branch above (C1 consolidation).
+      // Pool reactionCount + voyo_signals handled by the canonical onOye() fanout (oyo/index.ts).
       // FEED THE BRAIN — OYO DJ learns favorite artists from reactions.
       void oyoOnTrackReaction({
         id: trackId,

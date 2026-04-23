@@ -107,13 +107,8 @@ export const YouTubeIframe = memo(() => {
   const playbackSource = usePlayerStore((s) => s.playbackSource);
   const videoTarget = usePlayerStore((s) => s.videoTarget);
   const seekPosition = usePlayerStore((s) => s.seekPosition);
-  // NOTE: currentTime and duration are NOT subscribed at this level.
-  // They drive overlay visibility (Now Playing / Next Up / portrait
-  // end-zone) which is computed by the OverlayTimingSync sub-component
-  // below. That sub-component renders null and writes to these state
-  // setters only when the derived values actually change, so the full
-  // YouTubeIframe body re-renders ~1-2x per track (zone transitions)
-  // instead of at the 4Hz store-write cadence.
+  // currentTime/duration not subscribed here — OverlayTimingSync (render-null sub-component)
+  // computes overlay zones and writes only on zone transitions (~1-2x per track, not 4Hz).
   const duration = usePlayerStore((s) => s.duration);
   const queue = usePlayerStore((s) => s.queue);
 

@@ -71,7 +71,6 @@ let _voyexPersistTimer: ReturnType<typeof setTimeout> | null = null;
 // ============================================
 const STORAGE_KEY = 'voyo-player-state';
 
-// FIXED: Store FULL track info so you never lose a song
 interface PersistedHistoryItem {
   trackId: string;
   title: string;
@@ -82,9 +81,8 @@ interface PersistedHistoryItem {
   oyeReactions: number;
 }
 
-// FIXED: Persisted queue items now also carry title/artist/coverUrl so
-// rehydration on page reload doesn't blank them to 'Loading...' for tracks
-// not in the static seed array (which is most user-played tracks).
+// Persisted queue items carry full title/artist/coverUrl so rehydration on
+// reload doesn't blank them for tracks outside the static seed array.
 interface PersistedQueueItem {
   trackId: string;
   title?: string;
@@ -496,16 +494,12 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     }
     set({
       currentTrack: track,
-      // FIX: Don't auto-play - preserve current play state
-      // isPlaying: true, // REMOVED - was causing auto-play bug
       progress: 0,
       currentTime: 0,
-      seekPosition: null, // Clear seek position on track change
-      // SKEEP FIX: Reset playback rate when changing tracks
+      seekPosition: null,
       playbackRate: 1,
       isSkeeping: false,
-      // FIX: Reset playback source so AudioPlayer determines fresh for new track
-      // Without this, stale 'cached' value causes YouTubeIframe to mute
+      // Reset source so AudioPlayer re-evaluates fresh — stale 'cached' value mutes YouTubeIframe
       playbackSource: null,
       bufferHealth: 0,
     });
@@ -648,7 +642,6 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     set((state) => {
       const newIsPlaying = !state.isPlaying;
 
-      // FIX: Update Media Session state immediately
       if (typeof navigator !== 'undefined' && 'mediaSession' in navigator) {
         navigator.mediaSession.playbackState = newIsPlaying ? 'playing' : 'paused';
       }
@@ -797,7 +790,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     // Check queue first - filter out any unplayable tracks
     if (state.queue.length > 0) {
       // Skip any known unplayable tracks in queue
-      // FIX (2026-04-23): ALSO skip the current track. Without this guard,
+      // Also skip the current track. Without this guard,
       // if the queue's head is the same track that's currently playing
       // (duplicate add, repeat-all rebuild race, OYO re-queueing current),
       // nextTrack() "advances" to the same track → feels like the same
@@ -1515,8 +1508,6 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       ],
     }));
 
-    // FIXED: Persist FULL track info to localStorage (keep last 50 items)
-    // So you NEVER lose a song again
     setTimeout(() => {
       const state = get();
       const current = loadPersistedState();
@@ -1909,8 +1900,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     });
   },
 
-  // Detect network quality using Navigator API
-  // FIX: Singleton pattern to prevent listener leak
+  // Singleton — prevents listener leak on repeated calls
   detectNetworkQuality: (() => {
     let listenerAttached = false;
 

@@ -120,7 +120,7 @@ const ProgressSlider = memo(({ isScrubbing }: { isScrubbing: boolean }) => {
 // ============================================
 
 // Mix Mode Definition - Each preset on the mixing board
-export interface MixMode {
+interface MixMode {
   id: string;
   title: string;
   neon: string;      // Primary neon color
@@ -794,7 +794,6 @@ const BackdropToggle = memo(({
   const clickCount = useRef(0);
   const clickTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // FIX: Cleanup timers on unmount to prevent race conditions
   useEffect(() => {
     return () => {
       if (holdTimer.current) clearTimeout(holdTimer.current);
@@ -1381,7 +1380,6 @@ const PortalBelt = memo(({ tracks, onTap, onQueueAdd, playedTrackIds, type, mixM
         lastTime = time;
         animationId = requestAnimationFrame(animate);
       } catch (error) {
-        // FIX: Graceful error handling for animation loop
         devWarn('[VOYO PortalBelt] Animation error:', error);
         mounted = false;
       }
@@ -1399,7 +1397,6 @@ const PortalBelt = memo(({ tracks, onTap, onQueueAdd, playedTrackIds, type, mixM
   // Calculate entrance effect based on position and direction
   const getEntranceStyle = (x: number, containerWidth: number) => {
     if (isHot) {
-      // HOT: Cards enter from LEFT (x near 0), add rust ember glow fade-in
       const entranceZone = cardWidth * 1.5;
       if (x < entranceZone) {
         const progress = Math.max(0, x / entranceZone);

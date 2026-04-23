@@ -407,7 +407,6 @@ export const useDownloadStore = create<DownloadStore>((set, get) => ({
 
     isProcessing = true;
 
-    // FIX: Add iteration limit to prevent infinite loops
     const MAX_ITERATIONS = 100;
     let iterations = 0;
 

@@ -486,7 +486,7 @@ export const ClassicMode = ({ onSwitchToVOYO, onSearch }: ClassicModeProps) => {
   // of exiting the app. Mirrors PortraitVOYO's voyoActiveTab pattern.
   useTabHistory(activeTab, setActiveTab, 'classic-tab');
 
-  // FIX A4: Listen for shouldOpenNowPlaying flag (set by search overlay)
+  // shouldOpenNowPlaying is set by the search overlay
   useEffect(() => {
     if (shouldOpenNowPlaying) {
       setShowNowPlaying(true);

@@ -347,8 +347,7 @@ export const VoyoBottomNav = ({ onDahub, onHome, oyoSurface = 'home', playerMode
               // --voyo-bass drives the scale, --voyo-energy drives the glow
               // intensity. Both fall to 0 when paused so the orb returns
               // to its resting CSS animation state naturally.
-              // NOTE: The CSS animation + transform coexist because the
-              // animation targets box-shadow (glow), not transform.
+              // CSS animation + transform coexist — animation targets box-shadow (glow), not transform.
               animation: 'voyo-orb-pulse 4.5s ease-in-out infinite',
             }}
           >
