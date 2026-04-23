@@ -796,6 +796,14 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     // Check queue first - filter out any unplayable tracks
     if (state.queue.length > 0) {
       // FIX 6: Skip any known unplayable tracks in queue
+      // FIX (2026-04-23): ALSO skip the current track. Without this guard,
+      // if the queue's head is the same track that's currently playing
+      // (duplicate add, repeat-all rebuild race, OYO re-queueing current),
+      // nextTrack() "advances" to the same track → feels like the same
+      // song plays twice in a row. Discover-fallback already excludes
+      // current at line 956-962; this brings queue-pick in line.
+      const curId = state.currentTrack?.id;
+      const curTrackId = state.currentTrack?.trackId;
       let queueToProcess = state.queue;
       let nextPlayable: QueueItem | null = null;
       let rest: QueueItem[] = [];
@@ -803,8 +811,15 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       while (queueToProcess.length > 0 && !nextPlayable) {
         const [candidate, ...remaining] = queueToProcess;
         const cid = candidate.track.trackId;
+        const candId = candidate.track.id;
+        const isSameAsCurrent =
+          (curId && (candId === curId || cid === curId)) ||
+          (curTrackId && (cid === curTrackId || candId === curTrackId));
         if (cid && (isKnownUnplayable(cid) || isBlocklisted(cid))) {
           devWarn(`[PlayerStore] Skipping unplayable/blocked track in queue: ${candidate.track.title}`);
+          queueToProcess = remaining;
+        } else if (isSameAsCurrent) {
+          devWarn(`[PlayerStore] Skipping same-as-current in queue: ${candidate.track.title}`);
           queueToProcess = remaining;
         } else {
           nextPlayable = candidate;
