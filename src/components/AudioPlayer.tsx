@@ -347,7 +347,8 @@ export const AudioPlayer = () => {
           logPlaybackEvent({
             event_type: 'play_start',
             track_id: currentTrack.trackId,
-            source: 'pending_r2',
+            source: null,
+            meta: { subtype: 'pending_r2' },
           });
         }, 300);
         void ensureTrackReady(currentTrack, null, { priority: 10 });
