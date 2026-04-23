@@ -19,6 +19,7 @@ import {
 } from '../../lib/dahub/dahub-api';
 import { usePlayerStore } from '../../store/playerStore';
 import { DirectMessageChat } from './DirectMessageChat';
+import { useBackGuard } from '../../hooks/useBackGuard';
 
 // ==============================================
 // CONSTANTS & HELPERS
@@ -817,6 +818,7 @@ function AddFriendModal({ userId, onClose, onAdded }: { userId: string; onClose:
   const [friendId, setFriendId] = useState('');
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [error, setError] = useState('');
+  useBackGuard(true, onClose, 'dahub-add-friend');
 
   const handleAdd = async () => {
     if (!friendId.trim()) return;
@@ -894,6 +896,7 @@ function AddFriendModal({ userId, onClose, onAdded }: { userId: string; onClose:
 
 function NoteEditModal({ note, userAvatar, userName, onSave, onClose }: { note: string; userAvatar?: string; userName: string; onSave: (note: string) => void; onClose: () => void }) {
   const [value, setValue] = useState(note);
+  useBackGuard(true, onClose, 'dahub-note-edit');
 
   return (
     <div

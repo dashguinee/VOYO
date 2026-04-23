@@ -15,6 +15,8 @@ import {
   Music, Tv, GraduationCap, Paperclip
 } from 'lucide-react';
 import { messagesAPI, APP_CODES, getAppDisplay, type Message } from '../../lib/dahub/dahub-api';
+import { useBackGuard } from '../../hooks/useBackGuard';
+import { useMessagingViewport } from '../../hooks/useMessagingViewport';
 
 // ==============================================
 // TYPES
@@ -173,10 +175,20 @@ export function DirectMessageChat({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  // Scroll to bottom
+  useBackGuard(true, onClose, 'dahub-dm');
+  const { vh, keyboardOpen } = useMessagingViewport();
+
+  // Scroll to bottom — `end` block avoids smooth jank when keyboard is mid-open
   const scrollToBottom = useCallback(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    messagesEndRef.current?.scrollIntoView({ block: 'end' });
   }, []);
+
+  // Keep the newest message visible when the soft keyboard opens
+  useEffect(() => {
+    if (keyboardOpen) {
+      requestAnimationFrame(() => messagesEndRef.current?.scrollIntoView({ block: 'end' }));
+    }
+  }, [keyboardOpen]);
 
   // Load messages
   useEffect(() => {
@@ -270,7 +282,10 @@ export function DirectMessageChat({
   }, {} as Record<string, Message[]>);
 
   return (
-    <div className="fixed inset-0 z-[80] bg-[#0a0a0f] flex flex-col overflow-hidden animate-voyo-slide-in-right">
+    <div
+      className="fixed inset-x-0 top-0 z-[80] bg-[#0a0a0f] flex flex-col overflow-hidden animate-voyo-slide-in-right"
+      style={{ height: vh || '100dvh' }}
+    >
       {/* Header */}
       <div
         className="flex-shrink-0 flex items-center gap-3 px-3 py-3 border-b border-white/[0.06] bg-[#0a0a0f]/95 backdrop-blur-xl"
@@ -299,7 +314,7 @@ export function DirectMessageChat({
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto overflow-x-hidden px-4 py-4">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden overscroll-contain px-4 py-4">
         {isLoading ? (
           <div className="flex items-center justify-center h-full">
             <Loader2 size={24} className="animate-spin text-purple-400" />
@@ -380,8 +395,8 @@ export function DirectMessageChat({
               onKeyDown={handleKeyDown}
               placeholder="Message..."
               rows={1}
-              className="w-full px-4 py-2.5 rounded-2xl bg-white/[0.05] border border-white/[0.08] text-white text-sm placeholder-white/30 resize-none focus:outline-none focus:border-purple-500/50 transition-colors"
-              style={{ maxHeight: '120px' }}
+              className="w-full px-4 py-2.5 rounded-2xl bg-white/[0.05] border border-white/[0.08] text-white placeholder-white/30 resize-none focus:outline-none focus:border-purple-500/50 transition-colors"
+              style={{ maxHeight: '120px', fontSize: '16px' }}
             />
           </div>
 
