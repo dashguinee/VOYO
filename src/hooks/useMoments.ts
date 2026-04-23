@@ -18,7 +18,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { devWarn } from '../utils/logger';
-import type { Moment } from '../services/momentsService';
+import type { Moment } from '../types/moments';
 
 // Circuit breaker: voyo_moments queries time out when table lacks indexes.
 // After first timeout, stop making requests to prevent repeated 500s in console.

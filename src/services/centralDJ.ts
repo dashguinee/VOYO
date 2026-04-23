@@ -15,8 +15,6 @@ import { Track } from '../types';
 import { getThumb } from '../utils/thumbnail';
 import { devLog, devWarn } from '../utils/logger';
 import { getUserHash } from '../utils/userHash';
-import { getPlan } from './oyoPlan';
-
 // Re-export so existing consumers of `centralDJ.getUserHash` still work.
 export { getUserHash };
 
@@ -67,14 +65,6 @@ const MODE_KEYWORDS: Record<MixBoardMode, string[]> = {
   'random-mixer': [],
 };
 
-export interface SignalData {
-  trackId: string;
-  action: 'play' | 'love' | 'skip' | 'complete' | 'queue' | 'unlove';
-  sessionVibe?: string;
-  listenDuration?: number;
-  modeId?: MixBoardMode;  // Which MixBoard mode was active/used
-}
-
 /**
  * Vibe training signal - when user adds track to a mode
  */
@@ -83,14 +73,6 @@ export interface VibeTrainSignal {
   modeId: MixBoardMode;
   action: 'boost' | 'queue' | 'reaction';  // How they interacted
   intensity: number;  // 1-3 based on action strength
-}
-
-function getTimeOfDay(): string {
-  const hour = new Date().getHours();
-  if (hour < 6) return 'late_night';
-  if (hour < 12) return 'morning';
-  if (hour < 18) return 'afternoon';
-  return 'evening';
 }
 
 /**
@@ -118,7 +100,7 @@ export function detectModes(title: string, artist: string): MixBoardMode[] {
 /**
  * Calculate vibe scores from detected modes
  */
-export function modesToVibeProfile(modes: MixBoardMode[]): VibeProfile {
+function modesToVibeProfile(modes: MixBoardMode[]): VibeProfile {
   const profile: VibeProfile = {
     'afro-heat': 0,
     'chill-vibes': 0,
@@ -341,70 +323,39 @@ export async function saveVerifiedTracks(
 }
 
 // ============================================
-// SIGNAL RECORDING
+// SIGNAL RECORDING (feeds voyo_signals → hydrateFromSignals → OYO affinities)
 // ============================================
 
-// In-memory dedupe window. Two call paths (playerStore + oyo/index.ts) both fire
-// recordPoolEngagement('play') on the same track change, so identical rows
-// landed within a second. Skip if same (user, track, action) fired recently.
 const SIGNAL_DEDUPE_MS = 5_000;
 const recentSignals = new Map<string, number>();
 
-function resolveSessionVibe(): string | null {
-  try {
-    return getPlan()?.direction ?? null;
-  } catch { return null; }
-}
-
-export async function recordSignal(signal: SignalData): Promise<boolean> {
+async function recordSignal(trackId: string, action: 'play' | 'love' | 'skip' | 'complete' | 'queue' | 'unlove', listenDuration?: number): Promise<boolean> {
   if (!supabase || !isSupabaseConfigured) return false;
-
   const userHash = getUserHash();
-  const key = `${userHash}:${signal.trackId}:${signal.action}`;
+  const key = `${userHash}:${trackId}:${action}`;
   const now = Date.now();
   const last = recentSignals.get(key);
-  if (last && now - last < SIGNAL_DEDUPE_MS) return true; // treat as success, already journalled
+  if (last && now - last < SIGNAL_DEDUPE_MS) return true;
   recentSignals.set(key, now);
-
-  // Opportunistic GC so the map never grows past a session's track count.
   if (recentSignals.size > 500) {
-    for (const [k, t] of recentSignals) {
-      if (now - t > SIGNAL_DEDUPE_MS * 2) recentSignals.delete(k);
-    }
+    for (const [k, t] of recentSignals) { if (now - t > SIGNAL_DEDUPE_MS * 2) recentSignals.delete(k); }
   }
-
+  const hour = new Date().getHours();
+  const timeOfDay = hour < 6 ? 'late_night' : hour < 12 ? 'morning' : hour < 18 ? 'afternoon' : 'evening';
   const { error } = await supabase.from('voyo_signals').upsert({
-    track_id: signal.trackId,
-    user_hash: userHash,
-    action: signal.action,
-    session_vibe: signal.sessionVibe ?? resolveSessionVibe(),
-    time_of_day: getTimeOfDay(),
-    listen_duration: signal.listenDuration || 0,
+    track_id: trackId, user_hash: userHash, action,
+    time_of_day: timeOfDay, listen_duration: listenDuration || 0,
   }, { ignoreDuplicates: true });
   return !error;
 }
 
-/**
- * Convenience functions for common signals
- */
 export const signals = {
-  play: (trackId: string, sessionVibe?: string) =>
-    recordSignal({ trackId, action: 'play', sessionVibe }),
-
-  love: (trackId: string) =>
-    recordSignal({ trackId, action: 'love' }),
-
-  unlove: (trackId: string) =>
-    recordSignal({ trackId, action: 'unlove' }),
-
-  skip: (trackId: string, listenDuration?: number) =>
-    recordSignal({ trackId, action: 'skip', listenDuration }),
-
-  complete: (trackId: string) =>
-    recordSignal({ trackId, action: 'complete' }),
-
-  queue: (trackId: string, modeId?: MixBoardMode) =>
-    recordSignal({ trackId, action: 'queue', modeId }),
+  play:     (trackId: string) => recordSignal(trackId, 'play'),
+  love:     (trackId: string) => recordSignal(trackId, 'love'),
+  unlove:   (trackId: string) => recordSignal(trackId, 'unlove'),
+  skip:     (trackId: string, listenDuration?: number) => recordSignal(trackId, 'skip', listenDuration),
+  complete: (trackId: string) => recordSignal(trackId, 'complete'),
+  queue:    (trackId: string) => recordSignal(trackId, 'queue'),
 };
 
 // ============================================
@@ -508,7 +459,7 @@ export function trainVibeOnReaction(trackId: string, modeId: MixBoardMode): Prom
 /**
  * Convert CentralTrack to VOYO Track format
  */
-export function centralToTrack(central: CentralTrack): Track {
+function centralToTrack(central: CentralTrack): Track {
   return {
     id: `central_${central.voyo_id}`,
     title: central.title,
@@ -535,35 +486,6 @@ export function centralToTracks(centrals: CentralTrack[]): Track[] {
 // ============================================
 // STATS & DEBUG
 // ============================================
-
-/**
- * Get Central DJ stats
- */
-export async function getStats(): Promise<{
-  totalTracks: number;
-  totalSignals: number;
-  hotTracks: number;
-} | null> {
-  if (!supabase || !isSupabaseConfigured) return null;
-
-  try {
-    const [tracksRes, signalsRes, hotRes] = await Promise.all([
-      supabase.from('voyo_tracks').select('*', { count: 'exact', head: true }),
-      supabase.from('voyo_signals').select('*', { count: 'exact', head: true }),
-      supabase.from('voyo_tracks')
-        .select('*', { count: 'exact', head: true })
-        .gt('heat_score', 10),
-    ]);
-
-    return {
-      totalTracks: tracksRes.count || 0,
-      totalSignals: signalsRes.count || 0,
-      hotTracks: hotRes.count || 0,
-    };
-  } catch {
-    return null;
-  }
-}
 
 // ============================================
 // SEED SYNC - Upload local tracks to Supabase (one-time)
@@ -611,50 +533,33 @@ export async function syncSeedTracks(tracks: Track[]): Promise<number> {
 
 if (typeof window !== 'undefined') {
   (window as any).voyoCentral = {
-    // Query
     getByMode: getTracksByMode,
     getByVibe: getTracksByVibe,
     getHot: getHotTracks,
     hasEnough: hasEnoughTracks,
-    // Save
     save: saveVerifiedTrack,
-    // Signals
-    signal: signals,
-    // Vibe Training (The Flywheel!)
     train: trainVibe,
     trainQueue: trainVibeOnQueue,
     trainBoost: trainVibeOnBoost,
     trainReaction: trainVibeOnReaction,
-    // Utils
     detectModes,
-    stats: getStats,
     userHash: getUserHash,
   };
-  devLog('🎯 [Central DJ] Debug: window.voyoCentral.getByMode("afro-heat") / .train({trackId, modeId, action}) / .stats()');
 }
 
 export default {
-  // Query
   getTracksByMode,
   getTracksByVibe,
   getHotTracks,
   hasEnoughTracks,
-  // Save
   saveVerifiedTrack,
   saveVerifiedTracks,
   syncSeedTracks,
-  // Signals
-  recordSignal,
   signals,
-  // Vibe Training
   trainVibe,
   trainVibeOnQueue,
   trainVibeOnBoost,
   trainVibeOnReaction,
-  // Utils
   detectModes,
-  modesToVibeProfile,
-  centralToTrack,
   centralToTracks,
-  getStats,
 };

@@ -12,7 +12,7 @@
  */
 
 import { supabase, isSupabaseConfigured as supabaseConfigured } from '../lib/supabase';
-import { getVibeEssence, getEssenceForQuery, type VibeEssence } from './essenceEngine';
+import { getVibeEssence, type VibeEssence } from './essenceEngine';
 import { searchMusic as searchYouTube } from './api';
 import { TRACKS } from '../data/tracks';
 import type { Track } from '../types';
@@ -39,14 +39,6 @@ export interface DiscoveryTrack {
   thumbnail_url: string | null;
   discovery_reason?: string;
   heat_score?: number;
-}
-
-export interface DiscoveryResult {
-  hot: DiscoveryTrack[];
-  discovery: DiscoveryTrack[];
-  familiar: DiscoveryTrack[];
-  essence: VibeEssence;
-  source: 'database' | 'fallback';
 }
 
 // ============================================
@@ -463,102 +455,6 @@ export async function searchTracks(query: string, limit: number = 20): Promise<T
 }
 
 // ============================================
-// COMBINED FEED (with 70/30 ratio)
-// ============================================
-
-/**
- * Get complete discovery feed with proper fresh/familiar ratio
- */
-export async function getDiscoveryFeed(
-  hotLimit: number = 20,
-  discoveryLimit: number = 20
-): Promise<DiscoveryResult> {
-  const essence = getVibeEssence();
-
-  // Calculate familiar count based on ratio
-  const totalFresh = hotLimit + discoveryLimit;
-  const familiarCount = Math.round(totalFresh * (1 - essence.freshToFamiliarRatio));
-
-  // Fetch all in parallel
-  const [hot, discovery, familiar] = await Promise.all([
-    getHotTracksRaw(hotLimit),
-    getDiscoveryTracksRaw(discoveryLimit),
-    getFamiliarTracksRaw(familiarCount),
-  ]);
-
-  return {
-    hot,
-    discovery,
-    familiar,
-    essence,
-    source: supabaseConfigured ? 'database' : 'fallback',
-  };
-}
-
-// Raw versions that return DiscoveryTrack (for internal use)
-async function getHotTracksRaw(limit: number): Promise<DiscoveryTrack[]> {
-  if (!supabaseConfigured) return [];
-
-  const essence = getVibeEssence();
-
-  try {
-    const { data } = await getSupabase().rpc('get_hot_tracks', {
-      p_afro_heat: essence.afro_heat,
-      p_chill: essence.chill,
-      p_party: essence.party,
-      p_workout: essence.workout,
-      p_late_night: essence.late_night,
-      p_limit: limit,
-      p_exclude_ids: [],
-    });
-    return data || [];
-  } catch {
-    return [];
-  }
-}
-
-async function getDiscoveryTracksRaw(limit: number): Promise<DiscoveryTrack[]> {
-  if (!supabaseConfigured) return [];
-
-  const essence = getVibeEssence();
-  const playedIds = getPlayedTrackIds();
-
-  try {
-    const { data } = await getSupabase().rpc('get_discovery_tracks', {
-      p_afro_heat: essence.afro_heat,
-      p_chill: essence.chill,
-      p_party: essence.party,
-      p_workout: essence.workout,
-      p_late_night: essence.late_night,
-      p_dominant_vibe: essence.dominantVibes[0] || 'afro_heat',
-      p_limit: limit,
-      p_exclude_ids: [],
-      p_played_ids: playedIds,
-    });
-    return data || [];
-  } catch {
-    return [];
-  }
-}
-
-async function getFamiliarTracksRaw(limit: number): Promise<DiscoveryTrack[]> {
-  if (!supabaseConfigured || limit === 0) return [];
-
-  const playedIds = getPlayedTrackIds();
-  if (playedIds.length === 0) return [];
-
-  try {
-    const { data } = await getSupabase().rpc('get_familiar_tracks', {
-      p_played_ids: playedIds.slice(0, 50),
-      p_limit: limit,
-    });
-    return data || [];
-  } catch {
-    return [];
-  }
-}
-
-// ============================================
 // FALLBACK (when Supabase unavailable)
 // ============================================
 
@@ -569,21 +465,3 @@ function getFallbackTracks(type: 'hot' | 'discovery', limit: number): Track[] {
   return shuffled.slice(0, limit);
 }
 
-// ============================================
-// DEBUG
-// ============================================
-
-export function debugDiscovery(): void {
-  const essence = getVibeEssence();
-  const playedIds = getPlayedTrackIds();
-
-  devLog('[VOYO Discovery Debug]', {
-    essence: {
-      dominantVibes: essence.dominantVibes,
-      confidence: `${(essence.confidence * 100).toFixed(0)}%`,
-      freshRatio: `${(essence.freshToFamiliarRatio * 100).toFixed(0)}%`,
-    },
-    playedTracks: playedIds.length,
-    supabaseConfigured: supabaseConfigured,
-  });
-}

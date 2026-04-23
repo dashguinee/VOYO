@@ -44,9 +44,6 @@ function decodeVoyoId(voyoId: string): string {
   }
 }
 
-// Flag to prevent multiple batch heals
-let hasRunStartupHeal = false;
-
 // Debounce/queue to avoid hammering API
 const pendingVerifications = new Map<string, Promise<string | null>>();
 const verificationResults = new Map<string, { voyoId: string; thumbnail: string; expiresAt: number } | null>();
@@ -209,51 +206,6 @@ async function doVerification(
     // Use longer TTL for failures to avoid hammering
     setTimeout(() => verificationResults.delete(cacheKey), FAILED_CACHE_TTL);
     return null;
-  }
-}
-
-/**
- * Check if a track is playable via YouTube oEmbed API
- * Returns: { playable: true } or { playable: false, reason: string }
- */
-export async function isTrackPlayable(trackId: string): Promise<{ playable: boolean; reason?: string }> {
-  if (!trackId) return { playable: false, reason: 'no_track_id' };
-
-  // Clean the track ID
-  let ytId = trackId;
-  if (ytId.startsWith('VOYO_')) ytId = ytId.replace('VOYO_', '');
-
-  // Check permanent failure cache
-  const permFailure = permanentFailures.get(trackId);
-  if (permFailure && (Date.now() - permFailure.failedAt) < PERMANENT_FAILURE_TTL) {
-    return { playable: false, reason: permFailure.reason };
-  }
-
-  try {
-    const response = await fetch(
-      `https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${ytId}&format=json`,
-      { signal: AbortSignal.timeout(5000) }
-    );
-
-    if (response.ok) {
-      return { playable: true };
-    }
-
-    // YouTube returns specific errors
-    if (response.status === 401 || response.status === 403) {
-      permanentFailures.set(trackId, { reason: 'private_or_removed', failedAt: Date.now() });
-      return { playable: false, reason: 'private_or_removed' };
-    }
-    if (response.status === 404) {
-      permanentFailures.set(trackId, { reason: 'video_not_found', failedAt: Date.now() });
-      return { playable: false, reason: 'video_not_found' };
-    }
-
-    return { playable: false, reason: `http_${response.status}` };
-  } catch (error) {
-    // Network error - don't mark as permanent failure
-    devWarn(`[TrackVerifier] Playability check failed for ${trackId}:`, error);
-    return { playable: false, reason: 'network_error' };
   }
 }
 
@@ -450,72 +402,6 @@ async function verifyContentMatch(
 }
 
 /**
- * BATCH HEAL - Fix ALL tracks with bad thumbnails
- * Run once to ensure no user ever sees a placeholder
- *
- * Returns: { healed: number, failed: string[], total: number }
- */
-export async function batchHealTracks(): Promise<{
-  healed: number;
-  failed: string[];
-  total: number;
-  skipped: number;
-}> {
-  devLog('[TrackVerifier] 🔧 BATCH HEAL STARTED...');
-
-  const poolStore = useTrackPoolStore.getState();
-  const hotPool = poolStore.hotPool;
-
-  let healed = 0;
-  let skipped = 0;
-  const failed: string[] = [];
-
-  devLog(`[TrackVerifier] 📊 Checking ${hotPool.length} tracks in pool...`);
-
-  for (const track of hotPool) {
-    const thumbnailUrl = getThumb(track.trackId);
-
-    // Check if thumbnail is valid
-    const thumbnailValid = await isThumbnailValid(thumbnailUrl);
-
-    if (thumbnailValid) {
-      // Thumbnail works, but check content match too
-      const contentCheck = await verifyContentMatch(track.trackId, track.artist, track.title);
-      if (contentCheck.valid) {
-        skipped++;
-        continue; // Both valid, skip
-      }
-      devLog(`[TrackVerifier] ⚠️ CONTENT MISMATCH: ${track.artist} - ${track.title}`);
-      devLog(`[TrackVerifier]    Actual video: ${contentCheck.actualTitle}`);
-    } else {
-      devLog(`[TrackVerifier] ❌ Bad thumbnail: ${track.artist} - ${track.title}`);
-    }
-
-    // Try to heal
-    const result = await verifyTrack(track.trackId, track.artist, track.title);
-
-    if (result) {
-      healed++;
-      devLog(`[TrackVerifier] ✅ Healed: ${track.artist} - ${track.title}`);
-    } else {
-      failed.push(`${track.artist} - ${track.title}`);
-      devLog(`[TrackVerifier] ⚠️ Could not heal: ${track.artist} - ${track.title}`);
-    }
-
-    // Small delay to avoid hammering API
-    await new Promise(r => setTimeout(r, 300));
-  }
-
-  devLog(`[TrackVerifier] 🎉 BATCH HEAL COMPLETE`);
-  devLog(`[TrackVerifier]    Total: ${hotPool.length}`);
-  devLog(`[TrackVerifier]    Valid: ${skipped}`);
-  devLog(`[TrackVerifier]    Healed: ${healed}`);
-  devLog(`[TrackVerifier]    Failed: ${failed.length}`);
-
-  return { healed, failed, total: hotPool.length, skipped };
-}
-
-/**
  * Pre-validate a track BEFORE it enters the pool
  * Call this when adding tracks from any source
  * Now includes CONTENT MATCH verification!
@@ -630,43 +516,6 @@ export async function safeAddManyToPool(
 }
 
 /**
- * RUN AT APP STARTUP - Heal any existing bad tracks
- * Called once when app initializes
- */
-export async function runStartupHeal(): Promise<void> {
-  if (hasRunStartupHeal) {
-    devLog('[TrackVerifier] Startup heal already ran');
-    return;
-  }
-
-  hasRunStartupHeal = true;
-
-  // Wait a bit for app to stabilize
-  await new Promise(r => setTimeout(r, 2000));
-
-  const poolStore = useTrackPoolStore.getState();
-
-  if (poolStore.hotPool.length === 0) {
-    devLog('[TrackVerifier] No tracks in pool, skipping startup heal');
-    return;
-  }
-
-  devLog('[TrackVerifier] 🚀 Running startup heal...');
-
-  // Run batch heal in background
-  batchHealTracks().then(result => {
-    if (result.healed > 0) {
-      devLog(`[TrackVerifier] ✅ Startup heal fixed ${result.healed} tracks`);
-    }
-    if (result.failed.length > 0) {
-      devWarn(`[TrackVerifier] ⚠️ Could not heal ${result.failed.length} tracks`);
-    }
-  }).catch(err => {
-    console.error('[TrackVerifier] Startup heal error:', err);
-  });
-}
-
-/**
  * Check if a track is known to be unplayable (from permanent failure cache)
  */
 export function isKnownUnplayable(trackId: string): boolean {
@@ -674,14 +523,6 @@ export function isKnownUnplayable(trackId: string): boolean {
   const permFailure = permanentFailures.get(trackId);
   if (!permFailure) return false;
   return (Date.now() - permFailure.failedAt) < PERMANENT_FAILURE_TTL;
-}
-
-/**
- * Remove a track from permanent failure cache (for manual retry)
- */
-export function clearFailure(trackId: string): void {
-  permanentFailures.delete(trackId);
-  devLog(`[TrackVerifier] Cleared failure for: ${trackId}`);
 }
 
 /**
@@ -701,43 +542,29 @@ export function getVerificationStats(): {
   };
 }
 
-// Debug helper
 if (typeof window !== 'undefined') {
   (window as any).trackVerifier = {
     verify: verifyTrack,
-    batchHeal: batchHealTracks,
     safeAdd: safeAddToPool,
     safeAddMany: safeAddManyToPool,
     validateBeforePool,
-    runStartupHeal,
     clearCache: clearVerificationCache,
-    isPlayable: isTrackPlayable,
     isKnownUnplayable,
     markFailed: markTrackAsFailed,
-    clearFailure,
     stats: getVerificationStats,
     getPending: () => Array.from(pendingVerifications.keys()),
     getCached: () => Array.from(verificationResults.entries()),
     getFailures: () => Array.from(permanentFailures.entries()),
   };
-  devLog('🔧 [TrackVerifier] Debug commands:');
-  devLog('   window.trackVerifier.batchHeal()  - Fix ALL bad thumbnails NOW');
-  devLog('   window.trackVerifier.verify(id, artist, title)  - Fix single track');
-  devLog('   window.trackVerifier.stats()  - Get verification statistics');
-  devLog('   window.trackVerifier.getFailures()  - List permanently failed tracks');
 }
 
 export default {
   verifyTrack,
-  batchHealTracks,
   safeAddToPool,
   safeAddManyToPool,
   validateBeforePool,
-  runStartupHeal,
   clearVerificationCache,
-  isTrackPlayable,
   markTrackAsFailed,
   isKnownUnplayable,
-  clearFailure,
   getVerificationStats,
 };

@@ -504,31 +504,6 @@ export async function curateAllSections(): Promise<void> {
   devLog('[Pool Curator] ✅ All sections curated');
 }
 
-/**
- * Reset session
- */
-export function resetSession(): void {
-  currentSession = {
-    tracks: [],
-    startTime: Date.now(),
-    skipCount: 0,
-    reactionCount: 0,
-  };
-}
-
-/**
- * Get session stats
- */
-export function getSessionStats() {
-  return {
-    trackCount: currentSession.tracks.length,
-    skipCount: currentSession.skipCount,
-    reactionCount: currentSession.reactionCount,
-    isBootstrapped,
-    lastCurationTime,
-  };
-}
-
 // ============================================
 // AUTO-BOOTSTRAP ON IMPORT
 // ============================================
@@ -571,15 +546,11 @@ if (typeof window !== 'undefined') {
     forceBootstrap: () => bootstrapPool(true),
     clearStale: clearStalePool,
     expand: expandPool,
-    stats: getSessionStats,
-    reset: resetSession,
-    // Section-aware curation
     curateWestAfrican: () => curateSection('west-african'),
     curateClassics: () => curateSection('classics'),
     curateTrending: () => curateSection('trending'),
     curateAll: curateAllSections,
   };
-  devLog('🎵 [Pool Curator] Debug: voyoPool.seed() / .curateAll() / .curateClassics()');
 }
 
 export default {
@@ -589,8 +560,6 @@ export default {
   clearStalePool,
   expandPool,
   recordTrackInSession,
-  resetSession,
-  getSessionStats,
   curateSection,
   curateAllSections,
 };

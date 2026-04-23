@@ -301,9 +301,7 @@ interface PlayerStore {
 
   // Recommendations
   hotTracks: Track[];
-  aiPicks: Track[];
   discoverTracks: Track[];
-  isAiMode: boolean;
 
   // Mood Tunnel
   currentMood: MoodType | null;
@@ -368,7 +366,6 @@ interface PlayerStore {
 
   // Actions - Recommendations
   refreshRecommendations: () => void;
-  toggleAiMode: () => void;
   updateDiscoveryForTrack: (track: Track) => void;
   refreshDiscoveryForCurrent: () => void;
 
@@ -455,9 +452,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   // VIBES FIRST: Start empty, load from 324K database immediately
   // Database discovery populates these on first refreshRecommendations() call
   hotTracks: [],
-  aiPicks: [],
   discoverTracks: [],
-  isAiMode: true,
 
   currentMood: 'afro',
 
@@ -1634,9 +1629,6 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
           const newDiscover = dbDiscover.filter(t => !existingDiscoverIds.has(t.id) && !excludeIds.has(t.id));
           const mergedDiscover = [...cleanExistingDiscover, ...newDiscover].slice(0, MAX_DISCOVER_POOL);
 
-          // AI picks from top of discover pool
-          const aiPicks = mergedDiscover.slice(0, 5);
-
           // ── FRESHNESS TIER: 30% of Hot dedicated to trending content ──
           // These are tracks from TRENDING_QUERIES (poolCurator) — recent/viral music.
           // They sit in the front 30% slots regardless of long-term pool score,
@@ -1662,7 +1654,6 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
 
           set({
             hotTracks: gatedHot.length > 0 ? gatedHot : finalHot,
-            aiPicks: (gatedDiscover.length > 0 ? gatedDiscover : mergedDiscover).slice(0, 5),
             discoverTracks: gatedDiscover.length > 0 ? gatedDiscover : mergedDiscover,
           });
 
@@ -1739,8 +1730,6 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       }
     }
   },
-
-  toggleAiMode: () => set((state) => ({ isAiMode: !state.isAiMode })),
 
   // SMART DISCOVERY: Update discovery based on current track
   // MERGE with existing database results, don't replace

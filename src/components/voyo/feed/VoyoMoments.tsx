@@ -14,7 +14,7 @@
 import React, { useState, useRef, useCallback, useEffect, memo } from 'react';
 import { Heart, Flame, MessageCircle, ExternalLink, Play, Volume2, VolumeX, X, Sparkles } from 'lucide-react';
 import { useMoments, CategoryAxis, NavAction, CATEGORY_PRESETS } from '../../../hooks/useMoments';
-import type { Moment } from '../../../services/momentsService';
+import type { Moment } from '../../../types/moments';
 import { AnimatedArtCard } from './AnimatedArtCard';
 import { DynamicVignette } from './DynamicVignette';
 import { devWarn } from '../../../utils/logger';

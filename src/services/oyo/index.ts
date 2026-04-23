@@ -214,7 +214,5 @@ export const oyo = {
     newest:            pools.newest,
     topN:              pools.topN,
   },
-  // Prefetch
   prefetch,
-  prefetchMany: prefetch,
 };

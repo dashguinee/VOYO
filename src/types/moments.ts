@@ -1,0 +1,43 @@
+export type MomentPlatform = 'youtube' | 'youtube_shorts' | 'instagram' | 'tiktok';
+export type MomentContentType = 'dance' | 'lip_sync' | 'reaction' | 'cover' | 'live' | 'comedy' | 'fashion' | 'sports' | 'tutorial' | 'original';
+export type TrackMatchMethod = 'gemini' | 'audio_fingerprint' | 'manual' | 'user_tag';
+
+export interface Moment {
+  id: string;
+  source_platform: MomentPlatform;
+  source_id: string;
+  source_url?: string;
+  title: string;
+  description?: string;
+  creator_username?: string;
+  creator_name?: string;
+  thumbnail_url?: string;
+  duration_seconds: number;
+  hook_start_seconds: number;
+  parent_track_id?: string;
+  parent_track_title?: string;
+  parent_track_artist?: string;
+  track_match_confidence: number;
+  track_match_method: TrackMatchMethod;
+  content_type: MomentContentType;
+  vibe_tags: string[];
+  cultural_tags: string[];
+  view_count: number;
+  like_count: number;
+  share_count: number;
+  comment_count: number;
+  voyo_plays: number;
+  voyo_skips: number;
+  voyo_full_song_taps: number;
+  voyo_reactions: number;
+  virality_score: number;
+  conversion_rate: number;
+  heat_score: number;
+  discovered_at: string;
+  discovered_by: string;
+  verified: boolean;
+  featured: boolean;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
