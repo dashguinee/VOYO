@@ -2011,9 +2011,6 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
           tale of what's happening in the app right now. */}
       <Safe name="GreetingArea"><GreetingArea /></Safe>
 
-      {/* VoyoLiveCard - "Vibes on Vibes" → Opens VOYO Player */}
-      <Safe name="SignInPrompt"><SignInPrompt onSwitchToVOYO={onSwitchToVOYO} /></Safe>
-
       {/* ═══ CLASSICS ═══ All-time African hits, vinyl disk carousel.
           Placed early so the gold warmth anchors the feed before
           personalized sections kick in. Always renders (seed fallback). */}
@@ -2138,6 +2135,9 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
           </div>
         )}
       </Safe>
+
+      {/* VoyoLiveCard - "Vibes on Vibes" → Opens VOYO Player */}
+      <Safe name="SignInPrompt"><SignInPrompt onSwitchToVOYO={onSwitchToVOYO} /></Safe>
 
       {/* Back in the Mood — subtle brand atmosphere behind the cards.
           Single element, two stacked gradients:
