@@ -2191,7 +2191,7 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
                     letterSpacing: '-0.005em',
                   }}
                 >
-                  Vibing Right Now
+                  Vibes on Vibes
                 </h2>
 
                 {/* Live count suffix — only when authenticated + friends online */}

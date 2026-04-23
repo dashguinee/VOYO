@@ -26,6 +26,7 @@ import { searchMusic, SearchResult } from '../../services/api';
 import { useTabHistory } from '../../hooks/useTabHistory';
 import { CardHoldActions, CARD_ACTIONS } from '../ui/CardHoldActions';
 import { app } from '../../services/oyo';
+import { useKnowledgeStore } from '../../knowledge/KnowledgeStore';
 
 // Base filter tabs — five clean primary sets. "Disco" replaces the old
 // mix of 'offline' + 'recent' since our narralogy defines Disco = any
@@ -464,6 +465,37 @@ export const Library = ({ onTrackClick }: LibraryProps) => {
   const queue = usePlayerStore(s => s.queue);
   const history = usePlayerStore(s => s.history);
   const playlists = usePlaylistStore(s => s.playlists);
+  const knowledgeTracks = useKnowledgeStore(s => s.tracks);
+
+  // Unified track lookup — covers every source a user may have encountered:
+  // history (persisted), queue, KnowledgeStore (persisted), and the curated seed.
+  // This is what makes Liked work for OYÉd tracks that aren't in TRACKS.
+  const allKnownTracks = useMemo<Map<string, Track>>(() => {
+    const map = new Map<string, Track>();
+    const edge = `https://voyo-edge.dash-webtv.workers.dev`;
+    // Seed from TRACKS first (lowest priority, gets overwritten by richer data)
+    for (const t of TRACKS) map.set(t.id, t);
+    // KnowledgeStore — all discovered tracks with title + artist
+    for (const [id, k] of knowledgeTracks) {
+      if (!map.has(id)) {
+        map.set(id, {
+          id,
+          trackId: id,
+          title: k.title,
+          artist: k.artistName,
+          coverUrl: `${edge}/art/${id}?quality=medium`,
+          tags: [],
+          oyeScore: 0,
+          duration: k.duration ?? 0,
+          createdAt: new Date(k.discoveredAt).toISOString(),
+        });
+      }
+    }
+    // History + queue — have the most complete Track objects (cover already resolved)
+    for (const h of history) { if (h.track?.id) map.set(h.track.id, h.track); }
+    for (const qi of queue) { if (qi.track?.id) map.set(qi.track.id, qi.track); }
+    return map;
+  }, [knowledgeTracks, history, queue]);
 
   // Get liked tracks from preference store (persisted to localStorage)
   const trackPreferences = usePreferenceStore(s => s.trackPreferences);
@@ -594,14 +626,25 @@ export const Library = ({ onTrackClick }: LibraryProps) => {
         base = boostedTracks;
         break;
       case 'liked':
-        base = TRACKS.filter(t => likedTracks.has(t.id));
+        // All OYÉd tracks — looks across EVERY source (KnowledgeStore, history,
+        // queue, TRACKS), not just the 27-track seed. This is why OYÉd feed
+        // tracks now appear in the Liked tab.
+        base = Array.from(likedTracks)
+          .map(id => allKnownTracks.get(id))
+          .filter((t): t is Track => !!t);
         break;
-      default:
-        // "All" = curated library ∪ locally cached, deduped by id.
+      default: {
+        // "All" = liked tracks ∪ curated library ∪ locally cached, deduped by id.
         const seen = new Set<string>();
         base = [];
+        // Liked tracks first (user's personal picks float to the top)
+        for (const id of likedTracks) {
+          const t = allKnownTracks.get(id);
+          if (t && !seen.has(t.id)) { seen.add(t.id); base.push(t); }
+        }
         for (const t of TRACKS) { if (!seen.has(t.id)) { seen.add(t.id); base.push(t); } }
         for (const t of boostedTracks) { if (!seen.has(t.id)) { seen.add(t.id); base.push(t); } }
+      }
     }
 
     // ── Step 2: intersect with playlist if selected ──────────────
@@ -617,7 +660,7 @@ export const Library = ({ onTrackClick }: LibraryProps) => {
 
     // ── Step 3: search narrowing ─────────────────────────────────
     return base.filter(matchesSearch);
-  }, [activeFilter, activePlaylistId, searchQuery, boostedTracks, queue, history, playlists, likedTracks]);
+  }, [activeFilter, activePlaylistId, searchQuery, boostedTracks, queue, history, playlists, likedTracks, allKnownTracks]);
 
   // Sort / shuffle for both display AND play-all. Memoised from
   // filteredTracks + playMode + sortMode so the displayed order

@@ -376,7 +376,7 @@ export const VoyoLiveCard = ({ onSwitchToVOYO }: VoyoLiveCardProps = {}) => {
 
             {/* Copy */}
             <div className="flex-1 min-w-0">
-              <h3 className="text-white font-bold text-lg leading-tight">Vibes on Vibes</h3>
+              <h3 className="text-white font-bold text-lg leading-tight">Vibing Right Now</h3>
               <p className="text-white/70 text-xs">For the People, by The People</p>
             </div>
 
