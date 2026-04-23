@@ -22,10 +22,15 @@ const SUPABASE_URL = 'https://anmgyxhnyhbyxzpjhxgx.supabase.co';
 // Anon key — RLS lets anon PATCH video_intelligence per earlier session test.
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFubWd5eGhueWhieXh6cGpoeGd4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjU5NzE3NDAsImV4cCI6MjA4MTU0Nzc0MH0.VKzfgrAbwvfs6WC1xhVbJ-mShmex3ycfib8jI57dyR4';
 
-const R2_ACCOUNT_ID = '2b9fcfd8cd9aedbde62ffdd714d66a3e';
-const R2_ACCESS_KEY = '82679709fb4e9f7e77f1b159991c9551';
-const R2_SECRET_KEY = '306f3d28d29500228a67c8cf70cebe03bba3c765fee173aacb26614276e7bb52';
+// Run with: node --env-file=.env scripts/reconcile-vi-from-r2.cjs
+const R2_ACCOUNT_ID = process.env.R2_ACCOUNT_ID;
+const R2_ACCESS_KEY = process.env.R2_ACCESS_KEY_ID;
+const R2_SECRET_KEY = process.env.R2_SECRET_ACCESS_KEY;
 const R2_BUCKET     = 'voyo-audio';
+if (!R2_ACCOUNT_ID || !R2_ACCESS_KEY || !R2_SECRET_KEY) {
+  console.error('Missing R2_ACCOUNT_ID / R2_ACCESS_KEY_ID / R2_SECRET_ACCESS_KEY. Run with: node --env-file=.env ...');
+  process.exit(1);
+}
 
 const dryRun = process.argv.includes('--dry-run');
 const PATCH_CHUNK = 50; // anon PostgREST bulk PATCH — keep under 500ms budget

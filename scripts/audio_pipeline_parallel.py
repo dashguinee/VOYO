@@ -32,11 +32,14 @@ sys.stdout.reconfigure(line_buffering=True)
 SUPABASE_URL = "https://anmgyxhnyhbyxzpjhxgx.supabase.co"
 SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFubWd5eGhueWhieXh6cGpoeGd4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjU5NzE3NDAsImV4cCI6MjA4MTU0Nzc0MH0.VKzfgrAbwvfs6WC1xhVbJ-mShmex3ycfib8jI57dyR4"
 
-R2_ACCOUNT_ID = '2b9fcfd8cd9aedbde62ffdd714d66a3e'
-R2_ACCESS_KEY = '82679709fb4e9f7e77f1b159991c9551'
-R2_SECRET_KEY = '306f3d28d29500228a67c8cf70cebe03bba3c765fee173aacb26614276e7bb52'
+# Run with: set -a; source .env; set +a; python3 scripts/audio_pipeline_parallel.py ...
+R2_ACCOUNT_ID = os.environ.get('R2_ACCOUNT_ID')
+R2_ACCESS_KEY = os.environ.get('R2_ACCESS_KEY_ID')
+R2_SECRET_KEY = os.environ.get('R2_SECRET_ACCESS_KEY')
 R2_BUCKET = 'voyo-audio'
 R2_PUBLIC_URL = 'https://pub-645c1f5179484e2ca4ec33cbf7caba84.r2.dev'
+if not (R2_ACCOUNT_ID and R2_ACCESS_KEY and R2_SECRET_KEY):
+    sys.exit('Missing R2_ACCOUNT_ID / R2_ACCESS_KEY_ID / R2_SECRET_ACCESS_KEY. Source .env first.')
 
 BASE_DIR = Path(__file__).parent.parent
 TEMP_DIR = BASE_DIR / "audio_cache" / "temp"
