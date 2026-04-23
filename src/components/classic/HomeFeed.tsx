@@ -21,6 +21,8 @@ import { VIBES, Vibe, TRACKS } from '../../data/tracks';
 import { VibesReel } from './VibesReel';
 import { getUserTopTracks, getPoolAwareHotTracks, getPoolAwareDiscoveryTracks, calculateBehaviorScore, recordPoolEngagement } from '../../services/personalization';
 import { curateAllSections } from '../../services/poolCurator';
+import type { PooledTrack } from '../../store/trackPoolStore';
+import type { HistoryItem } from '../../types';
 import { getInsights as getOyoInsights } from '../../services/oyoDJ';
 import { usePools, app } from '../../services/oyo';
 import { usePreferenceStore } from '../../store/preferenceStore';
@@ -57,7 +59,7 @@ const getNewReleases = (pool: Track[], limit: number = 15): Track[] => {
 };
 
 // Pool-based: Get artists you love from pool + history
-const getArtistsYouLove = (history: any[], pool: Track[], limit: number = 8): { name: string; tracks: Track[]; playCount: number }[] => {
+const getArtistsYouLove = (history: HistoryItem[], pool: Track[], limit: number = 8): { name: string; tracks: Track[]; playCount: number }[] => {
   const artistPlays: Record<string, { tracks: Set<string>; count: number }> = {};
   history.forEach(item => {
     if (item.track?.artist) {
@@ -81,30 +83,30 @@ const getArtistsYouLove = (history: any[], pool: Track[], limit: number = 8): { 
     .slice(0, limit);
 };
 
-const getTrendingTracks = (hotPool: any[], limit: number = 15): Track[] => {
+const getTrendingTracks = (hotPool: PooledTrack[], limit: number = 15): Track[] => {
   return [...hotPool]
     .sort((a, b) => b.poolScore - a.poolScore)
     .slice(0, limit) as Track[];
 };
 
 // Section-filtered helpers (use curator tags from poolCurator)
-const getWestAfricanTracks = (hotPool: any[], limit: number = 15): Track[] => {
+const getWestAfricanTracks = (hotPool: PooledTrack[], limit: number = 15): Track[] => {
   return [...hotPool]
-    .filter((t: any) => t.tags?.includes('west-african'))
+    .filter(t => t.tags?.includes('west-african'))
     .sort((a, b) => (b.poolScore || 0) - (a.poolScore || 0))
     .slice(0, limit) as Track[];
 };
 
-const getClassicsTracks = (hotPool: any[], limit: number = 15): Track[] => {
+const getClassicsTracks = (hotPool: PooledTrack[], limit: number = 15): Track[] => {
   return [...hotPool]
-    .filter((t: any) => t.tags?.includes('classic'))
+    .filter(t => t.tags?.includes('classic'))
     .sort((a, b) => (b.poolScore || 0) - (a.poolScore || 0))
     .slice(0, limit) as Track[];
 };
 
-const getCuratedTrendingTracks = (hotPool: any[], limit: number = 15): Track[] => {
+const getCuratedTrendingTracks = (hotPool: PooledTrack[], limit: number = 15): Track[] => {
   return [...hotPool]
-    .filter((t: any) => t.tags?.includes('trending'))
+    .filter(t => t.tags?.includes('trending'))
     .sort((a, b) => (b.poolScore || 0) - (a.poolScore || 0))
     .slice(0, limit) as Track[];
 };
@@ -125,7 +127,7 @@ const seededShuffle = <T extends Track>(tracks: T[], seed: number): T[] => {
   });
 };
 
-const getRecentlyPlayed = (history: any[], limit: number = 10): Track[] => {
+const getRecentlyPlayed = (history: HistoryItem[], limit: number = 10): Track[] => {
   const seen = new Set<string>();
   const uniqueTracks: Track[] = [];
   for (let i = history.length - 1; i >= 0; i--) {
@@ -1857,8 +1859,8 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
         const topBand = scored.map(s => s.track).slice(0, 30);
         return seededShuffle(topBand, sessionSeed).slice(0, 15);
       }
-      const afroPool = pool.filter((t: any) =>
-        t?.detectedMode === 'afro-heat' || t?.tags?.some?.((tag: string) =>
+      const afroPool = pool.filter(t =>
+        t?.detectedMode === 'afro-heat' || t?.tags?.some((tag: string) =>
           ['afrobeats', 'afro', 'african', 'lagos', 'naija'].includes(tag.toLowerCase())
         )
       );
