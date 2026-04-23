@@ -1191,14 +1191,31 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   // PREDICT NEXT TRACK - For preloading (doesn't change state, just returns prediction)
   predictNextTrack: () => {
     const state = get();
+    const curId = state.currentTrack?.id;
+    const curTrackId = state.currentTrack?.trackId;
 
-    // If queue has items, that's definitive
+    // If queue has items, scan for the first that isn't unplayable AND isn't
+    // the currently-playing track. v418 nextTrack also skips same-as-current
+    // so predict MUST match or preload will cache the wrong track and the
+    // actual advance stalls waiting for the right one to fetch.
     if (state.queue.length > 0) {
-      return state.queue[0].track;
+      for (const qi of state.queue) {
+        const t = qi.track;
+        const cid = t.trackId;
+        const tid = t.id;
+        const isSameAsCurrent =
+          (curId && (tid === curId || cid === curId)) ||
+          (curTrackId && (cid === curTrackId || tid === curTrackId));
+        if (isSameAsCurrent) continue;
+        if (cid && (isKnownUnplayable(cid) || isBlocklisted(cid))) continue;
+        return t;
+      }
+      // All queue items are either blocked or same-as-current → fall through
+      // to discover pool (matches nextTrack's fallthrough).
     }
 
     // Otherwise, predict using same logic as nextTrack
-    const currentTrackId = state.currentTrack?.id || state.currentTrack?.trackId;
+    const currentTrackId = curId || curTrackId;
     const recentHistoryIds = new Set<string>();
 
     // Add last 40 played tracks to exclusion (see note at primary site).
