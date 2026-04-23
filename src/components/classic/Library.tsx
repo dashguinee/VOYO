@@ -24,8 +24,8 @@ import { OyeButton } from '../oye/OyeButton';
 import { DiscoExplainer } from '../ui/DiscoExplainer';
 import { searchMusic, SearchResult } from '../../services/api';
 import { useTabHistory } from '../../hooks/useTabHistory';
-import { CardHoldActions, CARD_ACTIONS } from '../ui/CardHoldActions';
 import { app } from '../../services/oyo';
+import { CardHoldActions } from '../ui/CardHoldActions';
 import { useKnowledgeStore } from '../../knowledge/KnowledgeStore';
 
 // Base filter tabs — five clean primary sets. "Disco" replaces the old
@@ -1036,17 +1036,7 @@ export const Library = ({ onTrackClick }: LibraryProps) => {
 
         {orderedTracks.length > 0 ? (
           orderedTracks.map((track, index) => (
-            <CardHoldActions
-              key={track.id}
-              leftAction={{ ...CARD_ACTIONS.oye, onFire: () => app.oyeCommit(track, {}) }}
-              rightAction={{
-                ...CARD_ACTIONS.download,
-                onFire: () => {
-                  console.log('[Download] Not yet implemented — infra coming', track.trackId);
-                  alert('Download coming soon!');
-                },
-              }}
-            >
+            <CardHoldActions key={track.id} track={track} onPlaylist={() => setPlaylistModalTrack(track)}>
               <SongRow
                 track={track}
                 index={index}

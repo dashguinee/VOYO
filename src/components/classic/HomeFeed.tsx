@@ -37,8 +37,8 @@ import { useBackGuard } from '../../hooks/useBackGuard';
 import { friendsAPI, type Friend } from '../../lib/voyo-api';
 import { VoyoLoadOrb } from '../voyo/VoyoLoadOrb';
 import { useNavigate } from 'react-router-dom';
-import { CardHoldActions, CARD_ACTIONS } from '../ui/CardHoldActions';
 import { PlaylistModal } from '../playlist/PlaylistModal';
+import { CardHoldActions } from '../ui/CardHoldActions';
 
 // ============================================
 // HELPER FUNCTIONS
@@ -1996,11 +1996,7 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
             style={{ scrollSnapType: 'x proximity', WebkitOverflowScrolling: 'touch' }}
           >
             {recentlyPlayed.slice(0, 12).map((track) => (
-              <CardHoldActions
-                key={track.id}
-                leftAction={{ ...CARD_ACTIONS.like, onFire: () => setExplicitLike(track.id, true) }}
-                rightAction={{ ...CARD_ACTIONS.playlist, onFire: () => setPlaylistModalTrack(track) }}
-              >
+              <CardHoldActions key={track.id} track={track} onPlaylist={() => setPlaylistModalTrack(track)}>
                 <WideTrackCard track={track} onPlay={playTrack} showBoostBadge isBoosted={boostedIds.has(track.trackId)} />
               </CardHoldActions>
             ))}
@@ -2116,17 +2112,7 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
       {hasDiscoverMore && (
         <ShelfWithRefresh title="Next Voyage" onRefresh={handleRefresh} isRefreshing={isRefreshing}>
           {discoverMoreTracks.slice(0, 12).map((track) => (
-            <CardHoldActions
-              key={track.id}
-              leftAction={{ ...CARD_ACTIONS.oye, onFire: () => app.oyeCommit(track, {}) }}
-              rightAction={{
-                ...CARD_ACTIONS.download,
-                onFire: () => {
-                  console.log('[Download] Not yet implemented — infra coming', track.trackId);
-                  alert('Download coming soon!');
-                },
-              }}
-            >
+            <CardHoldActions key={track.id} track={track} onPlaylist={() => setPlaylistModalTrack(track)}>
               <TrackCard track={track} onPlay={playTrackFull} />
             </CardHoldActions>
           ))}
