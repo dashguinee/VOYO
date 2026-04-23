@@ -1,49 +1,94 @@
-# `src/audio/` — Web Audio playback chain
+# `src/audio/` — Web Audio playback chain + background invariant
 
-Scope: **playback-side DSP only.** Everything that deals with fetching or
-preparing audio bytes lives in `src/services/voyoStream.ts` (VPS session
-orchestration) — NOT here. See `docs/PIPELINE.md` for the full pipeline.
+Scope: **playback-side orchestration** — the DSP chain, the BG keep-alive,
+and the playback state machine. Source fetching (R2, iframe fallback,
+extraction queue) lives in `src/services/voyoStream.ts` +
+`src/player/useHotSwap.ts`. See `docs/PIPELINE.md` for the full flow.
 
-## What lives here
+## Layout
 
 ```
 audio/
-├── AudioErrorBoundary.tsx   React error boundary — catches render crashes
-│                            in the audio player, shows a minimal fallback
-│                            so the whole app doesn't white-screen.
+├── AudioErrorBoundary.tsx   React boundary — catches render crashes in
+│                            AudioPlayer; null-cycles currentTrack + crash-
+│                            loop guard (3 catches/5s halts auto-remount).
+│
+├── bg/
+│   ├── bgEngine.ts          THE single module that owns every BG-
+│   │                        playback mitigation. Silent-WAV keeper,
+│   │                        capture-phase visibility handler, 5s
+│   │                        battery-suspend timer, MessageChannel
+│   │                        heartbeat (~4s, not throttled in BG) with
+│   │                        synthetic-ended + stuck-playback detectors,
+│   │                        gain rescue, AudioContext resume. Enforces
+│   │                        the invariant: while store.isPlaying is
+│   │                        true, SOMETHING is always playing through
+│   │                        <audio> (real track or silent WAV keeper).
+│   │                        See commentary at top of file.
+│   │
+│   └── useWakeLock.ts       Screen Wake Lock while isPlaying
+│                            (Chrome Android + iOS 16.4+).
+│
+├── playback/
+│   └── playbackState.ts     Explicit state machine:
+│                            idle | loading | bridge | playing |
+│                            paused | advancing | error. Observable
+│                            via `usePlaybackState()`. Every transition
+│                            emits a `state_transition` telemetry trace
+│                            with `{from, to, reason, dwellMs}`.
+│                            Illegal transitions silently rejected +
+│                            logged as `state_illegal`.
 │
 └── graph/
-    ├── useAudioChain.ts     The Web Audio graph. Creates AudioContext,
-    │                        wires master gain → EQ → spatial → analyser.
-    │                        Consumed by AudioPlayer.tsx.
+    ├── useAudioChain.ts     Web Audio graph: AudioContext →
+    │                        MediaElementAudioSourceNode → master gain
+    │                        → EQ → spatial → analyser → destination.
+    │                        Exposes audioContextRef, gainNodeRef,
+    │                        computeMasterTarget for bgEngine.
     │
-    ├── boostPresets.ts      EQ curves keyed by boost profile name
-    │                        (normal / bass / vocal / acoustic / etc.).
-    │
-    ├── boostPresets.test.ts Vitest — verifies preset shape + frequencies.
-    │
-    └── freqPump.ts          `useFrequencyPump` — drives the frequency
-                             visualizer at a bounded rAF rate.
+    ├── boostPresets.ts      EQ curves per boost profile.
+    ├── boostPresets.test.ts Vitest.
+    └── freqPump.ts          `useFrequencyPump` — rAF-bounded
+                             visualizer via AnalyserNode.
 ```
 
-## What doesn't live here (intentionally)
+## What lives elsewhere
 
-- **Audio fetching** — `voyoStream.ts` owns all HTTP. Read `docs/PIPELINE.md`.
-- **Preloading / prefetching** — the VPS handles pre-warming the next
-  track in the session queue. The browser plays ONE continuous stream.
-- **Cache tiers** — `/var/cache` and R2 are VPS/edge concerns. The
-  browser never touches either directly (except the single HEAD probe
-  in `ensureTrackReady`).
-- **Session state / SSE / skip** — all in `voyoStream.ts`.
+- **Source resolution** (R2 probe, iframe fallback, hot-swap crossfade)
+  → `src/player/useHotSwap.ts`, `src/player/r2Probe.ts`, `src/player/iframeBridge.ts`
+- **Extraction queue** (bump_queue_priority, ensureTrackReady)
+  → `src/services/voyoStream.ts`, `src/services/r2Gate.ts`
+- **Playback lifecycle** (play/pause/skip/advance, queue management)
+  → `src/store/playerStore.ts`, `src/components/AudioPlayer.tsx`
 
-If you're about to add audio-fetching code here, stop and check
-`voyoStream.ts` first.
+## The BG invariant
+
+**While store.isPlaying is true, the audio element is ALWAYS playing
+something** — a real track, or bgEngine's silent WAV keeper. Never idle.
+The OS therefore never revokes audio focus, so BG return finds a live
+session instead of a dead one requiring a user tap.
+
+bgEngine engages the silent WAV at two bridge points:
+1. In `AudioPlayer.handleEnded` before `nextTrack()` — bridges the gap
+   between track A ending and track B's src landing.
+2. (Future) In `AudioPlayer`'s track-change useEffect BG branch — bridges
+   rapid skips while the new src is loading.
 
 ## History
 
-Earlier revisions of this dir held browser-side extraction logic
-(`sourceResolver`, `hotSwap`, `playbackState`, `errorRecovery`,
-`bgEngine`, `usePreloadTrigger`, `preloadManager`). All removed on
-2026-04-19 when the VPS-owned streaming pipeline (voyo-stream.js)
-became the only audio source. If you find references in older
-commits or stale docs, ignore them.
+- **v198** (2026-04-16): extracted `bgEngine` from `AudioPlayer.tsx`.
+- **v219** (2026-04-17): restored BG playback after three BG-killing
+  bugs (handlePlayFailure, canplay context-resume path, visibility
+  handler capture phase). See commit `f5cfadf`.
+- **2026-04-19**: bgEngine + playbackState + hotSwap removed in the
+  VPS-owned streaming switch.
+- **2026-04-22**: VPS streaming ripped out (commit `df8d1f2`) WITHOUT
+  restoring bgEngine, leaving the client with no BG keep-alive.
+- **2026-04-22 (same day, later)**: bgEngine + useWakeLock + playbackState
+  restored from `1098988^` and re-wired into AudioPlayer.tsx. See commit
+  `692d210`. This is the current state.
+
+If you find references to `sourceResolver`, `errorRecovery`,
+`usePreloadTrigger`, or `preloadManager` in older commits or stale docs,
+those modules are gone for good — their responsibilities live in
+`voyoStream.ts` + `useHotSwap.ts` + `r2Gate.ts`.
