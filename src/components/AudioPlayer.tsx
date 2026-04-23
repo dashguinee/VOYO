@@ -350,22 +350,24 @@ export const AudioPlayer = () => {
           });
         }, 300);
       } else {
-        // Blank the audio element so the iframe is the sole audio source.
-        // intentionalPause flag prevents handlePause from flipping isPlaying.
-        if (el) {
-          voyoStream.intentionalPause = true;
-          try { el.pause(); } catch {}
-          el.removeAttribute('src');
+        const isHiddenNow = typeof document !== 'undefined' && document.hidden;
+        if (!isHiddenNow) {
+          // FG: blank el so iframe is the sole audio source.
+          // intentionalPause prevents handlePause from flipping isPlaying.
+          if (el) {
+            voyoStream.intentionalPause = true;
+            try { el.pause(); } catch {}
+            el.removeAttribute('src');
+          }
         }
+        // BG: DON'T blank el — the silent WAV engaged by handleEnded is keeping
+        // audio focus. Blanking it here kills audio focus immediately, OS revokes
+        // the session, next track never starts. el keeps the silent WAV running;
+        // on FG return bgEngine blanks it + iframeBridge.play() re-kicks iframe;
+        // on R2 landing via Realtime, performHotSwap swaps from silent WAV → R2.
         setSource('iframe');
-        // Iframe branch owns playback from here on — the audio element is
-        // intentionally silent (no src) and will NEVER fire canplay, so the
-        // trackSwap guard can't rely on handleCanPlay to clear it. Left set,
-        // the flag would permanently disable the BG auto-advance watchdog
-        // (AudioPlayer.tsx:512) and swallow every handlePause call for the
-        // lifetime of the iframe-sourced track. handlePause's separate
-        // playbackSource==='iframe' guard (line 461) still absorbs the
-        // expected audio-element pauses, so clearing here is safe.
+        // Iframe branch owns playback — el will NEVER fire canplay (src intentionally
+        // blank in FG, or silent WAV in BG), so trackSwap guard must clear here.
         trackSwapInProgressRef.current = false;
         setTimeout(() => {
           if (isStale()) return;
@@ -375,13 +377,7 @@ export const AudioPlayer = () => {
             source: 'iframe',
           });
         }, 300);
-        // Queue the track so lanes extract to R2 → useHotSwap watchers fire
-        // the cross-fade as soon as it lands.
         void ensureTrackReady(currentTrack, null, { priority: 10 });
-        // Background HEAD probe — warms r2KnownStore even though we're on
-        // the iframe path. If the track turns out to be cached already
-        // (race case: the store didn't know yet), useHotSwap's poll will
-        // catch the positive HEAD and fire the cross-fade on its own.
         void r2HasTrack(currentTrack.trackId);
       }
     })();
