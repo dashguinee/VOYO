@@ -15,7 +15,7 @@
  */
 
 import { useRef, useEffect, useState, useCallback, memo } from 'react';
-import { SkipBack, SkipForward, Play, Pause, Plus, Volume2, Smartphone, Loader2 } from 'lucide-react';
+import { SkipBack, SkipForward, Play, Pause, Plus, Volume2, Loader2 } from 'lucide-react';
 import { usePlayerStore } from '../../store/playerStore';
 import { voyoStream } from '../../services/voyoStream';
 import { app } from '../../services/oyo';
@@ -520,7 +520,8 @@ export const LandscapeVOYO = ({ onVideoMode }: LandscapeVOYOProps) => {
   const isPlaying = usePlayerStore(s => s.isPlaying);
   const togglePlay = usePlayerStore(s => s.togglePlay);
   const playbackSource = usePlayerStore(s => s.playbackSource);
-  const setPlaybackSource = usePlayerStore(s => s.setPlaybackSource);
+  // setPlaybackSource selector removed — it was subscribed but never called,
+  // causing the whole LandscapeVOYO to re-render when setter identity drifted.
   // currentTime is NOT subscribed here — it was dead weight causing the
   // whole LandscapeVOYO component to re-render at 4Hz during playback.
   // YouTubeInterceptor manages its own currentTime subscription in an
@@ -540,6 +541,11 @@ export const LandscapeVOYO = ({ onVideoMode }: LandscapeVOYOProps) => {
   const [isDJOpen, setIsDJOpen] = useState(false);
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastTapRef = useRef<number>(0);
+  // Tap counter for triple-tap → VideoMode detection. Resets after 400ms
+  // without another tap. Triple-tap on the video area switches to the
+  // full-screen immersive VideoMode surface (wires onVideoMode prop).
+  const tapCountRef = useRef<number>(0);
+  const tapResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Build timeline with deduplication
   const seenIds = new Set<string>();
@@ -580,10 +586,32 @@ export const LandscapeVOYO = ({ onVideoMode }: LandscapeVOYOProps) => {
   }, [isDJOpen]);
 
   // Handle tap on video area
+  //   1 tap  → toggle overlay visibility
+  //   2 taps → open DJ directly
+  //   3 taps → switch to full-screen VideoMode (onVideoMode)
   const handleVideoTap = useCallback(() => {
     const now = Date.now();
     const timeSinceLastTap = now - lastTapRef.current;
     lastTapRef.current = now;
+
+    // Extend the tap-burst window: if this tap came within 300ms of the
+    // prior one, keep counting; otherwise start a new burst.
+    if (timeSinceLastTap < 300) {
+      tapCountRef.current += 1;
+    } else {
+      tapCountRef.current = 1;
+    }
+
+    if (tapResetTimerRef.current) clearTimeout(tapResetTimerRef.current);
+    tapResetTimerRef.current = setTimeout(() => { tapCountRef.current = 0; }, 400);
+
+    if (tapCountRef.current >= 3) {
+      // Triple-tap → promote to full-screen VideoMode.
+      tapCountRef.current = 0;
+      if (tapResetTimerRef.current) clearTimeout(tapResetTimerRef.current);
+      onVideoMode();
+      return;
+    }
 
     // Double-tap detection (< 300ms)
     if (timeSinceLastTap < 300) {
@@ -601,7 +629,7 @@ export const LandscapeVOYO = ({ onVideoMode }: LandscapeVOYOProps) => {
         startHideTimer();
       }
     }
-  }, [showOverlay, startHideTimer]);
+  }, [showOverlay, startHideTimer, onVideoMode]);
 
   // Start hide timer when overlay shown
   useEffect(() => {
@@ -631,13 +659,6 @@ export const LandscapeVOYO = ({ onVideoMode }: LandscapeVOYOProps) => {
 
     refreshRecommendations();
     if (!isPlaying) togglePlay();
-  };
-
-  // Handle back to portrait
-  const handleBackToPortrait = () => {
-    // Rotate back by exiting fullscreen or just letting orientation change
-    // For now, this is handled by the orientation hook in App.tsx
-    // We could force portrait mode here if needed
   };
 
   return (
@@ -817,14 +838,9 @@ export const LandscapeVOYO = ({ onVideoMode }: LandscapeVOYOProps) => {
                 ))}
               </div>
 
-              {/* Back to Portrait Button */}
-              <button
-                className="absolute right-3 bottom-3 px-3 py-2 rounded-full bg-white/10 backdrop-blur-sm border border-white/20 flex items-center gap-2 text-white text-xs"
-                onClick={handleBackToPortrait}
-              >
-                <Smartphone className="w-4 h-4" />
-                Portrait
-              </button>
+              {/* Portrait-return button removed — handleBackToPortrait was a
+                  no-op (App-level orientation hook owns rotation). Dead UI
+                  is worse than missing UI. */}
             </div>
           </div>
         )}

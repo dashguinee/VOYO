@@ -26,6 +26,7 @@ import { OyeButton } from '../oye/OyeButton';
 import { useAuth } from '../../hooks/useAuth';
 import { useOyoInvocation } from '../../oyo-ui/useOyoInvocation';
 import { useMobilePlay } from '../../hooks/useMobilePlay';
+import { useTabHistory } from '../../hooks/useTabHistory';
 
 type ClassicTab = 'home' | 'hub' | 'library';
 
@@ -479,6 +480,10 @@ export const ClassicMode = ({ onSwitchToVOYO, onSearch }: ClassicModeProps) => {
   const shouldOpenNowPlaying = usePlayerStore(s => s.shouldOpenNowPlaying);
   const setShouldOpenNowPlaying = usePlayerStore(s => s.setShouldOpenNowPlaying);
 
+  // Tab-level back-gesture: back from Library/Hub returns to Home instead
+  // of exiting the app. Mirrors PortraitVOYO's voyoActiveTab pattern.
+  useTabHistory(activeTab, setActiveTab, 'classic-tab');
+
   // FIX A4: Listen for shouldOpenNowPlaying flag (set by search overlay)
   useEffect(() => {
     if (shouldOpenNowPlaying) {
@@ -501,11 +506,6 @@ export const ClassicMode = ({ onSwitchToVOYO, onSearch }: ClassicModeProps) => {
     }
     app.playTrack(track, 'feed');
   }, [setShowNowPlaying]);
-
-  const handleArtistClick = (artist: { name: string; tracks: Track[] }) => {
-    // Switch to library with artist filter
-    setActiveTab('library');
-  };
 
   return (
     <div className="relative h-full bg-[#0a0a0c]">

@@ -40,6 +40,7 @@ import { oyo, app } from '../../services/oyo';
 import { usePreferenceStore } from '../../store/preferenceStore';
 import { getTrackThumbnailUrl } from '../../utils/thumbnail';
 import { useMobilePlay } from '../../hooks/useMobilePlay';
+import { useBackGuard } from '../../hooks/useBackGuard';
 import { PlaylistModal } from '../playlist/PlaylistModal';
 import { useReactionStore, Reaction, TrackStats } from '../../store/reactionStore';
 import { OyeButton } from '../oye/OyeButton';
@@ -239,6 +240,11 @@ interface NowPlayingProps {
 }
 
 export const NowPlaying = ({ isOpen, onClose }: NowPlayingProps) => {
+  // Back-gesture coverage — system back / browser back / Android back closes
+  // the modal instead of exiting the app. Matches PlaylistModal /
+  // DiscoExplainer / SearchOverlayV2 pattern.
+  useBackGuard(isOpen, onClose, 'now-playing');
+
   // Fine-grained selectors — avoid re-rendering on unrelated store changes
   const currentTrack = usePlayerStore(s => s.currentTrack);
   const isPlaying = usePlayerStore(s => s.isPlaying);
@@ -499,11 +505,22 @@ export const NowPlaying = ({ isOpen, onClose }: NowPlayingProps) => {
               </div>
 
               {/* Action Buttons */}
+              {/* LIKE — Heart icon reflects isLiked (pink fill when liked,
+                  faint outline otherwise). Prior bug: rendered <X />, users
+                  mistook it for "close" and silently corrupted their like
+                  graph tapping to dismiss. Pattern mirrors VideoMode.tsx. */}
               <button
                 className="p-2"
                 onClick={() => currentTrack && setExplicitLike(currentTrack.trackId, !isLiked)}
+                aria-label={isLiked ? 'Unlike' : 'Like'}
               >
-                <X className="w-6 h-6 text-white/60" />
+                <Heart
+                  className="w-6 h-6"
+                  style={{
+                    color: isLiked ? '#f472b6' : 'rgba(255,255,255,0.6)',
+                    fill: isLiked ? '#f472b6' : 'none',
+                  }}
+                />
               </button>
               <button
                 className="p-2"

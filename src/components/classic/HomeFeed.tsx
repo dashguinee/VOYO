@@ -9,7 +9,7 @@
  */
 
 import { useState, useMemo, useEffect, useRef, memo, useCallback } from 'react';
-import { Search, Bell, Play, Zap } from 'lucide-react';
+import { Search, Play, Zap } from 'lucide-react';
 import { AfricaIcon } from '../ui/AfricaIcon';
 import { getThumb } from '../../utils/thumbnail';
 import { SmartImage } from '../ui/SmartImage';
@@ -1266,7 +1266,6 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
   // Set of boosted track IDs — OYE badge only shows on actually cached tracks
   const boostedIds = useMemo(() => new Set(cachedTracks.map(t => t.id)), [cachedTracks]);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [showNotificationHint, setShowNotificationHint] = useState(false);
   // Session seed drives shelf rotation — every reload / pull-to-refresh gets
   // a fresh number, so shelves surface different tracks from the big pool
   // without losing stability WITHIN a single session.
@@ -1333,11 +1332,6 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
     // Bump the session seed so every shelf re-shuffles its pick from the pool.
     setSessionSeed(Date.now());
     setTimeout(() => setIsRefreshing(false), 500);
-  };
-
-  const handleNotificationClick = () => {
-    setShowNotificationHint(true);
-    setTimeout(() => setShowNotificationHint(false), 2500);
   };
 
   // Stable callbacks for memo'd card children. Every card receives ONE of
@@ -1518,31 +1512,11 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
           <button aria-label="Search" className="p-2 rounded-full bg-white/10 hover:bg-white/20" onClick={onSearch}>
             <Search className="w-5 h-5 text-white/70" />
           </button>
-          <button aria-label="Notifications" className="p-2 rounded-full bg-white/10 hover:bg-white/20 relative" onClick={handleNotificationClick}>
-            <Bell className="w-5 h-5 text-white/70" />
-            <span aria-hidden="true" className="absolute top-1 right-1 w-2 h-2 rounded-full bg-red-500" />
-          </button>
+          {/* Bell removed — no classic-Home notifications pipeline. Push
+              notifications surface via PushBell in the VOYO header. */}
         </div>
       </header>
 
-      {/* Notification Hint Popup */}
-
-        {showNotificationHint && (
-          <div
-            className="fixed top-20 right-4 z-50 px-4 py-3 rounded-xl shadow-2xl"
-            style={{
-              background: 'linear-gradient(135deg, rgba(168, 85, 247, 0.95) 0%, rgba(236, 72, 153, 0.95) 100%)',
-              backdropFilter: 'blur(10px)',
-              boxShadow: '0 8px 32px rgba(168, 85, 247, 0.4)',
-            }}
-          >
-            <div className="flex items-center gap-2">
-              <Bell className="w-4 h-4 text-white" />
-              <p className="text-white text-sm font-medium">No new notifications</p>
-            </div>
-          </div>
-        )}
-      
 
       {/* Top-of-feed narrative slot — flashy GreetingBanner on session
           open, then eases into an ambient LiveStatusBar that tells the

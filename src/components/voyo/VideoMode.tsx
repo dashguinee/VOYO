@@ -10,13 +10,11 @@
  *
  * Features:
  * - Full-screen iframe video (global, never remounts)
- * - Overlay controls fade after ~3 seconds
- * - Right rail: Like (explicit preference) + Boost (offline cache + EQ)
- * - Swipe up/down for next/prev
- * - Triple-tap to exit
+ * - Controls stay always visible (tap directly to play/skip/exit)
+ * - Inline: Like (explicit preference) + Boost (offline cache + EQ)
  */
 
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useRef, useEffect, useCallback } from 'react';
 import { Play, Pause, SkipBack, SkipForward, X, Volume2, VolumeX, Heart } from 'lucide-react';
 import { usePlayerStore } from '../../store/playerStore';
 import { usePreferenceStore } from '../../store/preferenceStore';
@@ -48,7 +46,6 @@ export const VideoMode = ({ onExit }: VideoModeProps) => {
     return () => { setVideoTarget('hidden'); };
   }, [setVideoTarget]);
 
-  const [showControls, setShowControls] = useState(true);
   // Explicit like — toggles a persisted preference flag, not a moment-reaction.
   const trackPreferences = usePreferenceStore(s => s.trackPreferences);
   const setExplicitLike = usePreferenceStore(s => s.setExplicitLike);
@@ -56,10 +53,6 @@ export const VideoMode = ({ onExit }: VideoModeProps) => {
   // FIX: Derive mute state from volume instead of separate state
   const isMuted = volume === 0;
   const previousVolume = useRef(volume > 0 ? volume : 80); // Default to 80 if currently muted
-  const controlsTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const tapCountRef = useRef(0);
-  const tapTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const lastTapTime = useRef(0);
 
   // Controls stay always visible. We removed the full-screen tap surface
   // (it was covering search buttons beneath the overlay), which means
@@ -67,34 +60,12 @@ export const VideoMode = ({ onExit }: VideoModeProps) => {
   // anywhere to reveal" is no longer safe. Keep them on: the controls are
   // quiet enough (semi-transparent circles) that they don't steal the
   // video, and the user can actually, you know, use them.
-  void controlsTimeoutRef;
-  void setShowControls;
-
-  // Cleanup tap timeout on unmount to prevent memory leaks
-  useEffect(() => {
-    return () => {
-      if (tapTimeoutRef.current) {
-        clearTimeout(tapTimeoutRef.current);
-        tapTimeoutRef.current = undefined;
-      }
-    };
-  }, []);
 
   // Toggle the explicit like on the current track (persisted).
   const handleLikeToggle = useCallback(() => {
     if (!currentTrack) return;
     setExplicitLike(currentTrack.id, !isLiked);
   }, [currentTrack, isLiked, setExplicitLike]);
-
-  // Handle swipe
-  const handleDragEnd = useCallback((event: any, info: { offset: { x: number; y: number } }) => {
-    const threshold = 100;
-    if (info.offset.y < -threshold) {
-      nextTrack();
-    } else if (info.offset.y > threshold) {
-      prevTrack();
-    }
-  }, [nextTrack, prevTrack]);
 
   // Toggle mute - FIX: Update ref before toggling
   const handleMuteToggle = useCallback(() => {
@@ -196,90 +167,80 @@ export const VideoMode = ({ onExit }: VideoModeProps) => {
         </div>
       </div>
 
-      {/* Overlay Controls (fade in/out) */}
-      
-        {showControls && (
-          <div
-            className="absolute inset-0 pointer-events-none"
+      {/* Overlay Controls — always visible (see comment above on why the
+          auto-hide + tap-to-reveal behaviour was removed). */}
+      <div className="absolute inset-0 pointer-events-none">
+        {/* Exit Button */}
+        <button
+          className="absolute top-4 right-4 p-3 rounded-full bg-black/50 backdrop-blur-sm pointer-events-auto"
+          onClick={(e) => {
+            e.stopPropagation();
+            onExit();
+          }}
+        >
+          <X className="w-6 h-6 text-white" />
+        </button>
+
+        {/* Volume Control */}
+        <button
+          className="absolute top-4 left-4 p-3 rounded-full bg-black/50 backdrop-blur-sm pointer-events-auto"
+          onClick={(e) => {
+            e.stopPropagation();
+            handleMuteToggle();
+          }}
+        >
+          {isMuted ? (
+            <VolumeX className="w-6 h-6 text-white" />
+          ) : (
+            <Volume2 className="w-6 h-6 text-white" />
+          )}
+        </button>
+
+        {/* Center Controls — wrapper is pointer-events-none (covers inset-0
+            for layout, NOT for hit-testing), each button re-enables auto
+            so only the visible circles capture taps. Rest of the center
+            area stays transparent to underlying search controls. */}
+        <div className="absolute inset-0 flex items-center justify-center gap-8 pointer-events-none">
+          {/* Previous */}
+          <button
+            className="p-4 rounded-full bg-black/30 backdrop-blur-sm pointer-events-auto"
+            onClick={(e) => {
+              e.stopPropagation();
+              prevTrack();
+            }}
           >
-            {/* Exit Button */}
-            <button
-              className="absolute top-4 right-4 p-3 rounded-full bg-black/50 backdrop-blur-sm pointer-events-auto"
-              onClick={(e) => {
-                e.stopPropagation();
-                onExit();
-                }}
-            >
-              <X className="w-6 h-6 text-white" />
-            </button>
+            <SkipBack className="w-8 h-8 text-white" fill="white" />
+          </button>
 
-            {/* Volume Control */}
-            <button
-              className="absolute top-4 left-4 p-3 rounded-full bg-black/50 backdrop-blur-sm pointer-events-auto"
-              onClick={(e) => {
-                e.stopPropagation();
-                handleMuteToggle();
-                }}
-            >
-              {isMuted ? (
-                <VolumeX className="w-6 h-6 text-white" />
-              ) : (
-                <Volume2 className="w-6 h-6 text-white" />
-              )}
-            </button>
+          {/* Play/Pause */}
+          <button
+            className="w-20 h-20 rounded-full bg-white/90 flex items-center justify-center pointer-events-auto"
+            onClick={(e) => {
+              e.stopPropagation();
+              togglePlay();
+            }}
+          >
+            {isPlaying ? (
+              <Pause className="w-10 h-10 text-black" fill="black" />
+            ) : (
+              <Play className="w-10 h-10 text-black ml-1" fill="black" />
+            )}
+          </button>
 
-            {/* Center Controls — wrapper is pointer-events-none (covers inset-0
-                for layout, NOT for hit-testing), each button re-enables auto
-                so only the visible circles capture taps. Rest of the center
-                area stays transparent to underlying search controls. */}
-            <div className="absolute inset-0 flex items-center justify-center gap-8 pointer-events-none">
-              {/* Previous */}
-              <button
-                className="p-4 rounded-full bg-black/30 backdrop-blur-sm pointer-events-auto"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  prevTrack();
-                  }}
-              >
-                <SkipBack className="w-8 h-8 text-white" fill="white" />
-              </button>
-
-              {/* Play/Pause */}
-              <button
-                className="w-20 h-20 rounded-full bg-white/90 flex items-center justify-center pointer-events-auto"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  togglePlay();
-                  }}
-              >
-                {isPlaying ? (
-                  <Pause className="w-10 h-10 text-black" fill="black" />
-                ) : (
-                  <Play className="w-10 h-10 text-black ml-1" fill="black" />
-                )}
-              </button>
-
-              {/* Next */}
-              <button
-                className="p-4 rounded-full bg-black/30 backdrop-blur-sm pointer-events-auto"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  nextTrack();
-                  }}
-              >
-                <SkipForward className="w-8 h-8 text-white" fill="white" />
-              </button>
-            </div>
-
-            {/* Hint Text */}
-            <div className="absolute bottom-4 left-0 right-0 text-center">
-              <p className="text-white/50 text-xs">
-                Swipe up/down: Next/Prev • Double-tap: Reactions • Triple-tap: Exit
-              </p>
-            </div>
-          </div>
-        )}
-      
+          {/* Next */}
+          <button
+            className="p-4 rounded-full bg-black/30 backdrop-blur-sm pointer-events-auto"
+            onClick={(e) => {
+              e.stopPropagation();
+              nextTrack();
+            }}
+          >
+            <SkipForward className="w-8 h-8 text-white" fill="white" />
+          </button>
+        </div>
+        {/* Hint text removed — previously advertised swipe / double-tap /
+            triple-tap gestures that weren't actually implemented. */}
+      </div>
     </div>
   );
 };
