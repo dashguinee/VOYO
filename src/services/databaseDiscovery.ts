@@ -1,14 +1,13 @@
 /**
- * VOYO Database Discovery Service
+ * Database Discovery — primary track supply for the player pool.
  *
- * VIBES FIRST discovery from 324K tracks
+ * getHotTracks()      R2-cached tracks ordered by heat/vibe score
+ * getDiscoveryTracks() Same pool, diversity-ranked (lower heat, broader genres)
+ * searchTracks()       Supabase full-text → YouTube fallback
  *
- * - HOT: Trending NOW + matches your vibes
- * - DISCOVERY: Expand horizons + unique flavors
- * - SEARCH: Supabase first, YouTube fallback
- *
- * Uses essence engine to extract user's vibe fingerprint,
- * then queries Supabase for matching tracks.
+ * All three return only R2-cached tracks (via video_intelligence.r2_cached).
+ * essenceEngine provides the vibe fingerprint that biases ordering.
+ * playerStore calls these on refreshRecommendations() to fill hotTracks/discoverTracks.
  */
 
 import { supabase, isSupabaseConfigured as supabaseConfigured } from '../lib/supabase';

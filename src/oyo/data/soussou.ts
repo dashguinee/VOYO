@@ -94,10 +94,6 @@ export function isSoussouEnabled(locale: string | undefined): boolean {
   return lower === 'gn' || lower === 'fr-gn' || lower.startsWith('gn-') || lower.endsWith('-gn');
 }
 
-/** @deprecated Use isSoussouEnabled — kept for backwards compatibility */
-export function isGuineaLocale(locale: string | undefined): boolean {
-  return isSoussouEnabled(locale);
-}
 
 /**
  * Returns a random Soussou phrase if the user is in Guinea, otherwise null.

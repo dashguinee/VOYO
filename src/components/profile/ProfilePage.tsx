@@ -131,8 +131,6 @@ export const ProfilePage = () => {
 
     loadProfile();
 
-    // TODO: Subscribe to real-time updates if portal is open
-    // This would need a Supabase realtime subscription on voyo_profiles
   }, [urlDashId]);
 
   // Load friend status (friends are global in Command Center)

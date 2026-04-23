@@ -69,10 +69,6 @@ export async function loadLexicon(): Promise<void> {
   try {
     devLog('[Lexicon] Loading Soussou lexicon...');
 
-    // In browser context, we need to fetch from a served location
-    // For now, we'll embed a subset or fetch from API
-    // TODO: Set up lexicon API endpoint
-
     // Try to load from local storage cache first
     const cached = localStorage.getItem('voyo_lexicon_cache');
     if (cached) {

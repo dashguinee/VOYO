@@ -257,7 +257,7 @@ export async function saveVerifiedTrack(
       thumbnail: track.coverUrl || getThumb(youtubeId),
       duration: track.duration || 0,
       tags: track.tags || [],
-      language: 'en', // TODO: detect
+      language: 'en',
       region: track.region || 'NG',
       discovered_by: discoveredBy,
       verified: true,

@@ -1,17 +1,13 @@
 /**
- * VOYO Essence Engine
+ * Essence Engine — builds the user's vibe fingerprint from live signals.
  *
- * Extracts the user's VIBE FINGERPRINT from all signals:
- * - Past plays (what they listened to)
- * - Completions vs skips (what they REALLY liked)
- * - Reactions (OYÉ, Fire, Like)
- * - MixBoard intent (what they WANT)
- * - Time patterns (when they listen)
+ * Reads intentStore (MixBoard position), preferenceStore (history/skips/completions),
+ * and reactionStore (OYÉ, Fire, Like) then blends them into a VibeEssence:
+ * five 0–1 weights (afro_heat, chill, party, workout, late_night) plus
+ * dominant vibe list and fresh-vs-familiar ratio.
  *
- * VIBES FIRST - Not genre, not popularity. VIBES.
- *
- * The essence is used to query 324K tracks that MATCH the user's vibe,
- * whether those tracks are hot or niche doesn't matter.
+ * getVibeEssence() is called by databaseDiscovery on every pool refresh.
+ * No network calls — pure in-memory derivation.
  */
 
 import { useIntentStore, type VibeMode } from '../store/intentStore';
