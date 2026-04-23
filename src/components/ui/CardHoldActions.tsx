@@ -46,7 +46,7 @@ export function CardHoldActions({ track, children, onPlaylist, className = '' }:
     ? { label: 'Playlist', Icon: Plus,  color: '#a78bfa', gradient: 'radial-gradient(circle at 32% 24%, rgba(167,139,250,0.45) 0%, rgba(73,24,114,0.95) 44%, rgba(32,13,58,0.95) 100%)', glow: '#a78bfa',  onFire: () => onPlaylist?.() }
     : isLiked
     ? { label: 'OYÉ',      Icon: Zap,   color: '#D4A053', gradient: 'radial-gradient(circle at 32% 24%, rgba(244,217,153,0.55) 0%, rgba(139,98,40,0.95) 44%, rgba(60,40,10,0.95) 100%)',   glow: '#D4A053',  onFire: () => app.oyeCommit(track, {}) }
-    : { label: 'Like',     Icon: Heart, color: '#f472b6', gradient: 'radial-gradient(circle at 32% 24%, rgba(244,114,182,0.45) 0%, rgba(131,24,67,0.95) 44%, rgba(45,8,26,0.95) 100%)',  glow: '#f472b6',  onFire: () => setExplicitLike(track.id, true) };
+    : { label: 'Like',     Icon: Heart, color: '#8b5cf6', gradient: 'radial-gradient(circle at 32% 24%, rgba(139,92,246,0.45) 0%, rgba(76,29,149,0.95) 44%, rgba(20,10,48,0.95) 100%)',  glow: '#8b5cf6',  onFire: () => setExplicitLike(track.id, true) };
 
   const [holdOpen, setHoldOpen] = useState(false);
   const [flashing, setFlashing] = useState(false);
@@ -150,7 +150,7 @@ export function CardHoldActions({ track, children, onPlaylist, className = '' }:
 
       <div
         className={className}
-        style={{ position: 'relative', zIndex: holdOpen ? 50 : undefined, touchAction: 'pan-y' }}
+        style={{ position: 'relative', zIndex: holdOpen ? 50 : undefined, touchAction: 'pan-x pan-y' }}
         onPointerDown={handlePointerDown}
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerUp}
