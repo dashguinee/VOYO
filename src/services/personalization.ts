@@ -184,7 +184,9 @@ export function calculateTrackScore(track: Track, preferences: Record<string, Tr
 }
 
 /**
- * HOT ENGINE v2.0 - Intent-First Recommendations
+ * Intent-first hot track recommendations (static TRACKS array).
+ * Selects and scores from the static seed array only.
+ * Used as fallback when pool is empty.
  *
  * Strategy:
  * 1. Get dominant modes from MixBoard (what user WANTS)
@@ -561,24 +563,14 @@ export function getMixedTracks(limit: number = 10): Track[] {
 }
 
 // ============================================
-// POOL-AWARE ENGINES (v3.0)
-// Uses dynamic Track Pool instead of static TRACKS
+// POOL-AWARE ENGINES (live track pool)
 // ============================================
 
 /**
- * HOT ENGINE v3.0 - Pool-Aware, Intent-First
- *
- * Uses Track Pool Store for dynamic track management.
- * Falls back to static TRACKS if pool is empty.
- *
- * Key difference from v2.0:
- * - Pulls from growing pool (not static 11 tracks)
- * - Uses pool scores (engagement + recency + intent)
- * - Blends new tracks smoothly (no jarring refresh)
- *
- * v3.1 IMPROVEMENTS:
- * - Added randomization factor to prevent same tracks every time
- * - Better deduplication with trackId fallback
+ * Pool-aware hot track selection — primary path when pool is populated.
+ * Scores tracks from trackPoolStore using engagement + recency + intent,
+ * with a randomization factor to prevent repetition. Falls back to
+ * static TRACKS if pool is empty.
  */
 export function getPoolAwareHotTracks(limit: number = 5): Track[] {
   const poolStore = useTrackPoolStore.getState();
