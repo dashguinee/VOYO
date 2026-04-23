@@ -330,9 +330,14 @@ export const PortraitVOYO = ({ onSearch, onDahub, onHome }: PortraitVOYOProps) =
 
         {/* LAYER 3: CREATOR MODE — hidden until backend ready */}
 
-        {/* LAYER 4: DAHUB MODE (Slide-in from Left) */}
+        {/* LAYER 4: DAHUB MODE (Slide-in from Left)
+            NOTE: Dahub handles its own scroll via flex-1 overflow-y-auto
+            and its own safe-area-bottom padding. The wrapper must be
+            overflow-hidden (not overflow-y-auto) and have NO pb-20 —
+            adding either forces a double-scroll + extra padding that
+            collapses Dahub's usable viewport. */}
         <div
-          className="absolute inset-0 z-20 bg-[#050507] pb-20 overflow-y-auto transition-all duration-500"
+          className="absolute inset-0 z-20 bg-[#050507] overflow-hidden transition-all duration-500"
           style={{
             transform: voyoActiveTab === 'dahub' ? 'translateX(0)' : 'translateX(-100%)',
             opacity: voyoActiveTab === 'dahub' ? 1 : 0,
