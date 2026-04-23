@@ -208,12 +208,12 @@ const PlayModeMenu = ({
         </div>
 
         <div className="flex flex-col gap-2">
-          <button onClick={() => pick('magic')} className="px-4 py-2.5 rounded-full text-left text-[13px] font-medium voyo-tap-scale" style={pillStyle(playMode === 'magic')}>
+          <button onClick={() => pick('magic')} className="px-4 py-2.5 rounded-full text-left text-[13px] font-semibold voyo-tap-scale" style={pillStyle(playMode === 'magic')}>
             Magic Mix
             <span className="ml-2 text-[11px] opacity-60">smart mix · rotates daily · surfaces forgotten favourites</span>
           </button>
 
-          <button onClick={() => pick('in-order')} className="px-4 py-2.5 rounded-full text-left text-[13px] font-medium voyo-tap-scale flex items-center justify-between" style={pillStyle(playMode === 'in-order')}>
+          <button onClick={() => pick('in-order')} className="px-4 py-2.5 rounded-full text-left text-[13px] font-semibold voyo-tap-scale flex items-center justify-between" style={pillStyle(playMode === 'in-order')}>
             <span>In Order</span>
             <span className="text-[11px] opacity-60">{inOrderExpanded ? '▾' : '▸'}</span>
           </button>
@@ -229,7 +229,7 @@ const PlayModeMenu = ({
                 <button
                   key={id}
                   onClick={() => pickSort(id)}
-                  className="px-3 py-1 rounded-full text-[11px] font-medium voyo-tap-scale"
+                  className="px-3 py-1 rounded-full text-[11px] font-semibold voyo-tap-scale"
                   style={pillStyle(playMode === 'in-order' && sortMode === id)}
                 >
                   {label}
@@ -238,7 +238,7 @@ const PlayModeMenu = ({
             </div>
           )}
 
-          <button onClick={() => pick('shuffle')} className="px-4 py-2.5 rounded-full text-left text-[13px] font-medium voyo-tap-scale" style={pillStyle(playMode === 'shuffle')}>
+          <button onClick={() => pick('shuffle')} className="px-4 py-2.5 rounded-full text-left text-[13px] font-semibold voyo-tap-scale" style={pillStyle(playMode === 'shuffle')}>
             Shuffle
             <span className="ml-2 text-[11px] opacity-60">pure random</span>
           </button>
@@ -874,7 +874,7 @@ export const Library = ({ onTrackClick }: LibraryProps) => {
             return (
               <button
                 key={filter.id}
-                className="px-3.5 py-1.5 rounded-full text-[13px] font-medium whitespace-nowrap transition-all voyo-tap-scale"
+                className="px-3.5 py-1.5 rounded-full text-[13px] font-semibold whitespace-nowrap transition-all voyo-tap-scale"
                 style={
                   isActive
                     ? {
@@ -911,7 +911,7 @@ export const Library = ({ onTrackClick }: LibraryProps) => {
           <div className="flex gap-2 px-4 pb-3 overflow-x-auto scrollbar-hide">
             <button
               key="__all"
-              className="px-3 py-1 rounded-full text-[11px] font-medium whitespace-nowrap transition-all voyo-tap-scale"
+              className="px-3 py-1 rounded-full text-[11px] font-semibold whitespace-nowrap transition-all voyo-tap-scale"
               style={
                 activePlaylistId === null
                   ? {
@@ -930,7 +930,7 @@ export const Library = ({ onTrackClick }: LibraryProps) => {
               return (
                 <button
                   key={p.id}
-                  className="px-3 py-1 rounded-full text-[11px] font-medium whitespace-nowrap transition-all voyo-tap-scale"
+                  className="px-3 py-1 rounded-full text-[11px] font-semibold whitespace-nowrap transition-all voyo-tap-scale"
                   style={
                     isActive
                       ? {

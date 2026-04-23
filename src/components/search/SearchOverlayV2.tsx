@@ -664,7 +664,7 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap, onEnterVideoMode
                 ]).map(({ key, voyo, label }) => (
                   <button
                     key={key}
-                    className="flex-1 py-2 rounded-xl text-sm font-medium transition-all flex items-center justify-center gap-1.5"
+                    className="flex-1 py-2 rounded-xl text-sm font-semibold transition-all flex items-center justify-center gap-1.5"
                     style={{
                       background: activeTab === key ? 'rgba(212, 175, 110, 0.10)' : 'transparent',
                       color: activeTab === key ? 'rgba(232, 208, 158, 0.95)' : 'rgba(255,255,255,0.38)',
