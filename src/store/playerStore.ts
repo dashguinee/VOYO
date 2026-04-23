@@ -982,7 +982,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       ? state.hotTracks
       : TRACKS;
 
-    // DEDUPLICATION: Remove recently played + collective-blocklist tracks.
+    // Remove recently played + collective-blocklist tracks.
     // The discover/hot fallback must apply the same blocklist filter as the
     // queue path — without it, the fallback lands on a blocked track,
     // isBlocked() fires nextTrack() immediately, which lands on another blocked
@@ -1043,7 +1043,6 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       let nextTrack;
 
       if (state.shuffleMode) {
-        // ROULETTE MODE: Pick random track with animation trigger
         const randomIndex = Math.floor(Math.random() * availableTracks.length);
         nextTrack = availableTracks[randomIndex];
       } else {
@@ -1053,7 +1052,6 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
         nextTrack = availableTracks[0];
       }
 
-      // SAFETY CHECK: Ensure we're not playing the same track
       if ((nextTrack.id === currentTrackId || nextTrack.trackId === currentTrackId) && availableTracks.length > 1) {
         // Pick a different one (deterministically — same reason as above)
         const filtered = availableTracks.filter(t => t.id !== currentTrackId && t.trackId !== currentTrackId);

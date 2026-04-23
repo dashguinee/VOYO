@@ -370,7 +370,7 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap, onEnterVideoMode
     // Library (DB/pool) on top; YouTube results below with a labeled divider.
     // Clean mental model: "what we already have" vs "what's out there".
 
-    // PARALLEL fetch — DB returns in ~200ms, YT in 1-4s
+    // Parallel fetch — DB returns in ~200ms, YT in 1-4s
     const essence = getVibeEssence();
     const dbPromise = isSupabaseConfigured
       ? supabase!.rpc('search_tracks_by_vibe', {

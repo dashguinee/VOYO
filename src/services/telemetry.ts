@@ -143,7 +143,7 @@ export function logPlaybackEvent(
       session_id: sessionId,
     };
 
-    // BG REAL-TIME FLUSH: setTimeout is throttled 1/min in BG.
+    // BG flush: setTimeout is throttled 1/min in BG.
     // fetch(keepalive:true) is also deferred by Android Chrome in deep BG,
     // causing events to pile up until visibility returns.
     //

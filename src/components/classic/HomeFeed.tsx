@@ -1873,8 +1873,6 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
     }
   }, [hotPool, trackPreferences, sessionSeed]);
 
-  // REMOVED: westAfricanTracks alias - africanVibes is now distinct
-
   const classicsTracks = useMemo(() => {
     try {
       const pool = Array.isArray(hotPool) ? hotPool : [];

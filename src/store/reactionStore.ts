@@ -221,9 +221,8 @@ export const useReactionStore = create<ReactionStore>((set, get) => ({
       // Pool reactionCount + voyo_signals are written by the canonical OYE path
       // (oye() → onOye() → recordPoolEngagement + recordRemoteSignal).
       // Calling useTrackPoolStore.recordReaction here would double-bump the local count.
-      // FEED THE BRAIN — OYO DJ learns favorite artists from reactions.
-      // Without this wire, oyoDJ.getInsights().favoriteArtists stays empty
-      // and the playerStore.refreshRecommendations boost is a no-op.
+      // OYO DJ learns favorite artists from reactions — without this,
+      // getInsights().favoriteArtists stays empty and the boost is a no-op.
       void oyoOnTrackReaction({
         id: trackId,
         trackId,
@@ -265,7 +264,6 @@ export const useReactionStore = create<ReactionStore>((set, get) => ({
         get().computeHotspots(trackId);
       }
       // Pool reactionCount + voyo_signals handled by the canonical onOye() fanout (oyo/index.ts).
-      // FEED THE BRAIN — OYO DJ learns favorite artists from reactions.
       void oyoOnTrackReaction({
         id: trackId,
         trackId,
