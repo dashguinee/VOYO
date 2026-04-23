@@ -1,60 +1,44 @@
-/**
- * VOYO Database Sync Service
- *
- * Ensures EVERYTHING that surfaces in VOYO goes to the collective database.
- * One function, called everywhere. No track left behind.
- */
-
 import { videoIntelligenceAPI, isSupabaseConfigured } from '../lib/supabase';
-import { Track } from '../types';
 import { devLog, devWarn } from '../utils/logger';
 
-// Debounce map to avoid syncing the same track multiple times in quick succession
-const recentlySynced = new Map<string, number>();
-const DEBOUNCE_MS = 5000; // Don't re-sync same track within 5 seconds
-
-/**
- * Sync a track to the collective database
- * Call this EVERYWHERE a track surfaces:
- * - When played
- * - When searched
- * - When added to pool
- * - When discovered by scouts
- */
-export async function syncToDatabase(track: Track | {
+type SyncableTrack = {
   trackId?: string;
   id?: string;
   title: string;
   artist?: string;
   coverUrl?: string;
-}): Promise<boolean> {
-  if (!isSupabaseConfigured) {
-    return false;
-  }
+};
 
-  const trackId = (track as any).trackId || (track as any).id;
-  if (!trackId) {
-    return false;
-  }
+const recentlySynced = new Map<string, number>();
+const DEBOUNCE_MS = 5000;
 
-  // Debounce check
+function getTrackId(track: SyncableTrack): string | undefined {
+  return track.trackId || track.id;
+}
+
+function toVideo(track: SyncableTrack) {
+  const youtube_id = getTrackId(track)!;
+  return {
+    youtube_id,
+    title: track.title || 'Unknown',
+    artist: track.artist || null,
+    thumbnail_url: track.coverUrl || `https://i.ytimg.com/vi/${youtube_id}/hqdefault.jpg`,
+  };
+}
+
+export async function syncToDatabase(track: SyncableTrack): Promise<boolean> {
+  if (!isSupabaseConfigured) return false;
+
+  const trackId = getTrackId(track);
+  if (!trackId) return false;
+
   const lastSynced = recentlySynced.get(trackId);
-  if (lastSynced && Date.now() - lastSynced < DEBOUNCE_MS) {
-    return true; // Already synced recently
-  }
+  if (lastSynced && Date.now() - lastSynced < DEBOUNCE_MS) return true;
 
   try {
-    // Use only columns that definitely exist in the table
-    const success = await videoIntelligenceAPI.sync({
-      youtube_id: trackId,
-      title: track.title || 'Unknown',
-      artist: (track as any).artist || null,
-      thumbnail_url: (track as any).coverUrl || `https://i.ytimg.com/vi/${trackId}/hqdefault.jpg`,
-    });
-
+    const success = await videoIntelligenceAPI.sync(toVideo(track));
     if (success) {
       recentlySynced.set(trackId, Date.now());
-      // Clean old entries periodically
       if (recentlySynced.size > 1000) {
         const now = Date.now();
         for (const [id, time] of recentlySynced.entries()) {
@@ -62,7 +46,6 @@ export async function syncToDatabase(track: Track | {
         }
       }
     }
-
     return success;
   } catch (error) {
     devWarn('[DatabaseSync] Failed:', trackId, error);
@@ -70,52 +53,25 @@ export async function syncToDatabase(track: Track | {
   }
 }
 
-/**
- * Batch sync multiple tracks (more efficient)
- */
-export async function syncManyToDatabase(tracks: Array<Track | {
-  trackId?: string;
-  id?: string;
-  title: string;
-  artist?: string;
-  coverUrl?: string;
-}>): Promise<number> {
-  if (!isSupabaseConfigured || tracks.length === 0) {
-    return 0;
-  }
+export async function syncManyToDatabase(tracks: SyncableTrack[]): Promise<number> {
+  if (!isSupabaseConfigured || tracks.length === 0) return 0;
 
-  // Filter out recently synced and invalid tracks
   const now = Date.now();
   const toSync = tracks.filter(track => {
-    const trackId = (track as any).trackId || (track as any).id;
+    const trackId = getTrackId(track);
     if (!trackId) return false;
     const lastSynced = recentlySynced.get(trackId);
     return !lastSynced || now - lastSynced >= DEBOUNCE_MS;
   });
 
-  if (toSync.length === 0) {
-    return 0;
-  }
+  if (toSync.length === 0) return 0;
 
   try {
-    const videos = toSync.map(track => {
-      const trackId = (track as any).trackId || (track as any).id;
-      return {
-        youtube_id: trackId,
-        title: track.title || 'Unknown',
-        artist: (track as any).artist || null,
-        thumbnail_url: (track as any).coverUrl || `https://i.ytimg.com/vi/${trackId}/hqdefault.jpg`,
-      };
-    });
-
-    const count = await videoIntelligenceAPI.batchSync(videos);
-
-    // Mark all as synced
+    const count = await videoIntelligenceAPI.batchSync(toSync.map(toVideo));
     for (const track of toSync) {
-      const trackId = (track as any).trackId || (track as any).id;
+      const trackId = getTrackId(track);
       if (trackId) recentlySynced.set(trackId, now);
     }
-
     devLog(`[DatabaseSync] Batch synced ${count} tracks`);
     return count;
   } catch (error) {
@@ -124,9 +80,6 @@ export async function syncManyToDatabase(tracks: Array<Track | {
   }
 }
 
-/**
- * Sync search results to database
- */
 export function syncSearchResults(results: Array<{
   voyoId?: string;
   title: string;
@@ -134,14 +87,10 @@ export function syncSearchResults(results: Array<{
   thumbnail?: string;
 }>): void {
   if (!isSupabaseConfigured || results.length === 0) return;
-
-  // Fire and forget - don't block search UX
-  const tracks = results.map(r => ({
+  syncManyToDatabase(results.map(r => ({
     trackId: r.voyoId,
     title: r.title,
     artist: r.artist,
     coverUrl: r.thumbnail,
-  }));
-
-  syncManyToDatabase(tracks).catch(() => {});
+  }))).catch(() => {});
 }
