@@ -330,12 +330,28 @@ const useOrientation = () => {
 // Consumed on next poll / mount / 'ended' / tab-close-reopen so the update still
 // lands, just at a moment that doesn't interrupt listening.
 const PENDING_FORCE_RELOAD_KEY = 'voyo-pending-force-reload-v1';
+// Timestamp written just before reload — if the app reopens within 10s and the
+// version still mismatches (Vercel served stale JS), skip the force-reload
+// rather than looping the spinner indefinitely.
+const LAST_FORCE_RELOAD_KEY = 'voyo-last-force-reload-ts';
 
 /**
  * Runs the destructive cache-wipe + reload. Extracted so it can be called
  * immediately (safe moment) OR deferred via an 'ended' listener / next poll.
  */
 async function performForceReload(): Promise<void> {
+  // Guard: if we just reloaded within the last 10s, Vercel likely served stale
+  // JS. Don't loop the spinner — let the user use the app and retry next poll.
+  const lastTs = parseInt(sessionStorage.getItem(LAST_FORCE_RELOAD_KEY) || '0', 10);
+  if (Date.now() - lastTs < 10_000) {
+    sessionStorage.removeItem(PENDING_FORCE_RELOAD_KEY);
+    sessionStorage.removeItem(LAST_FORCE_RELOAD_KEY);
+    return;
+  }
+  // Clear deferred flag BEFORE reload so a stale-JS bounce doesn't re-trigger.
+  sessionStorage.removeItem(PENDING_FORCE_RELOAD_KEY);
+  sessionStorage.setItem(LAST_FORCE_RELOAD_KEY, String(Date.now()));
+
   if (document.pictureInPictureElement) {
     try { await document.exitPictureInPicture(); } catch {}
   }
