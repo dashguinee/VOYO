@@ -1989,7 +1989,7 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
             aria-hidden
           />
           <div className="relative flex justify-between items-center px-4 mb-5">
-            <h2 className="text-white font-semibold text-base">Keep The Energy</h2>
+            <h2 className="text-white font-semibold text-base">Keep the energy</h2>
           </div>
           <div
             className="relative flex gap-4 px-4 overflow-x-auto scrollbar-hide"
