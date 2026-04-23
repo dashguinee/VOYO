@@ -172,6 +172,18 @@ export function useBgEngine(params: UseBgEngineParams): BgEngineApi {
         // Set BEFORE the browser fires any pause — protects onPause.
         isTransitioningToBackgroundRef.current = true;
         const { isPlaying: shouldPlay } = usePlayerStore.getState();
+
+        // IFRAME BG GUARD: browser pauses <iframe> video elements immediately
+        // on hide — we can't stop that. With <audio> intentionally blank in
+        // iframe mode, the OS sees zero audio activity and revokes audio focus
+        // within seconds (notification gone, headphone controls dead). Engaging
+        // the silent WAV now keeps the audio thread alive through the BG window.
+        // On FG return we restore blank state before the iframe re-kicks, so
+        // only one source plays at a time.
+        if (shouldPlay && playbackSource === 'iframe') {
+          engageSilentWav('bg_iframe_guard', usePlayerStore.getState().currentTrack?.trackId);
+        }
+
         // BATTERY: suspend context ONLY when paused + hidden (saves power).
         // Never suspend when playing — audio must continue.
         if (!shouldPlay && audioContextRef.current?.state === 'running') {
@@ -184,6 +196,23 @@ export function useBgEngine(params: UseBgEngineParams): BgEngineApi {
       // Returning from BG. Clear the flag + re-kick if needed.
       isTransitioningToBackgroundRef.current = false;
 
+      // IFRAME FG RESTORE: if silent WAV was engaged during BG (to hold audio
+      // focus), stop it now before the iframe resumes — one source at a time.
+      // AudioPlayer's capture-phase FG handler (registered after this one)
+      // calls iframeBridge.play() immediately after we return, re-engaging
+      // the iframe. handlePause ignores the el.pause() here because
+      // playbackSource === 'iframe' is the guard it checks.
+      if (playbackSource === 'iframe') {
+        const el2 = audioRef.current;
+        if (el2 && el2.src) {
+          try { el2.pause(); } catch {}
+          el2.removeAttribute('src');
+        }
+        // AudioContext is idle in iframe mode — no resume needed.
+        // iframeBridge.play() fires from AudioPlayer's FG-return effect next.
+        return;
+      }
+
       // Always resume AudioContext on FG return — even if a load is in
       // flight. A suspended/interrupted context during load means the
       // canplay gain ramp fires against a frozen clock. The element kick
@@ -194,8 +223,6 @@ export function useBgEngine(params: UseBgEngineParams): BgEngineApi {
         // Long-BG AudioContext death: iOS/Safari can fully close the context
         // after extended backgrounding. teardownAudioChain releases the dead
         // node references so the useAudioChain hook re-wires on next render.
-        // User tapped play, then got interrupted (call, unplug, another app).
-        // Store still says isPlaying=true. On return, restore reality.
         devWarn('[BG] AudioContext closed on FG return — tearing down chain for re-wire');
         trace('ctx_closed_teardown', usePlayerStore.getState().currentTrack?.trackId, { hidden: document.hidden });
         try { teardownAudioChain(); } catch {}
@@ -210,7 +237,6 @@ export function useBgEngine(params: UseBgEngineParams): BgEngineApi {
       // handler will call play() once the new src is ready. Double-play
       // here races with that and causes duplicate play_success events.
       if (isLoadingTrackRef.current) return;
-      // User tapped play, then got interrupted (call, unplug, another app).
       // Store still says isPlaying=true. On return, restore reality.
       if (sp && audioRef.current?.paused && audioRef.current.src) {
         audioRef.current.play().catch(() => {});
