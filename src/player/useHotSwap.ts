@@ -131,7 +131,8 @@ async function performHotSwap(
     // R2 stores audio keyed by raw YouTube ID; app can carry VOYO IDs
     // (vyo_<base64>) in trackId. Telemetry 2026-04-21 showed vyo_ prefixed
     // IDs reaching hotswap_watcher_mount — those would 404 without decode.
-    el.src = `${R2_AUDIO}/${getYouTubeId(trackId)}?q=high`;
+    const ourSrc = `${R2_AUDIO}/${getYouTubeId(trackId)}?q=high`;
+    el.src = ourSrc;
     try { el.load(); } catch {}
     try { el.currentTime = t; } catch {}
     el.volume = 0;
@@ -140,8 +141,20 @@ async function performHotSwap(
     // the media isn't actually buffered enough. Abort rather than fade
     // iframe out into silence; the poll will re-fire in HOT_SWAP_POLL_MS
     // once R2 is genuinely ready.
+    //
+    // Stale-src guard: if the user skips during the canplay wait, the next
+    // track's effect may reassign `el.src` before our listener fires. Since
+    // <audio> fires `canplay` against the CURRENT source, our stale closure
+    // would otherwise resolve `true` and proceed to seek/play the new
+    // track's src at the OLD track's iframe position. Compare `el.src` to
+    // the url we set and bail if it's moved on — the new track owns the
+    // element now, leave it alone.
     const canplayFired = await new Promise<boolean>((resolve) => {
-      const onReady = () => { el.removeEventListener('canplay', onReady); resolve(true); };
+      const onReady = () => {
+        el.removeEventListener('canplay', onReady);
+        if (el.src !== ourSrc) { resolve(false); return; }
+        resolve(true);
+      };
       el.addEventListener('canplay', onReady);
       setTimeout(() => { el.removeEventListener('canplay', onReady); resolve(false); }, 2500);
     });
