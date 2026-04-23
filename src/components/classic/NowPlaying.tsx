@@ -273,8 +273,17 @@ export const NowPlaying = ({ isOpen, onClose }: NowPlayingProps) => {
   const { dashId } = useAuth();
 
   // State
-  const [isShuffled, setIsShuffled] = useState(false);
-  const [repeatMode, setRepeatMode] = useState<'off' | 'all' | 'one'>('off');
+  // Shuffle + repeat wire directly to the playerStore — ClassicMode +
+  // VoyoPortraitPlayer already use this pattern. Prior bug: NowPlaying
+  // kept its own `useState` copies, so taps here updated icon color but
+  // the store's shuffleMode / repeatMode stayed at their defaults →
+  // nextTrack() never saw the user's intent. Observed in production as
+  // "repeat button does nothing" + "background loops same song because
+  // repeat-off can't be enabled from this surface".
+  const shuffleMode    = usePlayerStore(s => s.shuffleMode);
+  const repeatMode     = usePlayerStore(s => s.repeatMode);
+  const toggleShuffle  = usePlayerStore(s => s.toggleShuffle);
+  const cycleRepeat    = usePlayerStore(s => s.cycleRepeat);
   const [showPlaylistModal, setShowPlaylistModal] = useState(false);
   const [isVibesExpanded, setIsVibesExpanded] = useState(false);
   const [floatingReactions, setFloatingReactions] = useState<FloatingReaction[]>([]);
@@ -532,8 +541,9 @@ export const NowPlaying = ({ isOpen, onClose }: NowPlayingProps) => {
             {/* MAIN CONTROLS */}
             <div className="flex items-center justify-between px-6 py-4">
               <button
-                className={isShuffled ? 'text-purple-400' : 'text-white/60'}
-                onClick={() => setIsShuffled(!isShuffled)}
+                className={shuffleMode ? 'text-purple-400' : 'text-white/60'}
+                onClick={toggleShuffle}
+                aria-label={shuffleMode ? 'Disable shuffle' : 'Enable shuffle'}
               >
                 <Shuffle className="w-6 h-6" />
               </button>
@@ -565,10 +575,14 @@ export const NowPlaying = ({ isOpen, onClose }: NowPlayingProps) => {
 
               <button
                 className={repeatMode !== 'off' ? 'text-purple-400' : 'text-white/60'}
-                onClick={() => {
-                  const modes: Array<'off' | 'all' | 'one'> = ['off', 'all', 'one'];
-                  setRepeatMode(modes[(modes.indexOf(repeatMode) + 1) % 3]);
-                }}
+                onClick={cycleRepeat}
+                aria-label={
+                  repeatMode === 'off'
+                    ? 'Enable repeat'
+                    : repeatMode === 'one'
+                      ? 'Repeat one — click to disable'
+                      : 'Repeat all — click for repeat one'
+                }
               >
                 <Repeat className="w-6 h-6" />
               </button>
