@@ -2149,25 +2149,9 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
               style={{ touchAction: 'pan-x pan-y', cursor: 'pointer' }}
             >
               <div className="flex items-end gap-3 flex-wrap">
-                <h2
-                  className="leading-none"
-                  style={{
-                    fontFamily: "'Italianno', cursive",
-                    fontSize: 'clamp(44px, 13vw, 64px)',
-                    fontWeight: 400,
-                    margin: 0,
-                    whiteSpace: 'nowrap',
-                    background:
-                      'linear-gradient(135deg, #FFF3D6 0%, #F4D999 15%, #E6B865 35%, #D4A053 55%, #C4943D 75%, #8B6228 100%)',
-                    WebkitBackgroundClip: 'text',
-                    WebkitTextFillColor: 'transparent',
-                    filter:
-                      'drop-shadow(0 2px 6px rgba(0,0,0,0.7)) drop-shadow(0 0 24px rgba(212,160,83,0.3))',
-                    letterSpacing: '0.005em',
-                  }}
-                >
-                  Vibes on Vibes
-                </h2>
+                {/* Heading text removed 2026-04-23 — VoyoLiveCard below
+                    already carries the "Vibes on Vibes" brand moment.
+                    Gestures, live count, and all effects preserved. */}
 
                 {/* Live count suffix — only when authenticated + friends online */}
                 {isLoggedIn && liveCount > 0 && (
