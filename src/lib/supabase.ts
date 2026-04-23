@@ -57,7 +57,7 @@ export interface UniverseState {
   queue: string[];
   history: HistoryItem[];
   preferences: {
-    boostProfile: string;
+    boostProfile: 'off' | 'boosted' | 'calm' | 'voyex';
     shuffleMode: boolean;
     repeatMode: string;
   };

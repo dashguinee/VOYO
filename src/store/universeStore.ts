@@ -21,11 +21,15 @@
  */
 
 import { create } from 'zustand';
+import type { RealtimeChannel } from '@supabase/supabase-js';
 // CIRCULAR DEP FIX: playerStore and preferenceStore are accessed via
 // dynamic import() to avoid TDZ (Temporal Dead Zone) crashes. All stores
 // end up in one Vite chunk, so static top-level imports create init order
 // issues. Dynamic import() inside action functions is safe because stores
 // are fully initialized by the time any action is called by user interaction.
+// `import type` is compile-time only — no runtime circular dep.
+import type { TrackPreference, ArtistPreference, TagPreference, MoodPreference } from './preferenceStore';
+import type { QueueItem, HistoryItem } from '../types';
 import {
   universeAPI,
   isSupabaseConfigured,
@@ -46,10 +50,10 @@ export interface UniverseData {
   exportedAt: string;
   username: string;
   preferences: {
-    trackPreferences: Record<string, any>;
-    artistPreferences: Record<string, any>;
-    tagPreferences: Record<string, any>;
-    moodPreferences: Record<string, any>;
+    trackPreferences: Record<string, TrackPreference>;
+    artistPreferences: Record<string, ArtistPreference>;
+    tagPreferences: Record<string, TagPreference>;
+    moodPreferences: Record<string, MoodPreference>;
   };
   player: {
     currentTrackId?: string;
@@ -97,7 +101,7 @@ interface UniverseStore {
   // Portal State
   portalSession: PortalSession | null;
   isPortalOpen: boolean;
-  portalSubscription: any | null;
+  portalSubscription: RealtimeChannel | null;
 
   // Backup State
   isExporting: boolean;
@@ -517,26 +521,26 @@ export const useUniverseStore = create<UniverseStore>((set, get) => ({
         repeatMode: player.repeatMode,
       },
       // Queue - store trackIds only (last 20)
-      queue: player.queue.slice(0, 20).map((q: any) => q.track.trackId || q.track.id),
+      queue: player.queue.slice(0, 20).map((q: QueueItem) => q.track.trackId || q.track.id),
       // History - store last 50 plays
-      history: player.history.slice(-50).map((h: any) => ({
+      history: player.history.slice(-50).map((h: HistoryItem) => ({
         trackId: h.track.trackId || h.track.id,
         playedAt: h.playedAt,
         duration: h.duration,
       })),
       stats: {
         totalListens: Object.values(preferences.trackPreferences).reduce(
-          (sum: number, p: any) => sum + (p.totalListens || 0),
+          (sum: number, p: TrackPreference) => sum + (p.totalListens || 0),
           0
         ),
         totalMinutes: Math.round(
           Object.values(preferences.trackPreferences).reduce(
-            (sum: number, p: any) => sum + (p.totalDuration || 0),
+            (sum: number, p: TrackPreference) => sum + (p.totalDuration || 0),
             0
           ) / 60
         ),
         totalOyes: Object.values(preferences.trackPreferences).reduce(
-          (sum: number, p: any) => sum + (p.reactions || 0),
+          (sum: number, p: TrackPreference) => sum + (p.reactions || 0),
           0
         ),
       },
@@ -583,7 +587,7 @@ export const useUniverseStore = create<UniverseStore>((set, get) => ({
       // Restore preferences to playerStore
       if (cloudState.preferences) {
         if (cloudState.preferences.boostProfile) {
-          player.setBoostProfile(cloudState.preferences.boostProfile as any);
+          player.setBoostProfile(cloudState.preferences.boostProfile);
         }
         if (cloudState.preferences.shuffleMode !== undefined) {
           if (cloudState.preferences.shuffleMode !== player.shuffleMode) {
