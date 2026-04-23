@@ -16,7 +16,6 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { usePlayerStore } from '../store/playerStore';
 import { voyoStream, ensureTrackReady } from '../services/voyoStream';
-import { iframeBridge } from '../player/iframeBridge';
 import { oyo, app } from '../services/oyo';
 import { useAudioChain } from '../audio/graph/useAudioChain';
 import { useFrequencyPump } from '../audio/graph/freqPump';
@@ -249,15 +248,13 @@ export const AudioPlayer = () => {
     // tabs skip the timer wait (setTimeout throttles to ~1s in BG,
     // which would cause audible silence between outgoing and incoming).
     const isHidden = typeof document !== 'undefined' && document.hidden;
-    const wasIframe = playbackSource === 'iframe';
     const wasR2 = playbackSource === 'r2';
     // One fade for every track change — founder-simplified 2026-04-23.
     const fadeOutMs = UNIFIED_FADE_OUT_MS;
     const fadeInMs  = UNIFIED_FADE_IN_MS;
-    const shouldFade = !!el && !isHidden && (wasR2 || wasIframe);
+    const shouldFade = !!el && !isHidden && wasR2;
     if (shouldFade) {
-      if (wasR2) softFadeOut(fadeOutMs);
-      if (wasIframe) void iframeBridge.fadeOut(fadeOutMs);
+      softFadeOut(fadeOutMs);
       // Record the track-change timestamp so handleCanPlay can decide
       // whether a fresh canplay event is "new track ready" or "hot-swap
       // rewrote src mid-fade" (DSP audit Finding #1).
@@ -271,10 +268,8 @@ export const AudioPlayer = () => {
     // the ramp still fires reliably, just shorter (user can't see it).
     nextFadeInMsRef.current = isHidden ? Math.min(fadeInMs, 180) : fadeInMs;
 
-    // R2-first probe: either set audio.src directly (cached) or hand audio
-    // to the YouTubeIframe fallback (useHotSwap handles the cross-fade when
-    // the lane catches up). Watcher lifecycle lives in useHotSwap; no refs
-    // to manage here.
+    // R2-first probe: play from R2 immediately if known, otherwise engage
+    // silent WAV to hold audio focus while the VPS extracts, then poll.
     trackSwapInProgressRef.current = true;
     // Per-effect token. On rapid skips (A→B→C in <200ms) two IIFEs were
     // running concurrently: effect-B's closure would still write el.src=B
@@ -304,14 +299,6 @@ export const AudioPlayer = () => {
         : Promise.resolve();
       await fadePromise;
       if (isStale()) return;
-      // If outgoing was iframe, kill the YouTube stream entirely — stop()
-      // calls stopVideo() which terminates the network fetch, not just
-      // pauses playback. Without this, YouTube keeps buffering for up to
-      // 60s after the hot-swap. [AUDIT-2 #3]
-      if (wasIframe) {
-        iframeBridge.stop();
-        iframeBridge.resetVolume();
-      }
       if (knownInR2Sync && el) {
         // R2 is keyed by raw YouTube ID; trackId may be a VOYO ID (vyo_<b64>).
         el.src = `${R2_AUDIO}/${getYouTubeId(currentTrack.trackId)}?q=high`;
@@ -351,37 +338,21 @@ export const AudioPlayer = () => {
           });
         }, 300);
       } else {
-        const isHiddenNow = typeof document !== 'undefined' && document.hidden;
-        if (!isHiddenNow) {
-          // FG: blank el so iframe is the sole audio source.
-          // intentionalPause prevents handlePause from flipping isPlaying.
-          if (el) {
-            voyoStream.intentionalPause = true;
-            try { el.pause(); } catch {}
-            el.removeAttribute('src');
-          }
-        }
-        // BG: DON'T blank el — the silent WAV engaged by handleEnded is keeping
-        // audio focus. Blanking it here kills audio focus immediately, OS revokes
-        // the session, next track never starts. el keeps the silent WAV running;
-        // on FG return bgEngine blanks it + iframeBridge.play() re-kicks iframe;
-        // on R2 landing via Realtime, performHotSwap swaps from silent WAV → R2.
-        setSource('iframe');
-        // Iframe branch owns playback — el will NEVER fire canplay (src intentionally
-        // blank in FG, or silent WAV in BG), so trackSwap guard must clear here.
-        trackSwapInProgressRef.current = false;
+        // R2 not ready yet — hold audio focus with silent WAV while VPS extracts.
+        // Audio element stays alive (silent WAV loops); OS never revokes focus.
+        // handleCanPlay fires for the silent WAV and clears trackSwapInProgressRef.
+        engageSilentWav('pending_r2', currentTrack.trackId);
         setTimeout(() => {
           if (isStale()) return;
           logPlaybackEvent({
             event_type: 'play_start',
             track_id: currentTrack.trackId,
-            source: 'iframe',
+            source: 'pending_r2',
           });
         }, 300);
         void ensureTrackReady(currentTrack, null, { priority: 10 });
-        // Inline R2 arrival watcher — replaces useHotSwap.
-        // Polls every 3s. Pool pre-extraction means this fires quickly for
-        // discover tracks; for manual picks it bridges the extraction window.
+        // Poll R2 every 3s. When extraction lands, swap from silent WAV to R2.
+        // Pool pre-extraction (v445) means this fires quickly for discover tracks.
         r2WatcherRef.current = setInterval(async () => {
           if (isStale()) {
             clearInterval(r2WatcherRef.current!);
@@ -395,25 +366,16 @@ export const AudioPlayer = () => {
           if (isStale()) return;
           const el2 = audioRef.current;
           if (!el2) return;
-          const iframePos = iframeBridge.getCurrentTime() ?? 0;
-          await iframeBridge.fadeOut(600);
-          if (isStale()) return;
-          iframeBridge.stop();
-          iframeBridge.resetVolume();
-          const ytId = getYouTubeId(currentTrack.trackId);
+          // Re-guard so handlePause ignores the src change.
+          trackSwapInProgressRef.current = true;
           el2.loop = false;
-          el2.src = `${R2_AUDIO}/${ytId}?q=high`;
-          if (iframePos > 2) {
-            el2.addEventListener('canplay', () => {
-              try { el2.currentTime = iframePos; } catch {}
-            }, { once: true });
-          }
-          try { await el2.play(); } catch {}
+          el2.src = `${R2_AUDIO}/${getYouTubeId(currentTrack.trackId)}?q=high`;
           setSource('r2');
+          // handleCanPlay takes over: fadeInMasterGain + play() + clears swap flag.
           logPlaybackEvent({
             event_type: 'trace',
             track_id: currentTrack.trackId,
-            meta: { subtype: 'r2_swap_poll', pos: Math.round(iframePos) },
+            meta: { subtype: 'r2_from_pending' },
           });
         }, 3000);
       }
@@ -445,27 +407,8 @@ export const AudioPlayer = () => {
     };
   }, [currentTrack?.trackId]);
 
-  // Background visibility + recovery is fully owned by bgEngine (see
-  // src/audio/bg/bgEngine.ts). It runs in capture phase — BEFORE any
-  // pause event the browser fires during the hide transition — and owns
-  // the heartbeat + element-kick + AudioContext resume. The prior v407
-  // and v408 visibility handler here was doing a competing el.load() on
-  // FG return which tore down bgEngine's in-flight kick. Removed.
-  //
-  // IFRAME FG-RETURN: bgEngine's re-kick (bgEngine.ts:215) gates on el.src
-  // being truthy — which it never is for iframe tracks (src intentionally
-  // blanked at line 358 so the audio element is silent while YouTube plays).
-  // We handle the iframe case here by calling iframeBridge.play() directly.
-  useEffect(() => {
-    if (playbackSource !== 'iframe') return;
-    const handleFgReturn = () => {
-      if (document.visibilityState === 'visible' && usePlayerStore.getState().isPlaying) {
-        iframeBridge.play();
-      }
-    };
-    document.addEventListener('visibilitychange', handleFgReturn, true);
-    return () => document.removeEventListener('visibilitychange', handleFgReturn, true);
-  }, [playbackSource]);
+  // Background visibility + recovery is fully owned by bgEngine.
+  // It runs in capture phase, owns heartbeat + element-kick + AudioContext resume.
 
   // ── MediaSession playback state sync ─────────────────────────────────
   useEffect(() => {
@@ -544,12 +487,6 @@ export const AudioPlayer = () => {
     // about to fire. Don't flip isPlaying=false or BG auto-advance will
     // leave the app "paused" until the user opens it and resumes.
     if (trackSwapInProgressRef.current) {
-      return;
-    }
-    // When iframe is the audio source, the audio element pausing is expected
-    // (we intentionally silenced it). Don't let it flip isPlaying — the real
-    // playback is happening through the iframe.
-    if (usePlayerStore.getState().playbackSource === 'iframe') {
       return;
     }
     // Intentional pause (user tap, MediaSession) — honour it
@@ -743,11 +680,7 @@ export const AudioPlayer = () => {
     // of treating the resulting 'pause' event as a buffer underrun.
     navigator.mediaSession.setActionHandler('play', () => {
       usePlayerStore.getState().setIsPlaying(true);
-      if (usePlayerStore.getState().playbackSource === 'iframe') {
-        iframeBridge.play();
-      } else {
-        audioRef.current?.play().catch(() => {});
-      }
+      audioRef.current?.play().catch(() => {});
     });
     navigator.mediaSession.setActionHandler('pause', () => {
       voyoStream.intentionalPause = true;

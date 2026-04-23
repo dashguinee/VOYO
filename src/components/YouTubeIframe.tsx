@@ -285,18 +285,10 @@ export const YouTubeIframe = memo(() => {
             // playing healthily past the iframe's end — R2 file slightly
             // longer than the iframe video — the watchdog leaves it alone so
             // the user hears the full track.
+            // iframe is video-only: audio element always owns advancement.
+            // Watchdog: 3s after iframe ENDED, if audio hasn't advanced,
+            // force nextTrack as a safety net (R2 file ended but no event).
             const store = usePlayerStore.getState();
-            const ps = store.playbackSource;
-            if (ps !== 'cached' && ps !== 'r2') {
-              // iframe IS the audio source here → its ENDED = audio ended.
-              logPlaybackEvent({
-                event_type: 'stream_ended',
-                track_id: store.currentTrack?.trackId ?? 'unknown',
-                meta: { source: ps, advance: 'iframe_ended_owner' },
-              });
-              nextTrack();
-              return;
-            }
             const trackAtEnd = store.currentTrack?.trackId ?? null;
             // Snapshot audio state at the moment iframe ENDED fires. The
             // watchdog only force-advances if audio has meaningfully
@@ -457,22 +449,21 @@ export const YouTubeIframe = memo(() => {
   // call the latest initPlayer without creating a stale-closure dependency.
   useEffect(() => { initPlayerRef.current = initPlayer; }, [initPlayer]);
 
-  // Init player when track changes — also clear any prior videoBlocked flag.
-  // Skip creation when video is hidden AND we're not the audio source (VPS/boosted mode).
-  // Player will be created on-demand when the user opens video mode or source switches to iframe.
+  // Init player when track changes — only when video is visible.
+  // iframe is video-only now; audio is always R2 (or silent WAV during extraction).
   useEffect(() => {
     if (!youtubeId) return;
     usePlayerStore.getState().setVideoBlocked(false);
-    if (videoTarget === 'hidden' && playbackSource !== 'iframe') return;
+    if (videoTarget === 'hidden') return;
     if (isApiLoadedRef.current) initPlayer(youtubeId);
-  }, [youtubeId, videoTarget, playbackSource, initPlayer]);
+  }, [youtubeId, videoTarget, initPlayer]);
 
-  // On-demand player creation: user opened video mode or source switched to iframe
+  // On-demand player creation: user opened video mode
   useEffect(() => {
     if (!youtubeId || playerRef.current || !isApiLoadedRef.current) return;
-    if (videoTarget === 'hidden' && playbackSource !== 'iframe') return;
+    if (videoTarget === 'hidden') return;
     initPlayer(youtubeId);
-  }, [videoTarget, playbackSource, youtubeId, initPlayer]);
+  }, [videoTarget, youtubeId, initPlayer]);
 
   // Play/Pause sync
   // DOUBLE STREAMING FIX: When using cached/r2 audio with hidden video, pause iframe to save bandwidth
