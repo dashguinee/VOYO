@@ -2152,18 +2152,21 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
                 <h2
                   className="leading-none vibes-heading-fade"
                   style={{
-                    fontFamily: "'Italianno', cursive",
-                    fontSize: 'clamp(44px, 13vw, 64px)',
+                    fontFamily: "'Fraunces', 'Playfair Display', Georgia, serif",
+                    fontStyle: 'italic',
+                    fontSize: 'clamp(28px, 7vw, 40px)',
                     fontWeight: 400,
                     margin: 0,
                     whiteSpace: 'nowrap',
                     background:
-                      'linear-gradient(135deg, #FFF3D6 0%, #F4D999 15%, #E6B865 35%, #D4A053 55%, #C4943D 75%, #8B6228 100%)',
+                      'linear-gradient(100deg, #F4D999 0%, #E6B865 35%, #D4A053 65%, #8B6228 100%)',
+                    backgroundSize: '220% 100%',
+                    backgroundPosition: '0% 50%',
                     WebkitBackgroundClip: 'text',
                     WebkitTextFillColor: 'transparent',
                     filter:
-                      'drop-shadow(0 2px 6px rgba(0,0,0,0.7)) drop-shadow(0 0 24px rgba(212,160,83,0.3))',
-                    letterSpacing: '0.005em',
+                      'drop-shadow(0 1px 3px rgba(0,0,0,0.55)) drop-shadow(0 0 14px rgba(212,160,83,0.18))',
+                    letterSpacing: '-0.005em',
                   }}
                 >
                   Vibes on Vibes
@@ -2216,18 +2219,21 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
                 0%, 100% { opacity: 1; transform: scale(1); }
                 50% { opacity: 0.6; transform: scale(1.3); }
               }
-              /* Heading shows for ~3s then fades gracefully. Gestures still
-                 live on the parent container so hold / tap keep working
-                 whether the text is visible or not. */
+              /* Heading disappears like a sunset — gold sweeps off to the
+                 right, text drifts up slightly, opacity fades. Gestures on
+                 the parent container stay live whether text is visible or
+                 not. ~2.5s hold → ~3.5s graceful dissolve. */
               .vibes-heading-fade {
-                animation: vibes-heading-fade-out 3.2s ease-in 2.5s forwards;
+                animation: vibes-heading-dissolve 3.5s cubic-bezier(0.32, 0, 0.2, 1) 2.5s forwards;
+                will-change: opacity, background-position, transform, filter;
               }
-              @keyframes vibes-heading-fade-out {
-                from { opacity: 1; }
-                to   { opacity: 0; }
+              @keyframes vibes-heading-dissolve {
+                0%   { opacity: 1; background-position: 0% 50%;   transform: translateY(0);    filter: drop-shadow(0 1px 3px rgba(0,0,0,0.55)) drop-shadow(0 0 14px rgba(212,160,83,0.18)) blur(0px); }
+                55%  { opacity: 0.85; background-position: 60% 50%;  transform: translateY(-2px); }
+                100% { opacity: 0; background-position: 120% 50%; transform: translateY(-6px); filter: drop-shadow(0 1px 3px rgba(0,0,0,0)) drop-shadow(0 0 6px rgba(212,160,83,0)) blur(0.6px); }
               }
               @media (prefers-reduced-motion: reduce) {
-                .vibes-heading-fade { animation: none; opacity: 1; }
+                .vibes-heading-fade { animation: none; opacity: 0.9; }
               }
             `}</style>
 
