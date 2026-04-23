@@ -1989,7 +1989,7 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
             aria-hidden
           />
           <div className="relative flex justify-between items-center px-4 mb-5">
-            <h2 className="text-white font-semibold text-base">Back in the Mood</h2>
+            <h2 className="text-white font-semibold text-base">Keep The Energy</h2>
           </div>
           <div
             className="relative flex gap-4 px-4 overflow-x-auto scrollbar-hide"
@@ -2008,7 +2008,7 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
       {hasPreferences && (
         <div className="mb-10">
           <div className="px-4 mb-4">
-            <h2 className="text-white font-semibold text-base">Heavy Rotation</h2>
+            <h2 className="text-white font-semibold text-base">In your Loop</h2>
           </div>
           <div className="flex gap-5 px-4 overflow-x-auto scrollbar-hide">
             {heavyRotation.slice(0, 12).map((track, index) => {
