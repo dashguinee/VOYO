@@ -16,7 +16,6 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { usePlayerStore } from '../store/playerStore';
 import { voyoStream, ensureTrackReady } from '../services/voyoStream';
-import { useHotSwap } from '../player/useHotSwap';
 import { iframeBridge } from '../player/iframeBridge';
 import { oyo, app } from '../services/oyo';
 import { useAudioChain } from '../audio/graph/useAudioChain';
@@ -99,6 +98,9 @@ export const AudioPlayer = () => {
   // overwriting el.src or logging play_start after the user has already
   // moved on.
   const trackChangeTokenRef = useRef(0);
+  // Interval ID for the inline R2 arrival poller (replaces useHotSwap).
+  // Cleared on every track change + on unmount.
+  const r2WatcherRef = useRef<ReturnType<typeof setInterval> | null>(null);
   // Wall-clock at which the current track-change effect started its
   // softFadeOut. handleCanPlay reads this to decide whether a fresh
   // canplay event is "the incoming track is ready — ramp it in" or "hot-
@@ -168,11 +170,6 @@ export const AudioPlayer = () => {
   void engageSilentWav;
   void isTransitioningToBackgroundRef;
 
-  // ── Hot-swap: iframe → R2 cross-fade, snapshot resume, watcher lifecycle ──
-  // Self-contained hook. Activates whenever playbackSource flips to 'iframe'
-  // on a fresh track; idles otherwise. See src/player/useHotSwap.ts.
-  useHotSwap(currentTrack, playbackSource, audioRef);
-
   // ── Frequency visualizer pump ─────────────────────────────────────────
   useFrequencyPump(isPlaying);
 
@@ -184,7 +181,6 @@ export const AudioPlayer = () => {
     return () => {
       voyoStream.onRapidSkip = null;
       voyoStream.endSession();
-      // useHotSwap handles its own watcher teardown on unmount + track change.
     };
   }, []);
 
@@ -222,6 +218,11 @@ export const AudioPlayer = () => {
   // ── React to currentTrack changes ─────────────────────────────────────
   useEffect(() => {
     if (!currentTrack) return;
+    // Clear any R2 watcher from the previous track
+    if (r2WatcherRef.current) {
+      clearInterval(r2WatcherRef.current);
+      r2WatcherRef.current = null;
+    }
     // Reset completion signal on every track change
     completionSignaledRef.current = false;
     // Clear predictive pre-warm latch so the new track gets its own single
@@ -378,7 +379,43 @@ export const AudioPlayer = () => {
           });
         }, 300);
         void ensureTrackReady(currentTrack, null, { priority: 10 });
-        void r2HasTrack(currentTrack.trackId);
+        // Inline R2 arrival watcher — replaces useHotSwap.
+        // Polls every 3s. Pool pre-extraction means this fires quickly for
+        // discover tracks; for manual picks it bridges the extraction window.
+        r2WatcherRef.current = setInterval(async () => {
+          if (isStale()) {
+            clearInterval(r2WatcherRef.current!);
+            r2WatcherRef.current = null;
+            return;
+          }
+          const hasR2 = await r2HasTrack(currentTrack.trackId);
+          if (!hasR2) return;
+          clearInterval(r2WatcherRef.current!);
+          r2WatcherRef.current = null;
+          if (isStale()) return;
+          const el2 = audioRef.current;
+          if (!el2) return;
+          const iframePos = iframeBridge.getCurrentTime() ?? 0;
+          await iframeBridge.fadeOut(600);
+          if (isStale()) return;
+          iframeBridge.stop();
+          iframeBridge.resetVolume();
+          const ytId = getYouTubeId(currentTrack.trackId);
+          el2.loop = false;
+          el2.src = `${R2_AUDIO}/${ytId}?q=high`;
+          if (iframePos > 2) {
+            el2.addEventListener('canplay', () => {
+              try { el2.currentTime = iframePos; } catch {}
+            }, { once: true });
+          }
+          try { await el2.play(); } catch {}
+          setSource('r2');
+          logPlaybackEvent({
+            event_type: 'trace',
+            track_id: currentTrack.trackId,
+            meta: { subtype: 'r2_swap_poll', pos: Math.round(iframePos) },
+          });
+        }, 3000);
       }
     })();
 
@@ -399,6 +436,13 @@ export const AudioPlayer = () => {
         void ensureTrackReady(t, null, { priority: 5 });
       }
     }
+
+    return () => {
+      if (r2WatcherRef.current) {
+        clearInterval(r2WatcherRef.current);
+        r2WatcherRef.current = null;
+      }
+    };
   }, [currentTrack?.trackId]);
 
   // Background visibility + recovery is fully owned by bgEngine (see
