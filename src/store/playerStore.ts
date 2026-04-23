@@ -1323,6 +1323,17 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
         }).catch(() => {});
       }
 
+      // PIPELINE PRE-WARM: adding to queue = declared intent. Fire a
+      // priority-7 ensureTrackReady so the extraction worker pool can
+      // claim this row WHILE the user keeps queuing more. Worker semantics
+      // ("I got it / I'm free / I got it") already run on the VPS side —
+      // this makes sure we're actually feeding them work at click time,
+      // not play time. p=7 lands above background (p=0) and below
+      // user-click-to-play (p=10), so a direct tap still preempts.
+      import('../services/voyoStream').then(({ ensureTrackReady }) => {
+        void ensureTrackReady(track, null, { priority: 7 });
+      }).catch(() => {});
+
       if (position !== undefined) {
         const newQueue = [...state.queue];
         newQueue.splice(position, 0, newItem);
@@ -1361,14 +1372,26 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   },
 
   addTracksToQueue: (tracks) => {
+    let acceptedTracks: Track[] = [];
     set((state) => {
       const existingIds = new Set(state.queue.map(q => q.track.id));
       const newItems = tracks
         .filter(t => !existingIds.has(t.id) && t.trackId && !isKnownUnplayable(t.trackId) && !isBlocklisted(t.trackId))
         .map(t => ({ track: t, addedAt: new Date().toISOString(), source: 'auto' as const }));
       if (newItems.length === 0) return state;
+      acceptedTracks = newItems.map(i => i.track);
       return { queue: [...state.queue, ...newItems] };
     });
+    // PIPELINE PRE-WARM: batch-fire ensureTrackReady at p=7 for every
+    // accepted track so the worker pool starts claiming them immediately.
+    // Same "declared intent" priority tier as single addToQueue.
+    if (acceptedTracks.length > 0) {
+      import('../services/voyoStream').then(({ ensureTrackReady }) => {
+        for (const t of acceptedTracks) {
+          void ensureTrackReady(t, null, { priority: 7 });
+        }
+      }).catch(() => {});
+    }
   },
 
   removeFromQueue: (index) => {
