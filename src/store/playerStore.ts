@@ -408,7 +408,7 @@ const _persistedState = loadPersistedState();
 export const usePlayerStore = create<PlayerStore>((set, get) => ({
   // Initial State - restored from localStorage where available
   currentTrack: getPersistedTrack(),
-  isPlaying: false,
+  isPlaying: _persistedState.wasPlaying === true,
   progress: 0,
   currentTime: _persistedState.currentTime || 0,
   duration: 0,

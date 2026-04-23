@@ -465,7 +465,7 @@ export const AudioPlayer = () => {
     trackSwapInProgressRef.current = false;
     const el = audioRef.current;
     if (el && usePlayerStore.getState().isPlaying) {
-      el.play().catch(() => {});
+      el.play().catch(() => setIsPlaying(false));
     }
     // Recovered — cancel any pending stall-log.
     if (stallLogTimerRef.current) {
