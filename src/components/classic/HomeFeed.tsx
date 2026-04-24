@@ -757,76 +757,79 @@ WideTrackCard.displayName = 'WideTrackCard';
 // cover reads like a zoomed-in vinyl label. 90% opacity keeps it
 // effortless — there but not shouting.
 // ============================================
-const ClassicsDiskCard = memo(({ track, index, onPlay }: { track: Track; index: number; onPlay: (track: Track) => void }) => {
+const ClassicsDiskCard = memo(({ track, index, isSelected, onPlay }: {
+  track: Track;
+  index: number;
+  isSelected?: boolean;
+  onPlay: (track: Track) => void;
+}) => {
   const thumbnailUrl = getThumb(track.trackId, 'high');
-  // Each card gets its own drift phase so they breathe independently
   const driftDuration = 6 + (index % 4) * 0.9;
   const driftDelay = (index % 6) * 0.55;
   return (
     <button
-      className="flex-shrink-0 flex flex-col items-center gap-2 active:scale-[0.94] transition-transform duration-150"
+      className="flex-shrink-0 flex flex-col items-center gap-2 transition-transform duration-150"
+      style={{ scrollSnapAlign: 'start', transform: isSelected ? 'scale(1.08)' : 'scale(1)', transition: 'transform 0.35s cubic-bezier(0.16,1,0.3,1)' }}
       onClick={() => onPlay(track)}
       aria-label={`Play ${track.title} by ${track.artist}`}
-      style={{ scrollSnapAlign: 'start' }}
     >
-      {/* Disk */}
-      <div
-        className="relative rounded-full overflow-hidden classics-disk-drift"
-        style={{
-          width: 120,
-          height: 120,
-          ['--drift-dur' as string]: `${driftDuration}s`,
-          ['--drift-delay' as string]: `${driftDelay}s`,
-          boxShadow:
-            '0 0 0 2px rgba(212,160,83,0.45), 0 0 0 4px rgba(212,160,83,0.12), 0 10px 28px rgba(0,0,0,0.65), inset 0 0 24px rgba(0,0,0,0.4)',
-        }}
-      >
-        <SmartImage
-          src={thumbnailUrl}
-          alt={track.title}
-          className="w-full h-full object-cover"
-          trackId={track.trackId}
-          artist={track.artist}
-          title={track.title}
-          style={{ transform: 'scale(1.45)' }}
-        />
-        {/* Vinyl groove overlay */}
+      {/* Outer glow ring — only on selected */}
+      <div className="relative" style={{ padding: isSelected ? 6 : 0, transition: 'padding 0.35s ease' }}>
+        {isSelected && (
+          <div
+            className="absolute inset-0 rounded-full pointer-events-none classics-disk-glow-ring"
+            style={{ boxShadow: '0 0 0 3px rgba(212,160,83,0.9), 0 0 28px rgba(212,160,83,0.6), 0 0 56px rgba(212,160,83,0.3)' }}
+          />
+        )}
+        {/* Disk */}
         <div
-          className="absolute inset-0 rounded-full pointer-events-none"
+          className={`relative rounded-full overflow-hidden ${isSelected ? 'classics-disk-spin' : 'classics-disk-drift'}`}
           style={{
-            background:
-              'radial-gradient(circle at 50% 50%, transparent 28%, rgba(0,0,0,0.18) 30%, transparent 32%, rgba(0,0,0,0.10) 46%, transparent 48%, rgba(0,0,0,0.08) 62%, transparent 64%)',
+            width: 120,
+            height: 120,
+            ['--drift-dur' as string]: `${driftDuration}s`,
+            ['--drift-delay' as string]: `${driftDelay}s`,
+            boxShadow: isSelected
+              ? '0 0 0 2.5px rgba(212,160,83,0.9), 0 0 0 5px rgba(212,160,83,0.25), 0 12px 36px rgba(0,0,0,0.8), inset 0 0 24px rgba(0,0,0,0.4)'
+              : '0 0 0 2px rgba(212,160,83,0.45), 0 0 0 4px rgba(212,160,83,0.12), 0 10px 28px rgba(0,0,0,0.65), inset 0 0 24px rgba(0,0,0,0.4)',
           }}
-        />
-        {/* Warm sepia tone */}
-        <div
-          className="absolute inset-0 rounded-full pointer-events-none"
-          style={{ background: 'rgba(160, 100, 20, 0.12)', mixBlendMode: 'multiply' }}
-        />
-        {/* Center spindle dot */}
-        <div
-          className="absolute rounded-full pointer-events-none"
-          style={{
-            width: 10, height: 10,
-            top: '50%', left: '50%',
-            transform: 'translate(-50%, -50%)',
-            background: 'radial-gradient(circle, #D4A053 0%, #8B5E1A 100%)',
-            boxShadow: '0 0 4px rgba(212,160,83,0.6)',
-          }}
-        />
-      </div>
-      {/* Track label */}
-      <div className="text-center w-[120px]">
-        <p
-          className="text-white/80 text-[10px] font-semibold leading-tight truncate"
-          style={{ fontFamily: 'Satoshi, system-ui, sans-serif' }}
         >
+          <SmartImage
+            src={thumbnailUrl}
+            alt={track.title}
+            className="w-full h-full object-cover"
+            trackId={track.trackId}
+            artist={track.artist}
+            title={track.title}
+            style={{ transform: 'scale(1.45)' }}
+          />
+          {/* Vinyl grooves */}
+          <div
+            className="absolute inset-0 rounded-full pointer-events-none"
+            style={{ background: 'radial-gradient(circle at 50% 50%, transparent 28%, rgba(0,0,0,0.18) 30%, transparent 32%, rgba(0,0,0,0.10) 46%, transparent 48%, rgba(0,0,0,0.08) 62%, transparent 64%)' }}
+          />
+          {/* Sepia wash */}
+          <div className="absolute inset-0 rounded-full pointer-events-none" style={{ background: 'rgba(160,100,20,0.12)', mixBlendMode: 'multiply' }} />
+          {/* Gold light burst on selected */}
+          {isSelected && (
+            <div
+              className="absolute inset-0 rounded-full pointer-events-none classics-disk-lightburst"
+              style={{ background: 'radial-gradient(circle at 38% 32%, rgba(255,210,100,0.28) 0%, transparent 60%)' }}
+            />
+          )}
+          {/* Center spindle */}
+          <div
+            className="absolute rounded-full pointer-events-none"
+            style={{ width: 10, height: 10, top: '50%', left: '50%', transform: 'translate(-50%,-50%)', background: 'radial-gradient(circle, #D4A053 0%, #8B5E1A 100%)', boxShadow: isSelected ? '0 0 8px rgba(212,160,83,1), 0 0 16px rgba(212,160,83,0.6)' : '0 0 4px rgba(212,160,83,0.6)' }}
+          />
+        </div>
+      </div>
+      {/* Label */}
+      <div className="text-center w-[120px]">
+        <p className="text-[10px] font-semibold leading-tight truncate" style={{ color: isSelected ? 'rgba(244,217,153,1)' : 'rgba(255,255,255,0.8)', fontFamily: 'Satoshi, system-ui, sans-serif', transition: 'color 0.3s' }}>
           {track.title}
         </p>
-        <p
-          className="text-[10px] leading-tight truncate mt-0.5"
-          style={{ color: 'rgba(212,160,83,0.7)', fontFamily: 'Satoshi, system-ui, sans-serif' }}
-        >
+        <p className="text-[10px] leading-tight truncate mt-0.5" style={{ color: 'rgba(212,160,83,0.7)', fontFamily: 'Satoshi, system-ui, sans-serif' }}>
           {track.artist}
         </p>
       </div>
@@ -1700,6 +1703,7 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
   const diskScrollRef = useRef<HTMLDivElement>(null);
   const diskRafRef = useRef<number | null>(null);
   const diskCenterRef = useRef(0);
+  const [selectedClassic, setSelectedClassic] = useState<Track | null>(null);
 
   // Poll live friend count every 30s while mounted
   useEffect(() => {
@@ -2074,8 +2078,45 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
                 animation-delay: var(--drift-delay, 0s);
                 will-change: transform;
               }
+              @keyframes classics-disk-spin {
+                from { transform: rotate(0deg); }
+                to   { transform: rotate(360deg); }
+              }
+              .classics-disk-spin {
+                animation: classics-disk-spin 3.6s linear infinite;
+                will-change: transform;
+              }
+              @keyframes classics-disk-glow-pulse {
+                0%, 100% { opacity: 1; }
+                50%       { opacity: 0.65; }
+              }
+              .classics-disk-glow-ring {
+                animation: classics-disk-glow-pulse 2.2s ease-in-out infinite;
+              }
+              @keyframes classics-disk-lightburst-anim {
+                0%, 100% { opacity: 0.28; }
+                50%       { opacity: 0.58; }
+              }
+              .classics-disk-lightburst {
+                animation: classics-disk-lightburst-anim 1.7s ease-in-out infinite;
+              }
+              @keyframes classics-drift-in {
+                from { opacity: 0; transform: translateY(20px); }
+                to   { opacity: 1; transform: translateY(0); }
+              }
+              .classics-drift-in {
+                animation: classics-drift-in 0.55s cubic-bezier(0.16,1,0.3,1) both;
+              }
+              @keyframes rr-shimmer {
+                0%, 100% { opacity: 0.75; }
+                50%       { opacity: 1; }
+              }
+              .rr-fade-shimmer {
+                animation: rr-shimmer 5s ease-in-out infinite;
+              }
               @media (prefers-reduced-motion: reduce) {
-                .classics-disk-drift { animation: none; }
+                .classics-disk-drift, .classics-disk-spin, .classics-disk-glow-ring,
+                .classics-disk-lightburst, .rr-fade-shimmer { animation: none; }
               }
             `}</style>
 
@@ -2099,23 +2140,66 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
                   className="leading-none"
                   style={{ fontFamily: "'Fraunces', 'Playfair Display', Georgia, serif", fontStyle: 'italic', fontSize: 24, fontWeight: 400, background: 'linear-gradient(100deg, #F4D999 0%, #E6B865 40%, #C4943D 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', filter: 'drop-shadow(0 1px 4px rgba(0,0,0,0.6)) drop-shadow(0 0 14px rgba(212,160,83,0.2))' }}
                 >
-                  All-Time Classics
+                  All Time Best
                 </h2>
                 <p className="text-[9px] font-semibold tracking-widest uppercase mt-1" style={{ color: 'rgba(212,160,83,0.6)', fontFamily: 'Satoshi, system-ui, sans-serif' }}>
-                  African Bangers · Forever
+                  For the Bests
                 </p>
               </div>
             </div>
 
             {/* Disk carousel */}
-            <div
-              className="flex gap-5 px-5 overflow-x-auto scrollbar-hide"
-              style={{ scrollSnapType: 'x proximity', WebkitOverflowScrolling: 'touch', maskImage: 'linear-gradient(to right, transparent 0, black 6%, black 94%, transparent 100%)', WebkitMaskImage: 'linear-gradient(to right, transparent 0, black 6%, black 94%, transparent 100%)' }}
-            >
-              {classicsTracks.map((track, index) => (
-                <ClassicsDiskCard key={track.id} track={track} index={index} onPlay={playTrackFull} />
-              ))}
+            <div className="relative">
+              {/* RR Roof fades — scintillent white ↔ gold bronze */}
+              <div className="absolute top-0 bottom-0 left-0 pointer-events-none rr-fade-shimmer" style={{ width: 52, background: 'linear-gradient(to right, rgba(255,251,240,0.18) 0%, rgba(230,184,101,0.10) 50%, transparent 100%)', zIndex: 2 }} />
+              <div className="absolute top-0 bottom-0 right-0 pointer-events-none rr-fade-shimmer" style={{ width: 52, background: 'linear-gradient(to left, rgba(255,251,240,0.18) 0%, rgba(230,184,101,0.10) 50%, transparent 100%)', zIndex: 2, animationDelay: '2.5s' }} />
+              <div
+                className="flex gap-5 px-5 overflow-x-auto scrollbar-hide"
+                style={{ scrollSnapType: 'x proximity', WebkitOverflowScrolling: 'touch', maskImage: 'linear-gradient(to right, transparent 0, black 6%, black 94%, transparent 100%)', WebkitMaskImage: 'linear-gradient(to right, transparent 0, black 6%, black 94%, transparent 100%)' }}
+              >
+                {classicsTracks.map((track, index) => (
+                  <ClassicsDiskCard
+                    key={track.id}
+                    track={track}
+                    index={index}
+                    isSelected={selectedClassic?.id === track.id}
+                    onPlay={(t) => { setSelectedClassic(prev => prev?.id === t.id ? null : t); playTrackFull(t); }}
+                  />
+                ))}
+              </div>
             </div>
+
+            {/* Selected disc collection — drifts in below */}
+            {selectedClassic && (() => {
+              const related = classicsTracks.filter(t => t.artist === selectedClassic.artist && t.id !== selectedClassic.id).slice(0, 8);
+              if (related.length === 0) return null;
+              return (
+                <div className="mt-5 px-5 classics-drift-in">
+                  <p className="text-[9px] font-semibold tracking-widest uppercase mb-3" style={{ color: 'rgba(212,160,83,0.6)', fontFamily: 'Satoshi, system-ui, sans-serif' }}>
+                    More from {selectedClassic.artist}
+                  </p>
+                  <div className="flex gap-2.5 overflow-x-auto scrollbar-hide pb-1" style={{ scrollSnapType: 'x proximity' }}>
+                    {related.map((track, i) => (
+                      <button
+                        key={track.id}
+                        className="flex-shrink-0 flex items-center gap-2.5 rounded-xl px-2.5 py-2 classics-drift-in"
+                        style={{ scrollSnapAlign: 'start', background: 'rgba(212,160,83,0.07)', border: '1px solid rgba(212,160,83,0.18)', animationDelay: `${i * 0.065}s` }}
+                        onClick={() => { setSelectedClassic(track); playTrackFull(track); }}
+                        aria-label={`Play ${track.title}`}
+                      >
+                        <div className="relative flex-shrink-0 rounded-full overflow-hidden" style={{ width: 38, height: 38, boxShadow: '0 0 0 1.5px rgba(212,160,83,0.4)' }}>
+                          <SmartImage src={getThumb(track.trackId, 'high')} alt={track.title} className="w-full h-full object-cover" trackId={track.trackId} artist={track.artist} title={track.title} style={{ transform: 'scale(1.3)' }} />
+                        </div>
+                        <div className="text-left" style={{ maxWidth: 88 }}>
+                          <p className="text-[11px] font-semibold leading-tight truncate" style={{ color: 'rgba(255,255,255,0.9)', fontFamily: 'Satoshi, system-ui, sans-serif' }}>{track.title}</p>
+                          <p className="text-[9px] leading-tight truncate mt-0.5" style={{ color: 'rgba(212,160,83,0.62)', fontFamily: 'Satoshi, system-ui, sans-serif' }}>{track.artist}</p>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         )}
       </Safe>
