@@ -1028,7 +1028,8 @@ const AfricanVibesVideoCard = memo(({
 
         {/* Genre pill */}
         <div className="absolute top-1.5 left-1.5 z-20">
-          <span className="px-1.5 py-0.5 rounded text-[6px] font-medium tracking-widest uppercase bg-purple-600/35 text-white/65" style={{ letterSpacing: '0.08em', fontVariantCaps: 'all-small-caps' }}>
+          <span className="px-1.5 py-0.5 rounded text-[6px] uppercase bg-purple-600/45 text-white/90"
+                style={{ fontFamily: 'Arial Black, sans-serif', fontWeight: 900, letterSpacing: '0.07em', textShadow: '0 0 6px rgba(167,139,250,0.9), 0 0 14px rgba(139,92,246,0.55)' }}>
             {track.tags?.[0] || 'Afrobeats'}
           </span>
         </div>
@@ -1758,11 +1759,14 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
   const [top10SubtitleKey, setTop10SubtitleKey] = useState(0);
   const top10ScrollCooldownRef = useRef(false);
   const handleTop10Scroll = useCallback(() => {
+    // Ignore scroll events fired by the countdown's scrollIntoView —
+    // those are programmatic, not a user gesture.
+    if (top10CountdownActive) return;
     if (top10ScrollCooldownRef.current) return;
     top10ScrollCooldownRef.current = true;
     setTop10SubtitleKey(k => k + 1);
     setTimeout(() => { top10ScrollCooldownRef.current = false; }, 2800);
-  }, []);
+  }, [top10CountdownActive]);
 
   // Poll live friend count every 30s while mounted
   useEffect(() => {
@@ -2399,25 +2403,19 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
             </p>
           </div>
           <style>{`
-            /* Header — drifts left until VOYO exits, holds, returns. 17s, slow. */
+            /* Header — drifts left, VOYO exits, Top 10 glows gold at peak, lands with glow */
             @keyframes top10-header-drift {
-              0%   { transform: translateX(0); }
-              33%  { transform: translateX(-40%); }
-              65%  { transform: translateX(-40%); }
-              100% { transform: translateX(0); }
-            }
-            /* Landing glow fires when text returns to center */
-            @keyframes top10-header-land {
-              0%, 4%    { text-shadow: 0 0 18px rgba(212,160,83,0.55), 0 0 36px rgba(139,92,246,0.3); }
-              10%       { text-shadow: none; }
-              90%       { text-shadow: none; }
-              96%, 100% { text-shadow: 0 0 18px rgba(212,160,83,0.55), 0 0 36px rgba(139,92,246,0.3); }
+              0%        { transform: translateX(0);    color: #fff; text-shadow: 0 0 16px rgba(212,160,83,0.5), 0 0 32px rgba(139,92,246,0.28); }
+              7%        { transform: translateX(0);    color: #fff; text-shadow: none; }
+              33%       { transform: translateX(-43%); color: rgba(220,167,75,0.97); text-shadow: 0 0 22px rgba(212,160,83,0.8), 0 0 44px rgba(212,160,83,0.45), 0 0 72px rgba(139,92,246,0.22); }
+              65%       { transform: translateX(-43%); color: rgba(220,167,75,0.97); text-shadow: 0 0 22px rgba(212,160,83,0.8), 0 0 44px rgba(212,160,83,0.45), 0 0 72px rgba(139,92,246,0.22); }
+              93%       { transform: translateX(0);    color: #fff; text-shadow: none; }
+              96%, 100% { transform: translateX(0);    color: #fff; text-shadow: 0 0 16px rgba(212,160,83,0.5), 0 0 32px rgba(139,92,246,0.28); }
             }
             .top10-header-scroll {
-              animation: top10-header-drift 22s ease-in-out infinite,
-                         top10-header-land  22s ease-in-out infinite;
+              animation: top10-header-drift 22s ease-in-out infinite;
             }
-            /* BG radial glow — dims centered, pulses when Top 10 revealed */
+            /* BG radial glow — synced to same 22s cycle */
             @keyframes top10-bg-pulse {
               0%, 6%    { opacity: 0.35; }
               33%, 65%  { opacity: 1; }
@@ -2425,7 +2423,7 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
             }
             .top10-bg-glow {
               background: radial-gradient(ellipse 90% 70% at 50% 50%, rgba(139,92,246,0.22) 0%, rgba(139,92,246,0.08) 50%, transparent 80%);
-              animation: top10-bg-pulse 17s ease-in-out infinite;
+              animation: top10-bg-pulse 22s ease-in-out infinite;
             }
             /* Subtitle — plays once on manual scroll, pink → gold → fade */
             @keyframes top10-subtitle-flash {
