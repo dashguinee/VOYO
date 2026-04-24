@@ -1716,6 +1716,7 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
   const top10SectionRef = useRef<HTMLDivElement>(null);
   const top10CardRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const [top10CountdownActive, setTop10CountdownActive] = useState(false);
+  const top10CountdownActiveRef = useRef(false); // sync guard — state update is async
   const [top10ActiveIdx, setTop10ActiveIdx] = useState<number | null>(null);
   const top10DwellTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const top10CountdownIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -1729,6 +1730,7 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
         if (entry.isIntersecting && !fired) {
           top10DwellTimerRef.current = setTimeout(() => {
             fired = true;
+            top10CountdownActiveRef.current = true; // sync — blocks subtitle before re-render
             setTop10CountdownActive(true);
             let currentIdx = 8;
             setTop10ActiveIdx(currentIdx);
@@ -1738,7 +1740,7 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
               if (currentIdx < 0) { clearInterval(interval); return; }
               setTop10ActiveIdx(currentIdx);
               top10CardRefs.current[currentIdx]?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
-            }, 1800);
+            }, 2400);
             top10CountdownIntervalRef.current = interval;
           }, 4000);
         } else if (!entry.isIntersecting) {
@@ -1761,7 +1763,7 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
   const top10PrevScrollRef = useRef<{ left: number; time: number } | null>(null);
   const top10SubtitleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const handleTop10Scroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
-    if (top10CountdownActive) return;
+    if (top10CountdownActive || top10CountdownActiveRef.current) return;
     const now = Date.now();
     const currentLeft = e.currentTarget.scrollLeft;
     const prev = top10PrevScrollRef.current;
