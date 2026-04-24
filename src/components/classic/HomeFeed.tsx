@@ -2373,53 +2373,21 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
           <div className="absolute bottom-0 left-0 right-0 h-10 pointer-events-none z-10" style={{ background: 'linear-gradient(to bottom, transparent, rgba(139,92,246,0.15))' }} />
           <div className="px-4 mb-6">
             <div className="overflow-hidden">
-              <h2 className="top10-header-scroll text-white font-semibold text-base whitespace-nowrap inline-block"
-                  style={top10CountdownActive ? { animationPlayState: 'paused' } : undefined}>VOYO Top 10</h2>
+              <h2 className="top10-header-scroll text-white font-semibold text-base whitespace-nowrap inline-block">VOYO Top 10</h2>
             </div>
-            <p className="top10-subtitle-flash text-[9px] tracking-widest uppercase mt-1"
+            <p className="text-[9px] tracking-widest uppercase mt-1 opacity-40"
                style={{ fontFamily: 'Satoshi, system-ui, sans-serif', fontWeight: 700 }}>
               This Week · VOYO Certified
             </p>
           </div>
           <style>{`
-            /* Phase 1 — original gentle drift, kept intact */
             @keyframes top10-header-drift {
               0%   { transform: translateX(0); }
-              50%  { transform: translateX(-40%); }
+              50%  { transform: translateX(-30%); }
               100% { transform: translateX(0); }
             }
-            /* Phase 2 — added sequence: VOYO exits left, only Top 10 on screen */
-            @keyframes top10-header-deep {
-              0%    { transform: translateX(0); }
-              15%   { transform: translateX(-30%); }
-              30%   { transform: translateX(0); }
-              38%   { transform: translateX(0); }
-              52%   { transform: translateX(-67%); }
-              72%   { transform: translateX(-67%); }
-              88%   { transform: translateX(0); }
-              100%  { transform: translateX(0); }
-            }
             .top10-header-scroll {
-              animation: top10-header-drift 8s ease-in-out 1,
-                         top10-header-deep  20s ease-in-out 8s infinite;
-            }
-            /* Subtitle: invisible during Phase 1, neon-pink flash on Phase 2 deep hold,
-               settles to VOYO gold before fading out */
-            @keyframes top10-subtitle-flash {
-              0%, 44%   { opacity: 0; transform: translateY(3px); }
-              50%       { opacity: 1; transform: translateY(0);
-                          color: #FF5FA0;
-                          text-shadow: 0 0 8px #FF1493, 0 0 18px rgba(255,20,147,0.45), 0 0 32px rgba(255,20,147,0.2); }
-              62%       { opacity: 1;
-                          color: rgba(212,160,83,0.9);
-                          text-shadow: 0 0 6px rgba(212,160,83,0.3); }
-              70%       { opacity: 0.75; }
-              76%       { opacity: 0; transform: translateY(0); }
-              100%      { opacity: 0; }
-            }
-            .top10-subtitle-flash {
-              opacity: 0;
-              animation: top10-subtitle-flash 20s ease-in-out 8s infinite;
+              animation: top10-header-drift 12s ease-in-out infinite;
             }
             @keyframes top10-marquee {
               0% { transform: translateX(0); }
