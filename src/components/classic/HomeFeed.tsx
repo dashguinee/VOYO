@@ -2401,11 +2401,12 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
           <style>{`
             /* Header — drifts left until VOYO exits, holds, returns. 17s, slow. */
             @keyframes top10-header-drift {
-              0%        { transform: translateX(0); }
-              40%, 60%  { transform: translateX(-46%); }
-              100%      { transform: translateX(0); }
+              0%   { transform: translateX(0); }
+              33%  { transform: translateX(-40%); }
+              65%  { transform: translateX(-40%); }
+              100% { transform: translateX(0); }
             }
-            /* Landing glow fires when text returns to center (0% = land, ~5% = fade) */
+            /* Landing glow fires when text returns to center */
             @keyframes top10-header-land {
               0%, 4%    { text-shadow: 0 0 18px rgba(212,160,83,0.55), 0 0 36px rgba(139,92,246,0.3); }
               10%       { text-shadow: none; }
@@ -2413,14 +2414,14 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
               96%, 100% { text-shadow: 0 0 18px rgba(212,160,83,0.55), 0 0 36px rgba(139,92,246,0.3); }
             }
             .top10-header-scroll {
-              animation: top10-header-drift 17s ease-in-out infinite,
-                         top10-header-land  17s ease-in-out infinite;
+              animation: top10-header-drift 22s ease-in-out infinite,
+                         top10-header-land  22s ease-in-out infinite;
             }
-            /* BG radial glow — dims when centered, pulses when drifted (Top 10 revealed) */
+            /* BG radial glow — dims centered, pulses when Top 10 revealed */
             @keyframes top10-bg-pulse {
-              0%, 8%    { opacity: 0.35; }
-              40%, 60%  { opacity: 1; }
-              92%, 100% { opacity: 0.35; }
+              0%, 6%    { opacity: 0.35; }
+              33%, 65%  { opacity: 1; }
+              94%, 100% { opacity: 0.35; }
             }
             .top10-bg-glow {
               background: radial-gradient(ellipse 90% 70% at 50% 50%, rgba(139,92,246,0.22) 0%, rgba(139,92,246,0.08) 50%, transparent 80%);
