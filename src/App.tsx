@@ -52,7 +52,6 @@ import { startPoolMaintenance } from './store/trackPoolStore';
 import { syncSeedTracks } from './services/centralDJ';
 import { TRACKS } from './data/tracks';
 import { syncManyToDatabase } from './services/databaseSync';
-import { DashAuthBadge } from './lib/dash-auth';
 import { useUniverseStore } from './store/universeStore';
 import * as voyoApi from './lib/voyo-api';
 
@@ -1044,27 +1043,47 @@ function App() {
                 <PushBell appCode="voyo" />
               </div>
 
-              {/* Right: Ghost icon buttons — no pill backgrounds */}
-              <div className="flex items-center gap-1">
-                {/* Search */}
+              {/* Right cluster — search is a textured pill (grey→purple fade,
+                  inset highlight + lift shadow) that reads as a real button
+                  without shouting. Profile is smaller, more faded, with a
+                  very soft bronze-ivory ambient dot behind — it reads as
+                  the corner glow of a named person, not a glyph.
+                  V00 (DashAuthBadge) removed — identity surfaces inside
+                  the AccountMenu now, not as a badge. */}
+              <div className="flex items-center gap-2.5 pr-1">
+                {/* Search — textured pill */}
                 <button
-                  className="p-2 rounded-full active:scale-95 transition-transform"
                   aria-label="Search"
                   onClick={() => setIsSearchOpen(true)}
+                  className="p-2 rounded-full active:scale-95 transition-transform"
+                  style={{
+                    background: 'linear-gradient(135deg, rgba(180,180,200,0.10) 0%, rgba(139,92,246,0.16) 100%)',
+                    border: '1px solid rgba(255,255,255,0.08)',
+                    boxShadow: [
+                      'inset 0 1px 0 rgba(255,255,255,0.08)',
+                      'inset 0 -1px 0 rgba(0,0,0,0.18)',
+                      '0 2px 6px rgba(0,0,0,0.25)',
+                    ].join(', '),
+                  }}
                 >
-                  <Search className="w-5 h-5 text-white/60" strokeWidth={1.8} />
+                  <Search className="w-[17px] h-[17px] text-white/75" strokeWidth={2} />
                 </button>
 
-                {/* DASH Citizen ID */}
-                <DashAuthBadge productCode="V" />
-
-                {/* Profile → Voyo Universe */}
+                {/* Profile — smaller + faded + ambient bronze-ivory dot */}
                 <button
-                  className="p-2 rounded-full active:scale-95 transition-transform"
+                  className="relative p-1.5 rounded-full active:scale-95 transition-transform"
                   aria-label="Profile"
                   onClick={() => setIsProfileOpen(true)}
                 >
-                  <User className="w-5 h-5 text-white/60" strokeWidth={1.8} />
+                  <span
+                    aria-hidden
+                    className="absolute inset-[-2px] rounded-full pointer-events-none"
+                    style={{
+                      background: 'radial-gradient(circle at 50% 50%, rgba(240,220,190,0.18) 0%, rgba(240,220,190,0.05) 45%, transparent 72%)',
+                      filter: 'blur(2px)',
+                    }}
+                  />
+                  <User className="relative w-[15px] h-[15px] text-white/45" strokeWidth={1.6} />
                 </button>
               </div>
             </header>
