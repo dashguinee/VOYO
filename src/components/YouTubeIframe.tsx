@@ -581,6 +581,10 @@ export const YouTubeIframe = memo(() => {
     // its trigger time). Plus the constant create/clear churn was wasted
     // CPU on the main thread.
     const syncInterval = setInterval(() => {
+      // Battery: skip drift work when tab is hidden — iframe is frozen
+      // there anyway, and the seek() call would queue up against a stale
+      // player. Mirrors the time-update interval guard below.
+      if (document.hidden) return;
       const player = playerRef.current;
       if (!player?.getCurrentTime || !player?.seekTo) return;
 

@@ -24,7 +24,13 @@ if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/service-worker.js', { updateViaCache: 'none' })
       .then((reg) => {
-        setInterval(() => { reg.update(); }, 5 * 60 * 1000);
+        // Battery: skip updates when tab is backgrounded; bumped 5min → 15min
+        // (still surfaces fresh deploys quickly, ~96 wakes/day → ~32, and
+        // the visibility guard stops idle/locked-screen wakes entirely).
+        setInterval(() => {
+          if (document.hidden) return;
+          reg.update();
+        }, 15 * 60 * 1000);
       })
       .catch(() => { /* SW registration failed — non-critical, app works without it */ });
   });

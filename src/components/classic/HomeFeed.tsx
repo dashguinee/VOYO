@@ -1786,7 +1786,10 @@ const Top10Section = memo(({ tracks, onTrackPlay }: Top10SectionProps) => {
         }
         .top10-header-scroll {
           animation: top10-header-drift 22s ease-in-out infinite;
-          will-change: transform;
+          /* will-change removed — modern Chrome/Safari already promote
+             animated transforms to GPU heuristically. Explicit will-change
+             pinned a layer permanently even when the header was scrolled
+             off-screen, costing memory + composite work for nothing. */
         }
         @keyframes top10-bg-pulse {
           0%, 7%    { opacity: 0.3; }
@@ -2813,7 +2816,9 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onNavVisibilityChange, onSwitc
               .classics-disk-drift {
                 animation: classics-disk-drift var(--drift-dur, 7s) ease-in-out infinite;
                 animation-delay: var(--drift-delay, 0s);
-                will-change: transform;
+                /* will-change removed — disks live in a horizontal scroll
+                   that's often half off-screen; pinned GPU layers were
+                   keeping ~10 disks composited even when invisible. */
               }
               @keyframes classics-disk-spin {
                 from { transform: rotate(0deg); }
@@ -2821,7 +2826,7 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onNavVisibilityChange, onSwitc
               }
               .classics-disk-spin {
                 animation: classics-disk-spin 3.6s linear infinite;
-                will-change: transform;
+                /* will-change removed — same off-screen reason as drift. */
               }
               @keyframes classics-disk-glow-pulse {
                 0%, 100% { opacity: 1; }
