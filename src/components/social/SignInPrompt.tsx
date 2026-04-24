@@ -11,7 +11,7 @@ import { usePlayerStore } from '../../store/playerStore';
 import { useAuth } from '../../hooks/useAuth';
 import { friendsAPI, activityAPI, Friend, FriendActivity } from '../../lib/voyo-api';
 import { devWarn } from '../../utils/logger';
-import { getThumb } from '../../utils/thumbnail';
+import { TrackThumbnail } from '../ui/TrackThumbnail';
 
 // Default avatars — the real VOYO crew: Dash + Guinean figures + artists.
 // Replaced the stock Unsplash placeholders so the "Oyé! We Live" card
@@ -25,13 +25,14 @@ const DEFAULT_AVATARS = [
   '/vibes/artist-beanie.jpg',
 ];
 
-// Mock friends listening — names paired to the faces above, tracks kept
-// as real YouTube thumbs so the track-card previews still look live.
+// Mock friends listening. `thumbnail` is the primary YouTube art;
+// `communityFallback` is the /vibes/ local asset used when the YT
+// thumbnail 404s (e.g. mCfPHnO3EB4 is dead — video removed/region-blocked).
 const MOCK_FRIENDS_LISTENING = [
-  { id: '1', name: 'Dash',     avatar: DEFAULT_AVATARS[0], track: { title: 'Last Last', thumbnail: 'https://i.ytimg.com/vi/421w1j87fEM/hqdefault.jpg' } },
-  { id: '2', name: 'Brandy',   avatar: DEFAULT_AVATARS[1], track: { title: 'Essence',   thumbnail: 'https://i.ytimg.com/vi/jipQpjUA_o8/hqdefault.jpg' } },
-  { id: '3', name: 'Mamadi',   avatar: DEFAULT_AVATARS[2], track: { title: 'Calm Down', thumbnail: 'https://i.ytimg.com/vi/WcIcVapfqXw/hqdefault.jpg' } },
-  { id: '4', name: 'Fatou',    avatar: DEFAULT_AVATARS[3], track: { title: 'Peru',      thumbnail: 'https://i.ytimg.com/vi/mCfPHnO3EB4/hqdefault.jpg' } },
+  { id: '1', name: 'Dash',   avatar: DEFAULT_AVATARS[0], track: { title: 'Last Last', thumbnail: 'https://i.ytimg.com/vi/421w1j87fEM/hqdefault.jpg', communityFallback: '/vibes/dash.png' } },
+  { id: '2', name: 'Brandy', avatar: DEFAULT_AVATARS[1], track: { title: 'Essence',   thumbnail: 'https://i.ytimg.com/vi/jipQpjUA_o8/hqdefault.jpg', communityFallback: '/vibes/brandy-moja.jpg' } },
+  { id: '3', name: 'Mamadi', avatar: DEFAULT_AVATARS[2], track: { title: 'Calm Down', thumbnail: 'https://i.ytimg.com/vi/WcIcVapfqXw/hqdefault.jpg', communityFallback: '/vibes/mamadi.jpg' } },
+  { id: '4', name: 'Fatou',  avatar: DEFAULT_AVATARS[3], track: { title: 'Peru',      thumbnail: 'https://i.ytimg.com/vi/mCfPHnO3EB4/hqdefault.jpg', communityFallback: '/vibes/artist-blue.jpg' } },
 ];
 
 // Gradient colors
@@ -49,7 +50,7 @@ interface ListeningFriend {
   id: string;
   name: string;
   avatar: string;
-  track: { title: string; thumbnail: string };
+  track: { title: string; thumbnail: string; communityFallback?: string };
 }
 
 interface VoyoLiveCardProps {
@@ -502,7 +503,12 @@ export const VoyoLiveCard = ({ onSwitchToVOYO }: VoyoLiveCardProps = {}) => {
                           className="absolute inset-0 rounded-lg overflow-hidden border-2 border-white/50 shadow-lg"
                           style={{ animation: `voyo-absorb-out ${ABSORB_MS}ms cubic-bezier(0.4, 0, 0.2, 1) forwards` }}
                         >
-                          <img src={prevFriend1.track.thumbnail} alt="" className="w-full h-full object-cover" />
+                          <TrackThumbnail
+                            youtubeId={prevFriend1.track.thumbnail}
+                            communityUrl={prevFriend1.track.communityFallback}
+                            title={prevFriend1.track.title}
+                            className="w-full h-full object-cover"
+                          />
                           <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full border border-white overflow-hidden">
                             <img src={prevFriend1.avatar} alt={prevFriend1.name} className="w-full h-full object-cover" />
                           </div>
@@ -513,7 +519,12 @@ export const VoyoLiveCard = ({ onSwitchToVOYO }: VoyoLiveCardProps = {}) => {
                         className="absolute inset-0 rounded-lg overflow-hidden border-2 border-white/50 shadow-lg"
                         style={{ animation: `voyo-absorb-in ${ABSORB_MS}ms cubic-bezier(0.4, 0, 0.2, 1) forwards` }}
                       >
-                        <img src={friend1.track.thumbnail} alt="" className="w-full h-full object-cover" />
+                        <TrackThumbnail
+                          youtubeId={friend1.track.thumbnail}
+                          communityUrl={friend1.track.communityFallback}
+                          title={friend1.track.title}
+                          className="w-full h-full object-cover"
+                        />
                         <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full border border-white overflow-hidden">
                           <img src={friend1.avatar} alt={friend1.name} className="w-full h-full object-cover" />
                         </div>
@@ -527,7 +538,12 @@ export const VoyoLiveCard = ({ onSwitchToVOYO }: VoyoLiveCardProps = {}) => {
                           className="absolute inset-0 rounded-lg overflow-hidden border-2 border-white/50 shadow-lg"
                           style={{ animation: `voyo-absorb-out ${ABSORB_MS}ms cubic-bezier(0.4, 0, 0.2, 1) forwards` }}
                         >
-                          <img src={prevFriend2.track.thumbnail} alt="" className="w-full h-full object-cover" />
+                          <TrackThumbnail
+                            youtubeId={prevFriend2.track.thumbnail}
+                            communityUrl={prevFriend2.track.communityFallback}
+                            title={prevFriend2.track.title}
+                            className="w-full h-full object-cover"
+                          />
                           <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full border border-white overflow-hidden">
                             <img src={prevFriend2.avatar} alt={prevFriend2.name} className="w-full h-full object-cover" />
                           </div>
@@ -538,7 +554,12 @@ export const VoyoLiveCard = ({ onSwitchToVOYO }: VoyoLiveCardProps = {}) => {
                         className="absolute inset-0 rounded-lg overflow-hidden border-2 border-white/50 shadow-lg"
                         style={{ animation: `voyo-absorb-in ${ABSORB_MS}ms cubic-bezier(0.4, 0, 0.2, 1) forwards` }}
                       >
-                        <img src={friend2.track.thumbnail} alt="" className="w-full h-full object-cover" />
+                        <TrackThumbnail
+                          youtubeId={friend2.track.thumbnail}
+                          communityUrl={friend2.track.communityFallback}
+                          title={friend2.track.title}
+                          className="w-full h-full object-cover"
+                        />
                         <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full border border-white overflow-hidden">
                           <img src={friend2.avatar} alt={friend2.name} className="w-full h-full object-cover" />
                         </div>
@@ -585,7 +606,12 @@ export const VoyoLiveCard = ({ onSwitchToVOYO }: VoyoLiveCardProps = {}) => {
                       title={nextTrack.track.title}
                     />
                   ) : currentTrack ? (
-                    <img src={getThumb(currentTrack.trackId, 'high')} alt="" className="w-full h-full object-cover" />
+                    <TrackThumbnail
+                      youtubeId={currentTrack.trackId}
+                      communityUrl={currentTrack.coverUrl}
+                      title={currentTrack.title}
+                      className="w-full h-full object-cover"
+                    />
                   ) : null}
                   {/* Gold channel label */}
                   <div className="absolute bottom-0 left-0 right-0 px-1 py-0.5 text-center" style={{ background: 'rgba(0,0,0,0.55)' }}>
