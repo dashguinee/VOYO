@@ -86,7 +86,9 @@ export const VoyoLiveCard = ({ onSwitchToVOYO }: VoyoLiveCardProps = {}) => {
   const [cardMode, setCardMode] = useState<CardMode>('community');
   const modeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dissolveTargetRef = useRef<'next' | 'community'>('next');
-  const hasShownNextRef = useRef(false);
+  // Progress thresholds — 1 at start, then 3 spaced through the track.
+  const NEXT_SHOW_AT = [0.07, 0.38, 0.65, 0.86];
+  const shownCountRef = useRef(0);
 
   // Entry+exit transition duration for every cycling element. Picked
   // long enough to read as "absorbed" (not a hard swap), short enough
@@ -240,9 +242,9 @@ export const VoyoLiveCard = ({ onSwitchToVOYO }: VoyoLiveCardProps = {}) => {
     };
   }, []);
 
-  // Track change → reset shown flag + dissolve back to community
+  // Track change → reset counter + dissolve back to community
   useEffect(() => {
-    hasShownNextRef.current = false;
+    shownCountRef.current = 0;
     if (cardMode !== 'community') {
       dissolveTargetRef.current = 'community';
       setCardMode('dissolve');
@@ -267,15 +269,18 @@ export const VoyoLiveCard = ({ onSwitchToVOYO }: VoyoLiveCardProps = {}) => {
     return () => { if (modeTimerRef.current) clearTimeout(modeTimerRef.current); };
   }, [cardMode]);
 
-  // Progress-based Next Up trigger — fires once per track at 72%+
+  // Progress-based Next Up trigger — 1 at start (7%), 3 more spaced through track
   useEffect(() => {
     if (!currentTrack || !isPlaying || queue.length === 0) return;
-    if (hasShownNextRef.current || cardMode !== 'community') return;
-    if (progress >= 0.72) {
-      hasShownNextRef.current = true;
+    if (cardMode !== 'community') return;
+    const threshold = NEXT_SHOW_AT[shownCountRef.current];
+    if (threshold === undefined) return;
+    if (progress >= threshold) {
+      shownCountRef.current += 1;
       dissolveTargetRef.current = 'next';
       setCardMode('dissolve');
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [progress, cardMode, currentTrack?.id, isPlaying, queue.length]);
 
   const orbitAvatars = avatars.filter((_, i) => i !== centerIndex).slice(0, 3);
