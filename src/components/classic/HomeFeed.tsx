@@ -697,7 +697,8 @@ TrackCard.displayName = 'TrackCard';
 // WIDE TRACK CARD - 16:9 for Continue Listening
 // ============================================
 
-const WideTrackCard = memo(({ track, onPlay, showBoostBadge = false }: TrackCardProps) => {
+const CARD_BREATH_DELAYS = ['0s','3s','6s','2s','5s','1s','4s','7s','2.5s','4.5s','1.5s','6.5s'];
+const WideTrackCard = memo(({ track, onPlay, showBoostBadge = false, breathIdx = 0 }: TrackCardProps & { breathIdx?: number }) => {
   const [isHovered, setIsHovered] = useState(false);
   const thumbnailUrl = getThumb(track.trackId, 'high');
 
@@ -719,10 +720,12 @@ const WideTrackCard = memo(({ track, onPlay, showBoostBadge = false }: TrackCard
         <div
           className="absolute inset-0 pointer-events-none"
           style={{
-            background: 'linear-gradient(135deg, rgba(139,92,246,0.12) 0%, rgba(139,92,246,0.03) 45%, transparent 70%)',
+            background: 'linear-gradient(135deg, rgba(139,92,246,0.18) 0%, rgba(139,92,246,0.04) 45%, transparent 70%)',
+            animation: `card-purple-breath 9s ease-in-out ${CARD_BREATH_DELAYS[breathIdx % CARD_BREATH_DELAYS.length]} infinite`,
           }}
           aria-hidden
         />
+        <style>{`@keyframes card-purple-breath{0%,100%{opacity:.55}50%{opacity:1}}`}</style>
         <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent" />
         {isHovered && (
           <div
@@ -1751,6 +1754,16 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
     };
   }, []);
 
+  // Subtitle flash — fires when user manually scrolls the Top 10 carousel
+  const [top10SubtitleKey, setTop10SubtitleKey] = useState(0);
+  const top10ScrollCooldownRef = useRef(false);
+  const handleTop10Scroll = useCallback(() => {
+    if (top10ScrollCooldownRef.current) return;
+    top10ScrollCooldownRef.current = true;
+    setTop10SubtitleKey(k => k + 1);
+    setTimeout(() => { top10ScrollCooldownRef.current = false; }, 2800);
+  }, []);
+
   // Poll live friend count every 30s while mounted
   useEffect(() => {
     if (!isLoggedIn || !dashId) return;
@@ -2096,9 +2109,9 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
             className="relative flex gap-4 px-4 overflow-x-auto scrollbar-hide"
             style={{ scrollSnapType: 'x proximity', WebkitOverflowScrolling: 'touch' }}
           >
-            {recentlyPlayed.slice(0, 12).map((track) => (
+            {recentlyPlayed.slice(0, 12).map((track, i) => (
               <CardHoldActions key={track.id} track={track} onPlaylist={() => setPlaylistModalTrack(track)}>
-                <WideTrackCard track={track} onPlay={playTrack} showBoostBadge isBoosted={boostedIds.has(track.trackId)} />
+                <WideTrackCard track={track} onPlay={playTrack} showBoostBadge isBoosted={boostedIds.has(track.trackId)} breathIdx={i} />
               </CardHoldActions>
             ))}
           </div>
@@ -2371,23 +2384,58 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
           <div className="absolute top-0 left-0 right-0 h-8 bg-gradient-to-b from-[#060609] to-transparent pointer-events-none z-10" />
           {/* Bottom edge fade — purple-tinted */}
           <div className="absolute bottom-0 left-0 right-0 h-10 pointer-events-none z-10" style={{ background: 'linear-gradient(to bottom, transparent, rgba(139,92,246,0.15))' }} />
-          <div className="px-4 mb-6">
+          {/* BG glow — breathes in sync with the header drift (same 17s cycle) */}
+          <div className="absolute inset-0 pointer-events-none top10-bg-glow" aria-hidden style={{ zIndex: 0 }} />
+          <div className="relative px-4 mb-6" style={{ zIndex: 1 }}>
             <div className="overflow-hidden">
               <h2 className="top10-header-scroll text-white font-semibold text-base whitespace-nowrap inline-block">VOYO Top 10</h2>
             </div>
-            <p className="text-[9px] tracking-widest uppercase mt-1 opacity-40"
-               style={{ fontFamily: 'Satoshi, system-ui, sans-serif', fontWeight: 700 }}>
+            <p
+              key={top10SubtitleKey}
+              className={`text-[9px] tracking-widest uppercase mt-1${top10SubtitleKey > 0 ? ' top10-subtitle-flash' : ''}`}
+              style={{ fontFamily: 'Satoshi, system-ui, sans-serif', fontWeight: 700, opacity: top10SubtitleKey > 0 ? undefined : 0 }}
+            >
               This Week · VOYO Certified
             </p>
           </div>
           <style>{`
+            /* Header — drifts left until VOYO exits, holds, returns. 17s, slow. */
             @keyframes top10-header-drift {
               0%        { transform: translateX(0); }
-              38%, 62%  { transform: translateX(-56%); }
+              40%, 60%  { transform: translateX(-46%); }
               100%      { transform: translateX(0); }
             }
+            /* Landing glow fires when text returns to center (0% = land, ~5% = fade) */
+            @keyframes top10-header-land {
+              0%, 4%    { text-shadow: 0 0 18px rgba(212,160,83,0.55), 0 0 36px rgba(139,92,246,0.3); }
+              10%       { text-shadow: none; }
+              90%       { text-shadow: none; }
+              96%, 100% { text-shadow: 0 0 18px rgba(212,160,83,0.55), 0 0 36px rgba(139,92,246,0.3); }
+            }
             .top10-header-scroll {
-              animation: top10-header-drift 13s ease-in-out infinite;
+              animation: top10-header-drift 17s ease-in-out infinite,
+                         top10-header-land  17s ease-in-out infinite;
+            }
+            /* BG radial glow — dims when centered, pulses when drifted (Top 10 revealed) */
+            @keyframes top10-bg-pulse {
+              0%, 8%    { opacity: 0.35; }
+              40%, 60%  { opacity: 1; }
+              92%, 100% { opacity: 0.35; }
+            }
+            .top10-bg-glow {
+              background: radial-gradient(ellipse 90% 70% at 50% 50%, rgba(139,92,246,0.22) 0%, rgba(139,92,246,0.08) 50%, transparent 80%);
+              animation: top10-bg-pulse 17s ease-in-out infinite;
+            }
+            /* Subtitle — plays once on manual scroll, pink → gold → fade */
+            @keyframes top10-subtitle-flash {
+              0%   { opacity: 0; transform: translateY(3px); color: #FF5FA0; text-shadow: 0 0 8px #FF1493, 0 0 18px rgba(255,20,147,0.4); }
+              18%  { opacity: 1; transform: translateY(0);   color: #FF5FA0; text-shadow: 0 0 8px #FF1493, 0 0 18px rgba(255,20,147,0.4); }
+              55%  { opacity: 1; color: rgba(212,160,83,0.9); text-shadow: 0 0 6px rgba(212,160,83,0.3); }
+              82%  { opacity: 0.55; }
+              100% { opacity: 0; }
+            }
+            .top10-subtitle-flash {
+              animation: top10-subtitle-flash 2.8s ease forwards;
             }
             @keyframes top10-marquee {
               0% { transform: translateX(0); }
@@ -2398,7 +2446,7 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
               animation: top10-marquee 10s linear infinite;
             }
           `}</style>
-          <div className="flex gap-6 px-4 overflow-x-auto scrollbar-hide" style={{ scrollSnapType: 'x proximity', paddingBottom: '60px' }}>
+          <div className="flex gap-6 px-4 overflow-x-auto scrollbar-hide" style={{ scrollSnapType: 'x proximity', paddingBottom: '60px', position: 'relative', zIndex: 1 }} onScroll={handleTop10Scroll}>
             {trending.slice(0, 10).map((track, index) => {
               const maxChars = 12;
               const titleNeedsScroll = track.title.length > maxChars;
