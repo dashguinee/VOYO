@@ -89,16 +89,21 @@ const S = {
     pointerEvents: 'auto',
     transition: 'opacity 0.6s cubic-bezier(0.16, 1, 0.3, 1), transform 0.6s cubic-bezier(0.16, 1, 0.3, 1)',
   }),
-  // Side shadows — much subtler. Was 50% black at the edge (heavy frame),
-  // now 18% amber-tinted (whisper of depth, not a frame).
+  // Side shadows — matured. One signature move (per restraint memo):
+  // a 44px multi-stop gradient with a subtle cool→warm tonal shift.
+  // Outer edge is deeper + cooler (#080503), pulls toward warm amber as
+  // it fades — reads as light bouncing off a curved glass edge, not a
+  // dark wash pasted on. z 25→28 so the edge sits cleanly above the
+  // video card (zIndex 2) and content rails, but below the topBar (30).
+  // No top/bottom fades, no vignettes, no blur — one gesture, refined.
   sideShadowL: css({
-    position: 'absolute', top: 0, bottom: 0, left: 0, width: 24, zIndex: 25,
-    background: 'linear-gradient(to right, rgba(20,12,6,0.18) 0%, rgba(20,12,6,0.05) 50%, transparent 100%)',
+    position: 'absolute', top: 0, bottom: 0, left: 0, width: 44, zIndex: 28,
+    background: 'linear-gradient(to right, rgba(8,5,3,0.42) 0%, rgba(14,9,5,0.22) 35%, rgba(20,12,6,0.10) 65%, transparent 100%)',
     pointerEvents: 'none',
   }),
   sideShadowR: css({
-    position: 'absolute', top: 0, bottom: 0, right: 0, width: 24, zIndex: 25,
-    background: 'linear-gradient(to left, rgba(20,12,6,0.18) 0%, rgba(20,12,6,0.05) 50%, transparent 100%)',
+    position: 'absolute', top: 0, bottom: 0, right: 0, width: 44, zIndex: 28,
+    background: 'linear-gradient(to left, rgba(8,5,3,0.42) 0%, rgba(14,9,5,0.22) 35%, rgba(20,12,6,0.10) 65%, transparent 100%)',
     pointerEvents: 'none',
   }),
   axisTabs: css({ display: 'flex', justifyContent: 'center', gap: 4, padding: '8px 16px 2px' }),
