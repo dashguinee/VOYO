@@ -307,6 +307,12 @@ export const AudioPlayer = () => {
       await fadePromise;
       if (isStale()) return;
       if (knownInR2Sync && el) {
+        // Pause before src reassignment — guarantees el.paused=true so tryPlay's
+        // !e.paused guard doesn't exit early. trackSwapInProgressRef is already
+        // true so handlePause is a no-op. Without this, some browsers keep
+        // el.paused=false briefly after src change → tryPlay bails → preload="none"
+        // means no auto-load → canplay never fires → silent track.
+        el.pause();
         // R2 is keyed by raw YouTube ID; trackId may be a VOYO ID (vyo_<b64>).
         // engageSilentWav sets loop=true; must reset before R2 src lands or
         // the track will loop forever instead of firing 'ended' and advancing.
@@ -377,7 +383,10 @@ export const AudioPlayer = () => {
           }
           const el2 = audioRef.current;
           if (!el2 || isStale()) return;
-          trackSwapInProgressRef.current = true;
+          // trackSwapInProgressRef already true from line 282 — don't re-set,
+          // it masks rapid-skip races where the flag from the current effect
+          // was already valid. Same el.pause() guarantee as the fast path.
+          el2.pause();
           el2.loop = false;
           el2.src = `${R2_AUDIO}/${getYouTubeId(currentTrack.trackId)}?q=high`;
           setSource('r2');
@@ -464,9 +473,14 @@ export const AudioPlayer = () => {
     // fadeInMasterGain ALSO catches this, but guarding here avoids the
     // warn-log noise and is strictly symmetric with the audit's #1 fix.
     const sinceTrackChange = Date.now() - lastTrackChangeAtRef.current;
+    // Suppress only if canplay fired BEFORE the fade-out finished (hot-swap
+    // artifact or useHotSwap mid-fade). The -20ms margin means we only block
+    // canplay events arriving in the first (fadeOutMs-20)ms window.
+    // Previously +50 was too wide — normal canplay at t≈fadeOutMs+20 was
+    // being suppressed, causing gain to stay at 0 until the 4s heartbeat.
     const withinFadeWindow =
       lastTrackChangeAtRef.current > 0 &&
-      sinceTrackChange < lastFadeOutMsRef.current + 50;
+      sinceTrackChange < lastFadeOutMsRef.current - 20;
     if (!withinFadeWindow) {
       fadeInMasterGain(fadeMs);
     }
