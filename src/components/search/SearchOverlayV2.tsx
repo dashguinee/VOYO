@@ -27,6 +27,7 @@ import { getVibeEssence } from '../../services/essenceEngine';
 import { voyoStream } from '../../services/voyoStream';
 import { onSignal as oyaPlanSignal } from '../../services/oyoPlan';
 import { useBackGuard } from '../../hooks/useBackGuard';
+import { useR2KnownStore } from '../../store/r2KnownStore';
 import { formatTime as formatDuration, formatViews } from '../../utils/format';
 
 interface SearchOverlayProps {
@@ -64,6 +65,8 @@ interface TrackItemProps {
   onDiscoBadgeTap: () => void;
   formatDuration: (seconds: number) => string;
   formatViews: (views: number) => string;
+  isWarming?: boolean;
+  showIframePlay?: boolean;
 }
 
 const TrackItem = memo(({
@@ -78,6 +81,8 @@ const TrackItem = memo(({
   onDiscoBadgeTap,
   formatDuration,
   formatViews,
+  isWarming,
+  showIframePlay,
 }: TrackItemProps) => {
   const handleDiscoveryClick = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -86,14 +91,25 @@ const TrackItem = memo(({
 
   return (
     <div
-      className={`flex items-center gap-3 p-3 rounded-xl cursor-pointer group active:bg-white/[0.06] border transition-colors ${
+      className={`relative overflow-hidden flex items-center gap-3 p-3 rounded-xl cursor-pointer group active:bg-white/[0.06] border transition-colors ${
         isActive
           ? 'border-purple-400/50 bg-purple-500/10'
-          : 'border-transparent hover:border-[#28282f]'
+          : isWarming
+            ? 'border-orange-400/35 voyo-card-warming'
+            : 'border-transparent hover:border-[#28282f]'
       }`}
       style={{ background: isActive ? 'rgba(139,92,246,0.12)' : 'rgba(28, 28, 35, 0.4)' }}
       onClick={() => onSelect(result)}
     >
+      {/* Iframe pipeline active overlay */}
+      {showIframePlay && (
+        <div className="absolute bottom-0 inset-x-0 flex items-center justify-center py-0.5 pointer-events-none"
+          style={{ background: 'linear-gradient(to top, rgba(234,88,12,0.5), transparent)' }}>
+          <span className="text-[9px] font-bold text-orange-200 tracking-widest uppercase">
+            ↗ Mini Player · Tap to open
+          </span>
+        </div>
+      )}
       {/* Thumbnail */}
       <div className="relative w-12 h-12 rounded-lg overflow-hidden flex-shrink-0 bg-white/5">
         <SmartImage
@@ -209,6 +225,18 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap, onEnterVideoMode
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const searchIdRef = useRef(0); // Monotonic counter to ignore stale results
   const updateDiscoveryForTrack = usePlayerStore(s => s.updateDiscoveryForTrack);
+  const currentTrack = usePlayerStore(s => s.currentTrack);
+  const playbackSource = usePlayerStore(s => s.playbackSource);
+  const [warmingId, setWarmingId] = useState<string | null>(null);
+  const r2KnownSet = useR2KnownStore(s => s.known);
+
+  // Clear warming glow when R2 confirms the track is ready
+  useEffect(() => {
+    if (!warmingId) return;
+    if (useR2KnownStore.getState().has(warmingId)) { setWarmingId(null); return; }
+    const fallback = setTimeout(() => setWarmingId(null), 60_000);
+    return () => clearTimeout(fallback);
+  }, [warmingId, r2KnownSet]);
 
   // Scroll-driven UX: section header fades 15-25%, search bar slides to
   // bottom (thumb-zone) at 45%+. Lets users keep refining without scrolling
@@ -510,8 +538,19 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap, onEnterVideoMode
   const handleOyeCommit = useCallback((track: Track) => {
     addSearchResultsToPool([track]);
     app.oyeCommit(track);
-    showToast('Oye — warming up', 'queue');
-  }, [showToast]);
+    setWarmingId(track.trackId);
+    // DI notification fires after glow settles (600ms)
+    setTimeout(() => {
+      const q = usePlayerStore.getState().queue;
+      const isNext = q.length === 0 || q[0]?.track.trackId === track.trackId;
+      window.pushNotification?.({
+        id: `oye-${track.trackId}-${Date.now()}`,
+        type: 'music',
+        title: track.title,
+        subtitle: isNext ? 'Playing next · Warming up' : 'In Bucket · Coming up',
+      });
+    }, 600);
+  }, []);
 
   const handleAddToDiscovery = useCallback((result: SearchResult) => {
     const track = resultToTrack(result);
@@ -525,6 +564,13 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap, onEnterVideoMode
     <>
       {isOpen && (
         <>
+          <style>{`
+            @keyframes voyo-card-warm {
+              0%, 100% { box-shadow: 0 0 0 1px rgba(251,146,60,0.18), 0 0 14px rgba(251,146,60,0.10); }
+              50%       { box-shadow: 0 0 0 1px rgba(251,146,60,0.42), 0 0 26px rgba(251,146,60,0.22); }
+            }
+            .voyo-card-warming { animation: voyo-card-warm 2s ease-in-out infinite; }
+          `}</style>
           {/* Backdrop */}
           <div
             className="fixed inset-0 z-40 bg-black/80"
@@ -834,6 +880,12 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap, onEnterVideoMode
                           onDiscoBadgeTap={() => setDiscoExplainerOpen(true)}
                           formatDuration={formatDuration}
                           formatViews={formatViews}
+                          isWarming={result.voyoId === warmingId}
+                          showIframePlay={
+                            result.voyoId === warmingId &&
+                            playbackSource === 'iframe' &&
+                            currentTrack?.trackId === warmingId
+                          }
                         />
                       );
                     };
