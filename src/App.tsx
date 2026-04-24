@@ -1030,16 +1030,26 @@ function App() {
             className="relative z-10 h-full flex flex-col"
           >
             {/* Top Bar - VOYO Logo & Navigation — fully transparent, ghost buttons.
-                On the feed surface it auto-hides 7s after entry (smooth opacity +
-                slight lift) so the video owns the frame. */}
+                On the feed surface it auto-hides 7s after entry — opacity + lift
+                AND height/padding collapse together so the dark "strip" of empty
+                flex-row goes with it. Both moves run on the same easing so the
+                retract reads as one motion. */}
             <header
-              className="relative flex items-center justify-between px-4 py-3 flex-shrink-0 bg-transparent"
+              className="relative flex items-center justify-between px-4 bg-transparent"
               style={{
-                paddingTop: 'max(0.75rem, env(safe-area-inset-top))',
+                paddingTop: feedHeaderHidden ? 0 : 'max(0.75rem, env(safe-area-inset-top))',
+                paddingBottom: feedHeaderHidden ? 0 : '0.75rem',
+                maxHeight: feedHeaderHidden ? 0 : '120px',
+                overflow: 'hidden',
                 opacity: feedHeaderHidden ? 0 : 1,
                 transform: feedHeaderHidden ? 'translateY(-8px)' : 'translateY(0)',
                 pointerEvents: feedHeaderHidden ? 'none' : 'auto',
-                transition: 'opacity 800ms cubic-bezier(0.16, 1, 0.3, 1), transform 800ms cubic-bezier(0.16, 1, 0.3, 1)',
+                transition: [
+                  'opacity 800ms cubic-bezier(0.16, 1, 0.3, 1)',
+                  'transform 800ms cubic-bezier(0.16, 1, 0.3, 1)',
+                  'max-height 800ms cubic-bezier(0.16, 1, 0.3, 1)',
+                  'padding 800ms cubic-bezier(0.16, 1, 0.3, 1)',
+                ].join(', '),
               }}
               aria-hidden={feedHeaderHidden}
             >

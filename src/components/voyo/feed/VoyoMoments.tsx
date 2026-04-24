@@ -1645,10 +1645,11 @@ export const VoyoMoments: React.FC<VoyoMomentsProps> = ({ onPlayFullTrack, onArt
         </div>
       )}
 
-      {/* Next moment ghost preview */}
-      {nextMoment && !showOverlay && !showStarPanel && (
-        <NextMomentPreview moment={nextMoment} />
-      )}
+      {/* Next-moment ghost preview removed (2026-04-25). The 56×72 thumb
+          with a white outline cheapened the corner and pre-revealed the
+          next card — anticipation is part of the feed, killing it kills
+          the want. Per "premium = restraint" / "warm it up, slide it in"
+          philosophy: subtract before add. */}
 
       <OyeAnimations floats={oyeFloats} />
 
