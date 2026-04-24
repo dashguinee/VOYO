@@ -603,7 +603,7 @@ const TrackCard = memo(({ track, onPlay, showBoostBadge = false }: TrackCardProp
 
   return (
     <button
-      className="flex-shrink-0 w-32 relative group"
+      className="flex-shrink-0 w-36 relative group"
       onClick={() => { if (didPrefRef.current) { didPrefRef.current = false; return; } onPlay(track); }}
       style={{ scrollSnapAlign: 'start' }}
       onPointerDown={handlePrefDown}
@@ -613,7 +613,7 @@ const TrackCard = memo(({ track, onPlay, showBoostBadge = false }: TrackCardProp
     >
       <div
         ref={cardRef}
-        className="relative w-32 h-32 rounded-xl overflow-hidden mb-2 bg-[#1c1c22] border border-[#28282f]/50 group-active:border-white/15 transition-colors"
+        className="relative w-36 h-36 rounded-xl overflow-hidden mb-2 bg-[#1c1c22] border border-[#28282f]/50 group-active:border-white/15 transition-colors"
         style={{
           transform: bucketFly
             ? 'translateY(-80px) scale(0.7)'
@@ -705,7 +705,7 @@ const WideTrackCard = memo(({ track, onPlay, showBoostBadge = false }: TrackCard
     <div
       className="flex-shrink-0 cursor-pointer group"
       onClick={() => onPlay(track)}
-      style={{ scrollSnapAlign: 'start', width: '180px' }}
+      style={{ scrollSnapAlign: 'start', width: '200px' }}
     >
       <div className="relative w-full rounded-xl overflow-hidden mb-2 bg-[#1c1c22] border border-[#28282f]/50 group-active:border-[#8b5cf6]/30 transition-colors" style={{ aspectRatio: '16/9' }}>
         <SmartImage
@@ -1997,7 +1997,7 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
   const hasDiscoverMore = discoverMoreTracks.length > 0;
 
   return (
-    <div className="flex flex-col h-full overflow-y-auto pb-52 scrollbar-hide">
+    <div className="flex flex-col h-full overflow-y-auto pb-52 scrollbar-hide" style={{ overscrollBehavior: 'none' }}>
       {/* Header — fully transparent, floats over the continuous canvas (April 2026) */}
       <header className="flex items-center justify-between px-4 py-3 sticky top-0 bg-transparent z-10">
         <button

@@ -11,6 +11,7 @@ import { usePlayerStore } from '../../store/playerStore';
 import { useAuth } from '../../hooks/useAuth';
 import { friendsAPI, activityAPI, Friend, FriendActivity } from '../../lib/voyo-api';
 import { devWarn } from '../../utils/logger';
+import { getThumb } from '../../utils/thumbnail';
 
 // Default avatars — the real VOYO crew: Dash + Guinean figures + artists.
 // Replaced the stock Unsplash placeholders so the "Oyé! We Live" card
@@ -58,6 +59,9 @@ interface VoyoLiveCardProps {
 export const VoyoLiveCard = ({ onSwitchToVOYO }: VoyoLiveCardProps = {}) => {
   const setShouldOpenNowPlaying = usePlayerStore(s => s.setShouldOpenNowPlaying);
   const currentTrack = usePlayerStore(s => s.currentTrack);
+  const isPlaying = usePlayerStore(s => s.isPlaying);
+  const progress = usePlayerStore(s => s.progress);
+  const queue = usePlayerStore(s => s.queue);
   const { dashId, isLoggedIn } = useAuth();
 
   // Real data
@@ -76,6 +80,12 @@ export const VoyoLiveCard = ({ onSwitchToVOYO }: VoyoLiveCardProps = {}) => {
   const animationRef = useRef<number | null>(null);
   const centerFadeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const friendFadeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Card mode: community (purple) ↔ dissolve (black flash) ↔ next (orange)
+  type CardMode = 'community' | 'dissolve' | 'next';
+  const [cardMode, setCardMode] = useState<CardMode>('community');
+  const modeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const dissolveTargetRef = useRef<'next' | 'community'>('next');
 
   // Entry+exit transition duration for every cycling element. Picked
   // long enough to read as "absorbed" (not a hard swap), short enough
@@ -229,10 +239,39 @@ export const VoyoLiveCard = ({ onSwitchToVOYO }: VoyoLiveCardProps = {}) => {
     };
   }, []);
 
+  // Mode cycling: community (6s) → dissolve (350ms) → next (5s) → dissolve (350ms) → community
+  useEffect(() => {
+    if (modeTimerRef.current) clearTimeout(modeTimerRef.current);
+    if (!currentTrack || !isPlaying) {
+      setCardMode('community');
+      return;
+    }
+    const nextTrackAvail = queue.length > 0;
+    if (cardMode === 'community') {
+      modeTimerRef.current = setTimeout(() => {
+        if (nextTrackAvail) { dissolveTargetRef.current = 'next'; setCardMode('dissolve'); }
+      }, 6000);
+    } else if (cardMode === 'dissolve') {
+      modeTimerRef.current = setTimeout(() => setCardMode(dissolveTargetRef.current), 350);
+    } else if (cardMode === 'next') {
+      modeTimerRef.current = setTimeout(() => {
+        dissolveTargetRef.current = 'community'; setCardMode('dissolve');
+      }, 5000);
+    }
+    return () => { if (modeTimerRef.current) clearTimeout(modeTimerRef.current); };
+  }, [cardMode, currentTrack?.id, isPlaying, queue.length]);
+
   const orbitAvatars = avatars.filter((_, i) => i !== centerIndex).slice(0, 3);
   const radius = 32;
   const currentGradient = GRADIENT_COLORS[gradientIndex];
   const prevGradient = GRADIENT_COLORS[prevGradientIndex];
+
+  // Next track from queue
+  const nextTrack = queue.length > 0 ? queue[0] : null;
+
+  // Live count — real friends currently playing (falls back to 0)
+  const liveCount = friendsActivity.filter(a => a.now_playing).length;
+  const liveLabel = liveCount > 0 ? `${liveCount} in Voyo` : 'In Voyo';
 
   // Get current 2 friends to display (+ outgoing pair for crossfade).
   const friend1 = friendsListening[friendIndex % friendsListening.length];
@@ -318,7 +357,21 @@ export const VoyoLiveCard = ({ onSwitchToVOYO }: VoyoLiveCardProps = {}) => {
             className="absolute inset-y-0 w-1/2 bg-gradient-to-r from-transparent via-white/12 to-transparent"
           />
 
-          <div className="relative flex items-center gap-5 p-4">
+          {/* Mode overlay — dissolve: translucent black flash; next: orange */}
+          {cardMode !== 'community' && (
+            <div
+              key={`mode-overlay-${cardMode}`}
+              className="absolute inset-0 z-10"
+              style={{
+                background: cardMode === 'dissolve'
+                  ? 'rgba(0,0,0,0.72)'
+                  : 'linear-gradient(135deg, #C2410C 0%, #EA580C 45%, #F97316 100%)',
+                animation: 'voyo-absorb-in 350ms cubic-bezier(0.4,0,0.2,1) forwards',
+              }}
+            />
+          )}
+
+          <div className="relative flex items-center gap-5 p-4 z-20">
             {/* Avatar orbit system */}
             <div className="relative w-20 h-20 flex-shrink-0">
               {/* Pulsing ring */}
@@ -374,97 +427,125 @@ export const VoyoLiveCard = ({ onSwitchToVOYO }: VoyoLiveCardProps = {}) => {
               })}
             </div>
 
-            {/* Copy */}
+            {/* Copy — switches between community label and next track info */}
             <div className="flex-1 min-w-0">
-              <h3 className="text-white font-bold text-lg leading-tight">Vibing Right Now</h3>
-              <p className="text-white/70 text-xs">For the People</p>
+              {cardMode === 'next' && nextTrack ? (
+                <div key="copy-next" style={{ animation: 'voyo-absorb-in 400ms cubic-bezier(0.4,0,0.2,1) forwards' }}>
+                  <p className="text-[9px] font-black tracking-widest uppercase mb-0.5" style={{ color: 'rgba(212,160,83,0.95)' }}>Next Up</p>
+                  <p className="text-white font-bold text-sm leading-tight truncate">{nextTrack.title}</p>
+                  <p className="text-white/70 text-xs truncate mt-0.5">{nextTrack.artist}</p>
+                </div>
+              ) : (
+                <div key="copy-community">
+                  <h3 className="text-white font-bold text-lg leading-tight">Vibing Right Now</h3>
+                  <p className="text-white/70 text-xs">{liveLabel}</p>
+                </div>
+              )}
             </div>
 
-            {/* Mini friend cards + Play button. Each friend slot dual-
-                renders (outgoing fading/blurring out, incoming fading
-                in) for absorbed swaps instead of hard remounts. */}
+            {/* Right side — community: 2 friend cards + play; next: iframe card */}
             <div className="flex items-center gap-2">
-              <div className="flex -space-x-3">
-                <div className="relative w-9 h-9" style={{ zIndex: 10 }}>
-                  {prevFriend1 && (
-                    <div
-                      key={`f1-prev-${prevFriendIndex}`}
-                      className="absolute inset-0 rounded-lg overflow-hidden border-2 border-white/50 shadow-lg"
-                      style={{ animation: `voyo-absorb-out ${ABSORB_MS}ms cubic-bezier(0.4, 0, 0.2, 1) forwards` }}
-                    >
-                      <img src={prevFriend1.track.thumbnail} alt="" className="w-full h-full object-cover" />
-                      <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full border border-white overflow-hidden">
-                        <img src={prevFriend1.avatar} alt={prevFriend1.name} className="w-full h-full object-cover" />
+              {cardMode !== 'next' ? (
+                <>
+                  <div className="flex -space-x-3">
+                    <div className="relative w-9 h-9" style={{ zIndex: 10 }}>
+                      {prevFriend1 && (
+                        <div
+                          key={`f1-prev-${prevFriendIndex}`}
+                          className="absolute inset-0 rounded-lg overflow-hidden border-2 border-white/50 shadow-lg"
+                          style={{ animation: `voyo-absorb-out ${ABSORB_MS}ms cubic-bezier(0.4, 0, 0.2, 1) forwards` }}
+                        >
+                          <img src={prevFriend1.track.thumbnail} alt="" className="w-full h-full object-cover" />
+                          <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full border border-white overflow-hidden">
+                            <img src={prevFriend1.avatar} alt={prevFriend1.name} className="w-full h-full object-cover" />
+                          </div>
+                        </div>
+                      )}
+                      <div
+                        key={`f1-cur-${friendIndex}`}
+                        className="absolute inset-0 rounded-lg overflow-hidden border-2 border-white/50 shadow-lg"
+                        style={{ animation: `voyo-absorb-in ${ABSORB_MS}ms cubic-bezier(0.4, 0, 0.2, 1) forwards` }}
+                      >
+                        <img src={friend1.track.thumbnail} alt="" className="w-full h-full object-cover" />
+                        <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full border border-white overflow-hidden">
+                          <img src={friend1.avatar} alt={friend1.name} className="w-full h-full object-cover" />
+                        </div>
                       </div>
                     </div>
-                  )}
-                  <div
-                    key={`f1-cur-${friendIndex}`}
-                    className="absolute inset-0 rounded-lg overflow-hidden border-2 border-white/50 shadow-lg"
-                    style={{ animation: `voyo-absorb-in ${ABSORB_MS}ms cubic-bezier(0.4, 0, 0.2, 1) forwards` }}
-                  >
-                    <img src={friend1.track.thumbnail} alt="" className="w-full h-full object-cover" />
-                    <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full border border-white overflow-hidden">
-                      <img src={friend1.avatar} alt={friend1.name} className="w-full h-full object-cover" />
-                    </div>
-                  </div>
-                </div>
 
-                <div className="relative w-9 h-9" style={{ zIndex: 9 }}>
-                  {prevFriend2 && (
-                    <div
-                      key={`f2-prev-${prevFriendIndex}`}
-                      className="absolute inset-0 rounded-lg overflow-hidden border-2 border-white/50 shadow-lg"
-                      style={{ animation: `voyo-absorb-out ${ABSORB_MS}ms cubic-bezier(0.4, 0, 0.2, 1) forwards` }}
-                    >
-                      <img src={prevFriend2.track.thumbnail} alt="" className="w-full h-full object-cover" />
-                      <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full border border-white overflow-hidden">
-                        <img src={prevFriend2.avatar} alt={prevFriend2.name} className="w-full h-full object-cover" />
+                    <div className="relative w-9 h-9" style={{ zIndex: 9 }}>
+                      {prevFriend2 && (
+                        <div
+                          key={`f2-prev-${prevFriendIndex}`}
+                          className="absolute inset-0 rounded-lg overflow-hidden border-2 border-white/50 shadow-lg"
+                          style={{ animation: `voyo-absorb-out ${ABSORB_MS}ms cubic-bezier(0.4, 0, 0.2, 1) forwards` }}
+                        >
+                          <img src={prevFriend2.track.thumbnail} alt="" className="w-full h-full object-cover" />
+                          <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full border border-white overflow-hidden">
+                            <img src={prevFriend2.avatar} alt={prevFriend2.name} className="w-full h-full object-cover" />
+                          </div>
+                        </div>
+                      )}
+                      <div
+                        key={`f2-cur-${friendIndex}`}
+                        className="absolute inset-0 rounded-lg overflow-hidden border-2 border-white/50 shadow-lg"
+                        style={{ animation: `voyo-absorb-in ${ABSORB_MS}ms cubic-bezier(0.4, 0, 0.2, 1) forwards` }}
+                      >
+                        <img src={friend2.track.thumbnail} alt="" className="w-full h-full object-cover" />
+                        <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full border border-white overflow-hidden">
+                          <img src={friend2.avatar} alt={friend2.name} className="w-full h-full object-cover" />
+                        </div>
                       </div>
                     </div>
-                  )}
-                  <div
-                    key={`f2-cur-${friendIndex}`}
-                    className="absolute inset-0 rounded-lg overflow-hidden border-2 border-white/50 shadow-lg"
-                    style={{ animation: `voyo-absorb-in ${ABSORB_MS}ms cubic-bezier(0.4, 0, 0.2, 1) forwards` }}
-                  >
-                    <img src={friend2.track.thumbnail} alt="" className="w-full h-full object-cover" />
-                    <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full border border-white overflow-hidden">
-                      <img src={friend2.avatar} alt={friend2.name} className="w-full h-full object-cover" />
-                    </div>
                   </div>
-                </div>
-              </div>
 
-              {/* Plush velvet play button — rich dark purple, textured depth.
-                  Radial highlight top-left = soft cushion light. Inset shadows
-                  = pressed-into-velvet depth. Outer glow + shimmer sweep echoes
-                  the My Disco bronze shimmer language, shifted to purple. */}
-              <div
-                className="relative w-11 h-11 rounded-full flex items-center justify-center overflow-hidden voyo-plush-play"
-                style={{
-                  background:
-                    'radial-gradient(circle at 32% 24%, rgba(167,139,250,0.55) 0%, rgba(88,28,135,1) 42%, rgba(39,15,69,1) 100%)',
-                  boxShadow:
-                    'inset 0 1px 1px rgba(255,255,255,0.22), inset 0 -3px 6px rgba(0,0,0,0.45), 0 6px 14px rgba(0,0,0,0.45), 0 0 0 1px rgba(167,139,250,0.18), 0 0 18px rgba(139,92,246,0.22)',
-                }}
-              >
-                {/* Shimmer sweep — subtle, matches My Disco's gradient-shift cadence */}
+                  {/* Plush velvet play button */}
+                  <div
+                    className="relative w-11 h-11 rounded-full flex items-center justify-center overflow-hidden voyo-plush-play"
+                    style={{
+                      background: 'radial-gradient(circle at 32% 24%, rgba(167,139,250,0.55) 0%, rgba(88,28,135,1) 42%, rgba(39,15,69,1) 100%)',
+                      boxShadow: 'inset 0 1px 1px rgba(255,255,255,0.22), inset 0 -3px 6px rgba(0,0,0,0.45), 0 6px 14px rgba(0,0,0,0.45), 0 0 0 1px rgba(167,139,250,0.18), 0 0 18px rgba(139,92,246,0.22)',
+                    }}
+                  >
+                    <div
+                      className="absolute inset-0 pointer-events-none"
+                      style={{
+                        background: 'linear-gradient(110deg, transparent 30%, rgba(196,181,253,0.18) 48%, transparent 66%)',
+                        backgroundSize: '220% 100%',
+                        animation: 'voyo-plush-shimmer 4.2s ease-in-out infinite',
+                      }}
+                    />
+                    <Play className="w-5 h-5 text-white relative z-10" fill="white" style={{ filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.45))' }} />
+                  </div>
+                </>
+              ) : (
+                /* Next Up — orange mode: single iframe card */
                 <div
-                  className="absolute inset-0 pointer-events-none"
+                  key="next-card"
+                  className="relative rounded-xl overflow-hidden flex-shrink-0"
                   style={{
-                    background:
-                      'linear-gradient(110deg, transparent 30%, rgba(196,181,253,0.18) 48%, transparent 66%)',
-                    backgroundSize: '220% 100%',
-                    animation: 'voyo-plush-shimmer 4.2s ease-in-out infinite',
+                    width: 78, height: 78,
+                    boxShadow: '0 0 0 2px rgba(212,160,83,0.85), 0 0 18px rgba(212,160,83,0.4), 0 6px 20px rgba(0,0,0,0.5)',
+                    animation: 'voyo-absorb-in 400ms cubic-bezier(0.4,0,0.2,1) forwards',
                   }}
-                />
-                <Play
-                  className="w-5 h-5 text-white relative z-10"
-                  fill="white"
-                  style={{ filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.45))' }}
-                />
-              </div>
+                >
+                  {nextTrack ? (
+                    <iframe
+                      src={`https://www.youtube.com/embed/${nextTrack.trackId}?autoplay=1&mute=1&controls=0&playsinline=1&loop=1&playlist=${nextTrack.trackId}&start=30`}
+                      allow="autoplay; encrypted-media"
+                      allowFullScreen={false}
+                      className="w-full h-full border-0 scale-[1.4] pointer-events-none"
+                      title={nextTrack.title}
+                    />
+                  ) : currentTrack ? (
+                    <img src={getThumb(currentTrack.trackId, 'high')} alt="" className="w-full h-full object-cover" />
+                  ) : null}
+                  {/* Gold channel label */}
+                  <div className="absolute bottom-0 left-0 right-0 px-1 py-0.5 text-center" style={{ background: 'rgba(0,0,0,0.55)' }}>
+                    <p className="text-[8px] font-black tracking-widest" style={{ color: 'rgba(212,160,83,0.9)' }}>NEXT UP</p>
+                  </div>
+                </div>
+              )}
               <style>{`
                 @keyframes voyo-plush-shimmer {
                   0%, 100% { background-position: 200% 0; }

@@ -4747,6 +4747,7 @@ export const VoyoPortraitPlayer = ({
       className={`relative w-full h-full bg-[#020203] text-white font-sans flex flex-col overflow-x-hidden ${
         oyeBarBehavior === 'fade' ? 'overflow-y-auto' : 'overflow-hidden'
       }`}
+      style={{ overscrollBehavior: 'none' }}
       // FULL-SCREEN SWIPE SURFACE. The canvas-swipe handlers now live on
       // the outermost container so horizontal swipe-to-skip works from
       // ANYWHERE in the portrait player, not just the thin center section.
