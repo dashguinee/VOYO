@@ -1,5 +1,4 @@
 import { useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { X, User, Settings, LogOut, LogIn } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import { useBackGuard } from '../../hooks/useBackGuard';
@@ -24,13 +23,19 @@ export const AccountMenu = ({ isOpen, onClose, onOpenSettings }: AccountMenuProp
   }, [isOpen, onClose]);
 
   const { isLoggedIn, dashId, displayName, signOut } = useAuth();
-  const navigate = useNavigate();
 
   if (!isOpen) return null;
 
   const handleProfile = () => {
     onClose();
-    if (dashId) navigate(`/${dashId}`);
+    if (!dashId) return;
+    // Open the DASH Command Center profile in a NEW TAB (noopener so the
+    // popup can't reach back into this window). `window.location.href`
+    // would unmount the entire VOYO PWA and silence audio mid-track —
+    // `window.open` keeps the current tab (and its audio graph) alive.
+    const returnUrl = encodeURIComponent(window.location.origin);
+    const url = `https://hub.dasuperhub.com?returnUrl=${returnUrl}&app=V&dashId=${dashId}`;
+    window.open(url, '_blank', 'noopener,noreferrer');
   };
 
   const handleSettings = () => {
