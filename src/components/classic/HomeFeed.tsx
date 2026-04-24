@@ -2382,12 +2382,12 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
           </div>
           <style>{`
             @keyframes top10-header-drift {
-              0%   { transform: translateX(0); }
-              50%  { transform: translateX(-30%); }
-              100% { transform: translateX(0); }
+              0%        { transform: translateX(0); }
+              38%, 62%  { transform: translateX(-56%); }
+              100%      { transform: translateX(0); }
             }
             .top10-header-scroll {
-              animation: top10-header-drift 12s ease-in-out infinite;
+              animation: top10-header-drift 13s ease-in-out infinite;
             }
             @keyframes top10-marquee {
               0% { transform: translateX(0); }
@@ -2489,7 +2489,7 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
                     </div>
                     <div className="overflow-hidden mx-auto" style={{ width: '100px' }}>
                       <p className={`whitespace-nowrap ${artistNeedsScroll ? 'top10-scroll-title' : ''}`}
-                         style={{ animationDelay: '1.4s', fontSize: '9px', fontFamily: "'Fraunces', Georgia, serif", fontStyle: 'italic', fontWeight: 300, color: 'rgba(255,255,255,0.38)', letterSpacing: '0.01em' }}>
+                         style={{ animationDelay: '1.4s', fontSize: '9px', color: 'rgba(255,255,255,0.45)', letterSpacing: '0.02em' }}>
                         {artistNeedsScroll ? <>{track.artist}<span className="mx-3">·</span>{track.artist}<span className="mx-3">·</span></> : track.artist}
                       </p>
                     </div>
