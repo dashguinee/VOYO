@@ -67,9 +67,6 @@ interface TrackItemProps {
   formatViews: (views: number) => string;
   isWarming?: boolean;
   showIframePlay?: boolean;
-  showPrompt?: boolean;
-  onWarmTap?: () => void;
-  onPromptPlay?: () => void;
 }
 
 const TrackItem = memo(({
@@ -86,52 +83,26 @@ const TrackItem = memo(({
   formatViews,
   isWarming,
   showIframePlay,
-  showPrompt,
-  onWarmTap,
-  onPromptPlay,
 }: TrackItemProps) => {
   const handleDiscoveryClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     onAddToDiscovery(result);
   };
 
-  const handleCardClick = () => {
-    if (showPrompt) return; // prompt handles its own click
-    if (isWarming && onWarmTap) { onWarmTap(); return; }
-    onSelect(result);
-  };
-
   return (
     <div
       className={`relative overflow-hidden flex items-center gap-3 p-3 rounded-xl cursor-pointer group active:bg-white/[0.06] border transition-colors ${
-        showPrompt
-          ? 'border-purple-400/40'
-          : isActive
-            ? 'border-purple-400/50 bg-purple-500/10'
-            : isWarming
-              ? 'border-orange-400/35 voyo-card-warming'
-              : 'border-transparent hover:border-[#28282f]'
+        isActive
+          ? 'border-purple-400/50 bg-purple-500/10'
+          : isWarming
+            ? 'border-orange-400/35 voyo-card-warming'
+            : 'border-transparent hover:border-[#28282f]'
       }`}
       style={{ background: isActive ? 'rgba(139,92,246,0.12)' : 'rgba(28, 28, 35, 0.4)' }}
-      onClick={handleCardClick}
+      onClick={() => onSelect(result)}
     >
-      {/* "Play now?" prompt — fires after tapping a warming card */}
-      {showPrompt && (
-        <div
-          className="absolute inset-0 z-20 rounded-xl flex flex-col items-center justify-center gap-2"
-          style={{ background: 'linear-gradient(135deg, rgba(88,28,220,0.93) 0%, rgba(109,40,217,0.90) 50%, rgba(139,92,246,0.85) 100%)' }}
-        >
-          <span className="text-white/60 text-[9px] font-bold tracking-[0.2em] uppercase">Warming up</span>
-          <button
-            onClick={(e) => { e.stopPropagation(); onPromptPlay?.(); }}
-            className="px-5 py-1.5 rounded-full border border-white/30 bg-white/10 text-white text-xs font-bold tracking-wide active:scale-95 transition-transform"
-          >
-            Play now →
-          </button>
-        </div>
-      )}
       {/* Iframe pipeline footer — shows when track is live in mini player */}
-      {showIframePlay && !showPrompt && (
+      {showIframePlay && (
         <div className="absolute bottom-0 inset-x-0 flex items-center justify-center py-0.5 pointer-events-none"
           style={{ background: 'linear-gradient(to top, rgba(234,88,12,0.5), transparent)' }}>
           <span className="text-[9px] font-bold text-orange-200 tracking-widest uppercase">
@@ -238,8 +209,12 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap, onEnterVideoMode
   // Keyboard navigation — index into `results` (−1 = nothing selected)
   const [activeIndex, setActiveIndex] = useState(-1);
 
-  // Toast feedback for queue/discovery actions
-  const [toast, setToast] = useState<{ text: string; type: 'queue' | 'discovery' } | null>(null);
+  // Toast feedback — 'play_now' has an inline action button
+  type ToastState =
+    | { type: 'queue' | 'discovery'; text: string }
+    | { type: 'play_now'; trackTitle: string; onPlayNow: () => void };
+  const [toast, setToast] = useState<ToastState | null>(null);
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // DiscoExplainer — opened by tapping the ✦ DISCO badge on cached results.
   // Single instance in the overlay; each TrackItem just fires the open callback.
@@ -257,14 +232,13 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap, onEnterVideoMode
   const currentTrack = usePlayerStore(s => s.currentTrack);
   const playbackSource = usePlayerStore(s => s.playbackSource);
   const [warmingId, setWarmingId] = useState<string | null>(null);
-  const [promptId, setPromptId] = useState<string | null>(null);
   const r2KnownSet = useR2KnownStore(s => s.known);
 
   // Clear warming glow when R2 confirms the track is ready
   useEffect(() => {
     if (!warmingId) return;
-    if (useR2KnownStore.getState().has(warmingId)) { setWarmingId(null); setPromptId(null); return; }
-    const fallback = setTimeout(() => { setWarmingId(null); setPromptId(null); }, 60_000);
+    if (useR2KnownStore.getState().has(warmingId)) { setWarmingId(null); return; }
+    const fallback = setTimeout(() => setWarmingId(null), 60_000);
     return () => clearTimeout(fallback);
   }, [warmingId, r2KnownSet]);
 
@@ -544,21 +518,43 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap, onEnterVideoMode
     createdAt: new Date().toISOString(),
   }), []);
 
-  const showToast = useCallback((text: string, type: 'queue' | 'discovery') => {
-    setToast({ text, type });
-    setTimeout(() => setToast(null), 1500);
+  const showToast = useCallback((t: ToastState) => {
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    setToast(t);
+    const ms = t.type === 'play_now' ? 4000 : 1500;
+    toastTimerRef.current = setTimeout(() => setToast(null), ms);
   }, []);
 
   const handleSelectTrack = useCallback((result: SearchResult) => {
     const track = resultToTrack(result);
     addSearchResultsToPool([track]);
-    // Central orchestrator: plays, signals, telemetry, prefetch — all routed.
-    app.playTrack(track, 'search');
-    oyaPlanSignal('search_play', track.artist ?? '');
-    // Float VideoMode over search so the user sees the iframe immediately
-    // (buys time while R2 catches up). Parent keeps search mounted underneath.
-    onEnterVideoMode?.();
-  }, [resultToTrack, onEnterVideoMode]);
+
+    if (cachedSet.has(result.voyoId)) {
+      // R2 fast path — instant play, no queue step
+      app.playTrack(track, 'search');
+      oyaPlanSignal('search_play', track.artist ?? '');
+      onEnterVideoMode?.();
+      return;
+    }
+
+    // Non-R2: add to queue (skip if already queued from OYE) + show Play Now pop
+    const alreadyQueued = usePlayerStore.getState().queue.some(
+      q => q.track.trackId === track.trackId,
+    );
+    if (!alreadyQueued) app.addToQueue(track);
+
+    showToast({
+      type: 'play_now',
+      trackTitle: track.title,
+      onPlayNow: () => {
+        app.playTrack(track, 'search');
+        oyaPlanSignal('search_play', track.artist ?? '');
+        setToast(null);
+        setWarmingId(null);
+        onEnterVideoMode?.();
+      },
+    });
+  }, [resultToTrack, onEnterVideoMode, cachedSet, showToast]);
 
 
   // Called from OyeButton's onClick override. Pool sync + collective brain
@@ -580,13 +576,14 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap, onEnterVideoMode
         subtitle: isNext ? 'Playing next · Warming up' : 'In Bucket · Coming up',
       });
     }, 600);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleAddToDiscovery = useCallback((result: SearchResult) => {
     const track = resultToTrack(result);
     addSearchResultsToPool([track]);
     updateDiscoveryForTrack(track);
-    showToast('Finding similar', 'discovery');
+    showToast({ type: 'discovery', text: 'Finding similar' });
   }, [resultToTrack, updateDiscoveryForTrack, showToast]);
 
 
@@ -600,6 +597,10 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap, onEnterVideoMode
               50%       { box-shadow: 0 0 0 1px rgba(251,146,60,0.42), 0 0 26px rgba(251,146,60,0.22); }
             }
             .voyo-card-warming { animation: voyo-card-warm 2s ease-in-out infinite; }
+            @keyframes voyo-toast-pop {
+              from { opacity: 0; transform: translateX(-50%) scale(0.88); }
+              to   { opacity: 1; transform: translateX(-50%) scale(1); }
+            }
           `}</style>
           {/* Backdrop */}
           <div
@@ -910,20 +911,12 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap, onEnterVideoMode
                           onDiscoBadgeTap={() => setDiscoExplainerOpen(true)}
                           formatDuration={formatDuration}
                           formatViews={formatViews}
-                          isWarming={result.voyoId === warmingId && result.voyoId !== promptId}
+                          isWarming={result.voyoId === warmingId}
                           showIframePlay={
                             result.voyoId === warmingId &&
-                            result.voyoId !== promptId &&
                             playbackSource === 'iframe' &&
                             currentTrack?.trackId === warmingId
                           }
-                          showPrompt={result.voyoId === promptId}
-                          onWarmTap={() => setPromptId(result.voyoId)}
-                          onPromptPlay={() => {
-                            handleSelectTrack(result);
-                            setPromptId(null);
-                            setWarmingId(null);
-                          }}
                         />
                       );
                     };
@@ -986,15 +979,42 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap, onEnterVideoMode
           <>
             {toast && (
               <div
-                className="fixed bottom-24 left-1/2 z-[60] -translate-x-1/2 px-4 py-2 rounded-full text-xs font-medium text-white/90"
-                style={{
-                  background: toast.type === 'queue'
-                    ? 'rgba(139,92,246,0.9)'
-                    : 'rgba(212,160,83,0.9)',
-                  backdropFilter: 'blur(8px)',
-                  }}
+                key={toast.type}
+                className="fixed bottom-24 left-1/2 z-[60] -translate-x-1/2"
+                style={{ animation: 'voyo-toast-pop 0.38s cubic-bezier(0.34,1.56,0.64,1)' }}
               >
-                {toast.text}
+                {toast.type === 'play_now' ? (
+                  <div
+                    className="flex items-center gap-2.5 px-4 py-2.5 rounded-full"
+                    style={{
+                      background: 'rgba(12,12,20,0.94)',
+                      backdropFilter: 'blur(18px)',
+                      border: '1px solid rgba(139,92,246,0.28)',
+                      boxShadow: '0 8px 28px rgba(0,0,0,0.55), 0 0 20px rgba(139,92,246,0.10)',
+                    }}
+                  >
+                    <span className="text-white/45 text-[11px] truncate max-w-[140px]">
+                      {toast.trackTitle}
+                    </span>
+                    <span className="text-white/15 text-[11px]">·</span>
+                    <button
+                      onClick={toast.onPlayNow}
+                      className="text-white text-[11px] font-bold tracking-wide active:scale-95 transition-transform"
+                    >
+                      Play now →
+                    </button>
+                  </div>
+                ) : (
+                  <div
+                    className="px-4 py-2 rounded-full text-xs font-medium text-white/90"
+                    style={{
+                      background: toast.type === 'queue' ? 'rgba(139,92,246,0.9)' : 'rgba(212,160,83,0.9)',
+                      backdropFilter: 'blur(8px)',
+                    }}
+                  >
+                    {toast.text}
+                  </div>
+                )}
               </div>
             )}
           </>
