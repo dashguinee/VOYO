@@ -735,7 +735,8 @@ const FullscreenBackground = memo(({ trackId }: { trackId?: string }) => {
           key={trackId}
         >
           <SmartImage
-            src={getThumbnailUrl(trackId, 'high')}
+            src={getThumbnailUrl(trackId, 'max')}
+            fallbackSrc={getThumbnailUrl(trackId, 'high')}
             alt="Background"
             className="w-full h-full object-cover blur-2xl scale-110 will-change-transform"
             trackId={trackId}
@@ -1893,6 +1894,7 @@ const PlayControls = memo(({
   onScrubStart,
   onScrubEnd,
   trackArt,
+  trackId,
   scrubDirection,
   skeepLevel,
 }: {
@@ -1904,6 +1906,7 @@ const PlayControls = memo(({
   onScrubStart: (direction: 'forward' | 'backward') => void;
   onScrubEnd: () => void;
   trackArt?: string;
+  trackId?: string;
   scrubDirection: 'forward' | 'backward' | null;
   skeepLevel: number; // 1=2x, 2=4x, 3=8x
 }) => {
@@ -2033,8 +2036,10 @@ const PlayControls = memo(({
             >
               <SmartImage
                 src={trackArt}
+                fallbackSrc={trackId ? getThumbnailUrl(trackId, 'high') : undefined}
                 alt="Now playing album art"
                 className="w-full h-full object-cover"
+                trackId={trackId}
                 lazy={false}
               />
             </div>
@@ -5141,7 +5146,8 @@ export const VoyoPortraitPlayer = ({
           isScrubbing={isScrubbing}
           onScrubStart={handleScrubStart}
           onScrubEnd={handleScrubEnd}
-          trackArt={currentTrack ? getTrackThumbnailUrl(currentTrack, 'high') : undefined}
+          trackArt={currentTrack ? getTrackThumbnailUrl(currentTrack, 'max') : undefined}
+          trackId={currentTrack?.trackId}
           scrubDirection={scrubDirection}
           skeepLevel={skeepLevel}
         />
