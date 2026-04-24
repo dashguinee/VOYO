@@ -1037,6 +1037,10 @@ function App() {
             <header
               className="relative flex items-center justify-between px-4 bg-transparent"
               style={{
+                // z-50 so this stays above the fixed feed layer (z-10) for
+                // the 7s pre-retract window — header overlays the video
+                // edge-to-edge before fading out.
+                zIndex: 50,
                 paddingTop: feedHeaderHidden ? 0 : 'max(0.75rem, env(safe-area-inset-top))',
                 paddingBottom: feedHeaderHidden ? 0 : '0.75rem',
                 maxHeight: feedHeaderHidden ? 0 : '120px',

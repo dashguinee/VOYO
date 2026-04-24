@@ -355,6 +355,12 @@ interface PlayerStore {
    *  surface like Search is active so the page content has more room. */
   playerCompact: boolean;
   setPlayerCompact: (compact: boolean) => void;
+  /** Feed (Moments) ambient dim signal — VoyoMoments flips this on after
+   *  3s of dwell or 5 swipes; VoyoBottomNav reads it and fades the nav
+   *  pill to 30% (center VOYO orb stays at 50% — visible+accessible).
+   *  Touch / long-press resets it. */
+  feedNavDim: boolean;
+  setFeedNavDim: (dim: boolean) => void;
 
   // Actions - Queue
   addToQueue: (track: Track, position?: number) => void;
@@ -419,6 +425,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   videoPolitePosition: 'center',
   videoBlocked: false,
   playerCompact: false,
+  feedNavDim: false,
   shuffleMode: false,
   repeatMode: 'off',
 
@@ -1323,6 +1330,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
 
   setVideoTarget: (target: 'hidden' | 'portrait' | 'landscape') => set({ videoTarget: target }),
   setPlayerCompact: (compact: boolean) => set({ playerCompact: compact }),
+  setFeedNavDim: (dim: boolean) => set({ feedNavDim: dim }),
   setVideoPolitePosition: (pos: 'center' | 'bottom' | 'top-right' | 'top-left') => set({ videoPolitePosition: pos }),
   setVideoBlocked: (blocked: boolean) => set({ videoBlocked: blocked }),
 

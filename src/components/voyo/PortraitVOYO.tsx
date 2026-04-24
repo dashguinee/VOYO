@@ -295,9 +295,13 @@ export const PortraitVOYO = ({ onSearch, onDahub, onHome }: PortraitVOYOProps) =
           </Suspense>
         </div>
 
-        {/* LAYER 2: FEED MODE (Slide-in Overlay) */}
+        {/* LAYER 2: FEED MODE — `position: fixed inset:0` instead of
+            absolute, so the video fills the full viewport (edge-to-edge,
+            including behind the header during its 7s pre-retract window).
+            Music/Dahub layers stay absolute since they live inside the
+            flex layout below the header. */}
         <div
-          className="absolute inset-0 z-10 transition-all duration-500"
+          className="fixed inset-0 z-10 transition-all duration-500"
           style={{
             transform: voyoActiveTab === 'feed' ? 'translateX(0)' : 'translateX(100%)',
             opacity: voyoActiveTab === 'feed' ? 1 : 0,
