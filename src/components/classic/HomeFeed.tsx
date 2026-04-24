@@ -2052,12 +2052,11 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
         kind === 'trail' ? ['voyo-ring-trail',  560]  :
         kind === 'hold'  ? ['voyo-ring-hold',  2000]  :
                            ['voyo-ring-burst',  800];
-      // Barely-visible alphas — real water is a ghost, not a neon ring
       const alpha =
-        kind === 'trail' ? '0.07)' :
-        kind === 'tap'   ? '0.10)' :
-        kind === 'hold'  ? '0.08)' :
-                           '0.11)';
+        kind === 'trail' ? '0.16)' :
+        kind === 'tap'   ? '0.22)' :
+        kind === 'hold'  ? '0.18)' :
+                           '0.24)';
       Object.assign(inner.style, {
         width: '100%', height: '100%', borderRadius: '50%',
         border: `1px solid ${c}${alpha}`,
@@ -2507,19 +2506,19 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
       }} />
       <style>{`
         @keyframes voyo-ring-tap {
-          0%   { transform: scale(0.08); opacity: 0.10; }
+          0%   { transform: scale(0); opacity: 0.22; }
           100% { transform: scale(28); opacity: 0; }
         }
         @keyframes voyo-ring-trail {
-          0%   { transform: scale(0.08); opacity: 0.07; }
+          0%   { transform: scale(0); opacity: 0.16; }
           100% { transform: scale(24); opacity: 0; }
         }
         @keyframes voyo-ring-burst {
-          0%   { transform: scale(0.08); opacity: 0.11; }
+          0%   { transform: scale(0); opacity: 0.24; }
           100% { transform: scale(36); opacity: 0; }
         }
         @keyframes voyo-ring-hold {
-          0%   { transform: scale(0.08); opacity: 0.08; }
+          0%   { transform: scale(0); opacity: 0.18; }
           100% { transform: scale(54); opacity: 0; }
         }
       `}</style>
