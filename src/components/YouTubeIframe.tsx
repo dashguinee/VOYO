@@ -130,6 +130,19 @@ export const YouTubeIframe = memo(() => {
   const [showNextUp, setShowNextUp] = useState(false);
   const [showPortraitNextUp, setShowPortraitNextUp] = useState(false); // Full-cover thumbnail for portrait
   const [isDragging, setIsDragging] = useState(false);
+  // Landscape fades auto-mute after a short dwell: the purple top/bottom
+  // gradients fade heavy-then-light so the "just entered" moment is
+  // framed, but after ~3s the video breathes — fade heights shrink and
+  // opacity eases so the content owns the screen.
+  const [landscapeFadeMuted, setLandscapeFadeMuted] = useState(false);
+  useEffect(() => {
+    if (videoTarget !== 'landscape') {
+      setLandscapeFadeMuted(false);
+      return;
+    }
+    const t = setTimeout(() => setLandscapeFadeMuted(true), 3200);
+    return () => clearTimeout(t);
+  }, [videoTarget]);
   const upcomingTrack = queue[0]?.track || null;
 
 
@@ -628,15 +641,38 @@ export const YouTubeIframe = memo(() => {
     };
 
     if (videoTarget === 'landscape') {
+      // `inset: 0` alone leaves gaps on mobile Safari + Android Chrome
+      // when the PWA chrome / address bar reflow. Explicit viewport units
+      // with `dvh` (dynamic viewport) fallback to `vh` pin the container
+      // to the true mobile viewport — no black bars, no partial fit.
       return {
         ...base,
-        inset: 0,
+        top: 0,
+        left: 0,
+        width: '100vw',
+        height: '100vh',
+        maxWidth: '100dvw',
+        maxHeight: '100dvh',
         zIndex: 40,
       };
     }
 
     if (videoTarget === 'portrait' && isPlaying) {
       // Floating mini player — draggable. portraitPos offsets from center.
+      // Sized to nest under BigCenterCard (w-56 h-56 = 224×224 on mobile)
+      // — 216px is 8px shy, so the video sits "inside" the card footprint
+      // and reads as a living version of the counterpart art, not an
+      // overlay cover.
+      //
+      // Beam effect: boxShadow layers make the video feel lifted out of
+      // the page. Shadow is rendered OUTSIDE the overflow:hidden clip so
+      // it can extend freely. Four layers, stacked:
+      //   1. Anchoring dark shadow — grounds the element, reads as weight
+      //   2. Inner edge ring — sharp hairline for silhouette
+      //   3. Purple halo (60px, brand wash) — "light from within"
+      //   4. Extended bloom (140px) — the spatial beam, very faint
+      //   5. Upward cast (cool-ivory, 40px at -12y) — the video lighting
+      //      the space above itself, subtle but what completes "floating"
       return {
         position: 'fixed',
         overflow: 'hidden',
@@ -644,13 +680,19 @@ export const YouTubeIframe = memo(() => {
         top: '50%',
         left: '50%',
         transform: `translate(calc(-50% + ${portraitPos.x}px), calc(-50% + ${portraitPos.y}px))`,
-        width: '208px',
-        height: '208px',
+        width: '216px',
+        height: '216px',
         borderRadius: '2rem',
         zIndex: 60,
         opacity: 1,
         transition: dragStartRef.current ? 'none' : 'transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)',
-        boxShadow: '0 12px 40px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.08)',
+        boxShadow: [
+          '0 14px 48px rgba(0,0,0,0.65)',
+          '0 0 0 1px rgba(255,255,255,0.08)',
+          '0 0 60px rgba(139,92,246,0.32)',
+          '0 0 140px rgba(139,92,246,0.14)',
+          '0 -12px 40px rgba(199,168,255,0.10)',
+        ].join(', '),
       };
     }
 
@@ -774,25 +816,32 @@ export const YouTubeIframe = memo(() => {
               background: 'rgba(139, 92, 246, 0.04)',
             }}
           />
-          {/* Top gradient */}
+          {/* Top gradient — in landscape, shrinks from 30%→14% after 3.2s
+              dwell so the video breathes and owns the screen. */}
           <div
             style={{
               position: 'absolute',
               inset: 0,
               pointerEvents: 'none',
               zIndex: 10,
-              background: 'linear-gradient(to bottom, rgba(88,28,135,0.7) 0%, transparent 30%)',
+              background: videoTarget === 'landscape' && landscapeFadeMuted
+                ? 'linear-gradient(to bottom, rgba(88,28,135,0.45) 0%, transparent 14%)'
+                : 'linear-gradient(to bottom, rgba(88,28,135,0.7) 0%, transparent 30%)',
+              transition: 'background 1.2s cubic-bezier(0.16, 1, 0.3, 1)',
               animation: 'fadeIn 1s ease-out',
             }}
           />
-          {/* Bottom gradient */}
+          {/* Bottom gradient — same dwell treatment, shrinks 35%→17%. */}
           <div
             style={{
               position: 'absolute',
               inset: 0,
               pointerEvents: 'none',
               zIndex: 10,
-              background: 'linear-gradient(to top, rgba(88,28,135,0.8) 0%, transparent 35%)',
+              background: videoTarget === 'landscape' && landscapeFadeMuted
+                ? 'linear-gradient(to top, rgba(88,28,135,0.5) 0%, transparent 17%)'
+                : 'linear-gradient(to top, rgba(88,28,135,0.8) 0%, transparent 35%)',
+              transition: 'background 1.2s cubic-bezier(0.16, 1, 0.3, 1)',
               animation: 'fadeIn 1s ease-out',
             }}
           />
