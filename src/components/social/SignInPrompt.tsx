@@ -310,15 +310,22 @@ export const VoyoLiveCard = ({ onSwitchToVOYO }: VoyoLiveCardProps = {}) => {
           <div
             className="absolute inset-0 rounded-full voyo-live-halo"
             style={{
-              background:
-                'radial-gradient(circle, rgba(61,220,151,0.55) 0%, transparent 70%)',
+              background: isPlaying
+                ? 'radial-gradient(circle, rgba(251,146,60,0.6) 0%, transparent 70%)'
+                : 'radial-gradient(circle, rgba(61,220,151,0.55) 0%, transparent 70%)',
+              transition: 'background 0.6s ease',
             }}
           />
           <div
             className="relative w-1.5 h-1.5 rounded-full"
             style={{
-              background: 'linear-gradient(135deg, #4FE8A7 0%, #2DB785 100%)',
-              boxShadow: '0 0 6px rgba(61,220,151,0.55)',
+              background: isPlaying
+                ? 'linear-gradient(135deg, #FDBA74 0%, #F97316 100%)'
+                : 'linear-gradient(135deg, #4FE8A7 0%, #2DB785 100%)',
+              boxShadow: isPlaying
+                ? '0 0 6px rgba(249,115,22,0.65)'
+                : '0 0 6px rgba(61,220,151,0.55)',
+              transition: 'background 0.6s ease, box-shadow 0.6s ease',
             }}
           />
         </div>
