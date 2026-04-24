@@ -18,6 +18,7 @@ import type { Moment } from '../../../types/moments';
 import { AnimatedArtCard } from './AnimatedArtCard';
 import { DynamicVignette } from './DynamicVignette';
 import { devWarn } from '../../../utils/logger';
+import { usePlayerStore } from '../../../store/playerStore';
 
 // ============================================
 // CONSTANTS & HELPERS
@@ -1241,11 +1242,46 @@ export const VoyoMoments: React.FC<VoyoMomentsProps> = ({ onPlayFullTrack, onArt
   }, [currentMoment?.id, recordPlay]);
 
   // Navigate with animation direction
+  // Nav-fade signal — VoyoBottomNav fades to 30% (orb to 50%) when this
+  // flag is true. Triggered by 5 swipes OR 3s of dwell, restored on touch
+  // / long-press position modal. Cleanup on unmount so the nav doesn't
+  // stay dimmed if the user leaves the feed.
+  const setFeedNavDim = usePlayerStore(s => s.setFeedNavDim);
+  const swipeCountRef = useRef(0);
+  const dimTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const armDimTimer = useCallback(() => {
+    if (dimTimerRef.current) clearTimeout(dimTimerRef.current);
+    dimTimerRef.current = setTimeout(() => setFeedNavDim(true), 3000);
+  }, [setFeedNavDim]);
+  useEffect(() => {
+    armDimTimer();
+    return () => {
+      if (dimTimerRef.current) clearTimeout(dimTimerRef.current);
+      setFeedNavDim(false);
+    };
+  }, [armDimTimer, setFeedNavDim]);
+  // Long-press position modal restores the nav at the same time as the
+  // header reveal — the modal IS the "let me see where I am" gesture, so
+  // every chrome surface should be accessible during it. On close, the
+  // dim timer arms again so the nav fades back into ambient.
+  useEffect(() => {
+    if (showOverlay) {
+      setFeedNavDim(false);
+      if (dimTimerRef.current) clearTimeout(dimTimerRef.current);
+    } else {
+      armDimTimer();
+    }
+  }, [showOverlay, setFeedNavDim, armDimTimer]);
+
   const nav = useCallback((dir: SlideDir, fn: () => void) => {
     setSlideDir(dir);
     setMKey(p => p + 1);
     fn();
-  }, []);
+    // Each swipe counts toward the 5-swipe dim trigger. The dwell timer
+    // is a parallel trigger — whichever fires first sticks.
+    swipeCountRef.current += 1;
+    if (swipeCountRef.current >= 5) setFeedNavDim(true);
+  }, [setFeedNavDim]);
 
   // MIX mode navigation wrappers — override UP/DOWN to step through mixed feed
   const mixGoUp = useCallback((velocity?: number) => {
@@ -1278,6 +1314,13 @@ export const VoyoMoments: React.FC<VoyoMomentsProps> = ({ onPlayFullTrack, onArt
       return;
     }
 
+    // Touch wakes the nav back to full opacity + restarts the 3s dwell
+    // timer + resets the 5-swipe counter. Hold-to-show-position-modal
+    // pathway also clears it (showOverlay flip below).
+    setFeedNavDim(false);
+    swipeCountRef.current = 0;
+    armDimTimer();
+
     const t = e.touches[0];
     touchStart.current = { x: t.clientX, y: t.clientY, time: Date.now() };
     swiping.current = false;
@@ -1297,7 +1340,7 @@ export const VoyoMoments: React.FC<VoyoMomentsProps> = ({ onPlayFullTrack, onArt
     }
 
     lpTimer.current = setTimeout(() => { if (!swiping.current) setShowOverlay(true); }, LONG_PRESS_MS);
-  }, [currentMoment]);
+  }, [currentMoment, setFeedNavDim, armDimTimer]);
 
   const onTM = useCallback((e: React.TouchEvent) => {
     if (!touchStart.current) return;

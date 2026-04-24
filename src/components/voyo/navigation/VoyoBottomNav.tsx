@@ -38,6 +38,17 @@ interface VoyoBottomNavProps {
 export const VoyoBottomNav = ({ onDahub, onHome, oyoSurface = 'home', playerMode = false }: VoyoBottomNavProps) => {
   // Fine-grained selectors (battery fix)
   const voyoActiveTab = usePlayerStore(s => s.voyoActiveTab);
+  // Ambient nav fade — when on feed and the dim signal is on, side
+  // buttons drop to 30% and the center VOYO orb to 50% (orb stays
+  // 20pp brighter — visible + accessible per the spec). Composed with
+  // the existing --hold-* press vars via calc() so press-to-dim still
+  // multiplies on top of ambient.
+  const feedNavDim = usePlayerStore(s => s.feedNavDim);
+  const sideAmbient = (voyoActiveTab === 'feed' && feedNavDim) ? 0.30 : 1;
+  const orbAmbient  = (voyoActiveTab === 'feed' && feedNavDim) ? 0.50 : 1;
+  const sideOpacity = `calc(var(--hold-side, 1) * ${sideAmbient})`;
+  const orbOpacity  = `calc(var(--hold-orb, 1) * ${orbAmbient})`;
+  const ambientTransition = 'opacity 1s cubic-bezier(0.16, 1, 0.3, 1)';
   const setVoyoTab = usePlayerStore(s => s.setVoyoTab);
   const isPlaying = usePlayerStore(s => s.isPlaying);
   const { dashId, isLoggedIn } = useAuth();
@@ -283,7 +294,7 @@ export const VoyoBottomNav = ({ onDahub, onHome, oyoSurface = 'home', playerMode
           onPointerUp={handlePointerUp}
           onPointerLeave={handlePointerUp}
           onClick={handleHome}
-          style={{ opacity: 'var(--hold-side, 1)', transition: holdTransition }}
+          style={{ opacity: sideOpacity, transition: `${holdTransition}, ${ambientTransition}` }}
         >
           <div
             style={{
@@ -324,7 +335,7 @@ export const VoyoBottomNav = ({ onDahub, onHome, oyoSurface = 'home', playerMode
           }}
           onClickCapture={oyoBindings.onClickCapture}
           onClick={handleVoyoToggle}
-          style={{ flex: '0 0 auto', opacity: 'var(--hold-orb, 1)', transition: holdTransition }}
+          style={{ flex: '0 0 auto', opacity: orbOpacity, transition: `${holdTransition}, ${ambientTransition}` }}
           aria-label="VOYO — tap to play, long-press to summon OYO"
         >
           <div
@@ -424,7 +435,7 @@ export const VoyoBottomNav = ({ onDahub, onHome, oyoSurface = 'home', playerMode
           onPointerUp={handlePointerUp}
           onPointerLeave={handlePointerUp}
           onClick={handleDahub}
-          style={{ opacity: 'var(--hold-side, 1)', transition: holdTransition }}
+          style={{ opacity: sideOpacity, transition: `${holdTransition}, ${ambientTransition}` }}
         >
           <div
             style={{
