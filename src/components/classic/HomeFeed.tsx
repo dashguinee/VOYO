@@ -2248,7 +2248,7 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
           Watch More moved OFF the header (Apr 2026): it now only appears at the
           end of the carousel after scrolling, with a golden-beam reveal and a
           purple Open VOYO morph. Header stays clean, CTA earns the scroll. */}
-      <div className="mt-[22px] mb-10">
+      <div className="mt-5 mb-10">
         <div className="px-4 mb-5 flex items-center gap-3">
           <AfricaIcon size={36} />
           <div className="flex-1">
