@@ -2880,7 +2880,7 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
               <div>
                 <h2
                   className="leading-none"
-                  style={{ fontFamily: "'Fraunces', 'Playfair Display', Georgia, serif", fontStyle: 'italic', fontSize: 24, fontWeight: 400, background: 'linear-gradient(100deg, #F4D999 0%, #E6B865 40%, #C4943D 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', filter: 'drop-shadow(0 1px 4px rgba(0,0,0,0.6)) drop-shadow(0 0 14px rgba(212,160,83,0.2))' }}
+                  style={{ fontFamily: "'Fraunces', 'Playfair Display', Georgia, serif", fontStyle: 'italic', fontSize: 24, fontWeight: 400, background: 'linear-gradient(100deg, #F4D999 0%, #E6B865 40%, #C4943D 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', filter: 'drop-shadow(0 1px 4px rgba(0,0,0,0.6)) drop-shadow(0 0 14px rgba(212,160,83,0.2))', opacity: 0.93 }}
                 >
                   All-Time Classics
                 </h2>
@@ -2907,6 +2907,7 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
                     backgroundSize: '300% 100%',
                     WebkitBackgroundClip: 'text',
                     WebkitTextFillColor: 'transparent',
+                    opacity: 0.93,
                   }}
                 >
                   {'African Bangers · '}<b style={{ fontWeight: 800 }}>VOYO Certified</b>
