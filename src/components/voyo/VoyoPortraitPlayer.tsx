@@ -1046,22 +1046,30 @@ const BackdropLibrary = ({
 // weighing two verbs at mid-tap. Always wears the purple-glow live-dot
 // treatment; `isIframeAudio` drives the pulse.
 //
-// Two decay layers, composed:
-//   · t=5s  → enter DIMMED MODE — smaller padding + smaller text +
-//             softer contour glow + less saturated background. This
-//             is a real variant, not just opacity — the button
-//             structurally recedes while staying tappable on the right.
-//   · t=30s → further fade to 80% opacity (entire button, uniform).
-// Net effect: initial invitation → ambient chip → steady-state glance.
+// DIM coupled to the app's activity signal (controlsActive — derived
+// from isControlsRevealed up top). While controls are revealed, the
+// button is fully active; when controls hide, dim decay starts:
+//   · 5s after controls hide  → enter DIMMED MODE (smaller padding +
+//     softer glow + shorter contour). Structural recede, not opacity.
+//   · 30s after controls hide → further fade to 80% opacity.
+// Any tap / reveal resets both timers — the button breathes with the
+// rest of the UI instead of running on its own mount-time clock.
 // ============================================
-const ExpandVideoButton = memo(({ onClick, isIframeAudio }: { onClick: () => void; isIframeAudio: boolean }) => {
+const ExpandVideoButton = memo(({ onClick, isIframeAudio, controlsActive }: { onClick: () => void; isIframeAudio: boolean; controlsActive: boolean }) => {
   const [mode, setMode] = useState<'active' | 'dimmed'>('active');
   const [extraFaded, setExtraFaded] = useState(false);
   useEffect(() => {
+    if (controlsActive) {
+      // Anything the user's doing wakes the button + clears timers.
+      setMode('active');
+      setExtraFaded(false);
+      return;
+    }
+    // Controls just went ambient — start decay clocks.
     const t1 = setTimeout(() => setMode('dimmed'), 5000);
     const t2 = setTimeout(() => setExtraFaded(true), 30000);
     return () => { clearTimeout(t1); clearTimeout(t2); };
-  }, []);
+  }, [controlsActive]);
 
   const isDimmed = mode === 'dimmed';
 
@@ -1739,12 +1747,15 @@ StreamCard.displayName = 'StreamCard';
 // BIG CENTER CARD (NOW PLAYING - Canva-style purple fade with premium typography)
 // TAP ALBUM ART FOR LYRICS VIEW | VIDEO HANDLED BY GLOBAL IFRAME
 // ============================================
-const BigCenterCard = memo(({ track, onExpandVideo, onShowLyrics, hideThumb, isIframeAudio }: {
+const BigCenterCard = memo(({ track, onExpandVideo, onShowLyrics, hideThumb, isIframeAudio, controlsActive = false }: {
   track: Track;
   onExpandVideo?: () => void;
   onShowLyrics?: () => void;
   hideThumb?: boolean;
   isIframeAudio?: boolean;
+  /** Driven by isControlsRevealed upstream — while true, the Mini Player
+   *  toggle stays fully active; when false, dim decay timers start. */
+  controlsActive?: boolean;
 }) => {
   return (
   // ── PERSPECTIVE CONTAINER ─────────────────────────────────────────
@@ -1883,7 +1894,7 @@ const BigCenterCard = memo(({ track, onExpandVideo, onShowLyrics, hideThumb, isI
         playbackSource === 'iframe' (audio is flowing through the iframe,
         tap to open the mini player and see the video). */}
     {onExpandVideo && (
-      <ExpandVideoButton onClick={onExpandVideo} isIframeAudio={!!isIframeAudio} />
+      <ExpandVideoButton onClick={onExpandVideo} isIframeAudio={!!isIframeAudio} controlsActive={controlsActive} />
     )}
 
     {/* ── EDGE HIGHLIGHT ─────────────────────────────────────────────
@@ -5068,6 +5079,10 @@ export const VoyoPortraitPlayer = ({
               // Mini Player button pulses, telling the user: tap here to see
               // the video for foreground playback until hot-swap completes.
               isIframeAudio={playbackSource === 'iframe'}
+              // Couple dim decay to the app's controls visibility signal.
+              // Button breathes with the rest of the UI — active when
+              // controls reveal, dims 5s after they hide.
+              controlsActive={isControlsRevealed}
             />
           ) : (
             <div className="w-48 h-48 rounded-[2rem] bg-white/5 border border-white/10 flex items-center justify-center">

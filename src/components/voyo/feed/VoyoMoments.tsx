@@ -77,13 +77,14 @@ const S = {
   // Pure black + neutral grey reads "screen". Amber-black reads "lit room
   // at dusk" — lower cortisol, evolution-conditioned safety signal.
   container: css({ position: 'relative', width: '100%', height: '100%', backgroundColor: '#0B0703', overflow: 'hidden', touchAction: 'none', userSelect: 'none', WebkitUserSelect: 'none' }),
-  // Top: removed the hard 78% black bar. Pure soft fade only — same warm
-  // amber tint as the container, much lower opacity so the video breathes
-  // through without a chrome strip pasted on top.
+  // Fully transparent — matches Home + VOYO + Profile header language.
+  // The axis tabs + CompassArc children carry their own chip-level
+  // backgrounds for readability, so the bar itself no longer needs a
+  // gradient veil. Video breathes all the way up to the safe-area.
   topBar: css({
     position: 'absolute', top: 0, left: 0, right: 0, zIndex: 30,
     paddingTop: 'env(safe-area-inset-top, 12px)',
-    background: 'linear-gradient(to bottom, rgba(20,12,6,0.42) 0%, rgba(20,12,6,0.18) 45%, rgba(20,12,6,0.04) 80%, transparent 100%)',
+    background: 'transparent',
     pointerEvents: 'auto',
     transition: 'opacity 0.6s cubic-bezier(0.16, 1, 0.3, 1), transform 0.6s cubic-bezier(0.16, 1, 0.3, 1)',
   }),
