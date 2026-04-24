@@ -288,6 +288,9 @@ export const AudioPlayer = () => {
       if (isStale()) return;
       if (knownInR2Sync && el) {
         // R2 is keyed by raw YouTube ID; trackId may be a VOYO ID (vyo_<b64>).
+        // engageSilentWav sets loop=true; must reset before R2 src lands or
+        // the track will loop forever instead of firing 'ended' and advancing.
+        el.loop = false;
         el.src = `${R2_AUDIO}/${getYouTubeId(currentTrack.trackId)}?q=high`;
         // Transient 'pause' fires on src reassign; handlePause sees the
         // flag and skips the setIsPlaying(false). The flag clears in
