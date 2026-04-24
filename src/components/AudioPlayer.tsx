@@ -114,6 +114,7 @@ export const AudioPlayer = () => {
   const playbackSource     = usePlayerStore(s => s.playbackSource);
   const seekPosition       = usePlayerStore(s => s.seekPosition);
   const clearSeekPosition  = usePlayerStore(s => s.clearSeekPosition);
+  const playbackRate       = usePlayerStore(s => s.playbackRate);
   const setProgress        = usePlayerStore(s => s.setProgress);
   const setCurrentTime     = usePlayerStore(s => s.setCurrentTime);
   const setDuration        = usePlayerStore(s => s.setDuration);
@@ -419,6 +420,15 @@ export const AudioPlayer = () => {
     try { el.currentTime = Math.max(0, seekPosition); } catch {}
     clearSeekPosition();
   }, [seekPosition, clearSeekPosition]);
+
+  // ── Playback rate sync (skeep) ────────────────────────────────────────
+  // setPlaybackRate() in the store only updates state — el.playbackRate was
+  // never applied to the audio element, so skeep level-1 (2x native) showed
+  // the speed indicator but audio played at 1x.
+  useEffect(() => {
+    const el = audioRef.current;
+    if (el) el.playbackRate = playbackRate;
+  }, [playbackRate]);
 
   // ── Audio element event handlers ──────────────────────────────────────
 
