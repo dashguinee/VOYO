@@ -261,7 +261,7 @@ export function DashAuthBadge({
   if (!citizen) {
     return (
       <button
-        onClick={() => window.location.href = `https://hub.dasuperhub.com?returnUrl=${window.location.origin}&app=V`}
+        onClick={() => window.open(`https://hub.dasuperhub.com?returnUrl=${window.location.origin}&app=V`, '_blank', 'noopener')}
         className={`
           px-2.5 py-1 rounded-full text-[11px] font-medium
           transition-all cursor-pointer flex items-center gap-1.5
@@ -326,14 +326,16 @@ export function useDashCitizen(productCode: ProductCode) {
     return () => window.removeEventListener('storage', handleStorage);
   }, [productCode]);
 
-  // Open Command Center with dashId prefilled if signed in
+  // Open Command Center with dashId prefilled if signed in.
+  // Opens in a new tab (noopener) so the VOYO PWA keeps the audio graph
+  // alive. Cross-tab storage listener below syncs session back on auth.
   const openCommandCenter = () => {
     const currentCitizen = getCitizen(productCode);
     const returnUrl = window.location.origin;
     const url = currentCitizen
       ? `https://hub.dasuperhub.com?returnUrl=${returnUrl}&app=V&dashId=${currentCitizen.coreId}`
       : `https://hub.dasuperhub.com?returnUrl=${returnUrl}&app=V`;
-    window.location.href = url;
+    window.open(url, '_blank', 'noopener');
   };
 
   return {
@@ -478,7 +480,10 @@ export function openCommandCenterForSSO(dashId?: string): void {
   params.set('app', 'V');
   if (dashId) params.set('dashId', dashId);
 
-  window.location.href = `${baseUrl}?${params.toString()}`;
+  // New tab + noopener: preserves the VOYO audio graph. The cross-tab
+  // `storage` listener in DashAuthBadge / useDashCitizen picks up the
+  // session write when SSO returns and re-renders this tab as logged in.
+  window.open(`${baseUrl}?${params.toString()}`, '_blank', 'noopener');
 }
 
 /**

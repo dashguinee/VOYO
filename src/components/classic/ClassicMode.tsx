@@ -550,7 +550,7 @@ export const ClassicMode = ({ onSwitchToVOYO, onSearch }: ClassicModeProps) => {
                 <h2 className="text-white text-xl font-bold mb-2">Sign in to DaHub</h2>
                 <p className="text-white/50 text-sm mb-6 max-w-xs">Connect with friends, share notes, and chat across the DASH ecosystem.</p>
                 <button
-                  onClick={() => window.location.href = `https://hub.dasuperhub.com?returnUrl=${window.location.origin}&app=V`}
+                  onClick={() => window.open(`https://hub.dasuperhub.com?returnUrl=${window.location.origin}&app=V`, '_blank', 'noopener')}
                   className="px-6 py-3 rounded-full bg-gradient-to-r from-purple-500 to-violet-600 text-white font-semibold text-sm shadow-lg shadow-purple-500/30 active:scale-95 transition-transform"
                 >
                   Sign in with DASH ID
