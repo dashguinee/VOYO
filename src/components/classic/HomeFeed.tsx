@@ -1028,7 +1028,7 @@ const AfricanVibesVideoCard = memo(({
 
         {/* Genre pill */}
         <div className="absolute top-1.5 left-1.5 z-20">
-          <span className="px-1.5 py-0.5 rounded text-[6px] font-bold uppercase bg-purple-600/50 text-white/80">
+          <span className="px-1.5 py-0.5 rounded text-[6px] font-medium tracking-widest uppercase bg-purple-600/35 text-white/65" style={{ letterSpacing: '0.08em', fontVariantCaps: 'all-small-caps' }}>
             {track.tags?.[0] || 'Afrobeats'}
           </span>
         </div>
