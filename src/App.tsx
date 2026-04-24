@@ -467,6 +467,20 @@ function App() {
   // Battery fix: fine-grained selectors
   const currentTrack = usePlayerStore(s => s.currentTrack);
   const setVoyoTab = usePlayerStore(s => s.setVoyoTab);
+  const voyoActiveTab = usePlayerStore(s => s.voyoActiveTab);
+
+  // On the feed surface the App header competes with the video for
+  // attention (and shows the dark app-root behind its transparent fill,
+  // reading as a black strip). Dismiss it after 7s of dwell — smooth
+  // opacity + slight upward slide, pointer-events cut so hit area goes
+  // with it. Resets on any tab change, so re-entering feed repeats the
+  // brief visibility window.
+  const [feedHeaderHidden, setFeedHeaderHidden] = useState(false);
+  useEffect(() => {
+    if (voyoActiveTab !== 'feed') { setFeedHeaderHidden(false); return; }
+    const t = setTimeout(() => setFeedHeaderHidden(true), 7000);
+    return () => clearTimeout(t);
+  }, [voyoActiveTab]);
   const [bgError, setBgError] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [artistPageName, setArtistPageName] = useState<string | null>(null);
@@ -1015,10 +1029,19 @@ function App() {
             key="voyo"
             className="relative z-10 h-full flex flex-col"
           >
-            {/* Top Bar - VOYO Logo & Navigation — fully transparent, ghost buttons */}
+            {/* Top Bar - VOYO Logo & Navigation — fully transparent, ghost buttons.
+                On the feed surface it auto-hides 7s after entry (smooth opacity +
+                slight lift) so the video owns the frame. */}
             <header
               className="relative flex items-center justify-between px-4 py-3 flex-shrink-0 bg-transparent"
-              style={{ paddingTop: 'max(0.75rem, env(safe-area-inset-top))' }}
+              style={{
+                paddingTop: 'max(0.75rem, env(safe-area-inset-top))',
+                opacity: feedHeaderHidden ? 0 : 1,
+                transform: feedHeaderHidden ? 'translateY(-8px)' : 'translateY(0)',
+                pointerEvents: feedHeaderHidden ? 'none' : 'auto',
+                transition: 'opacity 800ms cubic-bezier(0.16, 1, 0.3, 1), transform 800ms cubic-bezier(0.16, 1, 0.3, 1)',
+              }}
+              aria-hidden={feedHeaderHidden}
             >
               {/* Left: VOYO Logo — purple → bronze (brand colors, no pink, no yellow) */}
               <div className="flex items-center">
