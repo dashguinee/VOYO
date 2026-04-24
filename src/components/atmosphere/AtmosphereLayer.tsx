@@ -157,7 +157,7 @@ export const AtmosphereLayer = () => {
               filter: p.blur ? 'blur(0.5px)' : 'none',
               animation: `voyo-drift-up ${p.duration}s linear infinite`,
               animationDelay: `${p.delay}s`,
-              willChange: 'transform, opacity',
+              willChange: p.blur ? 'auto' : 'transform, opacity',
               ['--drift-x' as any]: `${p.driftX}px`,
             }}
           />

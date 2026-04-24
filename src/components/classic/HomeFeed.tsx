@@ -9,6 +9,7 @@
  */
 
 import { useState, useMemo, useEffect, useRef, memo, useCallback } from 'react';
+import { useShallow } from 'zustand/shallow';
 import { devWarn } from '../../utils/logger';
 import { Search, Play, Zap } from 'lucide-react';
 import { AfricaIcon } from '../ui/AfricaIcon';
@@ -1634,6 +1635,270 @@ const VibesLiveFriendsSheet = ({ friends, loading, onClose, onFriendTap }: Vibes
 };
 
 // ============================================
+// TOP 10 SECTION — self-contained sub-component
+// All countdown state/refs/effects live here so HomeFeed is NOT
+// re-rendered every 2.4s during the auto-scroll countdown.
+// ============================================
+
+interface Top10SectionProps {
+  tracks: Track[];
+  onTrackPlay: (track: Track, opts?: { openFull?: boolean }) => void;
+}
+
+const Top10Section = memo(({ tracks, onTrackPlay }: Top10SectionProps) => {
+  const sectionRef = useRef<HTMLDivElement>(null);
+  const cardRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  const [countdownActive, setCountdownActive] = useState(false);
+  const countdownActiveRef = useRef(false); // sync guard — state update is async
+  const [activeIdx, setActiveIdx] = useState<number | null>(null);
+  const dwellTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const countdownIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [subtitleKey, setSubtitleKey] = useState(0);
+  const scrollCooldownRef = useRef(false);
+  const prevScrollRef = useRef<{ left: number; time: number } | null>(null);
+  const subtitleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // IntersectionObserver — dwell 4s then auto-scroll countdown #9→#1
+  useEffect(() => {
+    const el = sectionRef.current;
+    if (!el) return;
+    let fired = false;
+    let mounted = true;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (!mounted) return;
+        if (entry.isIntersecting && !fired) {
+          dwellTimerRef.current = setTimeout(() => {
+            fired = true;
+            countdownActiveRef.current = true;
+            setCountdownActive(true);
+            let currentIdx = 8;
+            setActiveIdx(currentIdx);
+            cardRefs.current[currentIdx]?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+            const interval = setInterval(() => {
+              currentIdx -= 1;
+              if (currentIdx < 0) { clearInterval(interval); return; }
+              setActiveIdx(currentIdx);
+              cardRefs.current[currentIdx]?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+            }, 2400);
+            countdownIntervalRef.current = interval;
+          }, 4000);
+        } else if (!entry.isIntersecting) {
+          if (dwellTimerRef.current) { clearTimeout(dwellTimerRef.current); dwellTimerRef.current = null; }
+        }
+      },
+      { threshold: 0.35 }
+    );
+    observer.observe(el);
+    return () => {
+      mounted = false;
+      observer.disconnect();
+      if (dwellTimerRef.current) clearTimeout(dwellTimerRef.current);
+      if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
+    };
+  }, []);
+
+  // Subtitle flash — fires only on fast manual scroll of the carousel
+  const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
+    if (countdownActive || countdownActiveRef.current) return;
+    const now = Date.now();
+    const currentLeft = e.currentTarget.scrollLeft;
+    const prev = prevScrollRef.current;
+    prevScrollRef.current = { left: currentLeft, time: now };
+    if (!prev || scrollCooldownRef.current) return;
+    const dt = now - prev.time;
+    const dx = Math.abs(currentLeft - prev.left);
+    if (dt > 0 && dt < 150 && dx > 80) {
+      scrollCooldownRef.current = true;
+      if (subtitleTimerRef.current) clearTimeout(subtitleTimerRef.current);
+      subtitleTimerRef.current = setTimeout(() => {
+        setSubtitleKey(k => k + 1);
+        setTimeout(() => { scrollCooldownRef.current = false; }, 4200);
+      }, 280);
+    }
+  }, [countdownActive]);
+
+  return (
+    <div ref={sectionRef} className="mb-8 py-8 relative" style={{ background: 'linear-gradient(180deg, rgba(6,6,9,1) 0%, rgba(139,92,246,0.08) 15%, rgba(139,92,246,0.06) 50%, rgba(139,92,246,0.12) 85%, rgba(6,6,9,0.95) 100%)' }}>
+      <div className="absolute top-0 left-0 right-0 h-8 bg-gradient-to-b from-[#060609] to-transparent pointer-events-none z-10" />
+      <div className="absolute bottom-0 left-0 right-0 h-10 pointer-events-none z-10" style={{ background: 'linear-gradient(to bottom, transparent, rgba(139,92,246,0.15))' }} />
+      <div className="absolute inset-0 pointer-events-none top10-bg-glow" aria-hidden style={{ zIndex: 0 }} />
+      <div className="relative px-4 mb-6" style={{ zIndex: 1 }}>
+        <div className="overflow-hidden">
+          <h2 className="top10-header-scroll text-white font-semibold text-base whitespace-nowrap inline-block">VOYO Top 10</h2>
+        </div>
+        <p
+          key={subtitleKey}
+          className={`text-[9px] tracking-widest uppercase mt-1${subtitleKey > 0 ? ' top10-subtitle-flash' : ''}`}
+          style={{ fontFamily: 'Satoshi, system-ui, sans-serif', fontWeight: 700, opacity: subtitleKey > 0 ? undefined : 0 }}
+        >
+          This Week · VOYO Certified
+        </p>
+      </div>
+      <style>{`
+        @keyframes top10-header-drift {
+          0%        { transform: translateX(0);    color: #fff; }
+          8%        { transform: translateX(0);    color: #fff; }
+          34%       { transform: translateX(-43%); color: rgba(220,167,75,0.95); }
+          64%       { transform: translateX(-43%); color: rgba(220,167,75,0.95); }
+          92%       { transform: translateX(0);    color: #fff; }
+          96%, 100% { transform: translateX(0);    color: #fff; }
+        }
+        .top10-header-scroll {
+          animation: top10-header-drift 22s ease-in-out infinite;
+          will-change: transform;
+        }
+        @keyframes top10-bg-pulse {
+          0%, 7%    { opacity: 0.3; }
+          34%, 64%  { opacity: 1; }
+          93%, 100% { opacity: 0.3; }
+        }
+        .top10-bg-glow {
+          background: radial-gradient(ellipse 90% 70% at 50% 50%, rgba(139,92,246,0.2) 0%, rgba(139,92,246,0.07) 50%, transparent 80%);
+          animation: top10-bg-pulse 22s ease-in-out infinite;
+          will-change: opacity;
+        }
+        @keyframes top10-subtitle-flash {
+          0%   { opacity: 0; transform: translateY(4px); }
+          22%  { opacity: 0.7; transform: translateY(0); }
+          60%  { opacity: 0.55; }
+          100% { opacity: 0; }
+        }
+        .top10-subtitle-flash {
+          animation: top10-subtitle-flash 4.2s ease forwards;
+          color: rgba(212,160,83,0.75);
+        }
+        @keyframes top10-marquee {
+          0% { transform: translateX(0); }
+          100% { transform: translateX(-50%); }
+        }
+        .top10-scroll-title {
+          display: inline-block;
+          animation: top10-marquee 10s linear infinite;
+        }
+      `}</style>
+      <div
+        className="flex gap-6 px-4 overflow-x-auto scrollbar-hide"
+        style={{ scrollSnapType: countdownActive ? 'none' : 'x proximity', overscrollBehaviorX: 'contain', paddingBottom: '60px', position: 'relative', zIndex: 1 }}
+        onScroll={handleScroll}
+      >
+        {tracks.map((track, index) => {
+          const maxChars = 12;
+          const titleNeedsScroll = track.title.length > maxChars;
+          const artistNeedsScroll = track.artist.length > maxChars;
+          const isPodium = index < 3;
+          const numberFill = index === 0 ? '#FFD700' : index === 1 ? '#C0C0C0' : index === 2 ? '#CD7F32' : 'transparent';
+          const numberStroke = index === 0 ? '#B8860B' : index === 1 ? '#808080' : index === 2 ? '#8B4513' : '#9D4EDD';
+          const strokeWidth = isPodium ? '2px' : '3px';
+          const numberGlow = index === 0 ? '0 0 30px rgba(255, 215, 0, 0.5)' : index === 1 ? '0 0 20px rgba(192, 192, 192, 0.4)' : index === 2 ? '0 0 20px rgba(205, 127, 50, 0.4)' : '0 0 25px rgba(157, 78, 221, 0.5), 3px 3px 0 rgba(0,0,0,0.6)';
+          const isActive = countdownActive && activeIdx === index;
+          return (
+            <button
+              key={track.id}
+              ref={(el) => { cardRefs.current[index] = el; }}
+              className="flex-shrink-0 flex items-end relative"
+              onClick={() => onTrackPlay(track, { openFull: true })}
+              style={{ scrollSnapAlign: 'start' }}
+            >
+              <div
+                className="font-black select-none self-center"
+                style={{
+                  fontSize: index < 9 ? '5.5rem' : '4.5rem',
+                  lineHeight: '1',
+                  marginRight: '-22px',
+                  zIndex: 1,
+                  color: numberFill,
+                  WebkitTextStroke: `${strokeWidth} ${numberStroke}`,
+                  textShadow: isActive
+                    ? index === 0
+                      ? '0 0 60px rgba(255,215,0,0.9), 0 0 100px rgba(255,215,0,0.5)'
+                      : index === 1
+                        ? '0 0 50px rgba(230,230,200,0.9), 0 0 80px rgba(255,215,0,0.45)'
+                        : '0 0 50px rgba(139,92,246,0.9), 0 0 80px rgba(157,78,221,0.5)'
+                    : numberGlow,
+                  fontFamily: 'Arial Black, sans-serif',
+                  transition: 'text-shadow 0.8s ease-in-out',
+                }}
+              >
+                {index + 1}
+              </div>
+              <div className="relative" style={{ zIndex: 2 }}>
+                <div className="absolute -inset-2 rounded-full" style={{
+                  opacity: isActive ? 0.85 : 0.35,
+                  background: index === 0
+                    ? 'radial-gradient(circle, rgba(255,215,0,0.85) 0%, rgba(212,160,83,0.4) 40%, transparent 70%)'
+                    : index === 1
+                      ? 'radial-gradient(circle, rgba(230,230,205,0.75) 0%, rgba(255,215,0,0.38) 40%, transparent 70%)'
+                      : 'radial-gradient(circle, rgba(139,92,246,0.85) 0%, rgba(157,78,221,0.42) 40%, transparent 70%)',
+                  filter: 'blur(12px)',
+                  transition: 'opacity 0.8s ease-in-out',
+                  willChange: 'opacity',
+                }} />
+                <div className="relative rounded-full overflow-hidden" style={{
+                  width: '85px',
+                  height: '85px',
+                  boxShadow: isActive
+                    ? index === 0
+                      ? '0 4px 18px rgba(0,0,0,0.5), 0 0 44px rgba(255,215,0,0.8), 0 0 80px rgba(255,215,0,0.38)'
+                      : index === 1
+                        ? '0 4px 18px rgba(0,0,0,0.5), 0 0 40px rgba(220,220,200,0.75), 0 0 72px rgba(255,215,0,0.35)'
+                        : '0 4px 18px rgba(0,0,0,0.5), 0 0 36px rgba(139,92,246,0.8), 0 0 64px rgba(139,92,246,0.4)'
+                    : '0 4px 18px rgba(0,0,0,0.45), 0 0 16px rgba(157,78,221,0.18)',
+                  transition: 'box-shadow 0.8s ease-in-out',
+                  willChange: 'box-shadow',
+                }}>
+                  <SmartImage
+                    src={getThumb(track.trackId)}
+                    alt={track.title}
+                    className="w-full h-full object-cover"
+                    style={{ transform: 'scale(1.3)', objectPosition: 'center 35%' }}
+                    trackId={track.trackId}
+                    artist={track.artist}
+                    title={track.title}
+                  />
+                  <div className="absolute inset-0 rounded-full" style={{
+                    background: 'radial-gradient(circle, transparent 28%, rgba(0,0,0,0.3) 48%, transparent 52%, rgba(0,0,0,0.2) 100%)',
+                    boxShadow: 'inset 0 0 15px rgba(0,0,0,0.5)',
+                  }} />
+                  <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#0a0a0c]" style={{ width: '10px', height: '10px', boxShadow: '0 0 5px rgba(0,0,0,0.8)' }} />
+                </div>
+              </div>
+              <div className="absolute text-center" style={{ width: '110px', left: '50%', transform: 'translateX(-50%)', bottom: '-52px' }}>
+                <div className="overflow-hidden mx-auto" style={{ width: '100px' }}>
+                  <p className={`text-white text-[10px] font-semibold whitespace-nowrap ${titleNeedsScroll ? 'top10-scroll-title' : ''}`}>
+                    {titleNeedsScroll ? <>{track.title}<span className="mx-3">•</span>{track.title}<span className="mx-3">•</span></> : track.title}
+                  </p>
+                </div>
+                <div className="overflow-hidden mx-auto" style={{ width: '100px' }}>
+                  <p className={`whitespace-nowrap ${artistNeedsScroll ? 'top10-scroll-title' : ''}`}
+                     style={{ animationDelay: '1.4s', fontSize: '9px', color: 'rgba(255,255,255,0.45)', letterSpacing: '0.02em' }}>
+                    {artistNeedsScroll ? <>{track.artist}<span className="mx-3">·</span>{track.artist}<span className="mx-3">·</span></> : track.artist}
+                  </p>
+                </div>
+                <div className="flex items-center justify-center gap-0.5 mt-0.5">
+                  {index < 3 ? (
+                    <>
+                      <Zap className="w-2.5 h-2.5" style={{ color: '#D4A053', fill: '#D4A053', filter: 'drop-shadow(0 0 3px rgba(212,160,83,0.5))' }} />
+                      <span className="text-[8px] font-bold" style={{ color: '#D4A053' }}>
+                        {track.oyeScore ? (track.oyeScore / 1000).toFixed(0) + 'K' : Math.round((10 - index) * 1.2) + 'K'}
+                      </span>
+                    </>
+                  ) : (
+                    <span className="text-[8px] font-bold" style={{ color: '#D4A053' }}>
+                      OYE {track.oyeScore ? (track.oyeScore / 1000).toFixed(0) + 'K' : Math.round((10 - index) * 1.2) + 'K'}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+});
+
+// ============================================
 // HOME FEED COMPONENT
 // ============================================
 
@@ -1647,12 +1912,14 @@ interface HomeFeedProps {
 
 export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange, onSwitchToVOYO }: HomeFeedProps) => {
   // Battery fix: fine-grained selectors
-  const history = usePlayerStore(s => s.history);
-  const hotTracks = usePlayerStore(s => s.hotTracks);
-  const discoverTracks = usePlayerStore(s => s.discoverTracks);
+  // useShallow prevents memos from recalculating when array contents are the
+  // same but the reference changed (e.g. Zustand spread on every play event).
+  const history = usePlayerStore(useShallow(s => s.history));
+  const hotTracks = usePlayerStore(useShallow(s => s.hotTracks));
+  const discoverTracks = usePlayerStore(useShallow(s => s.discoverTracks));
   const refreshRecommendations = usePlayerStore(s => s.refreshRecommendations);
-  const hotPool = useTrackPoolStore(s => s.hotPool);
-  const cachedTracks = useDownloadStore(s => s.cachedTracks);
+  const hotPool = useTrackPoolStore(useShallow(s => s.hotPool));
+  const cachedTracks = useDownloadStore(useShallow(s => s.cachedTracks));
   // Set of boosted track IDs — OYE badge only shows on actually cached tracks
   const boostedIds = useMemo(() => new Set(cachedTracks.map(t => t.id)), [cachedTracks]);
   const setExplicitLike = usePreferenceStore(s => s.setExplicitLike);
@@ -1712,78 +1979,6 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
   const diskCenterRef = useRef(0);
   const [selectedClassic, setSelectedClassic] = useState<Track | null>(null);
 
-  // Top 10 countdown — IntersectionObserver dwell 4s → auto-scroll from #9 → #1
-  const top10SectionRef = useRef<HTMLDivElement>(null);
-  const top10CardRefs = useRef<(HTMLButtonElement | null)[]>([]);
-  const [top10CountdownActive, setTop10CountdownActive] = useState(false);
-  const top10CountdownActiveRef = useRef(false); // sync guard — state update is async
-  const [top10ActiveIdx, setTop10ActiveIdx] = useState<number | null>(null);
-  const top10DwellTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const top10CountdownIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  useEffect(() => {
-    const el = top10SectionRef.current;
-    if (!el) return;
-    let fired = false;
-    let mounted = true; // guard against state updates after unmount
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (!mounted) return;
-        if (entry.isIntersecting && !fired) {
-          top10DwellTimerRef.current = setTimeout(() => {
-            fired = true;
-            top10CountdownActiveRef.current = true; // sync — blocks subtitle before re-render
-            setTop10CountdownActive(true);
-            let currentIdx = 8;
-            setTop10ActiveIdx(currentIdx);
-            top10CardRefs.current[currentIdx]?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
-            const interval = setInterval(() => {
-              currentIdx -= 1;
-              if (currentIdx < 0) { clearInterval(interval); return; }
-              setTop10ActiveIdx(currentIdx);
-              top10CardRefs.current[currentIdx]?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
-            }, 2400);
-            top10CountdownIntervalRef.current = interval;
-          }, 4000);
-        } else if (!entry.isIntersecting) {
-          if (top10DwellTimerRef.current) { clearTimeout(top10DwellTimerRef.current); top10DwellTimerRef.current = null; }
-        }
-      },
-      { threshold: 0.35 }
-    );
-    observer.observe(el);
-    return () => {
-      mounted = false;
-      observer.disconnect();
-      if (top10DwellTimerRef.current) clearTimeout(top10DwellTimerRef.current);
-      if (top10CountdownIntervalRef.current) clearInterval(top10CountdownIntervalRef.current);
-    };
-  }, []);
-
-  // Subtitle flash — fires only on fast manual scroll of the Top 10 carousel
-  const [top10SubtitleKey, setTop10SubtitleKey] = useState(0);
-  const top10ScrollCooldownRef = useRef(false);
-  const top10PrevScrollRef = useRef<{ left: number; time: number } | null>(null);
-  const top10SubtitleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const handleTop10Scroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
-    if (top10CountdownActive || top10CountdownActiveRef.current) return;
-    const now = Date.now();
-    const currentLeft = e.currentTarget.scrollLeft;
-    const prev = top10PrevScrollRef.current;
-    top10PrevScrollRef.current = { left: currentLeft, time: now };
-    if (!prev || top10ScrollCooldownRef.current) return;
-    const dt = now - prev.time;
-    const dx = Math.abs(currentLeft - prev.left);
-    // Fast scroll threshold: >80px moved in <150ms
-    if (dt > 0 && dt < 150 && dx > 80) {
-      top10ScrollCooldownRef.current = true;
-      if (top10SubtitleTimerRef.current) clearTimeout(top10SubtitleTimerRef.current);
-      top10SubtitleTimerRef.current = setTimeout(() => {
-        setTop10SubtitleKey(k => k + 1);
-        setTimeout(() => { top10ScrollCooldownRef.current = false; }, 4200);
-      }, 280);
-    }
-  }, [top10CountdownActive]);
 
   // ── Infinite loop scroll + ambient water ripple + audio reactive glow ───
   const feedScrollRef = useRef<HTMLDivElement>(null);
@@ -2647,187 +2842,9 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
       )}
 
 
-      {/* Top 10 on VOYO */}
+      {/* Top 10 on VOYO — state/countdown fully isolated in Top10Section */}
       {hasTrending && (
-        <div ref={top10SectionRef} className="mb-8 py-8 relative" style={{ background: 'linear-gradient(180deg, rgba(6,6,9,1) 0%, rgba(139,92,246,0.08) 15%, rgba(139,92,246,0.06) 50%, rgba(139,92,246,0.12) 85%, rgba(6,6,9,0.95) 100%)' }}>
-          {/* Top edge fade */}
-          <div className="absolute top-0 left-0 right-0 h-8 bg-gradient-to-b from-[#060609] to-transparent pointer-events-none z-10" />
-          {/* Bottom edge fade — purple-tinted */}
-          <div className="absolute bottom-0 left-0 right-0 h-10 pointer-events-none z-10" style={{ background: 'linear-gradient(to bottom, transparent, rgba(139,92,246,0.15))' }} />
-          {/* BG glow — breathes in sync with the header drift (same 17s cycle) */}
-          <div className="absolute inset-0 pointer-events-none top10-bg-glow" aria-hidden style={{ zIndex: 0 }} />
-          <div className="relative px-4 mb-6" style={{ zIndex: 1 }}>
-            <div className="overflow-hidden">
-              <h2 className="top10-header-scroll text-white font-semibold text-base whitespace-nowrap inline-block">VOYO Top 10</h2>
-            </div>
-            <p
-              key={top10SubtitleKey}
-              className={`text-[9px] tracking-widest uppercase mt-1${top10SubtitleKey > 0 ? ' top10-subtitle-flash' : ''}`}
-              style={{ fontFamily: 'Satoshi, system-ui, sans-serif', fontWeight: 700, opacity: top10SubtitleKey > 0 ? undefined : 0 }}
-            >
-              This Week · VOYO Certified
-            </p>
-          </div>
-          <style>{`
-            /* Header — compositor-only: only transform + color animate */
-            @keyframes top10-header-drift {
-              0%        { transform: translateX(0);    color: #fff; }
-              8%        { transform: translateX(0);    color: #fff; }
-              34%       { transform: translateX(-43%); color: rgba(220,167,75,0.95); }
-              64%       { transform: translateX(-43%); color: rgba(220,167,75,0.95); }
-              92%       { transform: translateX(0);    color: #fff; }
-              96%, 100% { transform: translateX(0);    color: #fff; }
-            }
-            .top10-header-scroll {
-              animation: top10-header-drift 22s ease-in-out infinite;
-              will-change: transform;
-            }
-            /* BG glow — opacity-only = compositor thread */
-            @keyframes top10-bg-pulse {
-              0%, 7%    { opacity: 0.3; }
-              34%, 64%  { opacity: 1; }
-              93%, 100% { opacity: 0.3; }
-            }
-            .top10-bg-glow {
-              background: radial-gradient(ellipse 90% 70% at 50% 50%, rgba(139,92,246,0.2) 0%, rgba(139,92,246,0.07) 50%, transparent 80%);
-              animation: top10-bg-pulse 22s ease-in-out infinite;
-              will-change: opacity;
-            }
-            /* Subtitle — soft reveal on fast scroll */
-            @keyframes top10-subtitle-flash {
-              0%   { opacity: 0; transform: translateY(4px); }
-              22%  { opacity: 0.7; transform: translateY(0); }
-              60%  { opacity: 0.55; }
-              100% { opacity: 0; }
-            }
-            .top10-subtitle-flash {
-              animation: top10-subtitle-flash 4.2s ease forwards;
-              color: rgba(212,160,83,0.75);
-            }
-            @keyframes top10-marquee {
-              0% { transform: translateX(0); }
-              100% { transform: translateX(-50%); }
-            }
-            .top10-scroll-title {
-              display: inline-block;
-              animation: top10-marquee 10s linear infinite;
-            }
-          `}</style>
-          <div className="flex gap-6 px-4 overflow-x-auto scrollbar-hide" style={{ scrollSnapType: top10CountdownActive ? 'none' : 'x proximity', overscrollBehaviorX: 'contain', paddingBottom: '60px', position: 'relative', zIndex: 1 }} onScroll={handleTop10Scroll}>
-            {trending.slice(0, 10).map((track, index) => {
-              const maxChars = 12;
-              const titleNeedsScroll = track.title.length > maxChars;
-              const artistNeedsScroll = track.artist.length > maxChars;
-              const isPodium = index < 3;
-              const numberFill = index === 0 ? '#FFD700' : index === 1 ? '#C0C0C0' : index === 2 ? '#CD7F32' : 'transparent';
-              const numberStroke = index === 0 ? '#B8860B' : index === 1 ? '#808080' : index === 2 ? '#8B4513' : '#9D4EDD';
-              const strokeWidth = isPodium ? '2px' : '3px';
-              const numberGlow = index === 0 ? '0 0 30px rgba(255, 215, 0, 0.5)' : index === 1 ? '0 0 20px rgba(192, 192, 192, 0.4)' : index === 2 ? '0 0 20px rgba(205, 127, 50, 0.4)' : '0 0 25px rgba(157, 78, 221, 0.5), 3px 3px 0 rgba(0,0,0,0.6)';
-
-              const isActive = top10CountdownActive && top10ActiveIdx === index;
-              return (
-                <button
-                  key={track.id}
-                  ref={(el) => { top10CardRefs.current[index] = el; }}
-                  className="flex-shrink-0 flex items-end relative"
-                  onClick={() => onTrackPlay(track, { openFull: true })}
-                  style={{ scrollSnapAlign: 'start' }}
-                >
-                  <div
-                    className="font-black select-none self-center"
-                    style={{
-                      fontSize: index < 9 ? '5.5rem' : '4.5rem',
-                      lineHeight: '1',
-                      marginRight: '-22px',
-                      zIndex: 1,
-                      color: numberFill,
-                      WebkitTextStroke: `${strokeWidth} ${numberStroke}`,
-                      textShadow: isActive
-                        ? index === 0
-                          ? '0 0 60px rgba(255,215,0,0.9), 0 0 100px rgba(255,215,0,0.5)'
-                          : index === 1
-                            ? '0 0 50px rgba(230,230,200,0.9), 0 0 80px rgba(255,215,0,0.45)'
-                            : '0 0 50px rgba(139,92,246,0.9), 0 0 80px rgba(157,78,221,0.5)'
-                        : numberGlow,
-                      fontFamily: 'Arial Black, sans-serif',
-                      transition: 'text-shadow 0.8s ease-in-out',
-                    }}
-                  >
-                    {index + 1}
-                  </div>
-                  <div className="relative" style={{ zIndex: 2 }}>
-                    <div className="absolute -inset-2 rounded-full" style={{
-                      opacity: isActive ? 0.85 : 0.35,
-                      background: index === 0
-                        ? 'radial-gradient(circle, rgba(255,215,0,0.85) 0%, rgba(212,160,83,0.4) 40%, transparent 70%)'
-                        : index === 1
-                          ? 'radial-gradient(circle, rgba(230,230,205,0.75) 0%, rgba(255,215,0,0.38) 40%, transparent 70%)'
-                          : 'radial-gradient(circle, rgba(139,92,246,0.85) 0%, rgba(157,78,221,0.42) 40%, transparent 70%)',
-                      filter: 'blur(12px)',
-                      transition: 'opacity 0.8s ease-in-out',
-                      willChange: 'opacity',
-                    }} />
-                    <div className="relative rounded-full overflow-hidden" style={{
-                      width: '85px',
-                      height: '85px',
-                      boxShadow: isActive
-                        ? index === 0
-                          ? '0 4px 18px rgba(0,0,0,0.5), 0 0 44px rgba(255,215,0,0.8), 0 0 80px rgba(255,215,0,0.38)'
-                          : index === 1
-                            ? '0 4px 18px rgba(0,0,0,0.5), 0 0 40px rgba(220,220,200,0.75), 0 0 72px rgba(255,215,0,0.35)'
-                            : '0 4px 18px rgba(0,0,0,0.5), 0 0 36px rgba(139,92,246,0.8), 0 0 64px rgba(139,92,246,0.4)'
-                        : '0 4px 18px rgba(0,0,0,0.45), 0 0 16px rgba(157,78,221,0.18)',
-                      transition: 'box-shadow 0.8s ease-in-out',
-                      willChange: 'box-shadow',
-                    }}>
-                      <SmartImage
-                        src={getThumb(track.trackId)}
-                        alt={track.title}
-                        className="w-full h-full object-cover"
-                        style={{ transform: 'scale(1.3)', objectPosition: 'center 35%' }}
-                        trackId={track.trackId}
-                        artist={track.artist}
-                        title={track.title}
-                      />
-                      <div className="absolute inset-0 rounded-full" style={{
-                        background: 'radial-gradient(circle, transparent 28%, rgba(0,0,0,0.3) 48%, transparent 52%, rgba(0,0,0,0.2) 100%)',
-                        boxShadow: 'inset 0 0 15px rgba(0,0,0,0.5)',
-                      }} />
-                      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#0a0a0c]" style={{ width: '10px', height: '10px', boxShadow: '0 0 5px rgba(0,0,0,0.8)' }} />
-                    </div>
-                  </div>
-                  <div className="absolute text-center" style={{ width: '110px', left: '50%', transform: 'translateX(-50%)', bottom: '-52px' }}>
-                    <div className="overflow-hidden mx-auto" style={{ width: '100px' }}>
-                      <p className={`text-white text-[10px] font-semibold whitespace-nowrap ${titleNeedsScroll ? 'top10-scroll-title' : ''}`}>
-                        {titleNeedsScroll ? <>{track.title}<span className="mx-3">•</span>{track.title}<span className="mx-3">•</span></> : track.title}
-                      </p>
-                    </div>
-                    <div className="overflow-hidden mx-auto" style={{ width: '100px' }}>
-                      <p className={`whitespace-nowrap ${artistNeedsScroll ? 'top10-scroll-title' : ''}`}
-                         style={{ animationDelay: '1.4s', fontSize: '9px', color: 'rgba(255,255,255,0.45)', letterSpacing: '0.02em' }}>
-                        {artistNeedsScroll ? <>{track.artist}<span className="mx-3">·</span>{track.artist}<span className="mx-3">·</span></> : track.artist}
-                      </p>
-                    </div>
-                    <div className="flex items-center justify-center gap-0.5 mt-0.5">
-                      {index < 3 ? (
-                        <>
-                          <Zap className="w-2.5 h-2.5" style={{ color: '#D4A053', fill: '#D4A053', filter: 'drop-shadow(0 0 3px rgba(212,160,83,0.5))' }} />
-                          <span className="text-[8px] font-bold" style={{ color: '#D4A053' }}>
-                            {track.oyeScore ? (track.oyeScore / 1000).toFixed(0) + 'K' : Math.round((10 - index) * 1.2) + 'K'}
-                          </span>
-                        </>
-                      ) : (
-                        <span className="text-[8px] font-bold" style={{ color: '#D4A053' }}>
-                          OYE {track.oyeScore ? (track.oyeScore / 1000).toFixed(0) + 'K' : Math.round((10 - index) * 1.2) + 'K'}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        </div>
+        <Top10Section tracks={trending.slice(0, 10)} onTrackPlay={onTrackPlay} />
       )}
 
       {/* Vibes reel — one horizontal scroll interleaving AI vibe-covers
