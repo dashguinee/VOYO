@@ -216,6 +216,15 @@ export const AudioPlayer = () => {
     // Clear predictive pre-warm latch so the new track gets its own single
     // ahead-of-time ensureTrackReady call at the 50% mark.
     prewarmFiredForRef.current = null;
+    // Clear error burst counter — errors from a prior track must not bleed
+    // into the new track's circuit-breaker window and trigger a false skip.
+    errorBurst = [];
+    // Clear any pending stall-log timer from the previous track so it doesn't
+    // fire against the new track's readyState and log a phantom stall.
+    if (stallLogTimerRef.current) {
+      clearTimeout(stallLogTimerRef.current);
+      stallLogTimerRef.current = null;
+    }
 
     devLog(`[AudioPlayer] track change: ${currentTrack.trackId}`);
 
@@ -592,6 +601,20 @@ export const AudioPlayer = () => {
   // in BG, setInterval is).
 
   const handleEnded = useCallback(() => {
+    // Repeat-one: seek back to 0 and replay without going through the
+    // silent-WAV bridge. nextTrack() with repeatMode='one' doesn't change
+    // currentTrack, so the track-change effect never re-fires — the only
+    // way to restart is to directly reset the element here.
+    const store = usePlayerStore.getState();
+    if (store.repeatMode === 'one' && store.currentTrack) {
+      const el = audioRef.current;
+      if (el) {
+        try { el.currentTime = 0; el.play().catch(() => {}); } catch {}
+      }
+      store.nextTrack(); // resets progress/currentTime/isPlaying in store
+      return;
+    }
+
     // R2-direct playback — the audio element gets a discrete R2 file per
     // track, so 'ended' means track-over, advance the queue locally.
     //
