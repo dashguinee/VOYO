@@ -73,7 +73,10 @@ const OverlayTimingSync = memo(({
       }
       return;
     }
-    const np = currentTime < 5 && currentTime > 0;
+    // > 1s avoids the frame where currentTime ticks from 0 → 0.x right at
+    // the track boundary, which produced a 1-frame flash overlapping the
+    // outgoing "Next Up" card and the incoming "Vibing right" badge.
+    const np = currentTime >= 1 && currentTime < 5;
     const timeRemaining = duration - currentTime;
     const midTrack = currentTime > 30 && duration > 60 && currentTime >= duration * 0.45 && currentTime < duration * 0.55;
     const endTrack = timeRemaining > 0 && timeRemaining < 20;
