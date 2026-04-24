@@ -34,7 +34,7 @@ function findScrollableAncestor(el: Element | null): Element | null {
   return null;
 }
 
-export function usePullToRefresh() {
+export function usePullToRefresh(enabled = true) {
   const [pulling, setPulling] = useState(false);
   const [pullY, setPullY] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
@@ -52,6 +52,7 @@ export function usePullToRefresh() {
   refreshingRef.current = refreshing;
 
   useEffect(() => {
+    if (!enabled) return;
     function onTouchStart(e: TouchEvent) {
       const container = findScrollableAncestor(e.target as Element);
       scrollContainer.current = container;
@@ -108,7 +109,7 @@ export function usePullToRefresh() {
       document.removeEventListener('touchmove', onTouchMove);
       document.removeEventListener('touchend', onTouchEnd);
     };
-  }, []);
+  }, [enabled]);
 
   return { pulling, pullY, refreshing };
 }

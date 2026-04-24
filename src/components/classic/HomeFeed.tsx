@@ -2074,7 +2074,7 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
   const hasDiscoverMore = discoverMoreTracks.length > 0;
 
   return (
-    <div className="flex flex-col h-full overflow-y-auto pb-52 scrollbar-hide" style={{ overscrollBehavior: 'none' }}>
+    <div className="flex flex-col h-full overflow-y-auto pb-52 scrollbar-hide" style={{ overscrollBehavior: 'none', touchAction: 'pan-y', WebkitOverflowScrolling: 'touch' as never }}>
       {/* Header — fully transparent, floats over the continuous canvas (April 2026) */}
       <header className="flex items-center justify-between px-4 py-3 sticky top-0 bg-transparent z-10">
         <button

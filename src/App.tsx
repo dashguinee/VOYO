@@ -505,7 +505,7 @@ function App() {
   // Pull-to-refresh: pull down at the top of any view to reload the app.
   // Especially useful while iterating on production fixes — the user can
   // grab a new build without hunting for a refresh button.
-  const ptr = usePullToRefresh();
+  const ptr = usePullToRefresh(appMode !== 'classic');
 
   // Mark this boot as successful — lets the next cold-boot's preflight
   // know we survived to paint. Also clears any crash counter since a
