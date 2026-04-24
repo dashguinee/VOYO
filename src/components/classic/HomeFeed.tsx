@@ -2328,11 +2328,18 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
           <div className="absolute top-0 left-0 right-0 h-8 bg-gradient-to-b from-[#060609] to-transparent pointer-events-none z-10" />
           {/* Bottom edge fade — purple-tinted */}
           <div className="absolute bottom-0 left-0 right-0 h-10 pointer-events-none z-10" style={{ background: 'linear-gradient(to bottom, transparent, rgba(139,92,246,0.15))' }} />
-          <div className="px-4 mb-6">
-            <h2 className="text-white font-semibold text-base">VOYO Top 10</h2>
-            <p className="text-[10px] tracking-widest uppercase mt-1" style={{ color: 'rgba(139,92,246,0.75)', fontFamily: 'Satoshi, system-ui, sans-serif', fontWeight: 700 }}>This Week · VOYO Certified</p>
+          <div className="px-4 mb-6 overflow-hidden">
+            <h2 className="top10-header-scroll text-white font-semibold text-base whitespace-nowrap inline-block">VOYO Top 10</h2>
           </div>
           <style>{`
+            @keyframes top10-header-drift {
+              0%   { transform: translateX(0); }
+              50%  { transform: translateX(-40%); }
+              100% { transform: translateX(0); }
+            }
+            .top10-header-scroll {
+              animation: top10-header-drift 8s ease-in-out infinite;
+            }
             @keyframes top10-marquee {
               0% { transform: translateX(0); }
               100% { transform: translateX(-50%); }
