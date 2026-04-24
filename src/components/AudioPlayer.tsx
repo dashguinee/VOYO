@@ -322,6 +322,9 @@ export const AudioPlayer = () => {
             if (isStale()) return;
             const e = audioRef.current;
             if (!e || e.src === '' || !e.paused) return; // already playing or torn down
+            // iOS: context may be interrupted mid-transition — resume before play()
+            const ctx = audioContextRef.current;
+            if (ctx && ctx.state !== 'running') await ctx.resume().catch(() => {});
             try { await e.play(); return; } catch { /* retry */ }
           }
           logPlaybackEvent({
@@ -366,6 +369,8 @@ export const AudioPlayer = () => {
           setSource('r2');
           // Explicit play() — mirrors fast path. handleCanPlay also calls play()
           // but isPlaying might be false by then if AbortError ran the old catch.
+          const ctx2 = audioContextRef.current;
+          if (ctx2 && ctx2.state !== 'running') ctx2.resume().catch(() => {});
           el2.play().catch(() => {});
           logPlaybackEvent({ event_type: 'play_start', track_id: currentTrack.trackId, source: 'r2', meta: { subtype: 'probe_found' } });
         }).catch(() => {
