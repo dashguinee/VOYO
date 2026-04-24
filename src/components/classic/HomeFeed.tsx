@@ -191,10 +191,6 @@ const Shelf = ({ title, onSeeAll, children }: ShelfProps) => {
 
 interface ShelfWithRefreshProps {
   title: string;
-  /** Unused — legacy prop for compat. Refresh happens via subtle end-of-scroll sentinel. */
-  onRefresh?: () => void;
-  /** Unused — legacy prop for compat. */
-  isRefreshing?: boolean;
   onSeeAll?: () => void;
   children: React.ReactNode;
 }
@@ -1952,6 +1948,85 @@ const Top10Section = memo(({ tracks, onTrackPlay }: Top10SectionProps) => {
 });
 
 // ============================================
+// MEMO'D SHELF COMPONENTS
+// Each shelf takes stable props (memoized arrays + stable callbacks) so
+// HomeFeed's 30+ pieces of state churn stop cascading. A shelf only
+// re-renders when its own prop slice actually changes.
+// ============================================
+
+interface KeepTheEnergyShelfProps {
+  tracks: Track[];
+  boostedIds: Set<string>;
+  onPlay: (track: Track) => void;
+  onPlaylist: (track: Track) => void;
+}
+
+const KeepTheEnergyShelf = memo(({ tracks, boostedIds, onPlay, onPlaylist }: KeepTheEnergyShelfProps) => (
+  <div className="relative mb-10">
+    <div
+      className="absolute inset-0 pointer-events-none"
+      style={{
+        background: `
+          radial-gradient(ellipse 80% 72% at 50% 55%, rgba(139,92,246,0.055) 0%, rgba(139,92,246,0.015) 55%, transparent 88%),
+          linear-gradient(to right, rgba(139,92,246,0.10) 0%, rgba(139,92,246,0.02) 14%, transparent 30%, transparent 70%, rgba(139,92,246,0.02) 86%, rgba(139,92,246,0.10) 100%)
+        `,
+      }}
+      aria-hidden
+    />
+    <div className="relative flex justify-between items-center px-4 mb-5">
+      <h2 className="text-white font-semibold text-base">Keep the energy</h2>
+    </div>
+    <div
+      className="relative flex gap-4 px-4 overflow-x-auto scrollbar-hide"
+      style={{ scrollSnapType: 'x proximity', WebkitOverflowScrolling: 'touch' }}
+    >
+      {tracks.map((track, i) => (
+        <CardHoldActions key={track.id} track={track} onPlaylist={() => onPlaylist(track)}>
+          <WideTrackCard track={track} onPlay={onPlay} showBoostBadge isBoosted={boostedIds.has(track.trackId)} breathIdx={i} />
+        </CardHoldActions>
+      ))}
+    </div>
+  </div>
+));
+KeepTheEnergyShelf.displayName = 'KeepTheEnergyShelf';
+
+interface NextVoyageShelfProps {
+  tracks: Track[];
+  onPlay: (track: Track) => void;
+  onPlaylist: (track: Track) => void;
+}
+
+const NextVoyageShelf = memo(({ tracks, onPlay, onPlaylist }: NextVoyageShelfProps) => (
+  <ShelfWithRefresh title="Next Voyage">
+    {tracks.map((track) => (
+      <CardHoldActions key={track.id} track={track} onPlaylist={() => onPlaylist(track)}>
+        <TrackCard track={track} onPlay={onPlay} />
+      </CardHoldActions>
+    ))}
+  </ShelfWithRefresh>
+));
+NextVoyageShelf.displayName = 'NextVoyageShelf';
+
+interface ArtistRadarShelfProps {
+  artists: Array<{ name: string; tracks: Track[]; playCount: number }>;
+  onPlay: (track: Track) => void;
+}
+
+const ArtistRadarShelf = memo(({ artists, onPlay }: ArtistRadarShelfProps) => (
+  <div className="mb-10">
+    <div className="px-4 mb-5">
+      <h2 className="text-white font-semibold text-base">Your Artist Radar</h2>
+    </div>
+    <div className="flex gap-6 px-4 overflow-x-auto scrollbar-hide">
+      {artists.map((artist) => (
+        <ArtistCard key={artist.name} artist={artist} onPlay={onPlay} />
+      ))}
+    </div>
+  </div>
+));
+ArtistRadarShelf.displayName = 'ArtistRadarShelf';
+
+// ============================================
 // HOME FEED COMPONENT
 // ============================================
 
@@ -1977,11 +2052,10 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
   const boostedIds = useMemo(() => new Set(cachedTracks.map(t => t.id)), [cachedTracks]);
   const setExplicitLike = usePreferenceStore(s => s.setExplicitLike);
   const [playlistModalTrack, setPlaylistModalTrack] = useState<Track | null>(null);
-  const [isRefreshing, setIsRefreshing] = useState(false);
   // Session seed drives shelf rotation — every reload / pull-to-refresh gets
   // a fresh number, so shelves surface different tracks from the big pool
   // without losing stability WITHIN a single session.
-  const [sessionSeed, setSessionSeed] = useState(() => Date.now());
+  const [sessionSeed] = useState(() => Date.now());
 
   // Stations — curator-led vibe hubs, shown as a horizontal snap-scroll rail
   // above the shelves. Rail animates parallax on scroll when >1 station.
@@ -2349,14 +2423,6 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
     curateAllSections().catch(() => {});
   }, []);
 
-  const handleRefresh = () => {
-    setIsRefreshing(true);
-    refreshRecommendations();
-    // Bump the session seed so every shelf re-shuffles its pick from the pool.
-    setSessionSeed(Date.now());
-    setTimeout(() => setIsRefreshing(false), 500);
-  };
-
   // Stable callbacks for memo'd card children. Every card receives ONE of
   // these refs regardless of the track it renders — the card itself passes
   // its own track back. Without this, inline `() => onTrackPlay(track)`
@@ -2372,6 +2438,10 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
 
   // Data from existing DJ/Curator systems (pool-based)
   const recentlyPlayed = useMemo(() => getRecentlyPlayed(history, 15), [history]);
+  // Sliced views — stable references for memo'd shelf components. Without
+  // these, `.slice(0,12)` inline at the JSX site would create a fresh array
+  // every render and break the shelf's React.memo compare.
+  const recentlyPlayed12 = useMemo(() => recentlyPlayed.slice(0, 12), [recentlyPlayed]);
   const heavyRotation = useMemo(() => getUserTopTracks(15), [history]);
   const artistsYouLove = useMemo(() => getArtistsYouLove(history, hotPool, 8), [history, hotPool]);
   const vibes = VIBES;
@@ -2389,6 +2459,8 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
     () => pools.discovery.slice(0, 15),
     [pools.discovery],
   );
+  // Top-12 sliced view for the Next Voyage shelf — stable ref for memo.
+  const discoverMoreTracks12 = useMemo(() => discoverMoreTracks.slice(0, 12), [discoverMoreTracks]);
 
   // OYO's Picks = hot stream with favorite-artist bubble + de-dup vs the
   // row above. Compact because pools.hot already did the behavior rerank.
@@ -2595,38 +2667,15 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
       <Safe name="SignInPrompt"><SignInPrompt onSwitchToVOYO={onSwitchToVOYO} /></Safe>
 
       {/* Back in the Mood — subtle brand atmosphere behind the cards.
-          Single element, two stacked gradients:
-            · radial purple breath across the whole section (brand wash)
-            · horizontal pillar fade — the portrait player's top/bottom
-              vignette language rotated 90° and dialled way down (player
-              is ~80% alpha, these pillars peak at ~10%)
-          Cards scroll past from behind; you feel it more than see it. */}
+          Extracted to memo'd shelf so HomeFeed state churn (scroll, vibes,
+          classics, etc.) doesn't cascade-rerender these 12 cards. */}
       {hasHistory && (
-        <div className="relative mb-10">
-          <div
-            className="absolute inset-0 pointer-events-none"
-            style={{
-              background: `
-                radial-gradient(ellipse 80% 72% at 50% 55%, rgba(139,92,246,0.055) 0%, rgba(139,92,246,0.015) 55%, transparent 88%),
-                linear-gradient(to right, rgba(139,92,246,0.10) 0%, rgba(139,92,246,0.02) 14%, transparent 30%, transparent 70%, rgba(139,92,246,0.02) 86%, rgba(139,92,246,0.10) 100%)
-              `,
-            }}
-            aria-hidden
-          />
-          <div className="relative flex justify-between items-center px-4 mb-5">
-            <h2 className="text-white font-semibold text-base">Keep the energy</h2>
-          </div>
-          <div
-            className="relative flex gap-4 px-4 overflow-x-auto scrollbar-hide"
-            style={{ scrollSnapType: 'x proximity', WebkitOverflowScrolling: 'touch' }}
-          >
-            {recentlyPlayed.slice(0, 12).map((track, i) => (
-              <CardHoldActions key={track.id} track={track} onPlaylist={() => setPlaylistModalTrack(track)}>
-                <WideTrackCard track={track} onPlay={playTrack} showBoostBadge isBoosted={boostedIds.has(track.trackId)} breathIdx={i} />
-              </CardHoldActions>
-            ))}
-          </div>
-        </div>
+        <KeepTheEnergyShelf
+          tracks={recentlyPlayed12}
+          boostedIds={boostedIds}
+          onPlay={playTrack}
+          onPlaylist={setPlaylistModalTrack}
+        />
       )}
 
       {/* ═══ CLASSICS — always visible, one fixed position after history/SignIn ═══ */}
@@ -2872,17 +2921,14 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
       </div>
 
       {/* Next Voyage — state-aware discovery. Pool re-ranks around the
-          last click + time-of-session context (sessionSeed + OYO behavior
-          rerank). Name carries VOYO DNA (voyage = VOYO root) while "next"
-          keeps it relative-to-now. */}
+          last click + time-of-session context. Memo'd shelf — HomeFeed
+          churn doesn't bleed into the 12-card map. */}
       {hasDiscoverMore && (
-        <ShelfWithRefresh title="Next Voyage" onRefresh={handleRefresh} isRefreshing={isRefreshing}>
-          {discoverMoreTracks.slice(0, 12).map((track) => (
-            <CardHoldActions key={track.id} track={track} onPlaylist={() => setPlaylistModalTrack(track)}>
-              <TrackCard track={track} onPlay={playTrackFull} />
-            </CardHoldActions>
-          ))}
-        </ShelfWithRefresh>
+        <NextVoyageShelf
+          tracks={discoverMoreTracks12}
+          onPlay={playTrackFull}
+          onPlaylist={setPlaylistModalTrack}
+        />
       )}
 
 
@@ -2962,20 +3008,11 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
         </div>
       )}
 
-      {/* Your Artist Radar — personal-history shelf, lives at the bottom as
-          a closing beat. Not the first thing users see; the discovery /
-          communal shelves lead, this is the quieter personal reveal. */}
+      {/* Your Artist Radar — personal-history shelf, lives at the bottom
+          as a closing beat. Memo'd — only rerenders when artistsYouLove or
+          playTrack identity actually changes. */}
       {hasArtists && (
-        <div className="mb-10">
-          <div className="px-4 mb-5">
-            <h2 className="text-white font-semibold text-base">Your Artist Radar</h2>
-          </div>
-          <div className="flex gap-6 px-4 overflow-x-auto scrollbar-hide">
-            {artistsYouLove.map((artist) => (
-              <ArtistCard key={artist.name} artist={artist} onPlay={playTrack} />
-            ))}
-          </div>
-        </div>
+        <ArtistRadarShelf artists={artistsYouLove} onPlay={playTrack} />
       )}
 
       {/* Empty State */}
