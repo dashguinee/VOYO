@@ -1712,7 +1712,7 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
   const diskCenterRef = useRef(0);
   const [selectedClassic, setSelectedClassic] = useState<Track | null>(null);
 
-  // Top 10 countdown — IntersectionObserver dwell 7s → auto-scroll from #9 → #1
+  // Top 10 countdown — IntersectionObserver dwell 4s → auto-scroll from #9 → #1
   const top10SectionRef = useRef<HTMLDivElement>(null);
   const top10CardRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const [top10CountdownActive, setTop10CountdownActive] = useState(false);
@@ -1740,7 +1740,7 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
               top10CardRefs.current[currentIdx]?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
             }, 1800);
             top10CountdownIntervalRef.current = interval;
-          }, 7000);
+          }, 4000);
         } else if (!entry.isIntersecting) {
           if (top10DwellTimerRef.current) { clearTimeout(top10DwellTimerRef.current); top10DwellTimerRef.current = null; }
         }
