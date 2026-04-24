@@ -1048,26 +1048,40 @@ const BackdropLibrary = ({
 // — iframe audio is the signal that tapping does something useful.
 // `isIframeAudio` still drives the pulse (when off, button is quiet
 // but discoverable; when on, it's actively inviting the tap).
+//
+// After 30s the whole button dims to 80% opacity — text, contour, glow
+// all fade uniformly so it stops demanding attention after the user has
+// had plenty of time to notice it. Still available, just ambient.
 // ============================================
-const ExpandVideoButton = memo(({ onClick, isIframeAudio }: { onClick: () => void; isIframeAudio: boolean }) => (
-  <button
-    onClick={onClick}
-    className="absolute top-3 right-3 z-30 px-3 py-1.5 rounded-full backdrop-blur-sm border text-white text-xs font-medium flex items-center gap-1.5 min-h-[44px] active:scale-95 border-purple-400/60 hover:border-purple-400/80"
-    style={{
-      background: 'rgba(139,92,246,0.22)',
-      boxShadow: '0 0 16px rgba(139,92,246,0.5), 0 0 28px rgba(139,92,246,0.25)',
-      animation: isIframeAudio ? 'voyo-iframe-pulse 1.6s ease-in-out infinite' : 'none',
-    }}
-    aria-label="Open mini player"
-  >
-    <span
-      className="w-1.5 h-1.5 rounded-full bg-purple-300"
-      style={{ boxShadow: '0 0 6px rgba(196,181,253,0.9)' }}
-    />
-    <Play size={12} fill="currentColor" />
-    <span>Mini Player</span>
-  </button>
-));
+const ExpandVideoButton = memo(({ onClick, isIframeAudio }: { onClick: () => void; isIframeAudio: boolean }) => {
+  const [dimmed, setDimmed] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setDimmed(true), 30000);
+    return () => clearTimeout(t);
+  }, []);
+
+  return (
+    <button
+      onClick={onClick}
+      className="absolute top-3 right-3 z-30 px-3 py-1.5 rounded-full backdrop-blur-sm border text-white text-xs font-medium flex items-center gap-1.5 min-h-[44px] active:scale-95 border-purple-400/60 hover:border-purple-400/80"
+      style={{
+        background: 'rgba(139,92,246,0.22)',
+        boxShadow: '0 0 16px rgba(139,92,246,0.5), 0 0 28px rgba(139,92,246,0.25)',
+        animation: isIframeAudio ? 'voyo-iframe-pulse 1.6s ease-in-out infinite' : 'none',
+        opacity: dimmed ? 0.8 : 1,
+        transition: 'opacity 1.4s cubic-bezier(0.16, 1, 0.3, 1)',
+      }}
+      aria-label="Open mini player"
+    >
+      <span
+        className="w-1.5 h-1.5 rounded-full bg-purple-300"
+        style={{ boxShadow: '0 0 6px rgba(196,181,253,0.9)' }}
+      />
+      <Play size={12} fill="currentColor" />
+      <span>Mini Player</span>
+    </button>
+  );
+});
 
 // ============================================
 // RIGHT-SIDE TOOLBAR - Vertical action buttons
