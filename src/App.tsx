@@ -842,6 +842,13 @@ function App() {
     }
   }, []);
 
+  // Compact the floating portrait player when Search is active — it
+  // shrinks ~15% via transform scale so the search pane has more room
+  // without unmounting the iframe (zero reload, smooth spring transition).
+  useEffect(() => {
+    usePlayerStore.getState().setPlayerCompact(isSearchOpen);
+  }, [isSearchOpen]);
+
   // PWA back-gesture handler. Push a history entry when search opens;
   // the system back button / Android gesture pops it → we close search
   // instead of exiting the app. Ignored if search is closed via the X

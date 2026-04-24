@@ -351,6 +351,10 @@ interface PlayerStore {
   setVideoTarget: (target: 'hidden' | 'portrait' | 'landscape') => void;
   setVideoPolitePosition: (pos: 'center' | 'bottom' | 'top-right' | 'top-left') => void;
   setVideoBlocked: (blocked: boolean) => void;
+  /** Compact mode — portrait floating player scales down ~15% when a
+   *  surface like Search is active so the page content has more room. */
+  playerCompact: boolean;
+  setPlayerCompact: (compact: boolean) => void;
 
   // Actions - Queue
   addToQueue: (track: Track, position?: number) => void;
@@ -414,6 +418,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   videoTarget: 'hidden',
   videoPolitePosition: 'center',
   videoBlocked: false,
+  playerCompact: false,
   shuffleMode: false,
   repeatMode: 'off',
 
@@ -1317,6 +1322,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   setViewMode: (mode) => set({ viewMode: mode }),
 
   setVideoTarget: (target: 'hidden' | 'portrait' | 'landscape') => set({ videoTarget: target }),
+  setPlayerCompact: (compact: boolean) => set({ playerCompact: compact }),
   setVideoPolitePosition: (pos: 'center' | 'bottom' | 'top-right' | 'top-left') => set({ videoPolitePosition: pos }),
   setVideoBlocked: (blocked: boolean) => set({ videoBlocked: blocked }),
 

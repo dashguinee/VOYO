@@ -109,6 +109,7 @@ export const YouTubeIframe = memo(() => {
   const volume = usePlayerStore((s) => s.volume);
   const playbackSource = usePlayerStore((s) => s.playbackSource);
   const videoTarget = usePlayerStore((s) => s.videoTarget);
+  const playerCompact = usePlayerStore((s) => s.playerCompact);
   const seekPosition = usePlayerStore((s) => s.seekPosition);
   // currentTime/duration not subscribed here — OverlayTimingSync (render-null sub-component)
   // computes overlay zones and writes only on zone transitions (~1-2x per track, not 4Hz).
@@ -673,13 +674,20 @@ export const YouTubeIframe = memo(() => {
       //   4. Extended bloom (140px) — the spatial beam, very faint
       //   5. Upward cast (cool-ivory, 40px at -12y) — the video lighting
       //      the space above itself, subtle but what completes "floating"
+      // Compact mode (Search open, etc.) shrinks the player by ~15% via
+      // transform scale — GPU-accelerated, no layout thrash, no iframe
+      // remount. 0.82 × 216 ≈ 177, which is the "back to original 208,
+      // minus 15%" footprint Dash called for. Scale lives on the same
+      // transform as translate/drag so the existing spring transition
+      // interpolates size change + position change together.
+      const compactScale = playerCompact ? 0.82 : 1;
       return {
         position: 'fixed',
         overflow: 'hidden',
         background: '#000',
         top: '50%',
         left: '50%',
-        transform: `translate(calc(-50% + ${portraitPos.x}px), calc(-50% + ${portraitPos.y}px))`,
+        transform: `translate(calc(-50% + ${portraitPos.x}px), calc(-50% + ${portraitPos.y}px)) scale(${compactScale})`,
         width: '216px',
         height: '216px',
         borderRadius: '2rem',
