@@ -1046,45 +1046,28 @@ const BackdropLibrary = ({
 // one consistent affordance ("Mini Player") so users aren't weighing
 // two verbs at mid-tap. Always wears the purple-glow live-dot treatment
 // — iframe audio is the signal that tapping does something useful.
-//
-// Fades in after 5s of mount. The card needs its first 5 seconds to
-// breathe — cover art, title, lyrics hint. Then the control surfaces,
-// inviting interaction without colonizing attention from the jump.
 // `isIframeAudio` still drives the pulse (when off, button is quiet
 // but discoverable; when on, it's actively inviting the tap).
 // ============================================
-const ExpandVideoButton = memo(({ onClick, isIframeAudio }: { onClick: () => void; isIframeAudio: boolean }) => {
-  const [revealed, setRevealed] = useState(false);
-  useEffect(() => {
-    const t = setTimeout(() => setRevealed(true), 5000);
-    return () => clearTimeout(t);
-  }, []);
-
-  return (
-    <button
-      onClick={onClick}
-      aria-hidden={!revealed}
-      className="absolute top-3 right-3 z-30 px-3 py-1.5 rounded-full backdrop-blur-sm border text-white text-xs font-medium flex items-center gap-1.5 min-h-[44px] active:scale-95 border-purple-400/60 hover:border-purple-400/80"
-      style={{
-        background: 'rgba(139,92,246,0.22)',
-        boxShadow: '0 0 16px rgba(139,92,246,0.5), 0 0 28px rgba(139,92,246,0.25)',
-        animation: isIframeAudio ? 'voyo-iframe-pulse 1.6s ease-in-out infinite' : 'none',
-        opacity: revealed ? 1 : 0,
-        pointerEvents: revealed ? 'auto' : 'none',
-        transform: revealed ? 'translateY(0)' : 'translateY(-4px)',
-        transition: 'opacity 700ms cubic-bezier(0.16, 1, 0.3, 1), transform 700ms cubic-bezier(0.16, 1, 0.3, 1)',
-      }}
-      aria-label="Open mini player"
-    >
-      <span
-        className="w-1.5 h-1.5 rounded-full bg-purple-300"
-        style={{ boxShadow: '0 0 6px rgba(196,181,253,0.9)' }}
-      />
-      <Play size={12} fill="currentColor" />
-      <span>Mini Player</span>
-    </button>
-  );
-});
+const ExpandVideoButton = memo(({ onClick, isIframeAudio }: { onClick: () => void; isIframeAudio: boolean }) => (
+  <button
+    onClick={onClick}
+    className="absolute top-3 right-3 z-30 px-3 py-1.5 rounded-full backdrop-blur-sm border text-white text-xs font-medium flex items-center gap-1.5 min-h-[44px] active:scale-95 border-purple-400/60 hover:border-purple-400/80"
+    style={{
+      background: 'rgba(139,92,246,0.22)',
+      boxShadow: '0 0 16px rgba(139,92,246,0.5), 0 0 28px rgba(139,92,246,0.25)',
+      animation: isIframeAudio ? 'voyo-iframe-pulse 1.6s ease-in-out infinite' : 'none',
+    }}
+    aria-label="Open mini player"
+  >
+    <span
+      className="w-1.5 h-1.5 rounded-full bg-purple-300"
+      style={{ boxShadow: '0 0 6px rgba(196,181,253,0.9)' }}
+    />
+    <Play size={12} fill="currentColor" />
+    <span>Mini Player</span>
+  </button>
+));
 
 // ============================================
 // RIGHT-SIDE TOOLBAR - Vertical action buttons
