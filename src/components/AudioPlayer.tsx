@@ -74,6 +74,9 @@ export const AudioPlayer = () => {
   // 'pause' event browsers fire when el.src is reassigned — which was
   // the reason BG auto-advance left the app "paused" until manual resume.
   const trackSwapInProgressRef = useRef(false);
+  // BG safety: if canplay/error never fires (slow BG network), this timer
+  // clears trackSwapInProgressRef after 10s so the heartbeat kick can fire.
+  const bgSwapSafetyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Debounce the `waiting` → stream_stall telemetry. The browser fires
   // 'waiting' once immediately on src assignment (readyState 0, normal
   // initial-buffer state) — NOT a real stall. Only log if the audio
@@ -309,6 +312,17 @@ export const AudioPlayer = () => {
         // the track will loop forever instead of firing 'ended' and advancing.
         el.loop = false;
         el.src = `${R2_AUDIO}/${getYouTubeId(currentTrack.trackId)}?q=high`;
+        // BG safety valve: if canplay/error never fires (slow BG network),
+        // clear the swap flag after 10s so the heartbeat kick can intervene.
+        if (document.hidden) {
+          if (bgSwapSafetyTimerRef.current) clearTimeout(bgSwapSafetyTimerRef.current);
+          bgSwapSafetyTimerRef.current = setTimeout(() => {
+            bgSwapSafetyTimerRef.current = null;
+            if (isStale() || !trackSwapInProgressRef.current) return;
+            trackSwapInProgressRef.current = false;
+            logPlaybackEvent({ event_type: 'trace', track_id: currentTrack.trackId, meta: { subtype: 'bg_swap_safety_released' } });
+          }, 10_000);
+        }
         // Transient 'pause' fires on src reassign; handlePause sees the
         // flag and skips the setIsPlaying(false). The flag clears in
         // handleCanPlay once the new track has data ready. If play() is
@@ -458,13 +472,23 @@ export const AudioPlayer = () => {
     }
     // New track has data ready → track-change is fully committed. Clear
     // the guard so subsequent user-initiated pauses actually pause.
+    if (bgSwapSafetyTimerRef.current) { clearTimeout(bgSwapSafetyTimerRef.current); bgSwapSafetyTimerRef.current = null; }
     trackSwapInProgressRef.current = false;
     const el = audioRef.current;
     if (el && usePlayerStore.getState().isPlaying) {
       el.play().catch((e: unknown) => {
-        // AbortError = src was swapped mid-play (silent-WAV → R2 transition).
-        // isPlaying must stay true so the next canplay can call play() on R2.
-        if ((e as { name?: string })?.name !== 'AbortError') setIsPlaying(false);
+        const errName = (e as { name?: string })?.name;
+        // AbortError = src swap mid-play — isPlaying must stay true.
+        if (errName === 'AbortError') return;
+        // NotAllowedError in BG = audio focus briefly dropped at track boundary.
+        // Killing isPlaying here stops the heartbeat and prevents all recovery.
+        // Let the heartbeat's 4s kick handle re-acquisition instead.
+        if (document.hidden && errName === 'NotAllowedError') {
+          const ctx = audioContextRef.current;
+          if (ctx && ctx.state !== 'running') ctx.resume().catch(() => {});
+          return;
+        }
+        setIsPlaying(false);
       });
     }
     // Recovered — cancel any pending stall-log.
@@ -837,6 +861,12 @@ export const AudioPlayer = () => {
         });
       }}
       onError={() => {
+        // Always clear the swap-in-progress flag so the heartbeat can kick.
+        // If we leave it true and canplay never fires (load error), the
+        // heartbeat's silent-paused kick is permanently blocked.
+        const wasSwapping = trackSwapInProgressRef.current;
+        trackSwapInProgressRef.current = false;
+
         const el = audioRef.current;
         const code = el?.error?.code;
         const msg  = el?.error?.message ?? '';
@@ -845,7 +875,7 @@ export const AudioPlayer = () => {
         errorBurst.push(now);
         const burstCount = errorBurst.length;
         const trackId = usePlayerStore.getState().currentTrack?.trackId ?? 'unknown';
-        devWarn('[AudioPlayer] stream error', { code, msg, burst: burstCount });
+        devWarn('[AudioPlayer] stream error', { code, msg, burst: burstCount, wasSwapping });
         logPlaybackEvent({
           event_type: 'stream_error',
           track_id: trackId,
@@ -855,8 +885,18 @@ export const AudioPlayer = () => {
             ready_state: el?.readyState,
             network_state: el?.networkState,
             burst_count: burstCount,
+            was_swapping: wasSwapping,
           },
         });
+
+        // BG mid-swap error: new track failed to load, user can't intervene.
+        // Skip immediately — no burst threshold needed.
+        if (wasSwapping && document.hidden) {
+          errorBurst = [];
+          logPlaybackEvent({ event_type: 'skip_auto', track_id: trackId, meta: { reason: 'bg_swap_error' } });
+          usePlayerStore.getState().nextTrack();
+          return;
+        }
 
         // Circuit breaker — three audio-element errors on the current track
         // in 10s → track is toast. Advance so the user doesn't sit on silence.
