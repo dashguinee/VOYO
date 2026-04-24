@@ -106,16 +106,18 @@ export const AudioPlayer = () => {
   // component on every progress / currentTime tick (4Hz) during playback,
   // cascading through the audio chain hooks. Now only the dep that changed
   // triggers a re-render.
-  const currentTrack    = usePlayerStore(s => s.currentTrack);
-  const isPlaying       = usePlayerStore(s => s.isPlaying);
-  const volume          = usePlayerStore(s => s.volume);
-  const boostProfile    = usePlayerStore(s => s.boostProfile);
-  const voyexSpatial    = usePlayerStore(s => s.voyexSpatial);
-  const playbackSource  = usePlayerStore(s => s.playbackSource);
-  const setProgress     = usePlayerStore(s => s.setProgress);
-  const setCurrentTime  = usePlayerStore(s => s.setCurrentTime);
-  const setDuration     = usePlayerStore(s => s.setDuration);
-  const setIsPlaying    = usePlayerStore(s => s.setIsPlaying);
+  const currentTrack       = usePlayerStore(s => s.currentTrack);
+  const isPlaying          = usePlayerStore(s => s.isPlaying);
+  const volume             = usePlayerStore(s => s.volume);
+  const boostProfile       = usePlayerStore(s => s.boostProfile);
+  const voyexSpatial       = usePlayerStore(s => s.voyexSpatial);
+  const playbackSource     = usePlayerStore(s => s.playbackSource);
+  const seekPosition       = usePlayerStore(s => s.seekPosition);
+  const clearSeekPosition  = usePlayerStore(s => s.clearSeekPosition);
+  const setProgress        = usePlayerStore(s => s.setProgress);
+  const setCurrentTime     = usePlayerStore(s => s.setCurrentTime);
+  const setDuration        = usePlayerStore(s => s.setDuration);
+  const setIsPlaying       = usePlayerStore(s => s.setIsPlaying);
 
   // ── Web Audio chain (VOYEX EQ + spatial effects) ──────────────────────
   const {
@@ -405,6 +407,18 @@ export const AudioPlayer = () => {
   useEffect(() => {
     applyMasterGain();
   }, [volume, boostProfile, applyMasterGain]);
+
+  // ── Seek sync (R2 mode) ───────────────────────────────────────────────
+  // seekPosition is written by prevTrack/seekTo/segment-jump/skeep, but
+  // only YouTubeIframe consumed it — so in R2 mode (the primary path) the
+  // audio element never actually moved. Apply the seek here and clear.
+  useEffect(() => {
+    if (seekPosition === null) return;
+    const el = audioRef.current;
+    if (!el) return;
+    try { el.currentTime = Math.max(0, seekPosition); } catch {}
+    clearSeekPosition();
+  }, [seekPosition, clearSeekPosition]);
 
   // ── Audio element event handlers ──────────────────────────────────────
 
