@@ -1041,37 +1041,50 @@ const BackdropLibrary = ({
 };
 
 // ============================================
-// EXPAND BUTTON / MINI PLAYER — Opens fullscreen video mode.
-// When playbackSource === 'iframe', the button pulses with a purple
-// glow + shows a small "live" dot so the user knows there's iframe
-// audio playing and they can open the mini player for foreground
-// mini-video playback during the hot-swap window.
+// MINI PLAYER BUTTON — single unified toggle. Used to dual-label as
+// "Video" vs "Mini Player" depending on playbackSource; collapsed to
+// one consistent affordance ("Mini Player") so users aren't weighing
+// two verbs at mid-tap. Always wears the purple-glow live-dot treatment
+// — iframe audio is the signal that tapping does something useful.
+//
+// Fades in after 5s of mount. The card needs its first 5 seconds to
+// breathe — cover art, title, lyrics hint. Then the control surfaces,
+// inviting interaction without colonizing attention from the jump.
+// `isIframeAudio` still drives the pulse (when off, button is quiet
+// but discoverable; when on, it's actively inviting the tap).
 // ============================================
-const ExpandVideoButton = memo(({ onClick, isIframeAudio }: { onClick: () => void; isIframeAudio: boolean }) => (
-  <button
-    onClick={onClick}
-    className={`absolute top-3 right-3 z-30 px-3 py-1.5 rounded-full backdrop-blur-sm border text-white text-xs font-medium flex items-center gap-1.5 transition-all min-h-[44px] active:scale-95 ${
-      isIframeAudio
-        ? 'border-purple-400/60 hover:border-purple-400/80'
-        : 'border-[#28282f] hover:border-purple-500/40'
-    }`}
-    style={{
-      background: isIframeAudio ? 'rgba(139,92,246,0.22)' : 'rgba(28, 28, 35, 0.65)',
-      boxShadow: isIframeAudio ? '0 0 16px rgba(139,92,246,0.5), 0 0 28px rgba(139,92,246,0.25)' : 'none',
-      animation: isIframeAudio ? 'voyo-iframe-pulse 1.6s ease-in-out infinite' : 'none',
-    }}
-    aria-label={isIframeAudio ? 'Open mini player (audio from video)' : 'Expand video'}
-  >
-    {isIframeAudio && (
+const ExpandVideoButton = memo(({ onClick, isIframeAudio }: { onClick: () => void; isIframeAudio: boolean }) => {
+  const [revealed, setRevealed] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setRevealed(true), 5000);
+    return () => clearTimeout(t);
+  }, []);
+
+  return (
+    <button
+      onClick={onClick}
+      aria-hidden={!revealed}
+      className="absolute top-3 right-3 z-30 px-3 py-1.5 rounded-full backdrop-blur-sm border text-white text-xs font-medium flex items-center gap-1.5 min-h-[44px] active:scale-95 border-purple-400/60 hover:border-purple-400/80"
+      style={{
+        background: 'rgba(139,92,246,0.22)',
+        boxShadow: '0 0 16px rgba(139,92,246,0.5), 0 0 28px rgba(139,92,246,0.25)',
+        animation: isIframeAudio ? 'voyo-iframe-pulse 1.6s ease-in-out infinite' : 'none',
+        opacity: revealed ? 1 : 0,
+        pointerEvents: revealed ? 'auto' : 'none',
+        transform: revealed ? 'translateY(0)' : 'translateY(-4px)',
+        transition: 'opacity 700ms cubic-bezier(0.16, 1, 0.3, 1), transform 700ms cubic-bezier(0.16, 1, 0.3, 1)',
+      }}
+      aria-label="Open mini player"
+    >
       <span
         className="w-1.5 h-1.5 rounded-full bg-purple-300"
         style={{ boxShadow: '0 0 6px rgba(196,181,253,0.9)' }}
       />
-    )}
-    <Play size={12} fill="currentColor" />
-    <span>{isIframeAudio ? 'Mini Player' : 'Video'}</span>
-  </button>
-));
+      <Play size={12} fill="currentColor" />
+      <span>Mini Player</span>
+    </button>
+  );
+});
 
 // ============================================
 // RIGHT-SIDE TOOLBAR - Vertical action buttons
