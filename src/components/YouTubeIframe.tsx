@@ -27,6 +27,12 @@ const YT_STATES = {
   CUED: 5,
 };
 
+// Default position of the floating portrait player, relative to screen
+// center. Nudged 12px left so it stops masking the right edge of
+// "Discover" in the Portrait layout — at true center, the rounded
+// corner was clipping the Discover shelf visually. Drag still overrides.
+const DEFAULT_PORTRAIT_POS = { x: -12, y: 0 };
+
 function getYouTubeId(trackId: string): string {
   if (!trackId) return '';
   if (trackId.startsWith('VOYO_')) return trackId.replace('VOYO_', '');
@@ -738,7 +744,7 @@ export const YouTubeIframe = memo(() => {
   // Portrait mode: draggable floating mini player
   const isPortraitMode = videoTarget === 'portrait' && isPlaying;
   const dragStartRef = useRef<{ x: number; y: number; ox: number; oy: number } | null>(null);
-  const [portraitPos, setPortraitPos] = useState({ x: 0, y: 0 });
+  const [portraitPos, setPortraitPos] = useState(DEFAULT_PORTRAIT_POS);
   const portraitDraggedRef = useRef(false);
 
   return (
@@ -801,7 +807,7 @@ export const YouTubeIframe = memo(() => {
             // If no meaningful drag happened, it's a tap → close
             if (!portraitDraggedRef.current) {
               setVideoTarget('hidden');
-              setPortraitPos({ x: 0, y: 0 }); // reset for next open
+              setPortraitPos(DEFAULT_PORTRAIT_POS); // reset for next open
             }
           }}
           onPointerCancel={() => {
