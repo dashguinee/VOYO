@@ -1708,6 +1708,49 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
   const diskCenterRef = useRef(0);
   const [selectedClassic, setSelectedClassic] = useState<Track | null>(null);
 
+  // Top 10 countdown — IntersectionObserver dwell 7s → auto-scroll from #9 → #1
+  const top10SectionRef = useRef<HTMLDivElement>(null);
+  const top10CardRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  const [top10CountdownActive, setTop10CountdownActive] = useState(false);
+  const [top10ActiveIdx, setTop10ActiveIdx] = useState<number | null>(null);
+  const top10DwellTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const top10CountdownIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    const el = top10SectionRef.current;
+    if (!el) return;
+    let fired = false;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting && !fired) {
+          top10DwellTimerRef.current = setTimeout(() => {
+            fired = true;
+            setTop10CountdownActive(true);
+            let currentIdx = 8;
+            setTop10ActiveIdx(currentIdx);
+            top10CardRefs.current[currentIdx]?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+            const interval = setInterval(() => {
+              currentIdx -= 1;
+              if (currentIdx < 0) { clearInterval(interval); return; }
+              setTop10ActiveIdx(currentIdx);
+              top10CardRefs.current[currentIdx]?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+            }, 1800);
+            top10CountdownIntervalRef.current = interval;
+          }, 7000);
+        } else if (!entry.isIntersecting) {
+          if (top10DwellTimerRef.current) { clearTimeout(top10DwellTimerRef.current); top10DwellTimerRef.current = null; }
+        }
+      },
+      { threshold: 0.35 }
+    );
+    observer.observe(el);
+    return () => {
+      observer.disconnect();
+      if (top10DwellTimerRef.current) clearTimeout(top10DwellTimerRef.current);
+      if (top10CountdownIntervalRef.current) clearInterval(top10CountdownIntervalRef.current);
+    };
+  }, []);
+
   // Poll live friend count every 30s while mounted
   useEffect(() => {
     if (!isLoggedIn || !dashId) return;
@@ -2323,22 +2366,60 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
 
       {/* Top 10 on VOYO */}
       {hasTrending && (
-        <div className="mb-8 py-8 relative" style={{ background: 'linear-gradient(180deg, rgba(6,6,9,1) 0%, rgba(139,92,246,0.08) 15%, rgba(139,92,246,0.06) 50%, rgba(139,92,246,0.12) 85%, rgba(6,6,9,0.95) 100%)' }}>
+        <div ref={top10SectionRef} className="mb-8 py-8 relative" style={{ background: 'linear-gradient(180deg, rgba(6,6,9,1) 0%, rgba(139,92,246,0.08) 15%, rgba(139,92,246,0.06) 50%, rgba(139,92,246,0.12) 85%, rgba(6,6,9,0.95) 100%)' }}>
           {/* Top edge fade */}
           <div className="absolute top-0 left-0 right-0 h-8 bg-gradient-to-b from-[#060609] to-transparent pointer-events-none z-10" />
           {/* Bottom edge fade — purple-tinted */}
           <div className="absolute bottom-0 left-0 right-0 h-10 pointer-events-none z-10" style={{ background: 'linear-gradient(to bottom, transparent, rgba(139,92,246,0.15))' }} />
-          <div className="px-4 mb-6 overflow-hidden">
-            <h2 className="top10-header-scroll text-white font-semibold text-base whitespace-nowrap inline-block">VOYO Top 10</h2>
+          <div className="px-4 mb-6">
+            <div className="overflow-hidden">
+              <h2 className="top10-header-scroll text-white font-semibold text-base whitespace-nowrap inline-block"
+                  style={top10CountdownActive ? { animationPlayState: 'paused' } : undefined}>VOYO Top 10</h2>
+            </div>
+            <p className="top10-subtitle-flash text-[9px] tracking-widest uppercase mt-1"
+               style={{ fontFamily: 'Satoshi, system-ui, sans-serif', fontWeight: 700 }}>
+              This Week · VOYO Certified
+            </p>
           </div>
           <style>{`
+            /* Phase 1 — original gentle drift, kept intact */
             @keyframes top10-header-drift {
               0%   { transform: translateX(0); }
               50%  { transform: translateX(-40%); }
               100% { transform: translateX(0); }
             }
+            /* Phase 2 — added sequence: VOYO exits left, only Top 10 on screen */
+            @keyframes top10-header-deep {
+              0%    { transform: translateX(0); }
+              15%   { transform: translateX(-30%); }
+              30%   { transform: translateX(0); }
+              38%   { transform: translateX(0); }
+              52%   { transform: translateX(-67%); }
+              72%   { transform: translateX(-67%); }
+              88%   { transform: translateX(0); }
+              100%  { transform: translateX(0); }
+            }
             .top10-header-scroll {
-              animation: top10-header-drift 8s ease-in-out infinite;
+              animation: top10-header-drift 8s ease-in-out 1,
+                         top10-header-deep  20s ease-in-out 8s infinite;
+            }
+            /* Subtitle: invisible during Phase 1, neon-pink flash on Phase 2 deep hold,
+               settles to VOYO gold before fading out */
+            @keyframes top10-subtitle-flash {
+              0%, 44%   { opacity: 0; transform: translateY(3px); }
+              50%       { opacity: 1; transform: translateY(0);
+                          color: #FF5FA0;
+                          text-shadow: 0 0 8px #FF1493, 0 0 18px rgba(255,20,147,0.45), 0 0 32px rgba(255,20,147,0.2); }
+              62%       { opacity: 1;
+                          color: rgba(212,160,83,0.9);
+                          text-shadow: 0 0 6px rgba(212,160,83,0.3); }
+              70%       { opacity: 0.75; }
+              76%       { opacity: 0; transform: translateY(0); }
+              100%      { opacity: 0; }
+            }
+            .top10-subtitle-flash {
+              opacity: 0;
+              animation: top10-subtitle-flash 20s ease-in-out 8s infinite;
             }
             @keyframes top10-marquee {
               0% { transform: translateX(0); }
@@ -2346,7 +2427,7 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
             }
             .top10-scroll-title {
               display: inline-block;
-              animation: top10-marquee 7.2s linear infinite;
+              animation: top10-marquee 10s linear infinite;
             }
           `}</style>
           <div className="flex gap-6 px-4 overflow-x-auto scrollbar-hide" style={{ scrollSnapType: 'x proximity', paddingBottom: '60px' }}>
@@ -2360,9 +2441,11 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
               const strokeWidth = isPodium ? '2px' : '3px';
               const numberGlow = index === 0 ? '0 0 30px rgba(255, 215, 0, 0.5)' : index === 1 ? '0 0 20px rgba(192, 192, 192, 0.4)' : index === 2 ? '0 0 20px rgba(205, 127, 50, 0.4)' : '0 0 25px rgba(157, 78, 221, 0.5), 3px 3px 0 rgba(0,0,0,0.6)';
 
+              const isActive = top10CountdownActive && top10ActiveIdx === index;
               return (
                 <button
                   key={track.id}
+                  ref={(el) => { top10CardRefs.current[index] = el; }}
                   className="flex-shrink-0 flex items-end relative"
                   onClick={() => onTrackPlay(track, { openFull: true })}
                   style={{ scrollSnapAlign: 'start' }}
@@ -2376,18 +2459,44 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
                       zIndex: 1,
                       color: numberFill,
                       WebkitTextStroke: `${strokeWidth} ${numberStroke}`,
-                      textShadow: numberGlow,
+                      textShadow: isActive
+                        ? index === 0
+                          ? '0 0 60px rgba(255,215,0,0.9), 0 0 100px rgba(255,215,0,0.5)'
+                          : index === 1
+                            ? '0 0 50px rgba(230,230,200,0.9), 0 0 80px rgba(255,215,0,0.45)'
+                            : '0 0 50px rgba(139,92,246,0.9), 0 0 80px rgba(157,78,221,0.5)'
+                        : numberGlow,
                       fontFamily: 'Arial Black, sans-serif',
+                      transition: 'text-shadow 0.6s ease',
                     }}
                   >
                     {index + 1}
                   </div>
                   <div className="relative" style={{ zIndex: 2 }}>
-                    <div className="absolute -inset-2 rounded-full opacity-40" style={{
-                      background: 'radial-gradient(circle, rgba(157,78,221,0.5) 0%, transparent 70%)',
-                      filter: 'blur(8px)',
+                    <div className="absolute -inset-2 rounded-full" style={{
+                      opacity: isActive ? 0.8 : 0.4,
+                      background: isActive
+                        ? index === 0
+                          ? 'radial-gradient(circle, rgba(255,215,0,0.85) 0%, rgba(212,160,83,0.45) 40%, transparent 70%)'
+                          : index === 1
+                            ? 'radial-gradient(circle, rgba(230,230,205,0.8) 0%, rgba(255,215,0,0.42) 40%, transparent 70%)'
+                            : 'radial-gradient(circle, rgba(139,92,246,0.9) 0%, rgba(157,78,221,0.5) 40%, transparent 70%)'
+                        : 'radial-gradient(circle, rgba(157,78,221,0.5) 0%, transparent 70%)',
+                      filter: isActive ? 'blur(14px)' : 'blur(8px)',
+                      transition: 'background 0.6s ease, opacity 0.6s ease, filter 0.5s ease',
                     }} />
-                    <div className="relative rounded-full overflow-hidden" style={{ width: '85px', height: '85px', boxShadow: '0 4px 20px rgba(0,0,0,0.5), 0 0 20px rgba(157,78,221,0.2)' }}>
+                    <div className="relative rounded-full overflow-hidden" style={{
+                      width: '85px',
+                      height: '85px',
+                      boxShadow: isActive
+                        ? index === 0
+                          ? '0 4px 20px rgba(0,0,0,0.5), 0 0 50px rgba(255,215,0,0.85), 0 0 90px rgba(255,215,0,0.45), 0 0 150px rgba(212,160,83,0.3)'
+                          : index === 1
+                            ? '0 4px 20px rgba(0,0,0,0.5), 0 0 45px rgba(220,220,200,0.8), 0 0 80px rgba(255,215,0,0.42), 0 0 130px rgba(192,192,192,0.22)'
+                            : '0 4px 20px rgba(0,0,0,0.5), 0 0 40px rgba(139,92,246,0.85), 0 0 72px rgba(139,92,246,0.48), 0 0 110px rgba(157,78,221,0.22)'
+                        : '0 4px 20px rgba(0,0,0,0.5), 0 0 20px rgba(157,78,221,0.2)',
+                      transition: 'box-shadow 0.6s ease',
+                    }}>
                       <SmartImage
                         src={getThumb(track.trackId)}
                         alt={track.title}
@@ -2411,8 +2520,9 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
                       </p>
                     </div>
                     <div className="overflow-hidden mx-auto" style={{ width: '100px' }}>
-                      <p className={`text-white/50 text-[9px] whitespace-nowrap ${artistNeedsScroll ? 'top10-scroll-title' : ''}`} style={{ animationDelay: '1s' }}>
-                        {artistNeedsScroll ? <>{track.artist}<span className="mx-3">•</span>{track.artist}<span className="mx-3">•</span></> : track.artist}
+                      <p className={`whitespace-nowrap ${artistNeedsScroll ? 'top10-scroll-title' : ''}`}
+                         style={{ animationDelay: '1.4s', fontSize: '9px', fontFamily: "'Fraunces', Georgia, serif", fontStyle: 'italic', fontWeight: 300, color: 'rgba(255,255,255,0.38)', letterSpacing: '0.01em' }}>
+                        {artistNeedsScroll ? <>{track.artist}<span className="mx-3">·</span>{track.artist}<span className="mx-3">·</span></> : track.artist}
                       </p>
                     </div>
                     <div className="flex items-center justify-center gap-0.5 mt-0.5">
