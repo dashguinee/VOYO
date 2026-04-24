@@ -510,8 +510,13 @@ export const AudioPlayer = () => {
     // BG transition: bgEngine fires capture-phase visibilitychange BEFORE this
     // pause event, setting isTransitioningToBackgroundRef. The browser forcibly
     // pauses the element on screen-lock — don't let that kill isPlaying or we
-    // wake up to a dead player. bgEngine re-kicks on FG return.
+    // wake up to a dead player. Try to restore immediately; heartbeat (4s) is
+    // the fallback if the play() call is refused.
     if (isTransitioningToBackgroundRef.current) {
+      if (usePlayerStore.getState().isPlaying) {
+        const el = audioRef.current;
+        if (el && !el.ended) el.play().catch(() => {});
+      }
       return;
     }
     // Involuntary pause on R2 — typically a brief buffer underrun in the
@@ -617,7 +622,7 @@ export const AudioPlayer = () => {
         navigator.mediaSession.setPositionState({
           duration: dur,
           position: Math.min(position, dur),
-          playbackRate: 1,
+          playbackRate: usePlayerStore.getState().playbackRate,
         });
       } catch {}
     }
