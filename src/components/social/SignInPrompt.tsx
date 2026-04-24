@@ -432,8 +432,8 @@ export const VoyoLiveCard = ({ onSwitchToVOYO }: VoyoLiveCardProps = {}) => {
               {cardMode === 'next' && nextTrack ? (
                 <div key="copy-next" style={{ animation: 'voyo-absorb-in 400ms cubic-bezier(0.4,0,0.2,1) forwards' }}>
                   <p className="text-[9px] font-black tracking-widest uppercase mb-0.5" style={{ color: 'rgba(212,160,83,0.95)' }}>Next Up</p>
-                  <p className="text-white font-bold text-sm leading-tight truncate">{nextTrack.title}</p>
-                  <p className="text-white/70 text-xs truncate mt-0.5">{nextTrack.artist}</p>
+                  <p className="text-white font-bold text-sm leading-tight truncate">{nextTrack.track.title}</p>
+                  <p className="text-white/70 text-xs truncate mt-0.5">{nextTrack.track.artist}</p>
                 </div>
               ) : (
                 <div key="copy-community">
@@ -531,11 +531,11 @@ export const VoyoLiveCard = ({ onSwitchToVOYO }: VoyoLiveCardProps = {}) => {
                 >
                   {nextTrack ? (
                     <iframe
-                      src={`https://www.youtube.com/embed/${nextTrack.trackId}?autoplay=1&mute=1&controls=0&playsinline=1&loop=1&playlist=${nextTrack.trackId}&start=30`}
+                      src={`https://www.youtube.com/embed/${nextTrack.track.trackId}?autoplay=1&mute=1&controls=0&playsinline=1&loop=1&playlist=${nextTrack.track.trackId}&start=30`}
                       allow="autoplay; encrypted-media"
                       allowFullScreen={false}
                       className="w-full h-full border-0 scale-[1.4] pointer-events-none"
-                      title={nextTrack.title}
+                      title={nextTrack.track.title}
                     />
                   ) : currentTrack ? (
                     <img src={getThumb(currentTrack.trackId, 'high')} alt="" className="w-full h-full object-cover" />
