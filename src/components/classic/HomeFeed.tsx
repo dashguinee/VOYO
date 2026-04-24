@@ -2417,38 +2417,40 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
             </p>
           </div>
           <style>{`
-            /* Header — drifts left, VOYO exits, Top 10 glows gold at peak, lands with glow */
+            /* Header — compositor-only: only transform + color animate */
             @keyframes top10-header-drift {
-              0%        { transform: translateX(0);    color: #fff; text-shadow: 0 0 16px rgba(212,160,83,0.5), 0 0 32px rgba(139,92,246,0.28); }
-              7%        { transform: translateX(0);    color: #fff; text-shadow: none; }
-              33%       { transform: translateX(-43%); color: rgba(220,167,75,0.97); text-shadow: 0 0 22px rgba(212,160,83,0.8), 0 0 44px rgba(212,160,83,0.45), 0 0 72px rgba(139,92,246,0.22); }
-              65%       { transform: translateX(-43%); color: rgba(220,167,75,0.97); text-shadow: 0 0 22px rgba(212,160,83,0.8), 0 0 44px rgba(212,160,83,0.45), 0 0 72px rgba(139,92,246,0.22); }
-              93%       { transform: translateX(0);    color: #fff; text-shadow: none; }
-              96%, 100% { transform: translateX(0);    color: #fff; text-shadow: 0 0 16px rgba(212,160,83,0.5), 0 0 32px rgba(139,92,246,0.28); }
+              0%        { transform: translateX(0);    color: #fff; text-shadow: 0 0 14px rgba(212,160,83,0.4), 0 0 28px rgba(139,92,246,0.22); }
+              8%        { transform: translateX(0);    color: #fff; text-shadow: none; }
+              34%       { transform: translateX(-43%); color: rgba(220,167,75,0.95); text-shadow: 0 0 20px rgba(212,160,83,0.75), 0 0 40px rgba(212,160,83,0.38); }
+              64%       { transform: translateX(-43%); color: rgba(220,167,75,0.95); text-shadow: 0 0 20px rgba(212,160,83,0.75), 0 0 40px rgba(212,160,83,0.38); }
+              92%       { transform: translateX(0);    color: #fff; text-shadow: none; }
+              96%, 100% { transform: translateX(0);    color: #fff; text-shadow: 0 0 14px rgba(212,160,83,0.4), 0 0 28px rgba(139,92,246,0.22); }
             }
             .top10-header-scroll {
               animation: top10-header-drift 22s ease-in-out infinite;
+              will-change: transform;
             }
-            /* BG radial glow — synced to same 22s cycle */
+            /* BG glow — opacity-only = compositor thread */
             @keyframes top10-bg-pulse {
-              0%, 6%    { opacity: 0.35; }
-              33%, 65%  { opacity: 1; }
-              94%, 100% { opacity: 0.35; }
+              0%, 7%    { opacity: 0.3; }
+              34%, 64%  { opacity: 1; }
+              93%, 100% { opacity: 0.3; }
             }
             .top10-bg-glow {
-              background: radial-gradient(ellipse 90% 70% at 50% 50%, rgba(139,92,246,0.22) 0%, rgba(139,92,246,0.08) 50%, transparent 80%);
+              background: radial-gradient(ellipse 90% 70% at 50% 50%, rgba(139,92,246,0.2) 0%, rgba(139,92,246,0.07) 50%, transparent 80%);
               animation: top10-bg-pulse 22s ease-in-out infinite;
+              will-change: opacity;
             }
-            /* Subtitle — soft reveal on fast scroll, delayed 280ms in JS, warm white → gold → fade */
+            /* Subtitle — soft reveal on fast scroll */
             @keyframes top10-subtitle-flash {
-              0%   { opacity: 0; transform: translateY(5px); color: rgba(255,255,255,0.6); text-shadow: none; }
-              20%  { opacity: 0.75; transform: translateY(0); color: rgba(255,255,255,0.8); text-shadow: 0 0 10px rgba(212,160,83,0.2); }
-              55%  { opacity: 0.65; color: rgba(212,160,83,0.7); text-shadow: 0 0 8px rgba(212,160,83,0.2); }
-              85%  { opacity: 0.3; }
+              0%   { opacity: 0; transform: translateY(4px); }
+              22%  { opacity: 0.7; transform: translateY(0); }
+              60%  { opacity: 0.55; }
               100% { opacity: 0; }
             }
             .top10-subtitle-flash {
               animation: top10-subtitle-flash 4.2s ease forwards;
+              color: rgba(212,160,83,0.75);
             }
             @keyframes top10-marquee {
               0% { transform: translateX(0); }
@@ -2459,7 +2461,7 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
               animation: top10-marquee 10s linear infinite;
             }
           `}</style>
-          <div className="flex gap-6 px-4 overflow-x-auto scrollbar-hide" style={{ scrollSnapType: 'x proximity', paddingBottom: '60px', position: 'relative', zIndex: 1 }} onScroll={handleTop10Scroll}>
+          <div className="flex gap-6 px-4 overflow-x-auto scrollbar-hide" style={{ scrollSnapType: top10CountdownActive ? 'none' : 'x proximity', overscrollBehaviorX: 'contain', paddingBottom: '60px', position: 'relative', zIndex: 1 }} onScroll={handleTop10Scroll}>
             {trending.slice(0, 10).map((track, index) => {
               const maxChars = 12;
               const titleNeedsScroll = track.title.length > maxChars;
@@ -2496,35 +2498,35 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
                             : '0 0 50px rgba(139,92,246,0.9), 0 0 80px rgba(157,78,221,0.5)'
                         : numberGlow,
                       fontFamily: 'Arial Black, sans-serif',
-                      transition: 'text-shadow 0.6s ease',
+                      transition: 'text-shadow 0.8s ease-in-out',
                     }}
                   >
                     {index + 1}
                   </div>
                   <div className="relative" style={{ zIndex: 2 }}>
                     <div className="absolute -inset-2 rounded-full" style={{
-                      opacity: isActive ? 0.8 : 0.4,
-                      background: isActive
-                        ? index === 0
-                          ? 'radial-gradient(circle, rgba(255,215,0,0.85) 0%, rgba(212,160,83,0.45) 40%, transparent 70%)'
-                          : index === 1
-                            ? 'radial-gradient(circle, rgba(230,230,205,0.8) 0%, rgba(255,215,0,0.42) 40%, transparent 70%)'
-                            : 'radial-gradient(circle, rgba(139,92,246,0.9) 0%, rgba(157,78,221,0.5) 40%, transparent 70%)'
-                        : 'radial-gradient(circle, rgba(157,78,221,0.5) 0%, transparent 70%)',
-                      filter: isActive ? 'blur(14px)' : 'blur(8px)',
-                      transition: 'background 0.6s ease, opacity 0.6s ease, filter 0.5s ease',
+                      opacity: isActive ? 0.85 : 0.35,
+                      background: index === 0
+                        ? 'radial-gradient(circle, rgba(255,215,0,0.85) 0%, rgba(212,160,83,0.4) 40%, transparent 70%)'
+                        : index === 1
+                          ? 'radial-gradient(circle, rgba(230,230,205,0.75) 0%, rgba(255,215,0,0.38) 40%, transparent 70%)'
+                          : 'radial-gradient(circle, rgba(139,92,246,0.85) 0%, rgba(157,78,221,0.42) 40%, transparent 70%)',
+                      filter: 'blur(12px)',
+                      transition: 'opacity 0.8s ease-in-out',
+                      willChange: 'opacity',
                     }} />
                     <div className="relative rounded-full overflow-hidden" style={{
                       width: '85px',
                       height: '85px',
                       boxShadow: isActive
                         ? index === 0
-                          ? '0 4px 20px rgba(0,0,0,0.5), 0 0 50px rgba(255,215,0,0.85), 0 0 90px rgba(255,215,0,0.45), 0 0 150px rgba(212,160,83,0.3)'
+                          ? '0 4px 18px rgba(0,0,0,0.5), 0 0 44px rgba(255,215,0,0.8), 0 0 80px rgba(255,215,0,0.38)'
                           : index === 1
-                            ? '0 4px 20px rgba(0,0,0,0.5), 0 0 45px rgba(220,220,200,0.8), 0 0 80px rgba(255,215,0,0.42), 0 0 130px rgba(192,192,192,0.22)'
-                            : '0 4px 20px rgba(0,0,0,0.5), 0 0 40px rgba(139,92,246,0.85), 0 0 72px rgba(139,92,246,0.48), 0 0 110px rgba(157,78,221,0.22)'
-                        : '0 4px 20px rgba(0,0,0,0.5), 0 0 20px rgba(157,78,221,0.2)',
-                      transition: 'box-shadow 0.6s ease',
+                            ? '0 4px 18px rgba(0,0,0,0.5), 0 0 40px rgba(220,220,200,0.75), 0 0 72px rgba(255,215,0,0.35)'
+                            : '0 4px 18px rgba(0,0,0,0.5), 0 0 36px rgba(139,92,246,0.8), 0 0 64px rgba(139,92,246,0.4)'
+                        : '0 4px 18px rgba(0,0,0,0.45), 0 0 16px rgba(157,78,221,0.18)',
+                      transition: 'box-shadow 0.8s ease-in-out',
+                      willChange: 'box-shadow',
                     }}>
                       <SmartImage
                         src={getThumb(track.trackId)}
