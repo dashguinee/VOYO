@@ -2156,7 +2156,7 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
                   className="leading-none"
                   style={{ fontFamily: "'Fraunces', 'Playfair Display', Georgia, serif", fontStyle: 'italic', fontSize: 24, fontWeight: 400, background: 'linear-gradient(100deg, #F4D999 0%, #E6B865 40%, #C4943D 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', filter: 'drop-shadow(0 1px 4px rgba(0,0,0,0.6)) drop-shadow(0 0 14px rgba(212,160,83,0.2))' }}
                 >
-                  All Time Classics
+                  All-Time Classics
                 </h2>
                 <p
                   className="text-[10px] tracking-widest uppercase mt-1 classics-subtitle-shimmer"
@@ -2329,7 +2329,8 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
           {/* Bottom edge fade — purple-tinted */}
           <div className="absolute bottom-0 left-0 right-0 h-10 pointer-events-none z-10" style={{ background: 'linear-gradient(to bottom, transparent, rgba(139,92,246,0.15))' }} />
           <div className="px-4 mb-6">
-            <h2 className="text-white font-semibold text-base">Top 10 on VOYO</h2>
+            <h2 className="text-white font-semibold text-base">VOYO Top 10</h2>
+            <p className="text-[10px] tracking-widest uppercase mt-1" style={{ color: 'rgba(139,92,246,0.75)', fontFamily: 'Satoshi, system-ui, sans-serif', fontWeight: 700 }}>This Week · VOYO Certified</p>
           </div>
           <style>{`
             @keyframes top10-marquee {
