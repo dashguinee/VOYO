@@ -225,6 +225,11 @@ export const AudioPlayer = () => {
       clearTimeout(stallLogTimerRef.current);
       stallLogTimerRef.current = null;
     }
+    // Reset the bgEngine ended-dedup guard. It was set to the previous track's
+    // ID to prevent double-advance during the transition window. Now that a
+    // genuinely different track is starting, clear it so the synthetic-ended
+    // and stuck detectors are fresh for the new track.
+    lastEndedTrackIdRef.current = null;
 
     devLog(`[AudioPlayer] track change: ${currentTrack.trackId}`);
 
@@ -611,6 +616,10 @@ export const AudioPlayer = () => {
       if (el) {
         try { el.currentTime = 0; el.play().catch(() => {}); } catch {}
       }
+      // track-change effect won't re-fire (same trackId) so reset these
+      // per-track refs manually so the next play-through behaves cleanly.
+      completionSignaledRef.current = false;
+      prewarmFiredForRef.current = null;
       store.nextTrack(); // resets progress/currentTime/isPlaying in store
       return;
     }
