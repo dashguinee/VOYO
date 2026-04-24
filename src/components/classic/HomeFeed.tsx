@@ -1782,6 +1782,83 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
     }
   }, [top10CountdownActive]);
 
+  // ── Infinite loop scroll + ambient water ripple ──────────────────────────
+  const feedScrollRef = useRef<HTMLDivElement>(null);
+  const rippleHostRef = useRef<HTMLDivElement>(null);
+  const loopingRef = useRef(false);
+  const [loopFade, setLoopFade] = useState(false);
+  const overscrollYRef = useRef(0);
+  const touchStartFeedYRef = useRef(0);
+  const feedAtBottomRef = useRef(false);
+  const feedAtTopRef = useRef(false);
+
+  // Water ripple — spawned on every empty-space touch
+  useEffect(() => {
+    const scroll = feedScrollRef.current;
+    const host = rippleHostRef.current;
+    if (!scroll || !host) return;
+    let cooldown = false;
+    const onTouch = (e: TouchEvent) => {
+      if (cooldown) return;
+      const target = e.target as HTMLElement;
+      if (target.closest('button,a,input,select,[role="button"]')) return;
+      const t = e.touches[0];
+      const frac = scroll.scrollTop / Math.max(1, scroll.scrollHeight - scroll.clientHeight);
+      const c = frac < 0.3 ? 'rgba(212,160,83,' : 'rgba(139,92,246,';
+      const r = document.createElement('div');
+      Object.assign(r.style, {
+        position: 'fixed', left: `${t.clientX}px`, top: `${t.clientY}px`,
+        width: '6px', height: '6px', borderRadius: '50%',
+        transform: 'translate(-50%,-50%) scale(0)',
+        border: `1px solid ${c}0.38)`, boxShadow: `0 0 8px ${c}0.1)`,
+        pointerEvents: 'none',
+        animation: 'voyo-water-ripple 680ms cubic-bezier(0.2,0.6,0.4,1) forwards',
+      });
+      host.appendChild(r);
+      cooldown = true;
+      setTimeout(() => { cooldown = false; }, 160);
+      setTimeout(() => r.remove(), 700);
+    };
+    scroll.addEventListener('touchstart', onTouch, { passive: true });
+    return () => scroll.removeEventListener('touchstart', onTouch);
+  }, []);
+
+  // Track scroll position for gesture overscroll detection
+  const handleFeedScroll = useCallback(() => {
+    const el = feedScrollRef.current;
+    if (!el) return;
+    const { scrollTop, scrollHeight, clientHeight } = el;
+    feedAtTopRef.current = scrollTop < 8;
+    feedAtBottomRef.current = scrollTop + clientHeight >= scrollHeight - 8;
+  }, []);
+
+  // Overscroll gesture — detect push-past-bottom / push-past-top
+  const onFeedTouchStart = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
+    touchStartFeedYRef.current = e.touches[0].clientY;
+    overscrollYRef.current = 0;
+  }, []);
+
+  const onFeedTouchMove = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
+    const dy = touchStartFeedYRef.current - e.touches[0].clientY; // >0 = finger up = wants more content
+    if (feedAtBottomRef.current && dy > 0) overscrollYRef.current = dy;
+    if (feedAtTopRef.current && dy < 0) overscrollYRef.current = dy; // <0 = finger down at top = wants to go back
+  }, []);
+
+  const onFeedTouchEnd = useCallback(() => {
+    if (loopingRef.current) return;
+    // Bottom overscroll → loop feed back to top
+    if (feedAtBottomRef.current && overscrollYRef.current > 52) {
+      loopingRef.current = true;
+      setLoopFade(true);
+      setTimeout(() => {
+        if (feedScrollRef.current) feedScrollRef.current.scrollTop = 0;
+        setTimeout(() => { setLoopFade(false); loopingRef.current = false; }, 90);
+      }, 280);
+    }
+    // Top overscroll (up gesture) — portal back (wired externally via onSwitchToVOYO when coming from player)
+    overscrollYRef.current = 0;
+  }, []);
+
   // Poll live friend count every 30s while mounted
   useEffect(() => {
     if (!isLoggedIn || !dashId) return;
@@ -2074,7 +2151,33 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
   const hasDiscoverMore = discoverMoreTracks.length > 0;
 
   return (
-    <div className="flex flex-col h-full overflow-y-auto pb-52 scrollbar-hide" style={{ overscrollBehavior: 'none', touchAction: 'pan-y', WebkitOverflowScrolling: 'touch' as never }}>
+    <>
+    {/* Ripple host — fixed viewport layer, receives imperatively added ripple divs */}
+    <div ref={rippleHostRef} style={{ position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 500 }} aria-hidden>
+      <style>{`
+        @keyframes voyo-water-ripple {
+          0%   { transform: translate(-50%,-50%) scale(0); opacity: 0.85; }
+          55%  { opacity: 0.3; }
+          100% { transform: translate(-50%,-50%) scale(42); opacity: 0; }
+        }
+      `}</style>
+    </div>
+    {/* Loop fade overlay — momentary dark veil on loop transition */}
+    <div style={{
+      position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 499,
+      background: 'rgba(6,6,9,0.92)',
+      opacity: loopFade ? 1 : 0,
+      transition: 'opacity 0.28s ease',
+    }} aria-hidden />
+    <div
+      ref={feedScrollRef}
+      className="flex flex-col h-full overflow-y-auto pb-52 scrollbar-hide"
+      style={{ overscrollBehavior: 'none', touchAction: 'pan-y', WebkitOverflowScrolling: 'touch' as never }}
+      onScroll={handleFeedScroll}
+      onTouchStart={onFeedTouchStart}
+      onTouchMove={onFeedTouchMove}
+      onTouchEnd={onFeedTouchEnd}
+    >
       {/* Header — fully transparent, floats over the continuous canvas (April 2026) */}
       <header className="flex items-center justify-between px-4 py-3 sticky top-0 bg-transparent z-10">
         <button
@@ -2712,6 +2815,7 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
         />
       )}
     </div>
+    </>
   );
 };
 
