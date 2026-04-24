@@ -637,21 +637,35 @@ const MomentCard = memo(({ moment, isOyed, onOye, isActive, isMuted, onToggleMut
       <div style={S.grad} />
 
       <div style={S.actBar} data-no-tap-wake="true">
-        <div style={S.actBtn} onClick={onOye}>
+        {/* OYE — primary, activated state always at 100%. Ambient = 85%. */}
+        <div
+          style={{
+            ...S.actBtn,
+            opacity: isOyed ? 1 : 'var(--act-primary, 1)',
+            transition: 'opacity 1s cubic-bezier(0.16, 1, 0.3, 1)',
+          }}
+          onClick={onOye}
+        >
           <div style={actIcon(isOyed)}>
             <Heart size={20} style={{ color: isOyed ? '#a78bfa' : '#fff', fill: isOyed ? '#a78bfa' : 'none', transition: 'all 0.2s ease' }} />
           </div>
           <span style={{ ...S.actLbl, color: isOyed ? '#a78bfa' : 'rgba(255,255,255,0.6)' }}>OYE</span>
         </div>
-        <div style={S.actBtn}>
+        {/* Reactions — primary, ambient 85%. */}
+        <div style={{ ...S.actBtn, opacity: 'var(--act-primary, 1)', transition: 'opacity 1s cubic-bezier(0.16, 1, 0.3, 1)' }}>
           <div style={actIcon(false)}><Flame size={20} style={{ color: '#fff' }} /></div>
           <span style={S.actLbl}>{formatCount(moment.voyo_reactions || 0)}</span>
         </div>
-        <div style={S.actBtn} onClick={(e) => { e.stopPropagation(); onOpenComments?.(); }}>
+        {/* Comments — secondary, ambient 95%. */}
+        <div
+          style={{ ...S.actBtn, opacity: 'var(--act-secondary, 1)', transition: 'opacity 1s cubic-bezier(0.16, 1, 0.3, 1)' }}
+          onClick={(e) => { e.stopPropagation(); onOpenComments?.(); }}
+        >
           <div style={actIcon(false)}><MessageCircle size={20} style={{ color: '#fff' }} /></div>
           <span style={S.actLbl}>{formatCount(moment.comment_count || 0)}</span>
         </div>
-        <div style={S.actBtn}>
+        {/* Share — secondary, ambient 95%. */}
+        <div style={{ ...S.actBtn, opacity: 'var(--act-secondary, 1)', transition: 'opacity 1s cubic-bezier(0.16, 1, 0.3, 1)' }}>
           <div style={actIcon(false)}><ExternalLink size={18} style={{ color: '#fff' }} /></div>
           <span style={S.actLbl}>Share</span>
         </div>
@@ -1252,6 +1266,7 @@ export const VoyoMoments: React.FC<VoyoMomentsProps> = ({ onPlayFullTrack, onArt
   // / long-press position modal. Cleanup on unmount so the nav doesn't
   // stay dimmed if the user leaves the feed.
   const setFeedNavDim = usePlayerStore(s => s.setFeedNavDim);
+  const feedNavDim = usePlayerStore(s => s.feedNavDim);
   const swipeCountRef = useRef(0);
   const dimTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const armDimTimer = useCallback(() => {
@@ -1534,7 +1549,23 @@ export const VoyoMoments: React.FC<VoyoMomentsProps> = ({ onPlayFullTrack, onArt
   const effectiveTotalInCategory = isMixMode ? mixedMoments.length : totalInCategory;
 
   return (
-    <div ref={containerRef} style={S.container} onTouchStart={onTS} onTouchMove={onTM} onTouchEnd={onTE}>
+    <div
+      ref={containerRef}
+      style={{
+        ...S.container,
+        // Action-rail ambient dim — driven by the same feedNavDim flag the
+        // navbar uses, so chrome breathes together. Primary buttons (OYE +
+        // reactions) drop to 85%; secondary (Comments + Share) to 95%.
+        // OYE button overrides to 100% when isOyed (activated stays full).
+        // Transition handled per-button so each button's opacity eases in
+        // ~1s — same Apple curve as the navbar fade.
+        '--act-primary':   feedNavDim ? '0.85' : '1',
+        '--act-secondary': feedNavDim ? '0.95' : '1',
+      } as React.CSSProperties}
+      onTouchStart={onTS}
+      onTouchMove={onTM}
+      onTouchEnd={onTE}
+    >
       {/* SIDE SHADOWS — frame the video with subtle vertical gradients */}
       <div style={S.sideShadowL} />
       <div style={S.sideShadowR} />
