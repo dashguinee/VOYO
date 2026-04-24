@@ -1041,43 +1041,64 @@ const BackdropLibrary = ({
 };
 
 // ============================================
-// MINI PLAYER BUTTON — single unified toggle. Used to dual-label as
-// "Video" vs "Mini Player" depending on playbackSource; collapsed to
-// one consistent affordance ("Mini Player") so users aren't weighing
-// two verbs at mid-tap. Always wears the purple-glow live-dot treatment
-// — iframe audio is the signal that tapping does something useful.
-// `isIframeAudio` still drives the pulse (when off, button is quiet
-// but discoverable; when on, it's actively inviting the tap).
+// MINI PLAYER TOGGLE — single unified toggle. Collapsed label to
+// "Mini Player" (was dual "Video"/"Mini Player") so users aren't
+// weighing two verbs at mid-tap. Always wears the purple-glow live-dot
+// treatment; `isIframeAudio` drives the pulse.
 //
-// After 30s the whole button dims to 80% opacity — text, contour, glow
-// all fade uniformly so it stops demanding attention after the user has
-// had plenty of time to notice it. Still available, just ambient.
+// Two decay layers, composed:
+//   · t=5s  → enter DIMMED MODE — smaller padding + smaller text +
+//             softer contour glow + less saturated background. This
+//             is a real variant, not just opacity — the button
+//             structurally recedes while staying tappable on the right.
+//   · t=30s → further fade to 80% opacity (entire button, uniform).
+// Net effect: initial invitation → ambient chip → steady-state glance.
 // ============================================
 const ExpandVideoButton = memo(({ onClick, isIframeAudio }: { onClick: () => void; isIframeAudio: boolean }) => {
-  const [dimmed, setDimmed] = useState(false);
+  const [mode, setMode] = useState<'active' | 'dimmed'>('active');
+  const [extraFaded, setExtraFaded] = useState(false);
   useEffect(() => {
-    const t = setTimeout(() => setDimmed(true), 30000);
-    return () => clearTimeout(t);
+    const t1 = setTimeout(() => setMode('dimmed'), 5000);
+    const t2 = setTimeout(() => setExtraFaded(true), 30000);
+    return () => { clearTimeout(t1); clearTimeout(t2); };
   }, []);
+
+  const isDimmed = mode === 'dimmed';
 
   return (
     <button
       onClick={onClick}
-      className="absolute top-3 right-3 z-30 px-3 py-1.5 rounded-full backdrop-blur-sm border text-white text-xs font-medium flex items-center gap-1.5 min-h-[44px] active:scale-95 border-purple-400/60 hover:border-purple-400/80"
+      className={`absolute top-3 right-3 z-30 rounded-full backdrop-blur-sm border text-white font-medium flex items-center active:scale-95 ${
+        isDimmed
+          ? 'px-2 py-1 gap-1 text-[10px] min-h-[36px] border-purple-400/40'
+          : 'px-3 py-1.5 gap-1.5 text-xs min-h-[44px] border-purple-400/60 hover:border-purple-400/80'
+      }`}
       style={{
-        background: 'rgba(139,92,246,0.22)',
-        boxShadow: '0 0 16px rgba(139,92,246,0.5), 0 0 28px rgba(139,92,246,0.25)',
-        animation: isIframeAudio ? 'voyo-iframe-pulse 1.6s ease-in-out infinite' : 'none',
-        opacity: dimmed ? 0.8 : 1,
-        transition: 'opacity 1.4s cubic-bezier(0.16, 1, 0.3, 1)',
+        background: isDimmed ? 'rgba(139,92,246,0.14)' : 'rgba(139,92,246,0.22)',
+        boxShadow: isDimmed
+          ? '0 0 9px rgba(139,92,246,0.28), 0 0 16px rgba(139,92,246,0.14)'
+          : '0 0 16px rgba(139,92,246,0.5), 0 0 28px rgba(139,92,246,0.25)',
+        animation: isIframeAudio && !isDimmed ? 'voyo-iframe-pulse 1.6s ease-in-out infinite' : 'none',
+        opacity: extraFaded ? 0.8 : 1,
+        transition: [
+          'padding 700ms cubic-bezier(0.16, 1, 0.3, 1)',
+          'background 900ms cubic-bezier(0.16, 1, 0.3, 1)',
+          'box-shadow 900ms cubic-bezier(0.16, 1, 0.3, 1)',
+          'border-color 900ms cubic-bezier(0.16, 1, 0.3, 1)',
+          'font-size 700ms cubic-bezier(0.16, 1, 0.3, 1)',
+          'opacity 1.4s cubic-bezier(0.16, 1, 0.3, 1)',
+        ].join(', '),
       }}
       aria-label="Open mini player"
     >
       <span
-        className="w-1.5 h-1.5 rounded-full bg-purple-300"
-        style={{ boxShadow: '0 0 6px rgba(196,181,253,0.9)' }}
+        className={`rounded-full bg-purple-300 ${isDimmed ? 'w-1 h-1' : 'w-1.5 h-1.5'}`}
+        style={{
+          boxShadow: isDimmed ? '0 0 4px rgba(196,181,253,0.65)' : '0 0 6px rgba(196,181,253,0.9)',
+          transition: 'box-shadow 900ms cubic-bezier(0.16, 1, 0.3, 1)',
+        }}
       />
-      <Play size={12} fill="currentColor" />
+      <Play size={isDimmed ? 10 : 12} fill="currentColor" />
       <span>Mini Player</span>
     </button>
   );
