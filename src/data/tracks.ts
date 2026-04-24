@@ -84,7 +84,7 @@ export const VIBES: Vibe[] = [
     color: '#F4A23E',
     gradient: 'from-amber-500 via-orange-500 to-amber-700',
     description: 'Afrobeats • Amapiano',
-    image: '/vibes/dash.png', // hero — Dash (central card)
+    image: '/vibes/ai-party.png',
   },
   {
     id: 'chill-vibes',
