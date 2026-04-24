@@ -1996,15 +1996,125 @@ interface NextVoyageShelfProps {
   onPlaylist: (track: Track) => void;
 }
 
-const NextVoyageShelf = memo(({ tracks, onPlay, onPlaylist }: NextVoyageShelfProps) => (
-  <ShelfWithRefresh title="Next Voyage">
-    {tracks.map((track) => (
-      <CardHoldActions key={track.id} track={track} onPlaylist={() => onPlaylist(track)}>
-        <TrackCard track={track} onPlay={onPlay} />
-      </CardHoldActions>
-    ))}
-  </ShelfWithRefresh>
-));
+// END-OF-RAIL DWELL: after the user scrolls to the final marker and it
+// sits in view for 10s, the message fades out while the rail rubber-bands
+// back — the "release pause" gesture from premium iOS apps, where a held
+// element dissolves after you let go. Two orchestrated moves:
+//   · scrollLeft eases back by the marker's width (700ms, material easing)
+//   · marker opacity + max-width both fall to 0 (500ms, starts 200ms in)
+// The offset gives a soft mask instead of a cliff.
+const END_DWELL_MS = 10000;
+const END_COLLAPSE_MS = 700;
+
+const NextVoyageShelf = memo(({ tracks, onPlay, onPlaylist }: NextVoyageShelfProps) => {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const endRef = useRef<HTMLDivElement>(null);
+  const [dismissed, setDismissed] = useState(false);
+
+  // Reset dismissed state if the track set changes (new voyage = new chance
+  // to see the message).
+  useEffect(() => { setDismissed(false); }, [tracks]);
+
+  useEffect(() => {
+    if (dismissed) return;
+    const el = endRef.current;
+    if (!el) return;
+    let dwellTimer: ReturnType<typeof setTimeout> | null = null;
+    const obs = new IntersectionObserver((entries) => {
+      const entry = entries[0];
+      if (entry.isIntersecting && entry.intersectionRatio >= 0.6) {
+        if (dwellTimer) return;
+        dwellTimer = setTimeout(() => {
+          // Rubber-band: start the scroll-back first, then collapse the
+          // marker mid-ease so the two transitions chain into one smooth
+          // release instead of a visible cliff.
+          const container = scrollRef.current;
+          const width = el.offsetWidth;
+          if (container) {
+            container.scrollTo({
+              left: Math.max(0, container.scrollLeft - width),
+              behavior: 'smooth',
+            });
+          }
+          setTimeout(() => setDismissed(true), 200);
+        }, END_DWELL_MS);
+      } else {
+        if (dwellTimer) { clearTimeout(dwellTimer); dwellTimer = null; }
+      }
+    }, { threshold: [0, 0.6, 0.9] });
+    obs.observe(el);
+    return () => {
+      obs.disconnect();
+      if (dwellTimer) clearTimeout(dwellTimer);
+    };
+  }, [dismissed]);
+
+  return (
+    <div className="mb-10">
+      <div className="flex justify-between items-center px-4 mb-5">
+        <h2 className="text-white font-semibold text-base">Next Voyage</h2>
+      </div>
+      <div
+        ref={scrollRef}
+        className="flex gap-4 px-4 overflow-x-auto scrollbar-hide"
+        style={{ scrollSnapType: 'x proximity', WebkitOverflowScrolling: 'touch' }}
+      >
+        {tracks.map((track) => (
+          <CardHoldActions key={track.id} track={track} onPlaylist={() => onPlaylist(track)}>
+            <TrackCard track={track} onPlay={onPlay} />
+          </CardHoldActions>
+        ))}
+        {/* End-of-rail marker — Apple-style two-line sign-off. Appears after
+            the last card; dwells 10s in view then rubber-bands the rail
+            back and masks itself off. */}
+        <div
+          ref={endRef}
+          aria-hidden={dismissed}
+          style={{
+            flexShrink: 0,
+            maxWidth: dismissed ? 0 : 180,
+            opacity: dismissed ? 0 : 1,
+            transition: `max-width ${END_COLLAPSE_MS}ms cubic-bezier(0.16, 1, 0.3, 1), opacity 500ms ease-out`,
+            overflow: 'hidden',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            minHeight: 140,
+          }}
+        >
+          <div className="text-center px-4 select-none pointer-events-none">
+            <p
+              className="leading-none"
+              style={{
+                fontFamily: "'Fraunces', 'Playfair Display', Georgia, serif",
+                fontStyle: 'italic',
+                fontSize: 20,
+                fontWeight: 600,
+                color: 'rgba(255,255,255,0.92)',
+                letterSpacing: '-0.01em',
+              }}
+            >
+              That&rsquo;s All
+            </p>
+            <p
+              className="leading-none mt-1.5"
+              style={{
+                fontFamily: "'Fraunces', 'Playfair Display', Georgia, serif",
+                fontStyle: 'italic',
+                fontSize: 14,
+                fontWeight: 400,
+                color: 'rgba(255,255,255,0.42)',
+                letterSpacing: '-0.005em',
+              }}
+            >
+              For Now
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+});
 NextVoyageShelf.displayName = 'NextVoyageShelf';
 
 interface ArtistRadarShelfProps {
@@ -2456,11 +2566,13 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
   // Keep Expanding Horizons = top slice of the discovery stream.
   // (Was 25 lines of inline fallbacks; now the pool does the lifting.)
   const discoverMoreTracks = useMemo(
-    () => pools.discovery.slice(0, 15),
+    () => pools.discovery.slice(0, 25),
     [pools.discovery],
   );
-  // Top-12 sliced view for the Next Voyage shelf — stable ref for memo.
-  const discoverMoreTracks12 = useMemo(() => discoverMoreTracks.slice(0, 12), [discoverMoreTracks]);
+  // Top-21 sliced view for the Next Voyage shelf — stable ref for memo.
+  // 21 cards give the rail enough depth to feel immersive before the
+  // "That's All / For Now" sign-off lands.
+  const discoverMoreTracks21 = useMemo(() => discoverMoreTracks.slice(0, 21), [discoverMoreTracks]);
 
   // OYO's Picks = hot stream with favorite-artist bubble + de-dup vs the
   // row above. Compact because pools.hot already did the behavior rerank.
@@ -2925,7 +3037,7 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
           churn doesn't bleed into the 12-card map. */}
       {hasDiscoverMore && (
         <NextVoyageShelf
-          tracks={discoverMoreTracks12}
+          tracks={discoverMoreTracks21}
           onPlay={playTrackFull}
           onPlaylist={setPlaylistModalTrack}
         />
