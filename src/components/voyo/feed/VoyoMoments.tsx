@@ -52,21 +52,53 @@ function formatCount(n: number): string {
 
 type SlideDir = 'up' | 'down' | 'left' | 'right' | null;
 
-function slideVariants(dir: SlideDir, isSurrender: boolean = false) {
-  const axis = dir === 'up' || dir === 'down' ? 'y' : 'x';
+// Dissolve-scroll wrapper — ONE signature gesture (per "premium =
+// restraint"). 600ms crossfade, 10% directional translate, no scale,
+// no breath, no parallax. Outgoing fades 1→0 while drifting toward
+// exit direction; incoming fades 0→1 while drifting in from entry
+// direction. Apple easing — cubic-bezier(0.16, 1, 0.3, 1).
+//
+// Mount-time `phase: 'pre'` style sets the BEFORE values; rAF flips to
+// `'post'` (the AFTER values) so the CSS transition picks up the diff.
+// React's standard transition pattern; no animation library needed.
+const FadeWrapper = memo(({ children, dir, role }: { children: React.ReactNode; dir: SlideDir; role: 'outgoing' | 'incoming' }) => {
+  const [phase, setPhase] = useState<'pre' | 'post'>('pre');
+  useEffect(() => {
+    const id = requestAnimationFrame(() => setPhase('post'));
+    return () => cancelAnimationFrame(id);
+  }, []);
+
   const sign = dir === 'up' || dir === 'left' ? 1 : dir === 'down' || dir === 'right' ? -1 : 0;
-  const hScale = dir === 'left' || dir === 'right' ? 0.92 : 1;
+  const axis = dir === 'up' || dir === 'down' ? 'Y' : 'X';
+  const offsetPct = 10; // % of viewport — restrained (Dash: "more on the fade side")
 
-  // Surrender directions get subtle rotation and scale variance
-  const rotateIn = isSurrender ? (Math.random() - 0.5) * 3 : 0;
-  const scaleIn = isSurrender ? 0.95 + Math.random() * 0.05 : hScale;
+  let initial: React.CSSProperties;
+  let final: React.CSSProperties;
+  if (role === 'outgoing') {
+    // Held position → drifts further in the direction it's leaving.
+    initial = { opacity: 1, transform: `translate${axis}(0%)` };
+    final   = { opacity: 0, transform: `translate${axis}(${-sign * offsetPct}%)` };
+  } else {
+    // Comes in from the entry side → settles at center.
+    initial = { opacity: 0, transform: `translate${axis}(${sign * offsetPct}%)` };
+    final   = { opacity: 1, transform: `translate${axis}(0%)` };
+  }
 
-  return {
-    initial: { [axis]: `${sign * 100}%`, opacity: 0.7, scale: scaleIn, rotate: rotateIn },
-    animate: { [axis]: 0, opacity: 1, scale: 1, rotate: 0 },
-    exit: { [axis]: `${-sign * 100}%`, opacity: 0.5, scale: hScale, rotate: -rotateIn },
-  };
-}
+  const live = phase === 'pre' ? initial : final;
+  return (
+    <div
+      style={{
+        ...live,
+        position: 'absolute', inset: 0,
+        transition: 'opacity 600ms cubic-bezier(0.16, 1, 0.3, 1), transform 600ms cubic-bezier(0.16, 1, 0.3, 1)',
+        willChange: 'opacity, transform',
+      }}
+    >
+      {children}
+    </div>
+  );
+});
+FadeWrapper.displayName = 'FadeWrapper';
 
 // ============================================
 // COMPACT STYLES
@@ -1293,7 +1325,25 @@ export const VoyoMoments: React.FC<VoyoMomentsProps> = ({ onPlayFullTrack, onArt
     }
   }, [showOverlay, setFeedNavDim, armDimTimer]);
 
+  // Dissolve-scroll outgoing snapshot — the moment we're leaving. Held
+  // for 700ms (slightly longer than the 600ms crossfade so the outgoing
+  // FadeWrapper has time to finish its transition before unmount).
+  const [prevMoment, setPrevMoment] = useState<Moment | null>(null);
+  const [transitionDir, setTransitionDir] = useState<SlideDir>(null);
+  const transitionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const nav = useCallback((dir: SlideDir, fn: () => void) => {
+    // Capture outgoing BEFORE fn() advances the feed so prevMoment holds
+    // the moment that's leaving, not the one that just arrived.
+    if (currentMoment) {
+      setPrevMoment(currentMoment);
+      setTransitionDir(dir);
+      if (transitionTimerRef.current) clearTimeout(transitionTimerRef.current);
+      transitionTimerRef.current = setTimeout(() => {
+        setPrevMoment(null);
+        setTransitionDir(null);
+      }, 700);
+    }
     setSlideDir(dir);
     setMKey(p => p + 1);
     fn();
@@ -1301,7 +1351,12 @@ export const VoyoMoments: React.FC<VoyoMomentsProps> = ({ onPlayFullTrack, onArt
     // is a parallel trigger — whichever fires first sticks.
     swipeCountRef.current += 1;
     if (swipeCountRef.current >= 5) setFeedNavDim(true);
-  }, [setFeedNavDim]);
+  }, [currentMoment, setFeedNavDim]);
+
+  // Cleanup any pending transition timer on unmount.
+  useEffect(() => () => {
+    if (transitionTimerRef.current) clearTimeout(transitionTimerRef.current);
+  }, []);
 
   // MIX mode navigation wrappers — override UP/DOWN to step through mixed feed
   const mixGoUp = useCallback((velocity?: number) => {
@@ -1477,9 +1532,9 @@ export const VoyoMoments: React.FC<VoyoMomentsProps> = ({ onPlayFullTrack, onArt
     if (starHoldTimer.current) clearTimeout(starHoldTimer.current);
   }, []);
 
-  const isSurrender = navAction === 'down' || navAction === 'right';
-  const sv = slideVariants(slideDir, isSurrender);
-  const spring = getSpring(navAction);
+  // slideVariants + sv removed — they were leftover from a stripped
+  // framer-motion impl and never wired. Dissolve-scroll (FadeWrapper)
+  // handles transitions now.
   const isOyed = currentMoment ? oyedMoments.has(currentMoment.id) : false;
 
   const handleOyeBtn = useCallback(() => {
@@ -1676,27 +1731,51 @@ export const VoyoMoments: React.FC<VoyoMomentsProps> = ({ onPlayFullTrack, onArt
           <span>Loading moments...</span>
         </div>
       ) : currentMoment ? (
-        <div key={`m-${currentMoment.id}-${mKey}`} style={{ position: 'absolute', inset: 0, transition: 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)' }}>
-          <MomentCard
-            moment={currentMoment}
-            isOyed={isOyed}
-            onOye={handleOyeBtn}
-            isActive={true}
-            isMuted={isMuted}
-            onToggleMute={showVolBadge}
-            onPlayTrack={currentMoment.parent_track_id && onPlayFullTrack ? () => onPlayFullTrack({
-              id: currentMoment.parent_track_id!,
-              title: currentMoment.parent_track_title || 'Unknown',
-              artist: currentMoment.parent_track_artist || 'Unknown Artist',
-            }) : undefined}
-            onArtistTap={onArtistTap}
-            onOpenComments={handleOpenComments}
-            showOrb={showOrb}
-            showName={showName}
-            showTitle={showTitle}
-            showBioBody={showBioBody}
-          />
-        </div>
+        <>
+          {/* Outgoing — only mounts during the 700ms transition window.
+              isActive={false} so its video pauses (audio stops doubling
+              up while two cards briefly coexist). */}
+          {prevMoment && transitionDir && prevMoment.id !== currentMoment.id && (
+            <FadeWrapper key={`prev-${prevMoment.id}`} dir={transitionDir} role="outgoing">
+              <MomentCard
+                moment={prevMoment}
+                isOyed={oyedMoments.has(prevMoment.id)}
+                onOye={() => {}}
+                isActive={false}
+                isMuted={true}
+                onToggleMute={() => {}}
+                onArtistTap={onArtistTap}
+                showOrb={false}
+                showName={false}
+                showTitle={false}
+                showBioBody={false}
+              />
+            </FadeWrapper>
+          )}
+          {/* Incoming — keyed by moment id so each new moment runs a
+              fresh enter from offset+0 opacity to 0+1 over 600ms. */}
+          <FadeWrapper key={`curr-${currentMoment.id}-${mKey}`} dir={transitionDir} role="incoming">
+            <MomentCard
+              moment={currentMoment}
+              isOyed={isOyed}
+              onOye={handleOyeBtn}
+              isActive={true}
+              isMuted={isMuted}
+              onToggleMute={showVolBadge}
+              onPlayTrack={currentMoment.parent_track_id && onPlayFullTrack ? () => onPlayFullTrack({
+                id: currentMoment.parent_track_id!,
+                title: currentMoment.parent_track_title || 'Unknown',
+                artist: currentMoment.parent_track_artist || 'Unknown Artist',
+              }) : undefined}
+              onArtistTap={onArtistTap}
+              onOpenComments={handleOpenComments}
+              showOrb={showOrb}
+              showName={showName}
+              showTitle={showTitle}
+              showBioBody={showBioBody}
+            />
+          </FadeWrapper>
+        </>
       ) : (
         <div key="empty" style={S.empty} className="animate-[voyo-fade-in_0.3s_ease]">
           {/* Visual anchor — purple gradient halo with sparkle icon. Makes
