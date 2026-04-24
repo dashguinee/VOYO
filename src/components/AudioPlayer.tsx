@@ -344,6 +344,9 @@ export const AudioPlayer = () => {
           el2.loop = false;
           el2.src = `${R2_AUDIO}/${getYouTubeId(currentTrack.trackId)}?q=high`;
           setSource('r2');
+          // Explicit play() — mirrors fast path. handleCanPlay also calls play()
+          // but isPlaying might be false by then if AbortError ran the old catch.
+          el2.play().catch(() => {});
           logPlaybackEvent({ event_type: 'play_start', track_id: currentTrack.trackId, source: 'r2', meta: { subtype: 'probe_found' } });
         }).catch(() => {
           if (!isStale()) usePlayerStore.getState().nextTrack();
@@ -412,7 +415,11 @@ export const AudioPlayer = () => {
     trackSwapInProgressRef.current = false;
     const el = audioRef.current;
     if (el && usePlayerStore.getState().isPlaying) {
-      el.play().catch(() => setIsPlaying(false));
+      el.play().catch((e: unknown) => {
+        // AbortError = src was swapped mid-play (silent-WAV → R2 transition).
+        // isPlaying must stay true so the next canplay can call play() on R2.
+        if ((e as { name?: string })?.name !== 'AbortError') setIsPlaying(false);
+      });
     }
     // Recovered — cancel any pending stall-log.
     if (stallLogTimerRef.current) {
@@ -480,7 +487,9 @@ export const AudioPlayer = () => {
       // Without this guard, a race between handleEnded setting trackSwapInProgress
       // and the browser's pause event fires el.play() on the dead element → replay.
       if (el && !el.ended) {
-        el.play().catch(() => setIsPlaying(false));
+        el.play().catch((e: unknown) => {
+          if ((e as { name?: string })?.name !== 'AbortError') setIsPlaying(false);
+        });
         return;
       }
     }
