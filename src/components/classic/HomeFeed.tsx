@@ -1725,8 +1725,10 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
     const el = top10SectionRef.current;
     if (!el) return;
     let fired = false;
+    let mounted = true; // guard against state updates after unmount
     const observer = new IntersectionObserver(
       ([entry]) => {
+        if (!mounted) return;
         if (entry.isIntersecting && !fired) {
           top10DwellTimerRef.current = setTimeout(() => {
             fired = true;
@@ -1751,6 +1753,7 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
     );
     observer.observe(el);
     return () => {
+      mounted = false;
       observer.disconnect();
       if (top10DwellTimerRef.current) clearTimeout(top10DwellTimerRef.current);
       if (top10CountdownIntervalRef.current) clearInterval(top10CountdownIntervalRef.current);
@@ -1787,7 +1790,8 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
   const rippleHostRef = useRef<HTMLDivElement>(null);
   const audioGlowRef = useRef<HTMLDivElement>(null);
   const loopingRef = useRef(false);
-  const [loopFade, setLoopFade] = useState(false);
+  const loopFadeOverlayRef = useRef<HTMLDivElement>(null);
+  const loopTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   const overscrollYRef = useRef(0);
   const touchStartFeedYRef = useRef(0);
   const touchStartFeedXRef = useRef(0);
@@ -1806,6 +1810,7 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
     let curX = 0, curY = 0, targetX = 0, targetY = 0;
     let lastRingX = 0, lastRingY = 0, lastRingTime = 0;
     let touching = false;
+    const ringTimers: ReturnType<typeof setTimeout>[] = [];
 
     const color = () => {
       const frac = scroll.scrollTop / Math.max(1, scroll.scrollHeight - scroll.clientHeight);
@@ -1835,7 +1840,7 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
       });
       wrap.appendChild(inner);
       host.appendChild(wrap);
-      setTimeout(() => wrap.remove(), dur + 20);
+      ringTimers.push(setTimeout(() => wrap.remove(), dur + 20));
     };
 
     const tick = () => {
@@ -1854,6 +1859,9 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
       curY = targetY = t.clientY;
       lastRingX = t.clientX; lastRingY = t.clientY; lastRingTime = Date.now();
       touching = true;
+      // Cancel any lingering aura from a previous rapid tap before creating a new one
+      if (auraEl) { auraEl.remove(); auraEl = null; }
+      cancelAnimationFrame(rafId);
       spawnRing(t.clientX, t.clientY, 'tap');
       const c = color();
       auraEl = document.createElement('div');
@@ -1901,11 +1909,13 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
     scroll.addEventListener('touchmove', onTouchMove, { passive: true });
     scroll.addEventListener('touchend', onTouchEnd, { passive: true });
     return () => {
+      touching = false;
       scroll.removeEventListener('touchstart', onTouchStart);
       scroll.removeEventListener('touchmove', onTouchMove);
       scroll.removeEventListener('touchend', onTouchEnd);
       cancelAnimationFrame(rafId);
-      if (auraEl) auraEl.remove();
+      if (auraEl) { auraEl.remove(); auraEl = null; }
+      ringTimers.forEach(clearTimeout);
     };
   }, []);
 
@@ -1961,11 +1971,17 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
     // Bottom overscroll → loop feed back to top
     if (feedAtBottomRef.current && overscrollYRef.current > 52) {
       loopingRef.current = true;
-      setLoopFade(true);
-      setTimeout(() => {
+      const overlay = loopFadeOverlayRef.current;
+      if (overlay) overlay.style.opacity = '1';
+      const t1 = setTimeout(() => {
         if (feedScrollRef.current) feedScrollRef.current.scrollTop = 0;
-        setTimeout(() => { setLoopFade(false); loopingRef.current = false; }, 90);
+        const t2 = setTimeout(() => {
+          if (overlay) overlay.style.opacity = '0';
+          loopingRef.current = false;
+        }, 90);
+        loopTimersRef.current.push(t2);
       }, 280);
+      loopTimersRef.current.push(t1);
     }
     // Top overscroll (up gesture) — portal back (wired externally via onSwitchToVOYO when coming from player)
     overscrollYRef.current = 0;
@@ -2057,6 +2073,7 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
   useEffect(() => {
     return () => {
       if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+      loopTimersRef.current.forEach(clearTimeout);
     };
   }, []);
   // ───────────────────────────────────────────────────────────────────────────
@@ -2295,10 +2312,10 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
       `}</style>
     </div>
     {/* Loop fade overlay — above ripple host (501 > 500) so ripples don't bleed through */}
-    <div style={{
+    <div ref={loopFadeOverlayRef} style={{
       position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 501,
       background: 'rgba(6,6,9,0.92)',
-      opacity: loopFade ? 1 : 0,
+      opacity: 0,
       transition: 'opacity 0.28s ease',
     }} aria-hidden />
     <div
@@ -2654,12 +2671,12 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
           <style>{`
             /* Header — compositor-only: only transform + color animate */
             @keyframes top10-header-drift {
-              0%        { transform: translateX(0);    color: #fff; text-shadow: 0 0 14px rgba(212,160,83,0.4), 0 0 28px rgba(139,92,246,0.22); }
-              8%        { transform: translateX(0);    color: #fff; text-shadow: none; }
-              34%       { transform: translateX(-43%); color: rgba(220,167,75,0.95); text-shadow: 0 0 20px rgba(212,160,83,0.75), 0 0 40px rgba(212,160,83,0.38); }
-              64%       { transform: translateX(-43%); color: rgba(220,167,75,0.95); text-shadow: 0 0 20px rgba(212,160,83,0.75), 0 0 40px rgba(212,160,83,0.38); }
-              92%       { transform: translateX(0);    color: #fff; text-shadow: none; }
-              96%, 100% { transform: translateX(0);    color: #fff; text-shadow: 0 0 14px rgba(212,160,83,0.4), 0 0 28px rgba(139,92,246,0.22); }
+              0%        { transform: translateX(0);    color: #fff; }
+              8%        { transform: translateX(0);    color: #fff; }
+              34%       { transform: translateX(-43%); color: rgba(220,167,75,0.95); }
+              64%       { transform: translateX(-43%); color: rgba(220,167,75,0.95); }
+              92%       { transform: translateX(0);    color: #fff; }
+              96%, 100% { transform: translateX(0);    color: #fff; }
             }
             .top10-header-scroll {
               animation: top10-header-drift 22s ease-in-out infinite;
