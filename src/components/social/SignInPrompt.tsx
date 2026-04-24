@@ -89,6 +89,9 @@ export const VoyoLiveCard = ({ onSwitchToVOYO }: VoyoLiveCardProps = {}) => {
   // Progress thresholds — 1 at start, then 3 spaced through the track.
   const NEXT_SHOW_AT = [0.07, 0.38, 0.65, 0.86];
   const shownCountRef = useRef(0);
+  // Double-tap detection: single tap = open player, double tap = toggle Next Up
+  const lastTapRef = useRef(0);
+  const tapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Entry+exit transition duration for every cycling element. Picked
   // long enough to read as "absorbed" (not a hard swap), short enough
@@ -239,6 +242,7 @@ export const VoyoLiveCard = ({ onSwitchToVOYO }: VoyoLiveCardProps = {}) => {
     return () => {
       if (animationRef.current) cancelAnimationFrame(animationRef.current);
       document.removeEventListener('visibilitychange', handleVisibility);
+      if (tapTimerRef.current) clearTimeout(tapTimerRef.current);
     };
   }, []);
 
@@ -354,13 +358,28 @@ export const VoyoLiveCard = ({ onSwitchToVOYO }: VoyoLiveCardProps = {}) => {
         <div
           className="relative overflow-hidden rounded-2xl cursor-pointer"
           onClick={() => {
-            // Switch to VOYO Player if callback provided, otherwise open NowPlaying panel
-            if (onSwitchToVOYO) {
-              onSwitchToVOYO();
-            } else if (currentTrack) {
-              setShouldOpenNowPlaying(true);
+            const now = Date.now();
+            const gap = now - lastTapRef.current;
+            if (gap < 280 && gap > 0) {
+              // Double tap — toggle Next Up manually
+              if (tapTimerRef.current) clearTimeout(tapTimerRef.current);
+              lastTapRef.current = 0;
+              if (cardMode === 'next') {
+                dissolveTargetRef.current = 'community';
+                setCardMode('dissolve');
+              } else if (cardMode === 'community') {
+                dissolveTargetRef.current = 'next';
+                setCardMode('dissolve');
+              }
+              return;
             }
-            }}
+            lastTapRef.current = now;
+            // Single tap — delayed so double-tap can intercept
+            tapTimerRef.current = setTimeout(() => {
+              if (onSwitchToVOYO) onSwitchToVOYO();
+              else if (currentTrack) setShouldOpenNowPlaying(true);
+            }, 280);
+          }}
         >
           {/* Background gradient — previous layer sits behind, solid. */}
           <div
