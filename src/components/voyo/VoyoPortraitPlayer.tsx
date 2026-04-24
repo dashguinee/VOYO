@@ -1401,20 +1401,15 @@ const PortalBelt = memo(({ tracks, onTap, onQueueAdd, playedTrackIds, type, mixM
       const entranceZone = cardWidth * 1.5;
       if (x < entranceZone) {
         const progress = Math.max(0, x / entranceZone);
-        return {
-          opacity: 0.4 + progress * 0.6,
-          filter: `drop-shadow(0 0 ${(1 - progress) * 8}px rgba(181, 74, 46, 0.6))`,
-        };
+        // opacity-only fade — filter: drop-shadow() in rAF caused per-frame paint
+        return { opacity: 0.4 + progress * 0.6 };
       }
     } else {
-      // DISCOVERY: Cards enter from RIGHT, add bronze glow fade-in
+      // DISCOVERY: Cards enter from RIGHT, opacity fade-in (no filter — compositor safe)
       const entranceZone = containerWidth - cardWidth * 1.5;
       if (x > entranceZone) {
         const progress = Math.max(0, (containerWidth - x) / (cardWidth * 1.5));
-        return {
-          opacity: 0.4 + progress * 0.6,
-          filter: `drop-shadow(0 0 ${(1 - progress) * 8}px rgba(212, 160, 83, 0.6))`,
-        };
+        return { opacity: 0.4 + progress * 0.6 };
       }
     }
     return { opacity: 1, filter: 'none' };
@@ -3526,6 +3521,12 @@ export const VoyoPortraitPlayer = ({
   const isPlaying = usePlayerStore(s => s.isPlaying);
   const videoTarget = usePlayerStore(s => s.videoTarget);
   const setVideoTarget = usePlayerStore(s => s.setVideoTarget);
+
+  // Community-layer 5-rail needs Heart state at this scope (RightToolbar has
+  // its own copy inside its memo). Subscribing here gives the rail direct
+  // read+write without prop-drilling through the huge Layer C body.
+  const trackPreferences = usePreferenceStore(s => s.trackPreferences);
+  const setExplicitLike = usePreferenceStore(s => s.setExplicitLike);
   // Subscribe to playbackSource so the Mini Player button can pulse when
   // audio is flowing through the iframe (between track-start and hot-swap).
   const playbackSource = usePlayerStore(s => s.playbackSource);
@@ -3664,6 +3665,26 @@ export const VoyoPortraitPlayer = ({
   const partyModePunches = useMemo(() => getCommunityPunches('party-mode'), [getCommunityPunches]);
   const lateNightPunches = useMemo(() => getCommunityPunches('late-night'), [getCommunityPunches]);
   const workoutPunches = useMemo(() => getCommunityPunches('workout'), [getCommunityPunches]);
+
+  // Flat community feed for the Layer C extended view — all mood categories
+  // interleaved with mood tags + colors. Current track's punches float to top.
+  // Same shape will feed Lives / Events streams when those land.
+  const communityFeed = useMemo(() => {
+    const tag = (list: CommunityPunch[], mood: string, neon: string, glow: string) =>
+      list.map(p => ({ punch: p, mood, neon, glow }));
+    const all = [
+      ...tag(afroHeatPunches,   'afro heat',   '#D4A053', 'rgba(212,160,83,0.35)'),
+      ...tag(chillVibesPunches, 'chill vibes', '#a78bfa', 'rgba(167,139,250,0.35)'),
+      ...tag(partyModePunches,  'party mode',  '#f472b6', 'rgba(244,114,182,0.35)'),
+      ...tag(lateNightPunches,  'late night',  '#818cf8', 'rgba(129,140,248,0.35)'),
+      ...tag(workoutPunches,    'workout',     '#fb923c', 'rgba(251,146,60,0.35)'),
+    ];
+    const nowId = currentTrack?.trackId;
+    if (!nowId) return all;
+    const here = all.filter(x => x.punch.trackId === nowId);
+    const rest = all.filter(x => x.punch.trackId !== nowId);
+    return [...here, ...rest];
+  }, [afroHeatPunches, chillVibesPunches, partyModePunches, lateNightPunches, workoutPunches, currentTrack?.trackId]);
 
   // Handle punch click - navigate to track's expand view
   const handlePunchClick = useCallback((punch: CommunityPunch) => {
@@ -5856,205 +5877,278 @@ export const VoyoPortraitPlayer = ({
       </div>
 
       {/* ╔═════════════════════════════════════════════════════════════╗
-          ║ LAYER C — AMBIENT CANVAS (the "while you jam" surface)      ║
+          ║ PORTAL VEIL — dark overlay that peaks mid-transition        ║
+          ║ Clone of HomeFeed's loop-fade overlay (lines ~2527). Makes  ║
+          ║ the scroll-down feel like a port (player → community),     ║
+          ║ not a gradual fade. Opacity peaks around portalProgress     ║
+          ║ 0.5 and clears again by 0.7 as Layer C fades in.            ║
+          ╚═════════════════════════════════════════════════════════════╝ */}
+      <div
+        aria-hidden
+        style={{
+          position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 49,
+          background: 'rgba(6,6,9,0.95)',
+          opacity: Math.max(0, 0.92 - Math.abs(portalProgress - 0.5) * 3.8),
+          transition: 'opacity 0.12s linear',
+        }}
+      />
+
+      {/* ╔═════════════════════════════════════════════════════════════╗
+          ║ LAYER C — COMMUNITY LAYER (the reactions/comments surface)  ║
           ║                                                              ║
-          ║ Lives in the SAME physical slot as Layer B — absolutely     ║
-          ║ positioned over the music shelf. Step 2 of the portal       ║
-          ║ scroll fades it in IN PLACE so the visual footprint never   ║
-          ║ shifts and the faded Layer B sits behind it as ambient      ║
-          ║ depth. Vibes cards reborn from the existing mix modes,      ║
-          ║ hold-to-flood the mix board. The OYO chat slot lives at the ║
-          ║ top — same room, different focus.                            ║
+          ║ Scroll-down port from the player. Same shell will host      ║
+          ║ Lives and Events — only the stream content swaps. The       ║
+          ║ 5-control rail (Video, Heart, Oye★, Next Up, Share) stays   ║
+          ║ pinned at the bottom so the current track is always         ║
+          ║ actionable while you read the community.                    ║
+          ║                                                              ║
+          ║ Height expands to full viewport past portalProgress 0.55    ║
+          ║ so the community IS the view — anchor layer below.          ║
           ╚═════════════════════════════════════════════════════════════╝ */}
       <div
         className="absolute left-0 right-0 px-4 pt-4 pb-6 overflow-y-auto scrollbar-hide z-50"
         style={{
-          // Anchor to the same slot Layer B occupies (bottom 360px).
+          // Anchored to bottom; expands to full screen past the portal crossing
+          // so the community takes over the entire viewport.
           bottom: 0,
-          height: cubeDockOpen ? '480px' : '360px',
-          // Step 2 fade: Layer C is invisible until portalProgress
-          // crosses 0.55, then fades in fast. Below that it's hidden.
+          height: portalProgress > 0.55
+            ? '100vh'
+            : (cubeDockOpen ? '480px' : '360px'),
           opacity: portalProgress < 0.55 ? 0 : Math.min(1, (portalProgress - 0.55) / 0.35),
           pointerEvents: portalProgress > 0.6 ? 'auto' : 'none',
           transform: `translateY(${Math.max(0, (1 - portalProgress) * 24)}px)`,
           transition: 'opacity 0.22s ease-out, transform 0.22s ease-out, height 0.5s cubic-bezier(0.16, 1, 0.3, 1)',
-          background: 'linear-gradient(180deg, rgba(8,8,12,0.20) 0%, rgba(15,12,24,0.65) 22%, rgba(15,12,24,0.92) 100%)',
-          backdropFilter: 'blur(12px) saturate(140%)',
-          WebkitBackdropFilter: 'blur(12px) saturate(140%)',
+          background: 'linear-gradient(180deg, rgba(8,8,12,0.35) 0%, rgba(15,12,24,0.88) 18%, rgba(10,10,15,0.97) 100%)',
+          backdropFilter: 'blur(16px) saturate(140%)',
+          WebkitBackdropFilter: 'blur(16px) saturate(140%)',
         }}
       >
-        {/* Canvas header — the "while you jam" tagline + OYO chat slot */}
-        <div className="text-center mb-5">
-          <div className="text-[10px] tracking-[0.25em] uppercase text-white/40 mb-1">while you jam</div>
-          <div className="text-[13px]" style={{ color: '#D4A053', textShadow: '0 0 12px rgba(212,160,83,0.4)' }}>
-            {currentTrack ? `vibes around "${currentTrack.title.slice(0, 28)}"` : 'pick your next move'}
+        {/* Header — track context (thumb + title). Small, grounding the
+            feed in the currently-playing track. Same slot will hold the
+            Live session / Event banner when those modes ship. */}
+        <div className="flex items-center gap-3 mb-4 pt-1">
+          {currentTrack && (
+            <img
+              src={getTrackThumbnailUrl(currentTrack, 'high')}
+              alt=""
+              className="w-11 h-11 rounded-xl object-cover flex-shrink-0"
+              style={{ boxShadow: '0 0 16px rgba(139,92,246,0.25)' }}
+            />
+          )}
+          <div className="flex-1 min-w-0">
+            <div className="text-[9px] tracking-[0.3em] uppercase text-white/40">community · vibes</div>
+            <div className="text-[13px] text-white/90 truncate font-medium">
+              {currentTrack ? currentTrack.title : 'pick a track to see the room'}
+            </div>
+          </div>
+          <div
+            className="text-[10px] px-2 py-1 rounded-full"
+            style={{
+              color: '#D4A053',
+              background: 'rgba(212,160,83,0.10)',
+              border: '1px solid rgba(212,160,83,0.22)',
+            }}
+          >
+            {communityFeed.length}
           </div>
         </div>
 
-        {/* OYO DJ chat slot — surface entry, hold cube or scroll deeper */}
-        <button
-          onClick={() => setShowOyoIsland(true)}
-          className="w-full mb-5 rounded-2xl p-4 text-left active:scale-[0.98] transition-transform"
+        {/* Community feed — punches stream as comment cards. Current track's
+            punches float to the top. Empty state invites the user to start. */}
+        <div className="flex flex-col gap-2 pb-28">
+          {communityFeed.length === 0 ? (
+            <div className="text-center py-16 text-white/40 text-[12px]">
+              <div className="text-2xl mb-2 opacity-60">🎉</div>
+              no vibes yet<br/>
+              <span className="text-[10px] text-white/30">hit OYÉ to start the conversation</span>
+            </div>
+          ) : (
+            communityFeed.map(({ punch, mood, neon, glow }) => {
+              const isCurrent = currentTrack?.trackId === punch.trackId;
+              return (
+                <button
+                  key={punch.id}
+                  onClick={() => handlePunchClick(punch)}
+                  className="flex items-start gap-3 p-3 rounded-2xl text-left active:scale-[0.98] transition-transform"
+                  style={{
+                    background: isCurrent
+                      ? `linear-gradient(135deg, ${glow.replace(/0\.[0-9]+/, '0.10')} 0%, rgba(15,12,24,0.65) 100%)`
+                      : 'rgba(255,255,255,0.03)',
+                    border: `1px solid ${isCurrent ? glow.replace(/0\.[0-9]+/, '0.25') : 'rgba(255,255,255,0.06)'}`,
+                  }}
+                >
+                  <div
+                    className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 text-lg"
+                    style={{
+                      background: `radial-gradient(circle, ${glow.replace(/0\.[0-9]+/, '0.25')} 0%, rgba(15,12,24,0.8) 70%)`,
+                      boxShadow: `0 0 10px ${glow.replace(/0\.[0-9]+/, '0.20')}`,
+                    }}
+                  >
+                    {punch.emoji}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-0.5">
+                      <span className="text-[11px] font-semibold text-white/80 truncate">@{punch.username}</span>
+                      <span
+                        className="text-[8px] px-1.5 py-0.5 rounded-full flex-shrink-0 uppercase tracking-wider font-bold"
+                        style={{ color: neon, background: glow.replace(/0\.[0-9]+/, '0.10') }}
+                      >
+                        {mood}
+                      </span>
+                    </div>
+                    <div className="text-[13px] text-white/90 leading-snug">{punch.text}</div>
+                    {!isCurrent && (
+                      <div className="text-[9px] text-white/35 mt-1 truncate">on "{punch.trackTitle}"</div>
+                    )}
+                  </div>
+                </button>
+              );
+            })
+          )}
+        </div>
+
+        {/* ═══════════════════════════════════════════════════════════════
+            5-CONTROL RAIL — Video · Heart · Oye★ · Next Up · Share
+            Sticky inside Layer C so it stays visible as the user scrolls
+            through comments. Oye★ is centered + oversized with the
+            gateway halo (pulsing purple ring) that identifies it as the
+            reaction entry point. This is the SAME rail shape Lives and
+            Events will use — only the handlers change.
+            ═══════════════════════════════════════════════════════════════ */}
+        <div
+          className="sticky bottom-0 -mx-4 px-4 pt-4 pb-3 z-10"
           style={{
-            background: 'linear-gradient(135deg, rgba(139,92,246,0.18) 0%, rgba(212,160,83,0.10) 100%)',
-            border: '1px solid rgba(212,160,83,0.18)',
-            boxShadow: '0 0 24px rgba(139,92,246,0.12), inset 0 1px 0 rgba(255,255,255,0.04)',
+            background: 'linear-gradient(180deg, rgba(10,10,15,0) 0%, rgba(10,10,15,0.85) 30%, rgba(10,10,15,0.98) 100%)',
           }}
         >
-          <div className="flex items-center gap-3">
-            <div
-              className="w-10 h-10 rounded-2xl flex items-center justify-center flex-shrink-0"
-              style={{
-                background: 'linear-gradient(135deg, #8b5cf6, #6d28d9)',
-                boxShadow: '0 0 16px rgba(139,92,246,0.4)',
+          <div className="flex items-center justify-around gap-2">
+            {/* Video */}
+            <button
+              onClick={async () => {
+                const ok = await pipService.enter();
+                if (!ok) setVideoTarget('portrait');
+                haptics.light();
               }}
+              className="w-11 h-11 rounded-full flex items-center justify-center active:scale-90 transition-transform"
+              style={{
+                background: 'rgba(28,28,35,0.65)',
+                border: '1px solid rgba(255,255,255,0.08)',
+                backdropFilter: 'blur(8px)',
+              }}
+              aria-label="Expand video"
+              title="Video"
             >
-              <span className="text-white font-black text-[10px] tracking-tight">OYO</span>
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="text-[12px] text-white/90 font-medium">Talk to OYO</div>
-              <div className="text-[10px] text-white/40 mt-0.5">tell me what you want next</div>
-            </div>
-            <div className="text-white/30 text-lg">→</div>
-          </div>
-        </button>
+              <Film size={16} className="text-white/75" />
+            </button>
 
-        {/* VIBES CARDS — each existing mix mode as a canvas-resident card.
-            Tap to boost, hold to flood the mix board with this vibe. */}
-        <div className="flex flex-col gap-3">
-          {DEFAULT_MIX_MODES.map((mode) => {
-            const boostLevel = modeBoosts[mode.id] || 0;
-            const isActive = isModeActive(mode.id);
-            return (
-              <button
-                key={mode.id}
-                onClick={() => handleModeBoost(mode.id)}
-                onPointerDown={(e) => {
-                  // Hold ~500ms → flood the mix board with this vibe
-                  const tgt = e.currentTarget;
-                  const tid = setTimeout(() => {
-                    handleModeToQueueWithIntent(mode.id);
-                    haptics.medium();
-                    tgt.style.transform = 'scale(0.97)';
-                    setTimeout(() => { tgt.style.transform = ''; }, 180);
-                  }, 500);
-                  (tgt as HTMLButtonElement & { __holdTimer?: ReturnType<typeof setTimeout> }).__holdTimer = tid;
-                }}
-                onPointerUp={(e) => {
-                  const tgt = e.currentTarget as HTMLButtonElement & { __holdTimer?: ReturnType<typeof setTimeout> };
-                  if (tgt.__holdTimer) clearTimeout(tgt.__holdTimer);
-                }}
-                onPointerLeave={(e) => {
-                  const tgt = e.currentTarget as HTMLButtonElement & { __holdTimer?: ReturnType<typeof setTimeout> };
-                  if (tgt.__holdTimer) clearTimeout(tgt.__holdTimer);
-                }}
-                className="relative w-full rounded-2xl p-4 text-left overflow-hidden active:scale-[0.98] transition-transform"
-                style={{
-                  background: `linear-gradient(135deg, ${mode.glow.replace('0.5', '0.18').replace('0.4', '0.14').replace('0.45', '0.16').replace('0.55', '0.20')} 0%, rgba(15,12,24,0.85) 100%)`,
-                  border: `1px solid ${isActive ? mode.neon : 'rgba(255,255,255,0.06)'}`,
-                  boxShadow: isActive
-                    ? `0 0 24px ${mode.glow}, inset 0 0 12px ${mode.glow}`
-                    : `0 0 16px ${mode.glow.replace(/0\.[0-9]+/, '0.10')}`,
-                }}
+            {/* Heart / Like */}
+            <button
+              onClick={() => {
+                if (!currentTrack?.trackId) return;
+                const liked = trackPreferences[currentTrack.trackId]?.explicitLike === true;
+                setExplicitLike(currentTrack.trackId, !liked);
+                haptics.success();
+              }}
+              className="w-11 h-11 rounded-full flex items-center justify-center active:scale-90 transition-transform"
+              style={{
+                background: currentTrack?.trackId && trackPreferences[currentTrack.trackId]?.explicitLike
+                  ? 'rgba(139,92,246,0.25)'
+                  : 'rgba(28,28,35,0.65)',
+                border: currentTrack?.trackId && trackPreferences[currentTrack.trackId]?.explicitLike
+                  ? '1px solid rgba(139,92,246,0.55)'
+                  : '1px solid rgba(255,255,255,0.08)',
+                backdropFilter: 'blur(8px)',
+              }}
+              aria-label="Like"
+              title="Heart"
+            >
+              <Heart
+                size={16}
+                className={
+                  currentTrack?.trackId && trackPreferences[currentTrack.trackId]?.explicitLike
+                    ? 'text-purple-400 fill-purple-400'
+                    : 'text-white/75'
+                }
+              />
+            </button>
+
+            {/* OYÉ★ — Gateway button, centered + oversized with pulsing halo */}
+            <button
+              onClick={() => {
+                if (currentTrack) {
+                  handleReaction('oye' as ReactionType, '🎉', 'OYÉ', 1);
+                  haptics.medium();
+                }
+              }}
+              className="relative w-14 h-14 rounded-full flex items-center justify-center active:scale-95 transition-transform"
+              style={{
+                background: 'linear-gradient(135deg, rgba(212,160,83,0.30) 0%, rgba(139,92,246,0.20) 100%)',
+                border: '1px solid rgba(212,160,83,0.55)',
+                boxShadow: '0 0 20px rgba(212,160,83,0.35), inset 0 1px 0 rgba(255,255,255,0.10)',
+              }}
+              aria-label="OYÉ — react"
+              title="OYÉ"
+            >
+              {/* Gateway halo — pulsing ring identifies the unified Oye entry */}
+              <div
+                className="absolute inset-0 rounded-full border-2 border-purple-400/50 pointer-events-none"
+                style={{ animation: 'voyo-oye-halo 1.6s ease-in-out infinite' }}
+              />
+              <span
+                className="text-[11px] font-black tracking-tight"
+                style={{ color: '#D4A053', textShadow: '0 0 8px rgba(212,160,83,0.6)' }}
               >
-                <div className="flex items-center justify-between">
-                  <div className="flex-1 min-w-0">
-                    <div
-                      className="text-[14px] font-bold mb-0.5"
-                      style={{ color: mode.neon, textShadow: `0 0 10px ${mode.glow}` }}
-                    >
-                      {mode.title}
-                    </div>
-                    <div className="text-[11px] text-white/50">
-                      {mode.taglines[0]}
-                    </div>
-                  </div>
-                  {/* Boost level dots */}
-                  <div className="flex gap-1 ml-3">
-                    {Array.from({ length: 6 }).map((_, i) => (
-                      <div
-                        key={i}
-                        className="w-1 rounded-full transition-all"
-                        style={{
-                          height: i < boostLevel ? '14px' : '6px',
-                          background: i < boostLevel ? mode.neon : 'rgba(255,255,255,0.15)',
-                          boxShadow: i < boostLevel ? `0 0 6px ${mode.glow}` : 'none',
-                        }}
-                      />
-                    ))}
-                  </div>
-                </div>
-                {/* Hold hint — only on first card to teach the gesture */}
-                {mode.id === 'afro-heat' && portalProgress > 0.7 && (
-                  <div className="absolute bottom-1 right-3 text-[8px] text-white/30 italic">
-                    hold to flood
-                  </div>
-                )}
-              </button>
-            );
-          })}
-        </div>
+                OYÉ
+              </span>
+            </button>
 
-        {/* ===== OYÉ OPTIONS — react to what's playing without leaving =====
-            The four reactions live here in Layer C as a horizontal row.
-            Tap = quick reaction, hold = stronger (matches the existing
-            reaction store flow). Lets the user OYÉ a track from the
-            ambient canvas without going back to the player chrome. */}
-        <div className="mt-6 mb-2">
-          <div className="text-[10px] tracking-[0.25em] uppercase text-white/40 mb-2 px-1">react</div>
-          <div className="flex gap-2">
-            {[
-              { type: 'oyo', label: 'OYO', emoji: '👋', neon: '#a78bfa', glow: 'rgba(167,139,250,0.4)' },
-              { type: 'oye', label: 'OYÉ', emoji: '🎉', neon: '#D4A053', glow: 'rgba(212,160,83,0.5)' },
-              { type: 'wazzguan', label: 'Wazzguán', emoji: '🤙', neon: '#a8a29e', glow: 'rgba(168,162,158,0.35)' },
-              { type: 'fire', label: 'Fireee', emoji: '🔥', neon: '#D4A053', glow: 'rgba(212,160,83,0.5)' },
-            ].map((r) => (
-              <button
-                key={r.type}
-                onClick={() => {
-                  if (currentTrack) {
-                    handleReaction(r.type as ReactionType, r.emoji, r.label, 1);
-                    haptics.light();
-                  }
-                }}
-                className="flex-1 rounded-2xl p-3 flex flex-col items-center gap-1 active:scale-95 transition-transform"
-                style={{
-                  background: `linear-gradient(135deg, ${r.glow.replace(/0\.[0-9]+/, '0.12')} 0%, rgba(15,12,24,0.7) 100%)`,
-                  border: `1px solid ${r.glow.replace(/0\.[0-9]+/, '0.18')}`,
-                  boxShadow: `0 0 10px ${r.glow.replace(/0\.[0-9]+/, '0.10')}`,
-                }}
-              >
-                <span className="text-lg leading-none">{r.emoji}</span>
-                <span
-                  className="text-[9px] font-bold tracking-wide"
-                  style={{ color: r.neon, textShadow: `0 0 6px ${r.glow}` }}
-                >
-                  {r.label}
-                </span>
-              </button>
-            ))}
+            {/* Next Up — skip to next track */}
+            <button
+              onClick={() => { handleNextTrack(); haptics.light(); }}
+              className="w-11 h-11 rounded-full flex items-center justify-center active:scale-90 transition-transform"
+              style={{
+                background: 'rgba(28,28,35,0.65)',
+                border: '1px solid rgba(255,255,255,0.08)',
+                backdropFilter: 'blur(8px)',
+              }}
+              aria-label="Next up"
+              title="Next Up"
+            >
+              <SkipForward size={16} className="text-white/75" />
+            </button>
+
+            {/* Share */}
+            <button
+              onClick={() => {
+                if (currentTrack && navigator.share) {
+                  navigator.share({
+                    title: currentTrack.title,
+                    text: `Listen to ${currentTrack.title} by ${currentTrack.artist} on VOYO`,
+                    url: window.location.href,
+                  }).catch(() => {});
+                }
+                haptics.light();
+              }}
+              className="w-11 h-11 rounded-full flex items-center justify-center active:scale-90 transition-transform"
+              style={{
+                background: 'rgba(28,28,35,0.65)',
+                border: '1px solid rgba(255,255,255,0.08)',
+                backdropFilter: 'blur(8px)',
+              }}
+              aria-label="Share"
+              title="Share"
+            >
+              <Share2 size={16} className="text-white/75" />
+            </button>
           </div>
         </div>
 
-        {/* ===== MORE COMING — soft footer placeholder =====
-            Tells the user there's more they'll discover in VOYO Moments,
-            and gives the canvas a graceful tail before it scrolls away. */}
-        <div className="mt-6 mb-3 text-center">
-          <div
-            className="text-[10px] tracking-[0.2em] uppercase"
-            style={{ color: 'rgba(212,160,83,0.5)' }}
-          >
-            more in voyo moments
-          </div>
-          <div className="text-[9px] text-white/30 mt-1">
-            keep scrolling to clear • swipe up fast to snap home
-          </div>
-        </div>
-
-        {/* Inner spacer so the canvas content has bottom breathing room
-            before it itself scrolls past (the user reads the "react" row,
-            scrolls a bit more, and the canvas clears entirely). */}
-        <div style={{ height: '24px' }} />
+        <style>{`
+          @keyframes voyo-oye-halo {
+            0%, 100% { transform: scale(1); opacity: 0.5; }
+            50%      { transform: scale(1.12); opacity: 0.9; }
+          }
+        `}</style>
 
       </div>
 
