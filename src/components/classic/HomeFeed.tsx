@@ -1698,6 +1698,9 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
   const longPressMoved = useRef(false);
   const longPressFired = useRef(false);
 
+  // Random shimmer cycle duration per session — 18-28s so the gap never feels mechanical
+  const shimmerDuration = useRef(`${(18 + Math.random() * 10).toFixed(1)}s`);
+
   // Classics disk timeline — center-focused scroll
   const [diskCenterIndex, setDiskCenterIndex] = useState(0);
   const diskScrollRef = useRef<HTMLDivElement>(null);
@@ -2115,12 +2118,17 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
                 animation: rr-shimmer 5s ease-in-out infinite;
               }
               @keyframes classics-subtitle-shimmer {
-                0%   { background-position: 60% center; }
-                42%  { background-position: 0% center; }
-                100% { background-position: 0% center; }
+                0%   { background-position: 60% center; filter: none; }
+                22%  { background-position: 0% center;  filter: none; }
+                31%  { background-position: 0% center;  filter: drop-shadow(0 0 5px rgba(255,210,80,0.48)) drop-shadow(0 0 11px rgba(212,160,83,0.28)); }
+                46%  { background-position: 0% center;  filter: none; }
+                100% { background-position: 0% center;  filter: none; }
               }
               .classics-subtitle-shimmer {
-                animation: classics-subtitle-shimmer 10s ease-in-out infinite;
+                animation-name: classics-subtitle-shimmer;
+                animation-timing-function: ease-in-out;
+                animation-iteration-count: infinite;
+                animation-fill-mode: both;
               }
               @media (prefers-reduced-motion: reduce) {
                 .classics-disk-drift, .classics-disk-spin, .classics-disk-glow-ring,
@@ -2155,6 +2163,7 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
                   style={{
                     fontFamily: 'Satoshi, system-ui, sans-serif',
                     fontWeight: 700,
+                    animationDuration: shimmerDuration.current,
                     background: [
                       'linear-gradient(90deg,',
                       'rgba(175,125,42,0.68) 0%,',      /* AB — dim bronze */
