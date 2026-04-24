@@ -221,6 +221,31 @@ export function useBgEngine(params: UseBgEngineParams): BgEngineApi {
     // different return-from-BG handling in future.
   }, [audioRef, audioContextRef, gainNodeRef, isLoadingTrackRef, playbackSource]);
 
+  // ── iOS AudioContext 'interrupted' listener ───────────────────────────
+  // iOS transitions AudioContext to state='interrupted' on screen lock
+  // (not 'suspended'). This statechange fires BEFORE the element's pause
+  // event — if we resume fast enough, the element may never pause at all.
+  // Android Chrome uses 'suspended'; both are handled here.
+  useEffect(() => {
+    const ctx = audioContextRef.current;
+    if (!ctx) return;
+    const handleCtxState = () => {
+      if (
+        (ctx.state === 'suspended' || (ctx.state as string) === 'interrupted') &&
+        usePlayerStore.getState().isPlaying
+      ) {
+        ctx.resume().then(() => {
+          const el = audioRef.current;
+          if (el && el.paused && !el.ended && usePlayerStore.getState().isPlaying) {
+            el.play().catch(() => {});
+          }
+        }).catch(() => {});
+      }
+    };
+    ctx.addEventListener('statechange', handleCtxState);
+    return () => ctx.removeEventListener('statechange', handleCtxState);
+  }, [audioRef, audioContextRef]);
+
   // ── BATTERY-SUSPEND TIMER ────────────────────────────────────────────
   // 5s after paused + hidden, suspend the context for battery. Cancels
   // immediately on play or unhide. Separate from the capture-phase
