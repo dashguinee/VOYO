@@ -30,14 +30,21 @@ interface VibesReelProps {
   onOpenVibe: (vibe: Vibe) => void;
 }
 
+// Chill Vibes + Workout get the letterbox cover treatment — wider,
+// horizon-oriented, breaks the portrait rhythm of the other chapters
+// so the rail has visual cadence instead of being uniformly vertical.
+const LETTERBOX_VIBES = new Set(['chill-vibes', 'workout']);
+
 // ── AI vibe-cover (chapter marker) ──────────────────────────────────────
-const VibeCoverCard = memo(({ vibe, onTap }: { vibe: Vibe; onTap: () => void }) => (
+const VibeCoverCard = memo(({ vibe, onTap }: { vibe: Vibe; onTap: () => void }) => {
+  const isLetterbox = LETTERBOX_VIBES.has(vibe.id);
+  return (
   <button
     onClick={onTap}
     className="relative flex-shrink-0 rounded-[18px] overflow-hidden active:scale-[0.97] transition-transform"
     style={{
-      width: 130,
-      aspectRatio: '0.82',
+      width: isLetterbox ? 208 : 130,
+      aspectRatio: isLetterbox ? '1.55' : '0.82',
       background: `linear-gradient(135deg, ${vibe.color} 0%, ${vibe.color}dd 50%, ${vibe.color}bb 100%)`,
       boxShadow: `0 6px 22px ${vibe.color}4d`,
     }}
@@ -49,7 +56,9 @@ const VibeCoverCard = memo(({ vibe, onTap }: { vibe: Vibe; onTap: () => void }) 
         loading="lazy"
         decoding="async"
         className="absolute inset-0 w-full h-full object-cover"
-        style={{ transform: 'scale(1.04)', transformOrigin: 'center 30%' }}
+        // Letterbox frames benefit from centre-vertical focus (horizon
+        // shots) rather than the upper-third bias of portrait crops.
+        style={{ transform: 'scale(1.04)', transformOrigin: isLetterbox ? 'center center' : 'center 30%' }}
       />
     )}
     {/* Palette wash — unifies the cover with the vibe color. */}
@@ -65,15 +74,19 @@ const VibeCoverCard = memo(({ vibe, onTap }: { vibe: Vibe; onTap: () => void }) 
       className="absolute inset-x-0 bottom-0 h-2/3 pointer-events-none"
       style={{ background: 'linear-gradient(180deg, transparent 0%, rgba(0,0,0,0.18) 42%, rgba(0,0,0,0.62) 100%)' }}
     />
-    {/* Vibe title */}
+    {/* Vibe title — letterbox frames can carry slightly larger display. */}
     <div className="absolute inset-x-0 bottom-0 p-3">
       <p className="text-[10px] font-bold tracking-[0.18em] uppercase text-white/70 mb-0.5">Vibe</p>
-      <h3 className="text-white font-black leading-none tracking-tight" style={{ fontSize: vibe.name.length > 10 ? 14 : 16 }}>
+      <h3
+        className="text-white font-black leading-none tracking-tight"
+        style={{ fontSize: isLetterbox ? (vibe.name.length > 10 ? 17 : 20) : (vibe.name.length > 10 ? 14 : 16) }}
+      >
         {vibe.name}
       </h3>
     </div>
   </button>
-));
+  );
+});
 VibeCoverCard.displayName = 'VibeCoverCard';
 
 // ── Live track card (pool) ──────────────────────────────────────────────
