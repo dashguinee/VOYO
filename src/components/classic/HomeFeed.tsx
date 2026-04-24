@@ -2143,7 +2143,7 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
                   All Time Best
                 </h2>
                 <p className="text-[9px] font-semibold tracking-widest uppercase mt-1" style={{ color: 'rgba(212,160,83,0.6)', fontFamily: 'Satoshi, system-ui, sans-serif' }}>
-                  For the Bests
+                  For the People
                 </p>
               </div>
             </div>

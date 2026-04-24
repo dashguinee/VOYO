@@ -86,6 +86,7 @@ export const VoyoLiveCard = ({ onSwitchToVOYO }: VoyoLiveCardProps = {}) => {
   const [cardMode, setCardMode] = useState<CardMode>('community');
   const modeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dissolveTargetRef = useRef<'next' | 'community'>('next');
+  const hasShownNextRef = useRef(false);
 
   // Entry+exit transition duration for every cycling element. Picked
   // long enough to read as "absorbed" (not a hard swap), short enough
@@ -239,27 +240,43 @@ export const VoyoLiveCard = ({ onSwitchToVOYO }: VoyoLiveCardProps = {}) => {
     };
   }, []);
 
-  // Mode cycling: community (6s) → dissolve (350ms) → next (5s) → dissolve (350ms) → community
+  // Track change → reset shown flag + dissolve back to community
   useEffect(() => {
-    if (modeTimerRef.current) clearTimeout(modeTimerRef.current);
-    if (!currentTrack || !isPlaying) {
-      setCardMode('community');
-      return;
+    hasShownNextRef.current = false;
+    if (cardMode !== 'community') {
+      dissolveTargetRef.current = 'community';
+      setCardMode('dissolve');
     }
-    const nextTrackAvail = queue.length > 0;
-    if (cardMode === 'community') {
-      modeTimerRef.current = setTimeout(() => {
-        if (nextTrackAvail) { dissolveTargetRef.current = 'next'; setCardMode('dissolve'); }
-      }, 6000);
-    } else if (cardMode === 'dissolve') {
-      modeTimerRef.current = setTimeout(() => setCardMode(dissolveTargetRef.current), 350);
-    } else if (cardMode === 'next') {
-      modeTimerRef.current = setTimeout(() => {
-        dissolveTargetRef.current = 'community'; setCardMode('dissolve');
-      }, 5000);
-    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentTrack?.id]);
+
+  // Dissolve timer — 350ms bridge between modes
+  useEffect(() => {
+    if (cardMode !== 'dissolve') return;
+    modeTimerRef.current = setTimeout(() => setCardMode(dissolveTargetRef.current), 350);
     return () => { if (modeTimerRef.current) clearTimeout(modeTimerRef.current); };
-  }, [cardMode, currentTrack?.id, isPlaying, queue.length]);
+  }, [cardMode]);
+
+  // Next Up auto-dismiss — back to community after 7s
+  useEffect(() => {
+    if (cardMode !== 'next') return;
+    modeTimerRef.current = setTimeout(() => {
+      dissolveTargetRef.current = 'community';
+      setCardMode('dissolve');
+    }, 7000);
+    return () => { if (modeTimerRef.current) clearTimeout(modeTimerRef.current); };
+  }, [cardMode]);
+
+  // Progress-based Next Up trigger — fires once per track at 72%+
+  useEffect(() => {
+    if (!currentTrack || !isPlaying || queue.length === 0) return;
+    if (hasShownNextRef.current || cardMode !== 'community') return;
+    if (progress >= 0.72) {
+      hasShownNextRef.current = true;
+      dissolveTargetRef.current = 'next';
+      setCardMode('dissolve');
+    }
+  }, [progress, cardMode, currentTrack?.id, isPlaying, queue.length]);
 
   const orbitAvatars = avatars.filter((_, i) => i !== centerIndex).slice(0, 3);
   const radius = 32;
@@ -269,9 +286,8 @@ export const VoyoLiveCard = ({ onSwitchToVOYO }: VoyoLiveCardProps = {}) => {
   // Next track from queue
   const nextTrack = queue.length > 0 ? queue[0] : null;
 
-  // Live count — real friends currently playing (falls back to 0)
+  // Live count — real friends currently playing; 0 = show nothing
   const liveCount = friendsActivity.filter(a => a.now_playing).length;
-  const liveLabel = liveCount > 0 ? `${liveCount} in Voyo` : 'In Voyo';
 
   // Get current 2 friends to display (+ outgoing pair for crossfade).
   const friend1 = friendsListening[friendIndex % friendsListening.length];
@@ -437,8 +453,8 @@ export const VoyoLiveCard = ({ onSwitchToVOYO }: VoyoLiveCardProps = {}) => {
                 </div>
               ) : (
                 <div key="copy-community">
-                  <h3 className="text-white font-bold text-lg leading-tight">Vibing Right Now</h3>
-                  <p className="text-white/70 text-xs">{liveLabel}</p>
+                  <h3 className="text-white leading-tight" style={{ fontWeight: 900, fontSize: '1.2rem', letterSpacing: '-0.02em' }}>Vibing Right Now</h3>
+                  {liveCount > 0 && <p className="text-white/65 text-xs mt-0.5">{liveCount} in Voyo</p>}
                 </div>
               )}
             </div>
