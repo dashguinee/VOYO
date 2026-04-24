@@ -1782,9 +1782,10 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
     }
   }, [top10CountdownActive]);
 
-  // ── Infinite loop scroll + ambient water ripple ──────────────────────────
+  // ── Infinite loop scroll + ambient water ripple + audio reactive glow ───
   const feedScrollRef = useRef<HTMLDivElement>(null);
   const rippleHostRef = useRef<HTMLDivElement>(null);
+  const audioGlowRef = useRef<HTMLDivElement>(null);
   const loopingRef = useRef(false);
   const [loopFade, setLoopFade] = useState(false);
   const overscrollYRef = useRef(0);
@@ -1793,35 +1794,139 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
   const feedAtBottomRef = useRef(false);
   const feedAtTopRef = useRef(false);
 
-  // Water ripple — spawned on every empty-space touch
+  // Water ripple — Avatar-style fluid contact aura + trail rings
   useEffect(() => {
     const scroll = feedScrollRef.current;
     const host = rippleHostRef.current;
     if (!scroll || !host) return;
-    let cooldown = false;
-    const onTouch = (e: TouchEvent) => {
-      if (cooldown) return;
-      const target = e.target as HTMLElement;
-      if (target.closest('button,a,input,select,[role="button"]')) return;
-      const t = e.touches[0];
+
+    const AURA = 26;
+    let auraEl: HTMLDivElement | null = null;
+    let rafId = 0;
+    let curX = 0, curY = 0, targetX = 0, targetY = 0;
+    let lastRingX = 0, lastRingY = 0, lastRingTime = 0;
+    let touching = false;
+
+    const color = () => {
       const frac = scroll.scrollTop / Math.max(1, scroll.scrollHeight - scroll.clientHeight);
-      const c = frac < 0.3 ? 'rgba(212,160,83,' : 'rgba(139,92,246,';
-      const r = document.createElement('div');
-      Object.assign(r.style, {
-        position: 'fixed', left: `${t.clientX}px`, top: `${t.clientY}px`,
-        width: '6px', height: '6px', borderRadius: '50%',
-        transform: 'translate(-50%,-50%) scale(0)',
-        border: `1px solid ${c}0.38)`, boxShadow: `0 0 8px ${c}0.1)`,
-        pointerEvents: 'none',
-        animation: 'voyo-water-ripple 680ms cubic-bezier(0.2,0.6,0.4,1) forwards',
-      });
-      host.appendChild(r);
-      cooldown = true;
-      setTimeout(() => { cooldown = false; }, 160);
-      setTimeout(() => r.remove(), 700);
+      return frac < 0.3 ? 'rgba(212,160,83,' : 'rgba(139,92,246,';
     };
-    scroll.addEventListener('touchstart', onTouch, { passive: true });
-    return () => scroll.removeEventListener('touchstart', onTouch);
+
+    const spawnRing = (x: number, y: number, kind: 'tap' | 'trail' | 'burst') => {
+      const c = color();
+      const wrap = document.createElement('div');
+      Object.assign(wrap.style, {
+        position: 'fixed', left: `${x}px`, top: `${y}px`,
+        width: '6px', height: '6px', marginLeft: '-3px', marginTop: '-3px',
+        borderRadius: '50%', pointerEvents: 'none',
+      });
+      const inner = document.createElement('div');
+      const [anim, dur] =
+        kind === 'tap'   ? ['voyo-ring-tap',   500] :
+        kind === 'trail' ? ['voyo-ring-trail', 520] :
+                           ['voyo-ring-burst', 700];
+      const alpha = kind === 'trail' ? '0.28)' : kind === 'tap' ? '0.32)' : '0.44)';
+      Object.assign(inner.style, {
+        width: '100%', height: '100%', borderRadius: '50%',
+        border: `1px solid ${c}${alpha}`,
+        boxShadow: `0 0 ${kind === 'burst' ? 10 : 5}px ${c}${kind === 'burst' ? '0.1)' : '0.06)'})`,
+        animation: `${anim} ${dur}ms cubic-bezier(0.2,0.65,0.35,1) forwards`,
+        willChange: 'transform, opacity',
+      });
+      wrap.appendChild(inner);
+      host.appendChild(wrap);
+      setTimeout(() => wrap.remove(), dur + 20);
+    };
+
+    const tick = () => {
+      if (!touching) return;
+      curX += (targetX - curX) * 0.26;
+      curY += (targetY - curY) * 0.26;
+      if (auraEl) auraEl.style.transform = `translate(${curX - AURA / 2}px, ${curY - AURA / 2}px)`;
+      rafId = requestAnimationFrame(tick);
+    };
+
+    const onTouchStart = (e: TouchEvent) => {
+      const tgt = e.target as HTMLElement;
+      if (tgt.closest('button,a,input,select,[role="button"]')) return;
+      const t = e.touches[0];
+      curX = targetX = t.clientX;
+      curY = targetY = t.clientY;
+      lastRingX = t.clientX; lastRingY = t.clientY; lastRingTime = Date.now();
+      touching = true;
+      spawnRing(t.clientX, t.clientY, 'tap');
+      const c = color();
+      auraEl = document.createElement('div');
+      Object.assign(auraEl.style, {
+        position: 'fixed', left: '0', top: '0',
+        width: `${AURA}px`, height: `${AURA}px`, borderRadius: '50%',
+        transform: `translate(${curX - AURA / 2}px, ${curY - AURA / 2}px)`,
+        border: `1.5px solid ${c}0.6)`,
+        boxShadow: `0 0 14px ${c}0.3), 0 0 6px ${c}0.18) inset`,
+        pointerEvents: 'none', opacity: '1', willChange: 'transform',
+        transition: 'opacity 0.15s ease',
+      });
+      host.appendChild(auraEl);
+      cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(tick);
+    };
+
+    const onTouchMove = (e: TouchEvent) => {
+      if (!touching) return;
+      const t = e.touches[0];
+      targetX = t.clientX; targetY = t.clientY;
+      const dx = t.clientX - lastRingX, dy = t.clientY - lastRingY;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      const now = Date.now();
+      if (dist > 22 && now - lastRingTime > 45) {
+        spawnRing(t.clientX, t.clientY, 'trail');
+        lastRingX = t.clientX; lastRingY = t.clientY; lastRingTime = now;
+      }
+    };
+
+    const onTouchEnd = (e: TouchEvent) => {
+      if (!touching) return;
+      touching = false;
+      cancelAnimationFrame(rafId);
+      const t = e.changedTouches[0];
+      spawnRing(t.clientX, t.clientY, 'burst');
+      if (auraEl) {
+        auraEl.style.opacity = '0';
+        const el = auraEl; auraEl = null;
+        setTimeout(() => el.remove(), 170);
+      }
+    };
+
+    scroll.addEventListener('touchstart', onTouchStart, { passive: true });
+    scroll.addEventListener('touchmove', onTouchMove, { passive: true });
+    scroll.addEventListener('touchend', onTouchEnd, { passive: true });
+    return () => {
+      scroll.removeEventListener('touchstart', onTouchStart);
+      scroll.removeEventListener('touchmove', onTouchMove);
+      scroll.removeEventListener('touchend', onTouchEnd);
+      cancelAnimationFrame(rafId);
+      if (auraEl) auraEl.remove();
+    };
+  }, []);
+
+  // Audio-reactive ambient glow — reads CSS vars written by freqPump (10fps),
+  // drives a soft radial pulse behind the feed. Zero React re-renders.
+  useEffect(() => {
+    const glow = audioGlowRef.current;
+    if (!glow) return;
+    let rafId = 0;
+    let frame = 0;
+    const pump = () => {
+      rafId = requestAnimationFrame(pump);
+      if (++frame % 6 !== 0) return; // ~10fps, matches freqPump cadence
+      const root = document.documentElement;
+      const bass = parseFloat(root.style.getPropertyValue('--voyo-bass') || '0');
+      const energy = parseFloat(root.style.getPropertyValue('--voyo-energy') || '0');
+      glow.style.opacity = Math.min(energy * 0.2, 0.13).toFixed(3);
+      glow.style.transform = `translateX(-50%) scale(${(1 + bass * 0.5).toFixed(3)})`;
+    };
+    rafId = requestAnimationFrame(pump);
+    return () => cancelAnimationFrame(rafId);
   }, []);
 
   // Track scroll position for gesture overscroll detection
@@ -2161,11 +2266,31 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
     <>
     {/* Ripple host — fixed viewport layer, receives imperatively added ripple divs */}
     <div ref={rippleHostRef} style={{ position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 500 }} aria-hidden>
+      {/* Audio reactive ambient glow — radial pulse breathing with the music */}
+      <div ref={audioGlowRef} style={{
+        position: 'fixed', bottom: '-80px', left: '50%',
+        transform: 'translateX(-50%) scale(1)',
+        width: '440px', height: '440px', borderRadius: '50%',
+        background: 'radial-gradient(circle at 50% 55%, rgba(212,160,83,0.95) 0%, rgba(139,92,246,0.4) 28%, transparent 60%)',
+        opacity: '0', pointerEvents: 'none',
+        willChange: 'transform, opacity',
+        transition: 'opacity 0.55s ease, transform 0.45s ease',
+      }} />
       <style>{`
-        @keyframes voyo-water-ripple {
-          0%   { transform: translate(-50%,-50%) scale(0); opacity: 0.85; }
-          55%  { opacity: 0.3; }
-          100% { transform: translate(-50%,-50%) scale(42); opacity: 0; }
+        @keyframes voyo-ring-tap {
+          0%   { transform: scale(0); opacity: 0.6; }
+          60%  { opacity: 0.16; }
+          100% { transform: scale(22); opacity: 0; }
+        }
+        @keyframes voyo-ring-trail {
+          0%   { transform: scale(0); opacity: 0.5; }
+          60%  { opacity: 0.12; }
+          100% { transform: scale(20); opacity: 0; }
+        }
+        @keyframes voyo-ring-burst {
+          0%   { transform: scale(0); opacity: 0.75; }
+          50%  { opacity: 0.3; }
+          100% { transform: scale(32); opacity: 0; }
         }
       `}</style>
     </div>
