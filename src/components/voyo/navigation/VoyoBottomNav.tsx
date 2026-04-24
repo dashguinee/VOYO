@@ -48,10 +48,17 @@ export const VoyoBottomNav = ({ onDahub, onHome, oyoSurface = 'home', playerMode
 
   // While pointer is down (scroll / hesitate / drag), dim side nav buttons
   // but keep the VOYO orb mostly visible — player anchor must stay accessible mid-gesture.
-  const [isHolding, setIsHolding] = useState(false);
+  // Imperative CSS vars instead of React state — zero re-renders per tap event.
+  const holdNavRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    const onDown = () => setIsHolding(true);
-    const onUp = () => setIsHolding(false);
+    const onDown = () => {
+      holdNavRef.current?.style.setProperty('--hold-side', '0.28');
+      holdNavRef.current?.style.setProperty('--hold-orb', '0.78');
+    };
+    const onUp = () => {
+      holdNavRef.current?.style.setProperty('--hold-side', '1');
+      holdNavRef.current?.style.setProperty('--hold-orb', '1');
+    };
     document.addEventListener('pointerdown', onDown, { passive: true });
     document.addEventListener('pointerup', onUp, { passive: true });
     document.addEventListener('pointercancel', onUp, { passive: true });
@@ -61,8 +68,6 @@ export const VoyoBottomNav = ({ onDahub, onHome, oyoSurface = 'home', playerMode
       document.removeEventListener('pointercancel', onUp);
     };
   }, []);
-  const sideNavHoldOpacity = isHolding ? 0.28 : 1;
-  const centerOrbHoldOpacity = isHolding ? 0.78 : 1;
   const holdTransition = 'opacity 280ms cubic-bezier(0.16, 1, 0.3, 1)';
 
   // -- Visibility model.
@@ -253,6 +258,7 @@ export const VoyoBottomNav = ({ onDahub, onHome, oyoSurface = 'home', playerMode
       }}
     >
       <div
+        ref={holdNavRef}
         className="pointer-events-auto max-w-[280px] mx-auto h-[54px] rounded-full flex items-center justify-around px-3"
         style={
           playerMode
@@ -277,7 +283,7 @@ export const VoyoBottomNav = ({ onDahub, onHome, oyoSurface = 'home', playerMode
           onPointerUp={handlePointerUp}
           onPointerLeave={handlePointerUp}
           onClick={handleHome}
-          style={{ opacity: sideNavHoldOpacity, transition: holdTransition }}
+          style={{ opacity: 'var(--hold-side, 1)', transition: holdTransition }}
         >
           <div
             style={{
@@ -318,7 +324,7 @@ export const VoyoBottomNav = ({ onDahub, onHome, oyoSurface = 'home', playerMode
           }}
           onClickCapture={oyoBindings.onClickCapture}
           onClick={handleVoyoToggle}
-          style={{ flex: '0 0 auto', opacity: centerOrbHoldOpacity, transition: holdTransition }}
+          style={{ flex: '0 0 auto', opacity: 'var(--hold-orb, 1)', transition: holdTransition }}
           aria-label="VOYO — tap to play, long-press to summon OYO"
         >
           <div
@@ -418,7 +424,7 @@ export const VoyoBottomNav = ({ onDahub, onHome, oyoSurface = 'home', playerMode
           onPointerUp={handlePointerUp}
           onPointerLeave={handlePointerUp}
           onClick={handleDahub}
-          style={{ opacity: sideNavHoldOpacity, transition: holdTransition }}
+          style={{ opacity: 'var(--hold-side, 1)', transition: holdTransition }}
         >
           <div
             style={{

@@ -50,6 +50,7 @@ export function CardHoldActions({ track, children, onPlaylist, className = '' }:
 
   const [holdOpen, setHoldOpen] = useState(false);
   const [flashing, setFlashing] = useState(false);
+  const [isFiring, setIsFiring] = useState(false);
 
   const holdTimerRef    = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dismissTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -67,14 +68,17 @@ export function CardHoldActions({ track, children, onPlaylist, className = '' }:
     clearTimers();
     setHoldOpen(false);
     setFlashing(false);
+    setIsFiring(false);
     didFireRef.current = false;
   }, [clearTimers]);
 
   const firePill = useCallback(() => {
+    if (isFiring) return;
     didFireRef.current = true;
     pill.onFire();
-    close();
-  }, [pill, close]);
+    setIsFiring(true);
+    setTimeout(() => close(), 360);
+  }, [pill, close, isFiring]);
 
   const handlePointerDown = useCallback((e: React.PointerEvent) => {
     if (e.button !== 0 && e.pointerType !== 'touch') return;
@@ -150,43 +154,63 @@ export function CardHoldActions({ track, children, onPlaylist, className = '' }:
 
       <div
         className={className}
-        style={{ position: 'relative', zIndex: holdOpen ? 50 : undefined, touchAction: 'pan-x pan-y' }}
+        style={{
+          position: 'relative', zIndex: holdOpen ? 50 : undefined,
+          touchAction: 'pan-x pan-y',
+          userSelect: 'none', WebkitUserSelect: 'none',
+          // Suppress native long-press share/download menu
+          WebkitTouchCallout: 'none' as never,
+        }}
         onPointerDown={handlePointerDown}
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerUp}
+        onContextMenu={(e) => e.preventDefault()}
         onClick={(e) => { if (didFireRef.current) { e.stopPropagation(); e.preventDefault(); } }}
       >
-        {/* Single pill — centered, slides up from card center */}
+        {/* Single pill — upper-center of card, slides in from contact point */}
         {holdOpen && (
           <button
             aria-label={pill.label}
             onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); firePill(); }}
             style={{
               position: 'absolute',
-              top: '50%',
+              top: '36%',
               left: '50%',
               transform: 'translate(-50%, -50%)',
-              width: 56, height: 56, borderRadius: '50%',
-              background: pill.gradient,
+              width: 58, height: 58, borderRadius: '50%',
+              background: isFiring
+                ? `radial-gradient(circle, ${pill.glow} 0%, ${pill.glow}cc 60%, ${pill.glow}66 100%)`
+                : pill.gradient,
               boxShadow: [
-                'inset 0 1px 1px rgba(255,255,255,0.18)',
-                'inset 0 -2px 5px rgba(0,0,0,0.45)',
-                '0 6px 18px rgba(0,0,0,0.5)',
-                `0 0 0 1px ${pill.glow}28`,
-                `0 0 20px ${pill.glow}55`,
+                'inset 0 1px 1px rgba(255,255,255,0.22)',
+                'inset 0 -2px 5px rgba(0,0,0,0.4)',
+                '0 8px 22px rgba(0,0,0,0.55)',
+                `0 0 0 1px ${pill.glow}40`,
+                `0 0 26px ${pill.glow}70`,
               ].join(', '),
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               border: 'none', outline: 'none', cursor: 'pointer',
               WebkitTapHighlightColor: 'transparent',
               zIndex: 2,
-              animation: 'cha-pill-in 180ms cubic-bezier(0.34,1.56,0.64,1) forwards',
+              animation: isFiring
+                ? 'cha-pill-fire 360ms cubic-bezier(0.4,0,1,1) forwards'
+                : 'cha-pill-in 180ms cubic-bezier(0.34,1.56,0.64,1) forwards',
             }}
           >
-            <pill.Icon size={22} style={{ color: 'rgba(255,255,255,0.93)', filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.5))' }} />
+            <pill.Icon
+              size={24}
+              fill={isFiring ? 'rgba(255,255,255,0.95)' : 'none'}
+              style={{ color: 'rgba(255,255,255,0.95)', filter: 'drop-shadow(0 1px 3px rgba(0,0,0,0.55))' }}
+            />
             <style>{`
               @keyframes cha-pill-in {
-                from { opacity: 0; transform: translate(-50%,-50%) scale(0.6); }
+                from { opacity: 0; transform: translate(-50%,-50%) scale(0.55); }
                 to   { opacity: 1; transform: translate(-50%,-50%) scale(1); }
+              }
+              @keyframes cha-pill-fire {
+                0%   { opacity: 1; transform: translate(-50%,-50%) scale(1); }
+                35%  { opacity: 1; transform: translate(-50%,-50%) scale(1.30); }
+                100% { opacity: 0; transform: translate(-50%,-50%) scale(1.55); }
               }
             `}</style>
           </button>
