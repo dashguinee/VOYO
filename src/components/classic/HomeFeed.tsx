@@ -1789,6 +1789,7 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
   const [loopFade, setLoopFade] = useState(false);
   const overscrollYRef = useRef(0);
   const touchStartFeedYRef = useRef(0);
+  const touchStartFeedXRef = useRef(0);
   const feedAtBottomRef = useRef(false);
   const feedAtTopRef = useRef(false);
 
@@ -1835,13 +1836,19 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
   // Overscroll gesture — detect push-past-bottom / push-past-top
   const onFeedTouchStart = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
     touchStartFeedYRef.current = e.touches[0].clientY;
+    touchStartFeedXRef.current = e.touches[0].clientX;
     overscrollYRef.current = 0;
   }, []);
 
   const onFeedTouchMove = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
-    const dy = touchStartFeedYRef.current - e.touches[0].clientY; // >0 = finger up = wants more content
+    const dy = touchStartFeedYRef.current - e.touches[0].clientY;
+    const dx = Math.abs(touchStartFeedXRef.current - e.touches[0].clientX);
+    const absdy = Math.abs(dy);
+    // Skip if gesture is more horizontal than vertical (carousel swipe) or too small.
+    // Prevents diagonal swipes on Top 10/Vibes carousels from triggering the loop.
+    if (absdy < 14 || dx > absdy * 0.7) return;
     if (feedAtBottomRef.current && dy > 0) overscrollYRef.current = dy;
-    if (feedAtTopRef.current && dy < 0) overscrollYRef.current = dy; // <0 = finger down at top = wants to go back
+    if (feedAtTopRef.current && dy < 0) overscrollYRef.current = dy;
   }, []);
 
   const onFeedTouchEnd = useCallback(() => {
@@ -2162,9 +2169,9 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
         }
       `}</style>
     </div>
-    {/* Loop fade overlay — momentary dark veil on loop transition */}
+    {/* Loop fade overlay — above ripple host (501 > 500) so ripples don't bleed through */}
     <div style={{
-      position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 499,
+      position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 501,
       background: 'rgba(6,6,9,0.92)',
       opacity: loopFade ? 1 : 0,
       transition: 'opacity 0.28s ease',
