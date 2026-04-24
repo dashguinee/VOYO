@@ -2878,9 +2878,38 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
                 <div className="absolute inset-0 rounded-full" style={{ border: '1px solid rgba(212,160,83,0.08)', margin: 9 }} />
               </div>
               <div>
+                {/* Two layered effects fuse the header into the shelf:
+                    · background stack — repeating 1px warm-white striation
+                      (rgba(255,250,235,0.04) every 4px at 98°) painted BEHIND
+                      the gold gradient inside the text-clip. Clipped to the
+                      glyphs so it reads as brushed-gold grain, not as a box.
+                    · filter stack — two additional drop-shadows. The 24px
+                      warm-ivory halo traces the letter shape (not a
+                      rectangle) at 18% alpha; the 38px bloom extends it at
+                      8%. Because drop-shadow uses alpha, the shadow is
+                      exactly the text outline — the glow reads as part of
+                      the gold itself, not a layer sitting behind it. */}
                 <h2
                   className="leading-none"
-                  style={{ fontFamily: "'Fraunces', 'Playfair Display', Georgia, serif", fontStyle: 'italic', fontSize: 24, fontWeight: 400, background: 'linear-gradient(100deg, #F4D999 0%, #E6B865 40%, #C4943D 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', filter: 'drop-shadow(0 1px 4px rgba(0,0,0,0.6)) drop-shadow(0 0 14px rgba(212,160,83,0.2))', opacity: 0.93 }}
+                  style={{
+                    fontFamily: "'Fraunces', 'Playfair Display', Georgia, serif",
+                    fontStyle: 'italic',
+                    fontSize: 24,
+                    fontWeight: 400,
+                    background: [
+                      'repeating-linear-gradient(98deg, rgba(255,250,235,0.04) 0 1px, transparent 1px 4px),',
+                      'linear-gradient(100deg, #F4D999 0%, #E6B865 40%, #C4943D 100%)',
+                    ].join(' '),
+                    WebkitBackgroundClip: 'text',
+                    WebkitTextFillColor: 'transparent',
+                    filter: [
+                      'drop-shadow(0 1px 4px rgba(0,0,0,0.6))',
+                      'drop-shadow(0 0 14px rgba(212,160,83,0.2))',
+                      'drop-shadow(0 0 24px rgba(255,248,232,0.18))',
+                      'drop-shadow(0 0 38px rgba(255,248,232,0.08))',
+                    ].join(' '),
+                    opacity: 0.93,
+                  }}
                 >
                   All-Time Classics
                 </h2>
