@@ -2115,11 +2115,12 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
                 animation: rr-shimmer 5s ease-in-out infinite;
               }
               @keyframes classics-subtitle-shimmer {
-                0%   { background-position: 200% center; }
-                100% { background-position: -200% center; }
+                0%   { background-position: 60% center; }
+                42%  { background-position: 0% center; }
+                100% { background-position: 0% center; }
               }
               .classics-subtitle-shimmer {
-                animation: classics-subtitle-shimmer 9s linear infinite;
+                animation: classics-subtitle-shimmer 10s ease-in-out infinite;
               }
               @media (prefers-reduced-motion: reduce) {
                 .classics-disk-drift, .classics-disk-spin, .classics-disk-glow-ring,
@@ -2151,9 +2152,29 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
                 </h2>
                 <p
                   className="text-[10px] tracking-widest uppercase mt-1 classics-subtitle-shimmer"
-                  style={{ fontFamily: 'Satoshi, system-ui, sans-serif', fontWeight: 700, background: 'linear-gradient(90deg, #C4943D 0%, #F4D999 35%, #E6B865 55%, #C4943D 80%, #F4D999 100%)', backgroundSize: '200% auto', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}
+                  style={{
+                    fontFamily: 'Satoshi, system-ui, sans-serif',
+                    fontWeight: 700,
+                    background: [
+                      'linear-gradient(90deg,',
+                      'rgba(175,125,42,0.68) 0%,',      /* AB — dim bronze */
+                      'rgba(192,144,56,0.72) 10%,',
+                      'rgba(202,157,66,0.76) 19%,',     /* AB/VC boundary */
+                      'rgba(218,170,76,0.88) 26%,',     /* VC — picks up */
+                      'rgba(230,185,100,0.93) 33%,',    /* VC right edge at rest — brightest */
+                      'rgba(205,158,64,0.80) 42%,',     /* pre-glint */
+                      'rgba(255,238,145,1.00) 49%,',    /* GLINT peak */
+                      'rgba(232,188,106,0.90) 54%,',
+                      'rgba(200,152,60,0.78) 65%,',
+                      'rgba(192,144,56,0.74) 100%',
+                      ')',
+                    ].join(' '),
+                    backgroundSize: '300% 100%',
+                    WebkitBackgroundClip: 'text',
+                    WebkitTextFillColor: 'transparent',
+                  }}
                 >
-                  African Bangers · VOYO Certified
+                  {'African Bangers · '}<b style={{ fontWeight: 800 }}>VOYO Certified</b>
                 </p>
               </div>
             </div>
