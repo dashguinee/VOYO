@@ -2114,9 +2114,16 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
               .rr-fade-shimmer {
                 animation: rr-shimmer 5s ease-in-out infinite;
               }
+              @keyframes classics-subtitle-shimmer {
+                0%   { background-position: 200% center; }
+                100% { background-position: -200% center; }
+              }
+              .classics-subtitle-shimmer {
+                animation: classics-subtitle-shimmer 5s linear infinite;
+              }
               @media (prefers-reduced-motion: reduce) {
                 .classics-disk-drift, .classics-disk-spin, .classics-disk-glow-ring,
-                .classics-disk-lightburst, .rr-fade-shimmer { animation: none; }
+                .classics-disk-lightburst, .rr-fade-shimmer, .classics-subtitle-shimmer { animation: none; }
               }
             `}</style>
 
@@ -2140,10 +2147,13 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
                   className="leading-none"
                   style={{ fontFamily: "'Fraunces', 'Playfair Display', Georgia, serif", fontStyle: 'italic', fontSize: 24, fontWeight: 400, background: 'linear-gradient(100deg, #F4D999 0%, #E6B865 40%, #C4943D 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', filter: 'drop-shadow(0 1px 4px rgba(0,0,0,0.6)) drop-shadow(0 0 14px rgba(212,160,83,0.2))' }}
                 >
-                  All Time Best
+                  All Time Classics
                 </h2>
-                <p className="text-[9px] font-semibold tracking-widest uppercase mt-1" style={{ color: 'rgba(212,160,83,0.6)', fontFamily: 'Satoshi, system-ui, sans-serif' }}>
-                  African Bangers · For the People
+                <p
+                  className="text-[10px] tracking-widest uppercase mt-1 classics-subtitle-shimmer"
+                  style={{ fontFamily: 'Satoshi, system-ui, sans-serif', fontWeight: 700, background: 'linear-gradient(90deg, #C4943D 0%, #F4D999 35%, #E6B865 55%, #C4943D 80%, #F4D999 100%)', backgroundSize: '200% auto', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}
+                >
+                  African Bangers · VOYO Certified
                 </p>
               </div>
             </div>
