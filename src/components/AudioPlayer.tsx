@@ -515,7 +515,22 @@ export const AudioPlayer = () => {
     if (isTransitioningToBackgroundRef.current) {
       if (usePlayerStore.getState().isPlaying) {
         const el = audioRef.current;
-        if (el && !el.ended) el.play().catch(() => {});
+        if (el && !el.ended) {
+          // iOS requires AudioContext.resume() first — play() is rejected if
+          // the context is suspended, regardless of MediaSession state.
+          const ctx = audioContextRef.current;
+          const doPlay = () => el.play().catch((e: unknown) => {
+            // OS still transitioning — one retry after 100ms.
+            if ((e as { name?: string })?.name === 'NotAllowedError') {
+              setTimeout(() => { if (el.paused && !el.ended) el.play().catch(() => {}); }, 100);
+            }
+          });
+          if (ctx && ctx.state !== 'running') {
+            ctx.resume().then(doPlay).catch(doPlay);
+          } else {
+            doPlay();
+          }
+        }
       }
       return;
     }
