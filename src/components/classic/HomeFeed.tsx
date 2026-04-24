@@ -914,6 +914,11 @@ const AfricanVibesVideoCard = memo(({
 }) => {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [isLoaded, setIsLoaded] = useState(false);
+  // isReady: true 1s after both isActive and isLoaded — gives YouTube's JS
+  // time to fully initialize before we send playVideo and before the iframe
+  // fades in (hides the native YouTube loading state / big play button flash).
+  const [isReady, setIsReady] = useState(false);
+  const playDelayRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Decode VOYO ID to real YouTube ID
   const youtubeId = useMemo(() => decodeVoyoId(track.trackId), [track.trackId]);
@@ -936,13 +941,32 @@ const AfricanVibesVideoCard = memo(({
     return `https://www.youtube.com/embed/${youtubeId}?${params.toString()}`;
   }, [youtubeId]);
 
+  // Play/pause with 1s startup delay — YouTube player JS isn't ready at onLoad.
+  // Immediate postMessage falls on deaf ears; 1s gives it time to boot.
   useEffect(() => {
+    if (playDelayRef.current) clearTimeout(playDelayRef.current);
     if (!iframeRef.current || !isLoaded) return;
-    const cmd = isActive ? 'playVideo' : 'pauseVideo';
-    iframeRef.current.contentWindow?.postMessage(
-      `{"event":"command","func":"${cmd}","args":""}`, '*'
-    );
+    if (isActive) {
+      playDelayRef.current = setTimeout(() => {
+        iframeRef.current?.contentWindow?.postMessage(
+          '{"event":"command","func":"playVideo","args":""}', '*'
+        );
+      }, 1000);
+    } else {
+      iframeRef.current.contentWindow?.postMessage(
+        '{"event":"command","func":"pauseVideo","args":""}', '*'
+      );
+    }
+    return () => { if (playDelayRef.current) clearTimeout(playDelayRef.current); };
   }, [isActive, isLoaded]);
+
+  // isReady gates the opacity — thumbnail stays on top until video is actually
+  // playing so the user never sees the YouTube loading state or big play button.
+  useEffect(() => {
+    if (!isLoaded || !isActive) { setIsReady(false); return; }
+    const t = setTimeout(() => setIsReady(true), 1000);
+    return () => clearTimeout(t);
+  }, [isLoaded, isActive]);
 
   // Lazy-mount the iframe itself — off-active cards show only the
   // thumbnail. Was mounting 10+ YouTube player instances in parallel
@@ -998,7 +1022,7 @@ const AfricanVibesVideoCard = memo(({
         {shouldMountIframe && (
           <div
             className="absolute inset-0 transition-opacity duration-300"
-            style={{ opacity: isActive && isLoaded ? 1 : 0 }}
+            style={{ opacity: isReady ? 1 : 0 }}
           >
             <iframe
               ref={iframeRef}
@@ -1999,12 +2023,13 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
     const host = rippleHostRef.current;
     if (!scroll || !host) return;
 
-    const AURA = 26;
-    let auraEl: HTMLDivElement | null = null;
-    let rafId = 0;
-    let curX = 0, curY = 0, targetX = 0, targetY = 0;
+    // Pure ring system — no aura pointer. Rings only.
+    // Sail ripple: trail rings on move, sonar pulse on hold, burst on lift.
     let lastRingX = 0, lastRingY = 0, lastRingTime = 0;
+    let holdX = 0, holdY = 0;
     let touching = false;
+    let holdTimer: ReturnType<typeof setTimeout> | null = null;
+    let holdInterval: ReturnType<typeof setInterval> | null = null;
     const ringTimers: ReturnType<typeof setTimeout>[] = [];
 
     const color = () => {
@@ -2012,25 +2037,31 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
       return frac < 0.3 ? 'rgba(212,160,83,' : 'rgba(139,92,246,';
     };
 
-    const spawnRing = (x: number, y: number, kind: 'tap' | 'trail' | 'burst') => {
+    const spawnRing = (x: number, y: number, kind: 'tap' | 'trail' | 'burst' | 'hold') => {
       const c = color();
       const wrap = document.createElement('div');
       Object.assign(wrap.style, {
         position: 'fixed', left: `${x}px`, top: `${y}px`,
-        width: '6px', height: '6px', marginLeft: '-3px', marginTop: '-3px',
+        width: '8px', height: '8px', marginLeft: '-4px', marginTop: '-4px',
         borderRadius: '50%', pointerEvents: 'none',
       });
       const inner = document.createElement('div');
+      // Durations tuned for natural water: slightly longer = more breath
       const [anim, dur] =
-        kind === 'tap'   ? ['voyo-ring-tap',   500] :
-        kind === 'trail' ? ['voyo-ring-trail', 520] :
-                           ['voyo-ring-burst', 700];
-      const alpha = kind === 'trail' ? '0.28)' : kind === 'tap' ? '0.32)' : '0.44)';
+        kind === 'tap'   ? ['voyo-ring-tap',   640]  :
+        kind === 'trail' ? ['voyo-ring-trail',  560]  :
+        kind === 'hold'  ? ['voyo-ring-hold',  2000]  :
+                           ['voyo-ring-burst',  800];
+      // Barely-visible alphas — real water is a ghost, not a neon ring
+      const alpha =
+        kind === 'trail' ? '0.07)' :
+        kind === 'tap'   ? '0.10)' :
+        kind === 'hold'  ? '0.08)' :
+                           '0.11)';
       Object.assign(inner.style, {
         width: '100%', height: '100%', borderRadius: '50%',
         border: `1px solid ${c}${alpha}`,
-        boxShadow: `0 0 ${kind === 'burst' ? 10 : 5}px ${c}${kind === 'burst' ? '0.1)' : '0.06)'})`,
-        animation: `${anim} ${dur}ms cubic-bezier(0.2,0.65,0.35,1) forwards`,
+        animation: `${anim} ${dur}ms cubic-bezier(0,0.35,0.25,1) forwards`,
         willChange: 'transform, opacity',
       });
       wrap.appendChild(inner);
@@ -2038,50 +2069,40 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
       ringTimers.push(setTimeout(() => wrap.remove(), dur + 20));
     };
 
-    const tick = () => {
-      if (!touching) return;
-      curX += (targetX - curX) * 0.26;
-      curY += (targetY - curY) * 0.26;
-      if (auraEl) auraEl.style.transform = `translate(${curX - AURA / 2}px, ${curY - AURA / 2}px)`;
-      rafId = requestAnimationFrame(tick);
+    const cancelHold = () => {
+      if (holdTimer) { clearTimeout(holdTimer); holdTimer = null; }
+      if (holdInterval) { clearInterval(holdInterval); holdInterval = null; }
+    };
+
+    const startHoldPulse = () => {
+      spawnRing(holdX, holdY, 'hold');
+      holdInterval = setInterval(() => spawnRing(holdX, holdY, 'hold'), 900);
     };
 
     const onTouchStart = (e: TouchEvent) => {
       const tgt = e.target as HTMLElement;
       if (tgt.closest('button,a,input,select,[role="button"]')) return;
       const t = e.touches[0];
-      curX = targetX = t.clientX;
-      curY = targetY = t.clientY;
+      holdX = t.clientX; holdY = t.clientY;
       lastRingX = t.clientX; lastRingY = t.clientY; lastRingTime = Date.now();
       touching = true;
-      // Cancel any lingering aura from a previous rapid tap before creating a new one
-      if (auraEl) { auraEl.remove(); auraEl = null; }
-      cancelAnimationFrame(rafId);
+      cancelHold();
       spawnRing(t.clientX, t.clientY, 'tap');
-      const c = color();
-      auraEl = document.createElement('div');
-      Object.assign(auraEl.style, {
-        position: 'fixed', left: '0', top: '0',
-        width: `${AURA}px`, height: `${AURA}px`, borderRadius: '50%',
-        transform: `translate(${curX - AURA / 2}px, ${curY - AURA / 2}px)`,
-        border: `1.5px solid ${c}0.6)`,
-        boxShadow: `0 0 14px ${c}0.3), 0 0 6px ${c}0.18) inset`,
-        pointerEvents: 'none', opacity: '1', willChange: 'transform',
-        transition: 'opacity 0.15s ease',
-      });
-      host.appendChild(auraEl);
-      cancelAnimationFrame(rafId);
-      rafId = requestAnimationFrame(tick);
+      holdTimer = setTimeout(startHoldPulse, 220);
     };
 
     const onTouchMove = (e: TouchEvent) => {
       if (!touching) return;
       const t = e.touches[0];
-      targetX = t.clientX; targetY = t.clientY;
+      holdX = t.clientX; holdY = t.clientY;
+      // Any movement resets the hold timer — keeps hold tied to stillness
+      cancelHold();
+      holdTimer = setTimeout(startHoldPulse, 220);
+      // Sail ripple — denser trail for fluid feel
       const dx = t.clientX - lastRingX, dy = t.clientY - lastRingY;
       const dist = Math.sqrt(dx * dx + dy * dy);
       const now = Date.now();
-      if (dist > 22 && now - lastRingTime > 45) {
+      if (dist > 18 && now - lastRingTime > 35) {
         spawnRing(t.clientX, t.clientY, 'trail');
         lastRingX = t.clientX; lastRingY = t.clientY; lastRingTime = now;
       }
@@ -2090,14 +2111,8 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
     const onTouchEnd = (e: TouchEvent) => {
       if (!touching) return;
       touching = false;
-      cancelAnimationFrame(rafId);
-      const t = e.changedTouches[0];
-      spawnRing(t.clientX, t.clientY, 'burst');
-      if (auraEl) {
-        auraEl.style.opacity = '0';
-        const el = auraEl; auraEl = null;
-        setTimeout(() => el.remove(), 170);
-      }
+      cancelHold();
+      spawnRing(e.changedTouches[0].clientX, e.changedTouches[0].clientY, 'burst');
     };
 
     scroll.addEventListener('touchstart', onTouchStart, { passive: true });
@@ -2105,11 +2120,10 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
     scroll.addEventListener('touchend', onTouchEnd, { passive: true });
     return () => {
       touching = false;
+      cancelHold();
       scroll.removeEventListener('touchstart', onTouchStart);
       scroll.removeEventListener('touchmove', onTouchMove);
       scroll.removeEventListener('touchend', onTouchEnd);
-      cancelAnimationFrame(rafId);
-      if (auraEl) { auraEl.remove(); auraEl = null; }
       ringTimers.forEach(clearTimeout);
     };
   }, []);
@@ -2178,9 +2192,12 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
       }, 280);
       loopTimersRef.current.push(t1);
     }
-    // Top overscroll (up gesture) — portal back (wired externally via onSwitchToVOYO when coming from player)
+    // Top overscroll (pull-down at top) → portal back to VOYO player
+    if (feedAtTopRef.current && overscrollYRef.current < -52) {
+      onSwitchToVOYO?.();
+    }
     overscrollYRef.current = 0;
-  }, []);
+  }, [onSwitchToVOYO]);
 
   // Poll live friend count every 30s while mounted
   useEffect(() => {
@@ -2490,19 +2507,20 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
       }} />
       <style>{`
         @keyframes voyo-ring-tap {
-          0%   { transform: scale(0); opacity: 0.6; }
-          60%  { opacity: 0.16; }
-          100% { transform: scale(22); opacity: 0; }
+          0%   { transform: scale(0.08); opacity: 0.10; }
+          100% { transform: scale(28); opacity: 0; }
         }
         @keyframes voyo-ring-trail {
-          0%   { transform: scale(0); opacity: 0.5; }
-          60%  { opacity: 0.12; }
-          100% { transform: scale(20); opacity: 0; }
+          0%   { transform: scale(0.08); opacity: 0.07; }
+          100% { transform: scale(24); opacity: 0; }
         }
         @keyframes voyo-ring-burst {
-          0%   { transform: scale(0); opacity: 0.75; }
-          50%  { opacity: 0.3; }
-          100% { transform: scale(32); opacity: 0; }
+          0%   { transform: scale(0.08); opacity: 0.11; }
+          100% { transform: scale(36); opacity: 0; }
+        }
+        @keyframes voyo-ring-hold {
+          0%   { transform: scale(0.08); opacity: 0.08; }
+          100% { transform: scale(54); opacity: 0; }
         }
       `}</style>
     </div>
@@ -2639,11 +2657,9 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
                 animation: rr-shimmer 5s ease-in-out infinite;
               }
               @keyframes classics-subtitle-shimmer {
-                0%   { background-position: 60% center; filter: none; }
-                22%  { background-position: 0% center;  filter: none; }
-                31%  { background-position: 0% center;  filter: drop-shadow(0 0 5px rgba(255,210,80,0.48)) drop-shadow(0 0 11px rgba(212,160,83,0.28)); }
-                46%  { background-position: 0% center;  filter: none; }
-                100% { background-position: 0% center;  filter: none; }
+                0%   { background-position: 60% center; }
+                22%  { background-position: 0% center; }
+                100% { background-position: 0% center; }
               }
               .classics-subtitle-shimmer {
                 animation-name: classics-subtitle-shimmer;
