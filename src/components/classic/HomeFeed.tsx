@@ -1671,10 +1671,12 @@ interface Top10SectionProps {
 
 const Top10Section = memo(({ tracks, onTrackPlay }: Top10SectionProps) => {
   const sectionRef = useRef<HTMLDivElement>(null);
+  const carouselRef = useRef<HTMLDivElement>(null);
   const cardRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const [countdownActive, setCountdownActive] = useState(false);
   const countdownActiveRef = useRef(false); // sync guard — state update is async
   const [activeIdx, setActiveIdx] = useState<number | null>(null);
+  const [isVisible, setIsVisible] = useState(false); // pauses decorative CSS animations off-screen
   const dwellTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const countdownIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [subtitleKey, setSubtitleKey] = useState(0);
@@ -1682,7 +1684,22 @@ const Top10Section = memo(({ tracks, onTrackPlay }: Top10SectionProps) => {
   const prevScrollRef = useRef<{ left: number; time: number } | null>(null);
   const subtitleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // IntersectionObserver — dwell 4s then auto-scroll countdown #9→#1
+  // Local-only horizontal scroll: center the target card inside the carousel
+  // using scrollTo on the inner container. Previously used scrollIntoView,
+  // which walks up through every ancestor scroller and pulls the outer feed
+  // with it — produced a "drag-back" feel every time the countdown advanced.
+  const centerCardInCarousel = useCallback((idx: number) => {
+    const carousel = carouselRef.current;
+    const card = cardRefs.current[idx];
+    if (!carousel || !card) return;
+    const left = card.offsetLeft - (carousel.clientWidth - card.offsetWidth) / 2;
+    carousel.scrollTo({ left: Math.max(0, left), behavior: 'smooth' });
+  }, []);
+
+  // IntersectionObserver — tracks visibility for (a) gating the 4s dwell
+  // countdown, (b) pausing the 22s header drift + bg pulse CSS animations
+  // when off-screen (saves GPU/CPU across the feed, kills the reload-like
+  // jank seen while scrolling away from and back to this section).
   useEffect(() => {
     const el = sectionRef.current;
     if (!el) return;
@@ -1691,6 +1708,7 @@ const Top10Section = memo(({ tracks, onTrackPlay }: Top10SectionProps) => {
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (!mounted) return;
+        setIsVisible(entry.isIntersecting);
         if (entry.isIntersecting && !fired) {
           dwellTimerRef.current = setTimeout(() => {
             fired = true;
@@ -1698,12 +1716,12 @@ const Top10Section = memo(({ tracks, onTrackPlay }: Top10SectionProps) => {
             setCountdownActive(true);
             let currentIdx = 8;
             setActiveIdx(currentIdx);
-            cardRefs.current[currentIdx]?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+            centerCardInCarousel(currentIdx);
             const interval = setInterval(() => {
               currentIdx -= 1;
               if (currentIdx < 0) { clearInterval(interval); return; }
               setActiveIdx(currentIdx);
-              cardRefs.current[currentIdx]?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+              centerCardInCarousel(currentIdx);
             }, 2400);
             countdownIntervalRef.current = interval;
           }, 4000);
@@ -1720,7 +1738,7 @@ const Top10Section = memo(({ tracks, onTrackPlay }: Top10SectionProps) => {
       if (dwellTimerRef.current) clearTimeout(dwellTimerRef.current);
       if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
     };
-  }, []);
+  }, [centerCardInCarousel]);
 
   // Subtitle flash — fires only on fast manual scroll of the carousel
   const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
@@ -1743,7 +1761,7 @@ const Top10Section = memo(({ tracks, onTrackPlay }: Top10SectionProps) => {
   }, [countdownActive]);
 
   return (
-    <div ref={sectionRef} className="mb-8 py-8 relative" style={{ background: 'linear-gradient(180deg, rgba(6,6,9,1) 0%, rgba(139,92,246,0.08) 15%, rgba(139,92,246,0.06) 50%, rgba(139,92,246,0.12) 85%, rgba(6,6,9,0.95) 100%)' }}>
+    <div ref={sectionRef} className={`mb-8 py-8 relative ${isVisible ? '' : 'top10-paused'}`} style={{ background: 'linear-gradient(180deg, rgba(6,6,9,1) 0%, rgba(139,92,246,0.08) 15%, rgba(139,92,246,0.06) 50%, rgba(139,92,246,0.12) 85%, rgba(6,6,9,0.95) 100%)' }}>
       <div className="absolute top-0 left-0 right-0 h-8 bg-gradient-to-b from-[#060609] to-transparent pointer-events-none z-10" />
       <div className="absolute bottom-0 left-0 right-0 h-10 pointer-events-none z-10" style={{ background: 'linear-gradient(to bottom, transparent, rgba(139,92,246,0.15))' }} />
       <div className="absolute inset-0 pointer-events-none top10-bg-glow" aria-hidden style={{ zIndex: 0 }} />
@@ -1800,8 +1818,19 @@ const Top10Section = memo(({ tracks, onTrackPlay }: Top10SectionProps) => {
           display: inline-block;
           animation: top10-marquee 10s linear infinite;
         }
+        /* When Top 10 is off-screen, freeze all its decorative CSS
+           animations. 22s infinite loops running across the whole feed
+           while you scroll around were triggering GPU/layout jank that
+           looked like reloads/glitches in neighboring sections. */
+        .top10-paused .top10-header-scroll,
+        .top10-paused .top10-bg-glow,
+        .top10-paused .top10-scroll-title,
+        .top10-paused .top10-subtitle-flash {
+          animation-play-state: paused !important;
+        }
       `}</style>
       <div
+        ref={carouselRef}
         className="flex gap-6 px-4 overflow-x-auto scrollbar-hide"
         style={{ scrollSnapType: countdownActive ? 'none' : 'x proximity', overscrollBehaviorX: 'contain', paddingBottom: '60px', position: 'relative', zIndex: 1 }}
         onScroll={handleScroll}
