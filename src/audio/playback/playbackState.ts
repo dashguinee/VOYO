@@ -59,7 +59,7 @@ export interface StateSnapshot {
 // loading→paused: the audio element paused but the state machine stayed
 // 'loading' and the next nt/load flow treated it as an in-flight load).
 const ALLOWED: Record<PlaybackState, PlaybackState[]> = {
-  idle:      ['loading', 'error'],
+  idle:      ['loading', 'error', 'bridge'],
   loading:   ['bridge', 'playing', 'paused', 'error', 'idle', 'advancing'],
   bridge:    ['loading', 'playing', 'paused', 'error', 'advancing'],
   playing:   ['paused', 'advancing', 'loading', 'bridge', 'error'],
