@@ -2080,7 +2080,7 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
 
     const onTouchStart = (e: TouchEvent) => {
       const tgt = e.target as HTMLElement;
-      if (tgt.closest('button,a,input,select,[role="button"]')) return;
+      if (tgt.closest('input,select,textarea,[contenteditable="true"]')) return;
       const t = e.touches[0];
       holdX = t.clientX; holdY = t.clientY;
       lastRingX = t.clientX; lastRingY = t.clientY; lastRingTime = Date.now();
