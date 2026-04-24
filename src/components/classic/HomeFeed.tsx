@@ -1755,17 +1755,29 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
     };
   }, []);
 
-  // Subtitle flash — fires when user manually scrolls the Top 10 carousel
+  // Subtitle flash — fires only on fast manual scroll of the Top 10 carousel
   const [top10SubtitleKey, setTop10SubtitleKey] = useState(0);
   const top10ScrollCooldownRef = useRef(false);
-  const handleTop10Scroll = useCallback(() => {
-    // Ignore scroll events fired by the countdown's scrollIntoView —
-    // those are programmatic, not a user gesture.
+  const top10PrevScrollRef = useRef<{ left: number; time: number } | null>(null);
+  const top10SubtitleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const handleTop10Scroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
     if (top10CountdownActive) return;
-    if (top10ScrollCooldownRef.current) return;
-    top10ScrollCooldownRef.current = true;
-    setTop10SubtitleKey(k => k + 1);
-    setTimeout(() => { top10ScrollCooldownRef.current = false; }, 2800);
+    const now = Date.now();
+    const currentLeft = e.currentTarget.scrollLeft;
+    const prev = top10PrevScrollRef.current;
+    top10PrevScrollRef.current = { left: currentLeft, time: now };
+    if (!prev || top10ScrollCooldownRef.current) return;
+    const dt = now - prev.time;
+    const dx = Math.abs(currentLeft - prev.left);
+    // Fast scroll threshold: >80px moved in <150ms
+    if (dt > 0 && dt < 150 && dx > 80) {
+      top10ScrollCooldownRef.current = true;
+      if (top10SubtitleTimerRef.current) clearTimeout(top10SubtitleTimerRef.current);
+      top10SubtitleTimerRef.current = setTimeout(() => {
+        setTop10SubtitleKey(k => k + 1);
+        setTimeout(() => { top10ScrollCooldownRef.current = false; }, 4200);
+      }, 280);
+    }
   }, [top10CountdownActive]);
 
   // Poll live friend count every 30s while mounted
@@ -2425,16 +2437,16 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
               background: radial-gradient(ellipse 90% 70% at 50% 50%, rgba(139,92,246,0.22) 0%, rgba(139,92,246,0.08) 50%, transparent 80%);
               animation: top10-bg-pulse 22s ease-in-out infinite;
             }
-            /* Subtitle — plays once on manual scroll, pink → gold → fade */
+            /* Subtitle — soft reveal on fast scroll, delayed 280ms in JS, warm white → gold → fade */
             @keyframes top10-subtitle-flash {
-              0%   { opacity: 0; transform: translateY(3px); color: #FF5FA0; text-shadow: 0 0 8px #FF1493, 0 0 18px rgba(255,20,147,0.4); }
-              18%  { opacity: 1; transform: translateY(0);   color: #FF5FA0; text-shadow: 0 0 8px #FF1493, 0 0 18px rgba(255,20,147,0.4); }
-              55%  { opacity: 1; color: rgba(212,160,83,0.9); text-shadow: 0 0 6px rgba(212,160,83,0.3); }
-              82%  { opacity: 0.55; }
+              0%   { opacity: 0; transform: translateY(5px); color: rgba(255,255,255,0.6); text-shadow: none; }
+              20%  { opacity: 0.75; transform: translateY(0); color: rgba(255,255,255,0.8); text-shadow: 0 0 10px rgba(212,160,83,0.2); }
+              55%  { opacity: 0.65; color: rgba(212,160,83,0.7); text-shadow: 0 0 8px rgba(212,160,83,0.2); }
+              85%  { opacity: 0.3; }
               100% { opacity: 0; }
             }
             .top10-subtitle-flash {
-              animation: top10-subtitle-flash 2.8s ease forwards;
+              animation: top10-subtitle-flash 4.2s ease forwards;
             }
             @keyframes top10-marquee {
               0% { transform: translateX(0); }
