@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { memo, useEffect, useRef, useState, useCallback } from 'react';
 import { Play } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { app } from '../../services/oyo';
@@ -56,7 +56,7 @@ function muxYTUrl(videoId: string): string {
   return `https://www.youtube.com/embed/${videoId}?${params.toString()}`;
 }
 
-export const StationHero = ({ station }: StationHeroProps) => {
+export const StationHero = memo(({ station }: StationHeroProps) => {
   const cardRef = useRef<HTMLDivElement>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const dwellTimerRef = useRef<number | null>(null);
@@ -511,6 +511,7 @@ export const StationHero = ({ station }: StationHeroProps) => {
       `}</style>
     </div>
   );
-};
+});
+StationHero.displayName = 'StationHero';
 
 export default StationHero;
