@@ -528,7 +528,6 @@ export const ClassicMode = ({ onSwitchToVOYO, onSearch }: ClassicModeProps) => {
               <HomeFeed
                 onTrackPlay={handleTrackClick}
                 onSearch={onSearch}
-                onDahub={() => setActiveTab('hub')}
                 onNavVisibilityChange={setNavVisible}
                 onSwitchToVOYO={onSwitchToVOYO}
               />

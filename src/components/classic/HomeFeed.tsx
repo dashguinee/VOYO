@@ -42,6 +42,8 @@ import { friendsAPI, type Friend } from '../../lib/voyo-api';
 import { VoyoLoadOrb } from '../voyo/VoyoLoadOrb';
 import { useNavigate } from 'react-router-dom';
 import { PlaylistModal } from '../playlist/PlaylistModal';
+import { AccountMenu } from '../profile/AccountMenu';
+import { BoostSettings } from '../ui/BoostSettings';
 import { CardHoldActions } from '../ui/CardHoldActions';
 
 // ============================================
@@ -2143,12 +2145,11 @@ ArtistRadarShelf.displayName = 'ArtistRadarShelf';
 interface HomeFeedProps {
   onTrackPlay: (track: Track, options?: { openFull?: boolean }) => void;
   onSearch: () => void;
-  onDahub: () => void;
   onNavVisibilityChange?: (visible: boolean) => void;
   onSwitchToVOYO?: () => void;
 }
 
-export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange, onSwitchToVOYO }: HomeFeedProps) => {
+export const HomeFeed = ({ onTrackPlay, onSearch, onNavVisibilityChange, onSwitchToVOYO }: HomeFeedProps) => {
   // Battery fix: fine-grained selectors
   // useShallow prevents memos from recalculating when array contents are the
   // same but the reference changed (e.g. Zustand spread on every play event).
@@ -2162,6 +2163,8 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
   const boostedIds = useMemo(() => new Set(cachedTracks.map(t => t.id)), [cachedTracks]);
   const setExplicitLike = usePreferenceStore(s => s.setExplicitLike);
   const [playlistModalTrack, setPlaylistModalTrack] = useState<Track | null>(null);
+  const [accountMenuOpen, setAccountMenuOpen] = useState(false);
+  const [boostSettingsOpen, setBoostSettingsOpen] = useState(false);
   // Session seed drives shelf rotation — every reload / pull-to-refresh gets
   // a fresh number, so shelves surface different tracks from the big pool
   // without losing stability WITHIN a single session.
@@ -2752,11 +2755,14 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
       onTouchMove={onFeedTouchMove}
       onTouchEnd={onFeedTouchEnd}
     >
-      {/* Header — fully transparent, floats over the continuous canvas (April 2026) */}
+      {/* Header — fully transparent, floats over the continuous canvas.
+          The "D" profile button opens the AccountMenu (profile / settings /
+          sign out). Dahub stays reachable via the bottom nav. */}
       <header className="flex items-center justify-between px-4 py-3 sticky top-0 bg-transparent z-10">
         <button
-          className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-violet-600 flex items-center justify-center text-white font-bold"
-          onClick={onDahub}
+          className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-violet-600 flex items-center justify-center text-white font-bold active:scale-95 transition-transform"
+          onClick={() => setAccountMenuOpen(true)}
+          aria-label="Account menu"
         >
           D
         </button>
@@ -3203,6 +3209,21 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
           trackTitle={playlistModalTrack.title}
         />
       )}
+
+      {/* Account menu — anchored under the header D button. Hosts profile
+          navigation + settings + sign-in/out. */}
+      <AccountMenu
+        isOpen={accountMenuOpen}
+        onClose={() => setAccountMenuOpen(false)}
+        onOpenSettings={() => setBoostSettingsOpen(true)}
+      />
+
+      {/* Boost settings — opened from AccountMenu's "Settings" row. Same
+          modal VoyoPortraitPlayer uses; single source of settings truth. */}
+      <BoostSettings
+        isOpen={boostSettingsOpen}
+        onClose={() => setBoostSettingsOpen(false)}
+      />
     </div>
     </>
   );
