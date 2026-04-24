@@ -342,11 +342,15 @@ export const BoostButton = ({ variant = 'toolbar', className = '' }: BoostButton
     }
   }, [boostProfile]);
 
+  // ytId MUST be computed before any hook that depends on it, because
+  // React forbids conditional hook counts. We keep an empty-string fallback
+  // when currentTrack is absent so useR2KnownStore still runs on every
+  // render (Rules of Hooks). The `return null` gate moves AFTER all hooks.
+  const ytId = currentTrack?.trackId ? getYouTubeId(currentTrack.trackId) : '';
+  const isInR2 = useR2KnownStore(s => (ytId ? s.known.has(ytId) : false));
+
   if (!currentTrack?.trackId) return null;
 
-  // Use the DECODED YouTube id for download lookups — downloadStore keys by
-  // raw YT id, VOYO-prefixed track ids silently miss otherwise.
-  const ytId = getYouTubeId(currentTrack.trackId);
   const downloadStatus = getDownloadStatus(ytId);
   const isDownloading = downloadStatus?.status === 'downloading';
   const isQueued = downloadStatus?.status === 'queued';
@@ -356,9 +360,6 @@ export const BoostButton = ({ variant = 'toolbar', className = '' }: BoostButton
   // as "committed" in boost mode, so gold-filled lights up when cached
   // and EITHER user Oye'd explicitly OR EQ is actively engaged.
   const isActiveIframe = playbackSource === 'iframe';
-  // R2-known — populated by probe/hotswap/gateToR2. Flips to gold the
-  // moment the edge has the track, no wait for local download.
-  const isInR2 = useR2KnownStore(s => s.known.has(ytId));
   const oyeState = computeOyeState(downloadStatus?.status, explicitLike, isActiveIframe, isEqOn, isInR2);
   // Legacy visual flags, now derived from the shared state so every Oye
   // affordance reads the same signal graph:
