@@ -2119,7 +2119,7 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onDahub, onNavVisibilityChange
                 100% { background-position: -200% center; }
               }
               .classics-subtitle-shimmer {
-                animation: classics-subtitle-shimmer 5s linear infinite;
+                animation: classics-subtitle-shimmer 9s linear infinite;
               }
               @media (prefers-reduced-motion: reduce) {
                 .classics-disk-drift, .classics-disk-spin, .classics-disk-glow-ring,
