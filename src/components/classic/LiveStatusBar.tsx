@@ -157,11 +157,10 @@ export const LiveStatusBar = () => {
 
   return (
     <div
-      className="px-4 pt-2 pb-3 pointer-events-none"
+      className="px-4 pt-5 pb-3 pointer-events-none"
       style={{
         opacity: visible ? 1 : 0,
-        transform: visible ? 'translateY(0)' : 'translateY(-4px)',
-        transition: 'opacity 420ms ease, transform 420ms ease',
+        transition: 'opacity 380ms ease',
       }}
     >
       <div className="flex items-center gap-2 text-[12px] text-white/55">
@@ -177,7 +176,7 @@ export const LiveStatusBar = () => {
           key={tale.id}
           className="truncate"
           style={{
-            animation: 'voyo-status-tale-in 360ms ease both',
+            animation: 'voyo-status-tale-in 320ms cubic-bezier(0.22, 1, 0.36, 1) both',
             letterSpacing: '0.01em',
           }}
         >
@@ -191,8 +190,8 @@ export const LiveStatusBar = () => {
           50%      { opacity: 1;    transform: scale(1.15); }
         }
         @keyframes voyo-status-tale-in {
-          from { opacity: 0; transform: translateY(4px); }
-          to   { opacity: 1; transform: translateY(0); }
+          from { opacity: 0; transform: scale(0.94); }
+          to   { opacity: 1; transform: scale(1); }
         }
       `}</style>
     </div>
