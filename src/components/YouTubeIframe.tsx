@@ -479,21 +479,26 @@ export const YouTubeIframe = memo(() => {
   // call the latest initPlayer without creating a stale-closure dependency.
   useEffect(() => { initPlayerRef.current = initPlayer; }, [initPlayer]);
 
-  // Init player when track changes — only when video is visible.
-  // iframe is video-only now; audio is always R2 (or silent WAV during extraction).
+  // Init player when track changes — when video is visible OR when iframe
+  // IS the audio source. Iframe-as-audio engages whenever R2 isn't ready
+  // yet (warming-pill path, search/feed taps on uncached tracks); the
+  // iframe stays hidden visually but carries audio until useHotSwap
+  // migrates to R2.
   useEffect(() => {
     if (!youtubeId) return;
     usePlayerStore.getState().setVideoBlocked(false);
-    if (videoTarget === 'hidden') return;
+    const needsAudio = playbackSource === 'iframe';
+    if (videoTarget === 'hidden' && !needsAudio) return;
     if (isApiLoadedRef.current) initPlayer(youtubeId);
-  }, [youtubeId, videoTarget, initPlayer]);
+  }, [youtubeId, videoTarget, playbackSource, initPlayer]);
 
-  // On-demand player creation: user opened video mode
+  // On-demand player creation: user opened video mode OR iframe became audio source.
   useEffect(() => {
     if (!youtubeId || playerRef.current || !isApiLoadedRef.current) return;
-    if (videoTarget === 'hidden') return;
+    const needsAudio = playbackSource === 'iframe';
+    if (videoTarget === 'hidden' && !needsAudio) return;
     initPlayer(youtubeId);
-  }, [videoTarget, youtubeId, initPlayer]);
+  }, [videoTarget, playbackSource, youtubeId, initPlayer]);
 
   // Play/Pause sync
   // DOUBLE STREAMING FIX: When using cached/r2 audio with hidden video, pause iframe to save bandwidth

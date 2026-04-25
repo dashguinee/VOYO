@@ -368,36 +368,59 @@ export const AudioPlayer = () => {
           });
         }, 300);
       } else {
-        // Track not in r2KnownStore — probe R2 once.
-        // Pool tracks land here on fresh session (store empty).
-        // Manual/search picks land here always.
-        // Found → play. Not found → skip to next track.
+        // Track not in r2KnownStore — probe R2 once. Two outcomes:
+        //
+        //   Found  → R2 fast path (mirror the knownInR2Sync branch above).
+        //   Missed → engage IFRAME as audio source. useHotSwap polls R2,
+        //            crossfades to R2 the moment extraction lands. Per
+        //            Dash 2026-04-25: "play Now plays iframe then hotswap
+        //            or restart if less than 15s in." The skip-on-miss
+        //            behaviour was masking warming-pill flow — user
+        //            tapped Play Now and got skipped past their track
+        //            because R2 wasn't ready yet. Engaging iframe gives
+        //            the user audio NOW; useHotSwap upgrades when ready.
         engageSilentWav('pending_r2', currentTrack.trackId);
         void ensureTrackReady(currentTrack, null, { priority: 10 });
         r2HasTrack(currentTrack.trackId).then(hasR2 => {
           if (isStale()) return;
-          if (!hasR2) {
-            logPlaybackEvent({ event_type: 'skip_auto', track_id: currentTrack.trackId, meta: { reason: 'not_in_r2' } });
-            usePlayerStore.getState().nextTrack();
-            return;
-          }
           const el2 = audioRef.current;
           if (!el2 || isStale()) return;
-          // trackSwapInProgressRef already true from line 282 — don't re-set,
-          // it masks rapid-skip races where the flag from the current effect
-          // was already valid. Same el.pause() guarantee as the fast path.
-          el2.pause();
-          el2.loop = false;
-          el2.src = `${R2_AUDIO}/${getYouTubeId(currentTrack.trackId)}?q=high`;
-          setSource('r2');
-          // Explicit play() — mirrors fast path. handleCanPlay also calls play()
-          // but isPlaying might be false by then if AbortError ran the old catch.
-          const ctx2 = audioContextRef.current;
-          if (ctx2 && ctx2.state !== 'running') ctx2.resume().catch(() => {});
-          el2.play().catch(() => {});
-          logPlaybackEvent({ event_type: 'play_start', track_id: currentTrack.trackId, source: 'r2', meta: { subtype: 'probe_found' } });
+          if (hasR2) {
+            // trackSwapInProgressRef already true from line 282 — don't re-set,
+            // it masks rapid-skip races where the flag from the current effect
+            // was already valid. Same el.pause() guarantee as the fast path.
+            el2.pause();
+            el2.loop = false;
+            el2.src = `${R2_AUDIO}/${getYouTubeId(currentTrack.trackId)}?q=high`;
+            setSource('r2');
+            // Explicit play() — mirrors fast path. handleCanPlay also calls play()
+            // but isPlaying might be false by then if AbortError ran the old catch.
+            const ctx2 = audioContextRef.current;
+            if (ctx2 && ctx2.state !== 'running') ctx2.resume().catch(() => {});
+            el2.play().catch(() => {});
+            logPlaybackEvent({ event_type: 'play_start', track_id: currentTrack.trackId, source: 'r2', meta: { subtype: 'probe_found' } });
+          } else {
+            // Iframe-as-audio fallback. Silent WAV is already engaged on
+            // the audio element (line above) — set it to loop so it doesn't
+            // fire 'ended' and trigger nextTrack while iframe carries the
+            // real audio. YouTubeIframe inits when playbackSource==='iframe'
+            // even with videoTarget hidden; iframe unmute branch (line ~525)
+            // engages because source is no longer 'cached'/'r2'.
+            el2.loop = true;
+            setSource('iframe');
+            trackSwapInProgressRef.current = false;
+            logPlaybackEvent({ event_type: 'play_start', track_id: currentTrack.trackId, source: 'iframe', meta: { subtype: 'r2_pending_iframe_audio' } });
+          }
         }).catch(() => {
-          if (!isStale()) usePlayerStore.getState().nextTrack();
+          // Network error on probe — same fallback. Iframe carries audio,
+          // useHotSwap will retry R2 detection in the background.
+          if (isStale()) return;
+          const el2 = audioRef.current;
+          if (!el2) return;
+          el2.loop = true;
+          setSource('iframe');
+          trackSwapInProgressRef.current = false;
+          logPlaybackEvent({ event_type: 'trace', track_id: currentTrack.trackId, meta: { subtype: 'r2_probe_err_iframe_audio' } });
         });
       }
     })();

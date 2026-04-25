@@ -85,7 +85,7 @@ async function performHotSwap(
 
   // Position priority: live iframe → snapshot → fall back to 0 (cold).
   let t = iframeBridge.getCurrentTime();
-  let posSource: 'live' | 'snapshot' | 'cold' = 'live';
+  let posSource: 'live' | 'snapshot' | 'cold' | 'restart' = 'live';
   if (t == null || !isFinite(t)) {
     if (snapshot && snapshot.trackId === trackId && snapshot.seconds > 0) {
       t = snapshot.seconds;
@@ -94,6 +94,18 @@ async function performHotSwap(
       t = 0;
       posSource = 'cold';
     }
+  }
+
+  // Per Dash 2026-04-25: "restart if less than 15s in." If the user is
+  // still in the intro window when R2 lands, restart the track from 0
+  // via the existing crossfade — the user gets the full song from the
+  // top, no jarring mid-line jump. Past 15s, seamless in-place swap.
+  // 'restart' posSource is logged so we can verify the threshold feels
+  // right in telemetry over time.
+  const RESTART_THRESHOLD_S = 15;
+  if (t > 0 && t < RESTART_THRESHOLD_S) {
+    t = 0;
+    posSource = 'restart';
   }
 
   logPlaybackEvent({

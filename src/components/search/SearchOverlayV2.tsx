@@ -211,13 +211,15 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap, onEnterVideoMode
   // Keyboard navigation — index into `results` (−1 = nothing selected)
   const [activeIndex, setActiveIndex] = useState(-1);
 
-  // Toast feedback — 'warming' is the immediate-tap acknowledgment that
-  // morphs into 'play_now' after a brief flash. 'play_now' is the
-  // existing drift-in pill with the inline skip-to-now action.
+  // Toast feedback — three-stage flow for the warming path:
+  //   1. 'warming'   — purple neon, immediate ack, 3s
+  //   2. 'play_now'  — skip-to-now offer, 7s
+  //   3. 'in_disco'  — subtle confirm when R2 lands ("{title} · in Disco")
   type ToastState =
     | { type: 'queue' | 'discovery'; text: string }
     | { type: 'warming'; trackTitle: string }
-    | { type: 'play_now'; trackTitle: string; onPlayNow: () => void };
+    | { type: 'play_now'; trackTitle: string; onPlayNow: () => void }
+    | { type: 'in_disco'; trackTitle: string };
   const [toast, setToast] = useState<ToastState | null>(null);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Single morph timer — handleSelectTrack schedules the warming → play_now
@@ -250,6 +252,24 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap, onEnterVideoMode
     const id = getYouTubeId(voyoId);
     return warmingSet.has(id) && !r2KnownSet.has(id);
   }, [warmingSet, r2KnownSet]);
+
+  // "in Disco" announcer — when a track that was warming lands in R2,
+  // fire a subtle confirmation pill with the title. Once-per-id ref
+  // prevents re-announcing the same track if it cycles in/out of the
+  // results list. Card-level OyeButton transition (purple → gold) is
+  // already handled by the OyeButton's own r2KnownStore subscription.
+  const announcedDiscoRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    for (const id of warmingSet) {
+      if (r2KnownSet.has(id) && !announcedDiscoRef.current.has(id)) {
+        announcedDiscoRef.current.add(id);
+        const result = results.find(r => getYouTubeId(r.voyoId) === id);
+        if (result) showToast({ type: 'in_disco', trackTitle: result.title });
+        break; // one announcement per tick — don't pile up
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [warmingSet, r2KnownSet, results]);
 
   // Scroll-driven UX: section header fades 15-25%, search bar slides to
   // bottom (thumb-zone) at 45%+. Lets users keep refining without scrolling
@@ -539,11 +559,15 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap, onEnterVideoMode
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
     setToast(t);
     // 'warming' is morphed by the caller (handleSelectTrack) — no auto-dismiss.
-    // 'play_now' lingers 7s (was 4s) — by then the track should be in R2 and
-    // ready to play, so the user has a deliberate window to commit. Everything
-    // else 1.5s.
+    // 'play_now' lingers 7s — by then the track should be in R2 and ready
+    // to play, so the user has a deliberate window to commit.
+    // 'in_disco' is the subtle landed-in-R2 confirmation — 2.5s, no action.
+    // Everything else 1.5s.
     if (t.type === 'warming') return;
-    const ms = t.type === 'play_now' ? 7000 : 1500;
+    const ms =
+      t.type === 'play_now' ? 7000 :
+      t.type === 'in_disco' ? 2500 :
+      1500;
     toastTimerRef.current = setTimeout(() => setToast(null), ms);
   }, []);
 
@@ -559,16 +583,17 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap, onEnterVideoMode
       return;
     }
 
-    // Non-R2: queue (orange "being added" contour on the card),
-    // mark warming (purple "cooking" lightning on the Oye button),
-    // and run the two-stage pill — slow + deliberate per Dash:
+    // Non-R2: tap = implicit Oye commit. Per Dash, "as soon as in R2 it
+    // should be the filled golden" — that requires explicitLike, which
+    // app.oyeCommit sets. oyeCommit also handles addToQueue (de-duped),
+    // boost, and signals — single canonical entry point.
+    //
+    // Then mark warming (purple "cooking" lightning on the Oye button)
+    // and run the two-stage pill — slow + deliberate:
     //   1. "Oye · Warming up" (3s, soft fade in, neon glow holds)
-    //   2. "Play now →" (7s, soft fade in, swipe-to-skip)
-    // By 10s total, R2 should have the track and play is honest.
-    const alreadyQueued = usePlayerStore.getState().queue.some(
-      q => q.track.trackId === track.trackId,
-    );
-    if (!alreadyQueued) app.addToQueue(track);
+    //   2. "Play now →"        (7s, soft fade in, skip-to-now action)
+    //   3. "in Disco" pill fires when R2 lands (separate watcher effect).
+    app.oyeCommit(track);
 
     markWarming(track.trackId);
 
@@ -1046,6 +1071,28 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap, onEnterVideoMode
                     >
                       Play now →
                     </button>
+                  </div>
+                ) : toast.type === 'in_disco' ? (
+                  /* "Landed in Disco" — subtle gold confirm. Track is now
+                     in R2, the OyeButton has flipped to gold-filled,
+                     warming pulse is gone. This pill closes the loop:
+                     the user sees the journey from purple → gold complete. */
+                  <div
+                    className="flex items-center gap-2 px-3.5 py-2 rounded-full"
+                    style={{
+                      background: 'rgba(20,16,12,0.90)',
+                      backdropFilter: 'blur(14px)',
+                      border: '1px solid rgba(212,175,110,0.32)',
+                      boxShadow: '0 6px 20px rgba(0,0,0,0.45), 0 0 14px rgba(212,175,110,0.12)',
+                    }}
+                  >
+                    <span className="text-[rgba(232,208,158,0.95)] text-[10.5px] font-bold tracking-[0.12em] uppercase">
+                      ✦ in Disco
+                    </span>
+                    <span className="text-white/15 text-[10.5px]">·</span>
+                    <span className="text-white/55 text-[10.5px] truncate max-w-[140px]">
+                      {toast.trackTitle}
+                    </span>
                   </div>
                 ) : toast.type === 'warming' ? (
                   /* Immediate-tap acknowledgment. Purple flash via the same
