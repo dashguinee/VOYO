@@ -902,16 +902,37 @@ const decodeVoyoId = (trackId: string): string => {
 const AfricanVibesVideoCard = memo(({
   track,
   idx,
-  isActive,
+  sectionInView,
   onTrackPlay
 }: {
   track: Track;
   idx: number;
-  isActive: boolean;
+  /** Carousel-level visibility — the OYÉ Africa section is in viewport. */
+  sectionInView: boolean;
   onTrackPlay: (track: Track) => void;
 }) => {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [isLoaded, setIsLoaded] = useState(false);
+  // Card-level visibility — determined by THIS card's IntersectionObserver
+  // (not by parent activeIdx). Replaces the broken desktop-only mouseEnter
+  // logic that left mobile users stuck on the first card.
+  const cardRef = useRef<HTMLButtonElement>(null);
+  const [cardInView, setCardInView] = useState(idx === 0);
+  useEffect(() => {
+    const el = cardRef.current;
+    if (!el) return;
+    const obs = new IntersectionObserver(
+      ([entry]) => setCardInView(entry.intersectionRatio > 0.5),
+      { threshold: [0, 0.5, 1] }
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, []);
+  // First card is always-active when section is visible (per Dash:
+  // "first card keeps its current function"). Other cards play only
+  // when scrolled into view. Multiple cards may be active at once on
+  // wider viewports — that's fine, all are muted.
+  const isActive = sectionInView && (idx === 0 || cardInView);
   // isReady: true 1s after both isActive and isLoaded — gives YouTube's JS
   // time to fully initialize before we send playVideo and before the iframe
   // fades in (hides the native YouTube loading state / big play button flash).
@@ -986,6 +1007,7 @@ const AfricanVibesVideoCard = memo(({
 
   return (
     <button
+      ref={cardRef}
       className="flex-shrink-0 relative rounded-xl"
       style={{ width: '95px', height: '142px' }}
       onClick={() => onTrackPlay(track)}
@@ -1058,13 +1080,10 @@ const AfricanVibesVideoCard = memo(({
         </div>
 
         {/* Sound toggle removed - previews always muted, audio through AudioPlayer */}
-
-        {/* Blinking recording dot */}
-        {isActive && isLoaded && (
-          <div
-            className="absolute top-7 right-2 z-20 w-1.5 h-1.5 rounded-full bg-red-500"
-          />
-        )}
+        {/* Recording dot removed (2026-04-25) — the red dot on the active
+            card cheapened the carousel + its "REC" semantics weren't true
+            (cards aren't recording, they're playing). Subtraction over
+            ornament. */}
 
         {/* Track info */}
         <div className="absolute bottom-0 left-0 right-0 p-1.5 z-20">
@@ -1102,15 +1121,16 @@ const AfricanVibesCarousel = ({
   onOpenVoyo: (track: Track | null) => void;
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [activeIdx, setActiveIdx] = useState<number>(0);
   const [isInView, setIsInView] = useState(false);
   const [sentinelState, setSentinelState] = useState<EndSentinelState>('hidden');
   const lastWatchedRef = useRef<Track | null>(null);
 
-  // Track what the user was last looking at so Open VOYO can pick up there.
+  // lastWatched — first track is the default opener; if a card has been
+  // tapped, that wins. Carousel-level "active card" tracking is no longer
+  // needed (each card owns its own viewport-driven play state).
   useEffect(() => {
-    if (tracks[activeIdx]) lastWatchedRef.current = tracks[activeIdx];
-  }, [activeIdx, tracks]);
+    if (tracks[0]) lastWatchedRef.current = tracks[0];
+  }, [tracks]);
 
   useEffect(() => {
     const observer = new IntersectionObserver(
@@ -1156,18 +1176,16 @@ const AfricanVibesCarousel = ({
       ref={containerRef}
       className="flex gap-4 overflow-x-auto scrollbar-hide py-3 pr-4"
       style={{ paddingLeft: '28px' }}
-      onMouseLeave={() => setActiveIdx(0)}
       onScroll={handleScroll}
     >
       {tracks.slice(0, 12).map((track, idx) => (
-        <div key={track.id} onMouseEnter={() => setActiveIdx(idx)}>
-          <AfricanVibesVideoCard
-            track={track}
-            idx={idx}
-            isActive={isInView && activeIdx === idx}
-            onTrackPlay={onTrackPlay}
-          />
-        </div>
+        <AfricanVibesVideoCard
+          key={track.id}
+          track={track}
+          idx={idx}
+          sectionInView={isInView}
+          onTrackPlay={(t) => { lastWatchedRef.current = t; onTrackPlay(t); }}
+        />
       ))}
 
       {/* END-SCROLL SENTINEL — only visible after the user reaches the end */}
