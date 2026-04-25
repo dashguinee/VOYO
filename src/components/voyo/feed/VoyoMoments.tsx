@@ -1274,6 +1274,12 @@ export const VoyoMoments: React.FC<VoyoMomentsProps> = ({ onPlayFullTrack, onArt
   const currentMoment = isMixMode
     ? (mixedMoments[mixIndex] || null)
     : hookCurrentMoment;
+  // Live mirror — lets deferred callbacks (starHoldTimer fires after
+  // 500ms) read the *current* moment without going through closures.
+  // Without this, a hold started on moment A could fire its panel after
+  // a swipe to moment B and show A's creator on B's content.
+  const currentMomentRef = useRef(currentMoment);
+  useEffect(() => { currentMomentRef.current = currentMoment; }, [currentMoment]);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const lpTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1332,16 +1338,25 @@ export const VoyoMoments: React.FC<VoyoMomentsProps> = ({ onPlayFullTrack, onArt
   const [transitionDir, setTransitionDir] = useState<SlideDir>(null);
   const transitionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Re-entry guard — re-swipe during the 700ms transition window
+  // produced triple-card flicker (prev still fading while next prev
+  // gets captured + animates over it). Lock until the in-flight
+  // transition unmounts cleanly.
+  const navLockedRef = useRef(false);
+
   const nav = useCallback((dir: SlideDir, fn: () => void) => {
+    if (navLockedRef.current) return;
     // Capture outgoing BEFORE fn() advances the feed so prevMoment holds
     // the moment that's leaving, not the one that just arrived.
     if (currentMoment) {
+      navLockedRef.current = true;
       setPrevMoment(currentMoment);
       setTransitionDir(dir);
       if (transitionTimerRef.current) clearTimeout(transitionTimerRef.current);
       transitionTimerRef.current = setTimeout(() => {
         setPrevMoment(null);
         setTransitionDir(null);
+        navLockedRef.current = false;
       }, 700);
     }
     setSlideDir(dir);
@@ -1403,14 +1418,21 @@ export const VoyoMoments: React.FC<VoyoMomentsProps> = ({ onPlayFullTrack, onArt
     // Check if this is a second tap (potential double-tap-hold for stars)
     const now = Date.now();
     if (now - lastTap.current < DOUBLE_TAP_MS && currentMoment) {
-      // Second tap detected — start star hold timer
+      // Capture the moment id at hold-start so the panel can validate it
+      // hasn't drifted by the time the timer fires (e.g. realtime feed
+      // refresh during the 500ms hold). Without this, the StarPanel can
+      // open for the wrong creator's content.
+      const heldMomentId = currentMoment.id;
       starHoldTimer.current = setTimeout(() => {
-        if (!swiping.current) {
-          const creator = currentMoment.creator_username || currentMoment.creator_name || '';
-          if (creator) {
-            setShowStarPanel(true);
-          }
-        }
+        if (swiping.current) return;
+        // Re-read the live currentMoment via a fresh closure-captured ref
+        // is overkill — instead read the latest from the hook by walking
+        // back through React state. Simplest valid check: ensure the
+        // captured id still matches what's rendered.
+        const live = currentMomentRef.current;
+        if (!live || live.id !== heldMomentId) return;
+        const creator = live.creator_username || live.creator_name || '';
+        if (creator) setShowStarPanel(true);
       }, STAR_HOLD_MS);
     }
 

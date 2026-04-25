@@ -2230,12 +2230,17 @@ const ReactionBar = memo(({
       source.connect(analyserRef.current);
       analyserRef.current.fftSize = 32;
 
-      // Animate waveform bars
+      // Animate waveform bars — capped to ~15Hz (every 4th rAF frame)
+      // so we're not firing setState 60×/sec for 5 visual bars. Eyes
+      // can't perceive >24Hz on bar oscillation; 15Hz reads as alive,
+      // saves ~75% of the React reconciliation cost during recording.
+      // Pre-allocate the Uint8Array once instead of per-tick GC churn.
+      const buf = new Uint8Array(analyserRef.current.frequencyBinCount);
+      let frameMod = 0;
       const updateWaveform = () => {
-        if (analyserRef.current) {
-          const data = new Uint8Array(analyserRef.current.frequencyBinCount);
-          analyserRef.current.getByteFrequencyData(data);
-          const levels = Array.from(data.slice(0, 5)).map(v => Math.max(0.2, v / 255));
+        if (analyserRef.current && (frameMod++ & 3) === 0) {
+          analyserRef.current.getByteFrequencyData(buf);
+          const levels = Array.from(buf.slice(0, 5)).map(v => Math.max(0.2, v / 255));
           setWaveformLevels(levels);
         }
         animationRef.current = requestAnimationFrame(updateWaveform);
