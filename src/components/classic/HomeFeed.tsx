@@ -937,14 +937,18 @@ const AfricanVibesVideoCard = memo(({
   // time to fully initialize before we send playVideo and before the iframe
   // fades in (hides the native YouTube loading state / big play button flash).
   const [isReady, setIsReady] = useState(false);
-  const playDelayRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Decode VOYO ID to real YouTube ID
   const youtubeId = useMemo(() => decodeVoyoId(track.trackId), [track.trackId]);
 
   const embedUrl = useMemo(() => {
     const params = new URLSearchParams({
-      autoplay: '0',
+      // autoplay=1 — video starts the moment the iframe boots, not after
+      // our 1s postMessage(playVideo) cycle. Combined with mute=1 (which
+      // YouTube requires for browser autoplay), the video is already
+      // running by the time the iframe fades in. No more "thumbnail then
+      // gap then video" — feels instant.
+      autoplay: '1',
       mute: '1',
       controls: '0',
       disablekb: '1',
@@ -960,30 +964,31 @@ const AfricanVibesVideoCard = memo(({
     return `https://www.youtube.com/embed/${youtubeId}?${params.toString()}`;
   }, [youtubeId]);
 
-  // Play/pause with 1s startup delay — YouTube player JS isn't ready at onLoad.
-  // Immediate postMessage falls on deaf ears; 1s gives it time to boot.
+  // With autoplay=1 in the URL, the video starts on iframe boot — no
+  // more 1s playVideo postMessage delay. We only need pause + resume:
+  //   · Card leaves view → pauseVideo (saves CPU + bandwidth)
+  //   · Card returns to view → playVideo (resume from where it left)
   useEffect(() => {
-    if (playDelayRef.current) clearTimeout(playDelayRef.current);
     if (!iframeRef.current || !isLoaded) return;
     if (isActive) {
-      playDelayRef.current = setTimeout(() => {
-        iframeRef.current?.contentWindow?.postMessage(
-          '{"event":"command","func":"playVideo","args":""}', '*'
-        );
-      }, 1000);
+      iframeRef.current.contentWindow?.postMessage(
+        '{"event":"command","func":"playVideo","args":""}', '*'
+      );
     } else {
       iframeRef.current.contentWindow?.postMessage(
         '{"event":"command","func":"pauseVideo","args":""}', '*'
       );
     }
-    return () => { if (playDelayRef.current) clearTimeout(playDelayRef.current); };
   }, [isActive, isLoaded]);
 
-  // isReady gates the opacity — thumbnail stays on top until video is actually
-  // playing so the user never sees the YouTube loading state or big play button.
+  // isReady gates the iframe's opacity — thumbnail stays on top until
+  // YouTube has had time to paint the first video frame, so the user
+  // never sees the native YT loading UI / big play button. Tightened
+  // from 1000ms → 500ms now that autoplay=1 starts the video at boot
+  // (not after our delayed postMessage).
   useEffect(() => {
     if (!isLoaded || !isActive) { setIsReady(false); return; }
-    const t = setTimeout(() => setIsReady(true), 1000);
+    const t = setTimeout(() => setIsReady(true), 500);
     return () => clearTimeout(t);
   }, [isLoaded, isActive]);
 
