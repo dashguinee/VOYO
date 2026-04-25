@@ -3112,7 +3112,7 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onNavVisibilityChange, onSwitc
           Skeleton row renders while the query is in flight to kill the
           "ghost-then-jolt" layout shift on slow networks. */}
       {stationsLoading && stations.length === 0 ? (
-        <div className="mb-8 -mx-1" aria-busy="true" aria-label="Loading stations">
+        <div className="mb-12 -mx-1" aria-busy="true" aria-label="Loading stations">
           <div className="flex gap-3 overflow-hidden scrollbar-hide px-4 pb-2">
             {[0, 1].map((i) => (
               <div
@@ -3136,8 +3136,13 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onNavVisibilityChange, onSwitc
         </div>
       ) : stations.length > 0 && (
         <Safe name="StationsRail">
-          <div className="mb-8 -mx-1" data-no-ripple>
-            <div className="flex gap-3 overflow-x-auto snap-x snap-mandatory scrollbar-hide px-4 pb-2">
+          {/* mb-12 matches Vibes + OYO's Picks bookend rhythm — stations no
+              longer feels cramped against neighbours.
+              snap-proximity (was snap-mandatory) follows the gesture
+              intent — soft drag stays where you let go, hard flick still
+              snaps. Mandatory was forcing every micro-scroll to commit. */}
+          <div className="mb-12 -mx-1" data-no-ripple>
+            <div className="flex gap-3 overflow-x-auto snap-x snap-proximity scrollbar-hide px-4 pb-2">
               {stations.map((station) => (
                 <Safe name={`Station:${station.id}`} key={station.id}>
                   <div className="snap-center flex-shrink-0 w-[82vw] max-w-[420px]">

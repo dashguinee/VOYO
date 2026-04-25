@@ -78,6 +78,13 @@ export const StationHero = memo(({ station }: StationHeroProps) => {
   const [isPreviewingAudio, setIsPreviewingAudio] = useState(false);
   const [subscribed, setSubscribed] = useState(false);
   const [showIosHint, setShowIosHint] = useState(false);
+  // Smooth handoff between the static poster and the live iframe. Without
+  // this gate, isNearby flipping true unmounted the img + mounted a fresh
+  // iframe in the same frame — black flash until YT's first paint. Now
+  // the img stays mounted as backdrop and the iframe fades in over it
+  // once YT is ready. Reset to false when iframe unmounts (isNearby false).
+  const [iframeReady, setIframeReady] = useState(false);
+  useEffect(() => { if (!isNearby) setIframeReady(false); }, [isNearby]);
 
   const accentPrimary = station.accent_colors?.primary ?? '#007749'; // SA green fallback
   const accentSecondary = station.accent_colors?.secondary ?? '#FFB612'; // SA gold fallback
@@ -234,14 +241,29 @@ export const StationHero = memo(({ station }: StationHeroProps) => {
         boxShadow: `inset 0 0 32px rgba(212,175,110,0.08), 0 8px 32px ${accentPrimary}22`,
       }}
     >
-      {/* Iframe only mounts when the card is within proximity of the
-          viewport (rootMargin 150%). Far-offscreen stations render as a
-          static thumbnail poster until they get close, saving a YouTube
-          player instance + video decode + bandwidth per station.
-          scale 1.22 overscans YT UI bleed; translateY 7% drops the
-          video so the native YouTube title (when it flashes) falls
-          into the top fade instead of being clipped. */}
-      {isNearby ? (
+      {/* Static poster — ALWAYS mounted as the backdrop. Single cheap
+          thumbnail; carries the station visually when the iframe isn't
+          present (off-screen) AND while the iframe is booting (smooth
+          handoff). When iframe is ready + visible, it fades in over the
+          poster — no black flash on proximity flip. */}
+      <img
+        src={getThumb(station.hero_video_id)}
+        alt=""
+        decoding="async"
+        loading="lazy"
+        aria-hidden="true"
+        className="absolute inset-0 w-full h-full object-cover"
+        style={{
+          filter: 'brightness(0.52) blur(0.4px)',
+          transform: 'scale(1.62) translateY(5%)',
+          pointerEvents: 'none',
+        }}
+      />
+      {/* Live iframe overlays when within proximity (rootMargin 250%).
+          Far-offscreen stations show ONLY the poster — saves a YT player
+          + video decode + bandwidth per card. Fades in over 600ms when
+          YT signals onLoad. */}
+      {isNearby && (
         <iframe
           ref={iframeRef}
           src={muxYTUrl(station.hero_video_id)}
@@ -249,18 +271,18 @@ export const StationHero = memo(({ station }: StationHeroProps) => {
           style={{
             border: 0,
             filter: isPreviewingAudio ? 'brightness(0.82)' : 'brightness(0.52) blur(0.4px)',
-            transition: 'filter 500ms ease',
-            // scale 1.22 left ~55% of the iframe as YT letterbox black
-            // (16:9 video in 4:5 frame). 1.62 zooms the video enough to
-            // clip ~40% of the top black strip while still keeping the
-            // main subject framed. translateY keeps YT's title flash
-            // inside the top fade.
+            // scale 1.62 zooms enough to clip ~40% of the top black strip
+            // while keeping the subject framed; translateY drops YT's
+            // title flash into the top fade.
             transform: 'scale(1.62) translateY(5%)',
             pointerEvents: 'none',
+            opacity: iframeReady ? 1 : 0,
+            transition: 'opacity 600ms cubic-bezier(0.16, 1, 0.3, 1), filter 500ms ease',
           }}
           allow="autoplay; encrypted-media; picture-in-picture"
           title={station.title}
           onLoad={() => {
+            setIframeReady(true);
             // autoplay=1 in the URL starts the video the moment the iframe
             // boots. If we're mounted-nearby-but-not-in-view, that's pure
             // wasted decode + stream. Push pauseVideo as soon as the YT
@@ -274,20 +296,6 @@ export const StationHero = memo(({ station }: StationHeroProps) => {
               postYTMessage('pauseVideo');
               postYTMessage('mute');
             }, 800);
-          }}
-        />
-      ) : (
-        <img
-          src={getThumb(station.hero_video_id)}
-          alt=""
-          decoding="async"
-          loading="lazy"
-          aria-hidden="true"
-          className="absolute inset-0 w-full h-full object-cover"
-          style={{
-            filter: 'brightness(0.52) blur(0.4px)',
-            transform: 'scale(1.62) translateY(5%)',
-            pointerEvents: 'none',
           }}
         />
       )}
