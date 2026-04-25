@@ -2850,6 +2850,40 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onNavVisibilityChange, onSwitc
   const hasTrending = trending.length > 0;
   const hasDiscoverMore = discoverMoreTracks.length > 0;
 
+  // ── Deep page lazy-mount ────────────────────────────────────────────
+  // Top10 + Vibes + Stations + OYO Picks + Radar are deferred until the
+  // user scrolls within ~1 viewport of where they'd appear. Stations
+  // was the dominant first-paint glitch source — mounting it on demand
+  // eliminates it from the cold-load critical path entirely.
+  //
+  // The morphy fade gives a "depth" handoff: Page 1 reads as the intro,
+  // Page 2 emerges as a distinct surface (slight scale-up + opacity ramp,
+  // Apple easing). User keeps scrolling without interruption — the
+  // placeholder reserves the right height so the scroll position stays
+  // anchored across the mount.
+  const [deepMounted, setDeepMounted] = useState(false);
+  const deepSentinelRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (deepMounted) return;
+    const el = deepSentinelRef.current;
+    if (!el || typeof IntersectionObserver === 'undefined') {
+      // Fallback: no IO support → mount on a microtask so it doesn't block paint.
+      const t = setTimeout(() => setDeepMounted(true), 0);
+      return () => clearTimeout(t);
+    }
+    const obs = new IntersectionObserver(
+      (entries) => {
+        if (entries.some(e => e.isIntersecting)) {
+          setDeepMounted(true);
+          obs.disconnect();
+        }
+      },
+      { root: null, rootMargin: '100% 0px 100% 0px', threshold: 0 },
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [deepMounted]);
+
   return (
     <>
     {/* Ripple host — fixed viewport layer, receives imperatively added ripple divs */}
@@ -3235,6 +3269,33 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onNavVisibilityChange, onSwitc
       )}
 
 
+      {/* ═══════════════════════════════════════════════════════════════
+          DEEP PAGE — sentinel + lazy mount + morphy fade-in.
+          Everything below this seam (Top10, Vibes, Stations, OYO Picks,
+          Artist Radar) is deferred until the user scrolls within one
+          viewport of this point. First paint stays light — Stations no
+          longer glitches the cold load. Morphy fade reads as a depth
+          shift between two surfaces, not a continuous landing scroll.
+          ═══════════════════════════════════════════════════════════════ */}
+      <div ref={deepSentinelRef} aria-hidden="true" style={{ height: 1, marginBottom: -1 }} />
+      {!deepMounted ? (
+        // Placeholder: reserve enough height so the scroll position
+        // stays anchored when the deep mount lands. ~3 screens worth of
+        // content estimated; under-shoot is fine (just a small jump),
+        // over-shoot leaves an awkward gap.
+        <div aria-hidden="true" style={{ minHeight: '180vh' }} />
+      ) : (
+        <div className="voyo-deep-fade-in" style={{ transformOrigin: 'top center' }}>
+          <style>{`
+            @keyframes voyo-deep-emerge {
+              from { opacity: 0; transform: scale(0.97); }
+              to   { opacity: 1; transform: scale(1); }
+            }
+            .voyo-deep-fade-in {
+              animation: voyo-deep-emerge 800ms cubic-bezier(0.16, 1, 0.3, 1) both;
+            }
+          `}</style>
+
       {/* Top 10 on VOYO — state/countdown fully isolated in Top10Section.
           contain:paint scopes the countdown's text-shadow + box-shadow
           animations to this section so they can't cascade into Vibes/
@@ -3351,6 +3412,9 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onNavVisibilityChange, onSwitc
           </button>
         </div>
       )}
+        </div>
+      )}
+      {/* ═══════════════ END DEEP PAGE ═══════════════ */}
 
       {/* Vibes on Vibes — Live Friends Sheet (portal-like, renders on top) */}
       {vibesSheetOpen && (
