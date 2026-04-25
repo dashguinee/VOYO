@@ -30,6 +30,7 @@ import { useDownloadStore } from '../../store/downloadStore';
 import { usePreferenceStore } from '../../store/preferenceStore';
 import { usePlayerStore } from '../../store/playerStore';
 import { useR2KnownStore } from '../../store/r2KnownStore';
+import { useWarmingStore } from '../../store/warmingStore';
 import { app } from '../../services/oyo';
 import { getYouTubeId } from '../../utils/voyoId';
 import type { Track } from '../../types';
@@ -125,6 +126,7 @@ export function computeOyeState(
   isActiveIframe: boolean,
   isEqOnBoost = false,
   isInR2 = false,
+  isWarming = false,
 ): OyeVisualState {
   const isCommitted = hasExplicitLike || isEqOnBoost;
   // "In your Disco" = can play instantly. Two equivalent sources:
@@ -136,16 +138,19 @@ export function computeOyeState(
 
   // Gold filled = in disco AND committed.
   if (inDisco && isCommitted) return 'gold-filled';
-  // Cooking — the pulse is the active signal that the track is being
-  // worked on right now. Two sources of "cooking":
+  // Cooking — purple lightning pulse. Sources of "cooking":
   //   a) local IndexedDB download in flight (downloadStatus)
   //   b) this IS the currently playing track AND it's on iframe, meaning
-  //      R2 extraction is racing server-side (per Dash's rule "if it's
-  //      iframe and playing probably means it's cooking"). Suppressed
-  //      when inDisco (R2 already has it) — the iframe is about to be
-  //      swapped out any poll tick now.
+  //      R2 extraction is racing server-side
+  //   c) warmingStore says we just queued it from a non-R2 surface
+  //      (e.g. search tap) — Dash's "keep the lightning pulsing until
+  //      song is in R2" — purple stays lit alongside the orange "being
+  //      added" contour on the surface that initiated it.
+  // All three suppressed when inDisco (R2 already has it) — the button
+  // settles to gold-faded once cooking finishes.
   if (downloadStatus === 'downloading' || downloadStatus === 'queued') return 'bubbling';
   if (isActiveIframe && !inDisco) return 'bubbling';
+  if (isWarming && !inDisco) return 'bubbling';
   // In disco but no explicit commitment yet — e.g. auto-cached via play.
   if (inDisco) return 'gold-faded';
   // Cold — "needs to Oye".
@@ -200,10 +205,14 @@ export const OyeButton = memo(({ track, size = 'md', escape = true, className = 
   // complete. Selector returns primitive boolean so zustand's default
   // equality is sufficient.
   const isInR2 = useR2KnownStore(s => s.known.has(getYouTubeId(track.trackId)));
+  // Warming subscription — when a non-R2 search/feed tap queues a track,
+  // it lands in warmingStore. Pulse stays lit until R2 confirms (the
+  // computeOyeState branch suppresses warming → bubbling once inDisco).
+  const isWarming = useWarmingStore(s => s.warming.has(getYouTubeId(track.trackId)));
 
   const state = useMemo(
-    () => computeOyeState(download?.status, preference?.explicitLike === true, isActiveIframe, false, isInR2),
-    [download?.status, preference?.explicitLike, isActiveIframe, isInR2],
+    () => computeOyeState(download?.status, preference?.explicitLike === true, isActiveIframe, false, isInR2, isWarming),
+    [download?.status, preference?.explicitLike, isActiveIframe, isInR2, isWarming],
   );
 
   const { px, icon } = SIZE_MAP[size];

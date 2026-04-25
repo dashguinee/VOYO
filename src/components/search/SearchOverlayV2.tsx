@@ -23,11 +23,13 @@ import { AlbumSection } from './AlbumSection';
 import { VibesSection } from './VibesSection';
 import { devWarn } from '../../utils/logger';
 import { supabase, isSupabaseConfigured } from '../../lib/supabase';
+import { getYouTubeId } from '../../utils/voyoId';
 import { getVibeEssence } from '../../services/essenceEngine';
 import { voyoStream } from '../../services/voyoStream';
 import { onSignal as oyaPlanSignal } from '../../services/oyoPlan';
 import { useBackGuard } from '../../hooks/useBackGuard';
 import { useR2KnownStore, markR2KnownMany } from '../../store/r2KnownStore';
+import { useWarmingStore, markWarming } from '../../store/warmingStore';
 import { formatTime as formatDuration, formatViews } from '../../utils/format';
 
 interface SearchOverlayProps {
@@ -95,7 +97,7 @@ const TrackItem = memo(({
         isActive
           ? 'border-purple-400/50 bg-purple-500/10'
           : isWarming
-            ? 'border-purple-400/40 voyo-card-warming'
+            ? 'border-orange-400/35 voyo-card-warming'
             : 'border-transparent hover:border-[#28282f]'
       }`}
       style={{ background: isActive ? 'rgba(139,92,246,0.12)' : 'rgba(28, 28, 35, 0.4)' }}
@@ -218,6 +220,10 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap, onEnterVideoMode
     | { type: 'play_now'; trackTitle: string; onPlayNow: () => void };
   const [toast, setToast] = useState<ToastState | null>(null);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Single morph timer — handleSelectTrack schedules the warming → play_now
+  // morph 3s out. Rapid taps on different non-R2 results would otherwise
+  // ping-pong as both timers fire; cancel any pending morph on new tap.
+  const morphTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // DiscoExplainer — opened by tapping the ✦ DISCO badge on cached results.
   // Single instance in the overlay; each TrackItem just fires the open callback.
@@ -234,57 +240,16 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap, onEnterVideoMode
   const updateDiscoveryForTrack = usePlayerStore(s => s.updateDiscoveryForTrack);
   const currentTrack = usePlayerStore(s => s.currentTrack);
   const playbackSource = usePlayerStore(s => s.playbackSource);
-  // warmingIds is a Set so multiple cards can pulse in parallel — user
-  // sees their queue forming visually while in search. Each entry persists
-  // until R2 confirms the track is ready (per Dash: "shouldn't stop until
-  // song is in R2"). Per-track 60s safety timer for stuck states.
-  const [warmingIds, setWarmingIds] = useState<Set<string>>(new Set());
-  const warmingTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  // Card-level "being added" pulse subscribes to the global warmingStore
+  // (single source of truth — same Set the OyeButton reads to keep its
+  // purple lightning lit). Multiple cards can pulse in parallel; each
+  // persists until R2 confirms (consumers compare warming ∧ ¬r2Known).
   const r2KnownSet = useR2KnownStore(s => s.known);
-
-  const startWarming = useCallback((trackId: string) => {
-    setWarmingIds(prev => {
-      if (prev.has(trackId)) return prev;
-      const next = new Set(prev);
-      next.add(trackId);
-      return next;
-    });
-    const timers = warmingTimersRef.current;
-    if (timers.has(trackId)) clearTimeout(timers.get(trackId)!);
-    timers.set(trackId, setTimeout(() => {
-      setWarmingIds(prev => {
-        if (!prev.has(trackId)) return prev;
-        const next = new Set(prev);
-        next.delete(trackId);
-        return next;
-      });
-      timers.delete(trackId);
-    }, 60_000));
-  }, []);
-
-  // Sweep: any warming id whose track is now in r2KnownStore drops out.
-  // Same effect handles cleanup of safety timers on unmount.
-  useEffect(() => {
-    if (warmingIds.size === 0) return;
-    const known = useR2KnownStore.getState();
-    const drop: string[] = [];
-    for (const id of warmingIds) if (known.has(id)) drop.push(id);
-    if (drop.length === 0) return;
-    setWarmingIds(prev => {
-      const next = new Set(prev);
-      for (const id of drop) {
-        next.delete(id);
-        const t = warmingTimersRef.current.get(id);
-        if (t) { clearTimeout(t); warmingTimersRef.current.delete(id); }
-      }
-      return next;
-    });
-  }, [warmingIds, r2KnownSet]);
-
-  useEffect(() => () => {
-    for (const t of warmingTimersRef.current.values()) clearTimeout(t);
-    warmingTimersRef.current.clear();
-  }, []);
+  const warmingSet = useWarmingStore(s => s.warming);
+  const cardIsWarming = useCallback((voyoId: string) => {
+    const id = getYouTubeId(voyoId);
+    return warmingSet.has(id) && !r2KnownSet.has(id);
+  }, [warmingSet, r2KnownSet]);
 
   // Scroll-driven UX: section header fades 15-25%, search bar slides to
   // bottom (thumb-zone) at 45%+. Lets users keep refining without scrolling
@@ -574,9 +539,11 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap, onEnterVideoMode
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
     setToast(t);
     // 'warming' is morphed by the caller (handleSelectTrack) — no auto-dismiss.
-    // 'play_now' lingers 4s. Everything else 1.5s.
+    // 'play_now' lingers 7s (was 4s) — by then the track should be in R2 and
+    // ready to play, so the user has a deliberate window to commit. Everything
+    // else 1.5s.
     if (t.type === 'warming') return;
-    const ms = t.type === 'play_now' ? 4000 : 1500;
+    const ms = t.type === 'play_now' ? 7000 : 1500;
     toastTimerRef.current = setTimeout(() => setToast(null), ms);
   }, []);
 
@@ -592,18 +559,23 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap, onEnterVideoMode
       return;
     }
 
-    // Non-R2: queue, light the warming pulse on the card, and run the
-    // two-stage pill: "Oye · Warming up" (purple flash, immediate ack) →
-    // "Play Now" (drifts in 700ms later, existing pill, with skip-to-now).
+    // Non-R2: queue (orange "being added" contour on the card),
+    // mark warming (purple "cooking" lightning on the Oye button),
+    // and run the two-stage pill — slow + deliberate per Dash:
+    //   1. "Oye · Warming up" (3s, soft fade in, neon glow holds)
+    //   2. "Play now →" (7s, soft fade in, swipe-to-skip)
+    // By 10s total, R2 should have the track and play is honest.
     const alreadyQueued = usePlayerStore.getState().queue.some(
       q => q.track.trackId === track.trackId,
     );
     if (!alreadyQueued) app.addToQueue(track);
 
-    startWarming(track.trackId);
+    markWarming(track.trackId);
 
     showToast({ type: 'warming', trackTitle: track.title });
-    setTimeout(() => {
+    if (morphTimerRef.current) clearTimeout(morphTimerRef.current);
+    morphTimerRef.current = setTimeout(() => {
+      morphTimerRef.current = null;
       showToast({
         type: 'play_now',
         trackTitle: track.title,
@@ -611,13 +583,13 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap, onEnterVideoMode
           app.playTrack(track, 'search');
           oyaPlanSignal('search_play', track.artist ?? '');
           setToast(null);
-          // Card glow stays — per Dash, the pulse only stops once the
-          // track is actually in R2 (the watcher effect handles that).
+          // Orange contour + purple Oye pulse stay — they only fade
+          // when r2KnownStore confirms the track has landed.
           onEnterVideoMode?.();
         },
       });
-    }, 700);
-  }, [resultToTrack, onEnterVideoMode, cachedSet, showToast, startWarming]);
+    }, 3000);
+  }, [resultToTrack, onEnterVideoMode, cachedSet, showToast]);
 
 
   // Called from OyeButton's onClick override. Pool sync + collective brain
@@ -627,7 +599,7 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap, onEnterVideoMode
   const handleOyeCommit = useCallback((track: Track) => {
     addSearchResultsToPool([track]);
     app.oyeCommit(track);
-    startWarming(track.trackId);
+    markWarming(track.trackId);
     // DI notification fires after glow settles (600ms)
     setTimeout(() => {
       const q = usePlayerStore.getState().queue;
@@ -655,18 +627,22 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap, onEnterVideoMode
       {isOpen && (
         <>
           <style>{`
-            /* Warming pulse — Oye purple, matching the OyeButton 'bubbling'
-               narralogy (purple = on its way / cooking, gold = arrived).
-               Was orange; switched 2026-04-25 so the search-warming surface
-               speaks the same colour language as the Oye state machine. */
+            /* Card "being added" pulse — ORANGE. Narralogy lock:
+                 Orange = being added (queue / bucket landing)
+                 Purple = cooking (warming up to R2 — lives on Oye button)
+               Both run together on the same track until R2 lands.
+               This is the orange contour; the purple lightning lives on
+               the OyeButton's 'bubbling' state and reads warmingStore. */
             @keyframes voyo-card-warm {
-              0%, 100% { box-shadow: 0 0 0 1px rgba(139,92,246,0.20), 0 0 14px rgba(139,92,246,0.12); }
-              50%       { box-shadow: 0 0 0 1px rgba(139,92,246,0.48), 0 0 26px rgba(139,92,246,0.26); }
+              0%, 100% { box-shadow: 0 0 0 1px rgba(251,146,60,0.18), 0 0 14px rgba(251,146,60,0.10); }
+              50%       { box-shadow: 0 0 0 1px rgba(251,146,60,0.42), 0 0 26px rgba(251,146,60,0.22); }
             }
             .voyo-card-warming { animation: voyo-card-warm 2s ease-in-out infinite; }
-            @keyframes voyo-toast-pop {
-              from { opacity: 0; transform: translateX(-50%) scale(0.88); }
-              to   { opacity: 1; transform: translateX(-50%) scale(1); }
+            /* Toast entry — soft opacity fade, no scale-pop. The drift-in
+               read as glitchy / hasty; replaced with a calm neon ramp. */
+            @keyframes voyo-toast-fade {
+              from { opacity: 0; }
+              to   { opacity: 1; }
             }
           `}</style>
           {/* Backdrop */}
@@ -978,9 +954,9 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap, onEnterVideoMode
                           onDiscoBadgeTap={() => setDiscoExplainerOpen(true)}
                           formatDuration={formatDuration}
                           formatViews={formatViews}
-                          isWarming={warmingIds.has(result.voyoId)}
+                          isWarming={cardIsWarming(result.voyoId)}
                           showIframePlay={
-                            warmingIds.has(result.voyoId) &&
+                            cardIsWarming(result.voyoId) &&
                             playbackSource === 'iframe' &&
                             currentTrack?.trackId === result.voyoId
                           }
@@ -1048,7 +1024,7 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap, onEnterVideoMode
               <div
                 key={toast.type}
                 className="fixed bottom-24 left-1/2 z-[60] -translate-x-1/2"
-                style={{ animation: 'voyo-toast-pop 0.38s cubic-bezier(0.34,1.56,0.64,1)' }}
+                style={{ animation: 'voyo-toast-fade 0.6s cubic-bezier(0.16, 1, 0.3, 1)' }}
               >
                 {toast.type === 'play_now' ? (
                   <div
