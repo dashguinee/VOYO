@@ -36,6 +36,11 @@ const MOCK_FRIENDS_LISTENING = [
 ];
 
 // Gradient colors
+// Progress thresholds for Next Up reveals — 4 evenly-spaced moments
+// across the track. Module scope so the bucketing selector below can
+// reference it during render-time subscription.
+const NEXT_SHOW_AT = [0.07, 0.38, 0.65, 0.86];
+
 const GRADIENT_COLORS = [
   { from: '#7c3aed', via: '#8b5cf6', to: '#a78bfa' },  // Deep violet
   { from: '#5b21b6', via: '#7c3aed', to: '#8b5cf6' },  // Purple core
@@ -61,7 +66,15 @@ export const VoyoLiveCard = ({ onSwitchToVOYO }: VoyoLiveCardProps = {}) => {
   const setShouldOpenNowPlaying = usePlayerStore(s => s.setShouldOpenNowPlaying);
   const currentTrack = usePlayerStore(s => s.currentTrack);
   const isPlaying = usePlayerStore(s => s.isPlaying);
-  const progress = usePlayerStore(s => s.progress);
+  // Bucket progress to "thresholds passed" — instead of subscribing to
+  // raw progress (4Hz updates → 4 re-renders/sec on an always-mounted
+  // hero card → cascading layout reflow into Vibes + Stations below),
+  // subscribe to the count of thresholds we've already crossed. The
+  // selector returns an integer 0-4, only changes 4 times per song.
+  // The dissolve effect below reads this instead of `progress`.
+  const passedThresholdsCount = usePlayerStore(s =>
+    NEXT_SHOW_AT.filter(t => s.progress >= t).length
+  );
   const queue = usePlayerStore(s => s.queue);
   const { dashId, isLoggedIn } = useAuth();
 
@@ -87,8 +100,6 @@ export const VoyoLiveCard = ({ onSwitchToVOYO }: VoyoLiveCardProps = {}) => {
   const [cardMode, setCardMode] = useState<CardMode>('community');
   const modeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dissolveTargetRef = useRef<'next' | 'community'>('next');
-  // Progress thresholds — 1 at start, then 3 spaced through the track.
-  const NEXT_SHOW_AT = [0.07, 0.38, 0.65, 0.86];
   const shownCountRef = useRef(0);
   // Double-tap detection: single tap = open player, double tap = toggle Next Up
   const lastTapRef = useRef(0);
@@ -278,15 +289,15 @@ export const VoyoLiveCard = ({ onSwitchToVOYO }: VoyoLiveCardProps = {}) => {
   useEffect(() => {
     if (!currentTrack || !isPlaying || queue.length === 0) return;
     if (cardMode !== 'community') return;
-    const threshold = NEXT_SHOW_AT[shownCountRef.current];
-    if (threshold === undefined) return;
-    if (progress >= threshold) {
-      shownCountRef.current += 1;
+    // Only fire when a NEW threshold crosses (count incremented since last
+    // shown). Skips the dead spam between thresholds — was firing 4×/sec.
+    if (passedThresholdsCount > shownCountRef.current) {
+      shownCountRef.current = passedThresholdsCount;
       dissolveTargetRef.current = 'next';
       setCardMode('dissolve');
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [progress, cardMode, currentTrack?.id, isPlaying, queue.length]);
+  }, [passedThresholdsCount, cardMode, currentTrack?.id, isPlaying, queue.length]);
 
   const orbitAvatars = avatars.filter((_, i) => i !== centerIndex).slice(0, 3);
   const radius = 32;

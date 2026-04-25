@@ -2317,6 +2317,17 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onNavVisibilityChange, onSwitc
       if (!touching) return;
       const t = e.touches[0];
       holdX = t.clientX; holdY = t.clientY;
+      // Re-check the no-ripple boundary on each move — a finger that
+      // started outside vibes/stations and dragged INTO them was still
+      // spawning trail rings across the cards (touchstart-only check
+      // didn't catch the boundary cross). elementFromPoint on every
+      // tick sounds expensive but is cheap; happens at most once per
+      // 35ms (the trail throttle).
+      const tgt = document.elementFromPoint(t.clientX, t.clientY) as HTMLElement | null;
+      if (tgt?.closest('[data-no-ripple]')) {
+        cancelHold();
+        return;
+      }
       // Any movement resets the hold timer — keeps hold tied to stillness
       cancelHold();
       holdTimer = setTimeout(startHoldPulse, 220);
@@ -3099,7 +3110,12 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onNavVisibilityChange, onSwitc
           Tap AI card → open the vibe (playFromVibe); tap track card →
           play that exact track. Lightweight: 5 thumbs per vibe, all
           R2-cached so playback is instant on tap. */}
-      <div className="mb-12" data-no-ripple>
+      {/* contain: paint scopes paint invalidations to this section. Without
+          it, an animation flip elsewhere on Home (Top10 box-shadow during
+          countdown, Classics shimmer, etc.) can invalidate the rendering
+          of this section's GPU layer too. With contain:paint, the browser
+          knows VibesReel's paint output is self-contained. */}
+      <div className="mb-12" data-no-ripple style={{ contain: 'paint' }}>
         <div className="px-4 mb-1.5">
           <h2 className="text-white font-semibold text-base">Vibes</h2>
         </div>
@@ -3140,8 +3156,9 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onNavVisibilityChange, onSwitc
               longer feels cramped against neighbours.
               snap-proximity (was snap-mandatory) follows the gesture
               intent — soft drag stays where you let go, hard flick still
-              snaps. Mandatory was forcing every micro-scroll to commit. */}
-          <div className="mb-12 -mx-1" data-no-ripple>
+              snaps. Mandatory was forcing every micro-scroll to commit.
+              contain:paint scopes paint cascades — see Vibes section above. */}
+          <div className="mb-12 -mx-1" data-no-ripple style={{ contain: 'paint' }}>
             <div className="flex gap-3 overflow-x-auto snap-x snap-proximity scrollbar-hide px-4 pb-2">
               {stations.map((station) => (
                 <Safe name={`Station:${station.id}`} key={station.id}>
