@@ -2412,12 +2412,15 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onNavVisibilityChange, onSwitc
     }
   }, [hotPool, sessionSeed]);
 
-  // Top 10 on VOYO: Trending tracks, excluding what's in other shelves.
+  // Top 10 on VOYO: Trending tracks, excluding what's already shown in
+  // Page-1 shelves (Discover / African Vibes). OYO's Picks now lives on
+  // Page 2 (HomeFeedDeep) so we no longer dedup against it from here —
+  // small overlap on the rare same-track case is acceptable; smarter
+  // coordination would require a shared pool-coordinator service.
   const trending = useMemo(() => {
     try {
       const pool = Array.isArray(hotPool) ? hotPool : [];
       const usedIds = new Set([
-        ...oyosPicks.map(t => t?.id).filter(Boolean),
         ...discoverMoreTracks.map(t => t?.id).filter(Boolean),
         ...africanVibes.map(t => t?.id).filter(Boolean),
       ]);
@@ -2432,7 +2435,7 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onNavVisibilityChange, onSwitc
       devWarn('[HomeFeed] trending failed:', e);
       return [];
     }
-  }, [hotPool, oyosPicks, discoverMoreTracks, africanVibes, sessionSeed]);
+  }, [hotPool, discoverMoreTracks, africanVibes, sessionSeed]);
 
   const handleVibeSelect = (vibe: Vibe) => {
     // Central orchestrator picks the pool, plays the top, enqueues the rest.
