@@ -18,6 +18,7 @@ import { useRef, useEffect, useState, useCallback, memo } from 'react';
 import { devWarn } from '../../utils/logger';
 import { SkipBack, SkipForward, Play, Pause, Plus, Volume2, Loader2 } from 'lucide-react';
 import { usePlayerStore } from '../../store/playerStore';
+import { useShallow } from 'zustand/shallow';
 import { voyoStream } from '../../services/voyoStream';
 import { app } from '../../services/oyo';
 import { getThumb } from '../../utils/thumbnail';
@@ -508,10 +509,12 @@ export const LandscapeVOYO = ({ onVideoMode }: LandscapeVOYOProps) => {
   // Fine-grained selectors — huge landscape view, must avoid full re-render
   // on every progress/currentTime tick.
   const currentTrack = usePlayerStore(s => s.currentTrack);
-  const history = usePlayerStore(s => s.history);
-  const queue = usePlayerStore(s => s.queue);
-  const hotTracks = usePlayerStore(s => s.hotTracks);
-  const discoverTracks = usePlayerStore(s => s.discoverTracks);
+  // useShallow — same rationale as VoyoPortraitPlayer (playerStore spreads
+  // these on every set, defeating the default === selector check).
+  const history = usePlayerStore(useShallow(s => s.history));
+  const queue = usePlayerStore(useShallow(s => s.queue));
+  const hotTracks = usePlayerStore(useShallow(s => s.hotTracks));
+  const discoverTracks = usePlayerStore(useShallow(s => s.discoverTracks));
   const prevTrack = usePlayerStore(s => s.prevTrack);
   // Route through app.playTrack so every queue pick registers with lanes at p=10.
   const playTrack = useCallback((track: Track) => app.playTrack(track, 'queue'), []);

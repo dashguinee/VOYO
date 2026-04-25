@@ -36,6 +36,7 @@ import {
   Image
 } from 'lucide-react';
 import { usePlayerStore } from '../../store/playerStore';
+import { useShallow } from 'zustand/shallow';
 import { oyo, app } from '../../services/oyo';
 import { usePreferenceStore } from '../../store/preferenceStore';
 import { getTrackThumbnailUrl } from '../../utils/thumbnail';
@@ -257,7 +258,7 @@ export const NowPlaying = ({ isOpen, onClose }: NowPlayingProps) => {
   const nextTrack = usePlayerStore(s => s.nextTrack);
   const prevTrack = usePlayerStore(s => s.prevTrack);
   const seekTo = usePlayerStore(s => s.seekTo);
-  const queue = usePlayerStore(s => s.queue);
+  const queue = usePlayerStore(useShallow(s => s.queue));
   const removeFromQueue = usePlayerStore(s => s.removeFromQueue);
   const videoTarget = usePlayerStore(s => s.videoTarget);
   const setVideoTarget = usePlayerStore(s => s.setVideoTarget);
@@ -276,8 +277,11 @@ export const NowPlaying = ({ isOpen, onClose }: NowPlayingProps) => {
   const createReaction = useReactionStore(s => s.createReaction);
   const fetchTrackReactions = useReactionStore(s => s.fetchTrackReactions);
   const fetchTrackStats = useReactionStore(s => s.fetchTrackStats);
-  const trackReactions = useReactionStore(s => s.trackReactions);
-  const statsMap = useReactionStore(s => s.trackStats);
+  // Maps spread on every realtime reaction; default === fires for every
+  // ANY-track reaction even when this track wasn't touched. Shallow
+  // compare on the Map's entries prevents that.
+  const trackReactions = useReactionStore(useShallow(s => s.trackReactions));
+  const statsMap = useReactionStore(useShallow(s => s.trackStats));
   const { dashId } = useAuth();
 
   // State

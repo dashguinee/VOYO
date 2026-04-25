@@ -16,6 +16,7 @@ import {
   Shuffle, Repeat, Repeat1, Share2, Mic, Mic2, X
 } from 'lucide-react';
 import { usePlayerStore } from '../../store/playerStore';
+import { useShallow } from 'zustand/shallow';
 import { useIntentStore, VibeMode } from '../../store/intentStore';
 import { usePreferenceStore } from '../../store/preferenceStore';
 import { getThumbnailUrl, getTrackThumbnailUrl } from '../../utils/thumbnail';
@@ -3578,10 +3579,15 @@ export const VoyoPortraitPlayer = ({
   // audio is flowing through the iframe (between track-start and hot-swap).
   const playbackSource = usePlayerStore(s => s.playbackSource);
   const videoBlocked = usePlayerStore(s => s.videoBlocked);
-  const queue = usePlayerStore(s => s.queue);
-  const history = usePlayerStore(s => s.history);
-  const hotTracks = usePlayerStore(s => s.hotTracks);
-  const discoverTracks = usePlayerStore(s => s.discoverTracks);
+  // useShallow on array selectors — playerStore mutates these via spread
+  // (`set({ queue: [...state.queue, item] })`), so default === comparison
+  // returns false on every set even when contents are unchanged. Shallow
+  // element-wise compare prevents redundant re-renders of this 6k-line
+  // always-mounted player.
+  const queue = usePlayerStore(useShallow(s => s.queue));
+  const history = usePlayerStore(useShallow(s => s.history));
+  const hotTracks = usePlayerStore(useShallow(s => s.hotTracks));
+  const discoverTracks = usePlayerStore(useShallow(s => s.discoverTracks));
   const refreshRecommendations = usePlayerStore(s => s.refreshRecommendations);
   const prevTrack = usePlayerStore(s => s.prevTrack);
   // All in-player taps go through app.playTrack → registers with lanes at p=10.
@@ -3609,10 +3615,18 @@ export const VoyoPortraitPlayer = ({
   // Fine-grained selectors — broad destructure caused re-render when any
   // reaction field changed (very noisy, realtime socket).
   const createReaction = useReactionStore(s => s.createReaction);
-  const categoryPulse = useReactionStore(s => s.categoryPulse);
+  // categoryPulse is a Record<string, {count, ts}> — store spreads on every
+  // realtime pulse (`{...state.categoryPulse, [cat]: {...}}`), so default
+  // === fires on every reaction even if our category didn't change. Shallow
+  // compare keys + values prevents 5 MixBoard columns re-rendering on
+  // unrelated category pulses.
+  const categoryPulse = useReactionStore(useShallow(s => s.categoryPulse));
   const subscribeToReactions = useReactionStore(s => s.subscribeToReactions);
   const isSubscribed = useReactionStore(s => s.isSubscribed);
-  const recentReactions = useReactionStore(s => s.recentReactions);
+  // recentReactions is the realtime feed array — sliced+spread on every
+  // insert. Shallow compare so getCommunityPunches() upstream doesn't
+  // recompute on unchanged content.
+  const recentReactions = useReactionStore(useShallow(s => s.recentReactions));
   const fetchRecentReactions = useReactionStore(s => s.fetchRecentReactions);
   const { dashId, isLoggedIn } = useAuth();
 
