@@ -401,11 +401,16 @@ export const StationHero = memo(({ station }: StationHeroProps) => {
                 <span
                   className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold text-white/95"
                   style={{
-                    background: 'linear-gradient(135deg, rgba(255,255,255,0.14) 0%, rgba(255,255,255,0.06) 100%)',
-                    border: '1px solid rgba(255,255,255,0.16)',
-                    backdropFilter: 'blur(8px) saturate(140%)',
-                    WebkitBackdropFilter: 'blur(8px) saturate(140%)',
-                    boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.12)',
+                    // Pumped the gradient + boxShadow to compensate for
+                    // the backdropFilter:blur removal — same glassy read,
+                    // zero per-frame background-pixel sampling. Stations
+                    // rail had 15 simultaneous backdrop-filters during
+                    // scroll (5 cards × 3 pills each), recomputing every
+                    // frame. The visible delta without blur is minimal;
+                    // the cost during scroll was real jank.
+                    background: 'linear-gradient(135deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0.08) 100%)',
+                    border: '1px solid rgba(255,255,255,0.18)',
+                    boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.14), 0 1px 2px rgba(0,0,0,0.25)',
                     letterSpacing: '0.01em',
                   }}
                 >
@@ -420,11 +425,10 @@ export const StationHero = memo(({ station }: StationHeroProps) => {
             <span
               className="inline-flex items-center px-2 py-0.5 rounded-full font-semibold text-white/90"
               style={{
-                background: 'linear-gradient(135deg, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0.05) 100%)',
-                border: '1px solid rgba(255,255,255,0.14)',
-                backdropFilter: 'blur(8px) saturate(140%)',
-                WebkitBackdropFilter: 'blur(8px) saturate(140%)',
-                boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.10)',
+                // Same gradient bump — blur removed, glass read preserved.
+                background: 'linear-gradient(135deg, rgba(255,255,255,0.16) 0%, rgba(255,255,255,0.07) 100%)',
+                border: '1px solid rgba(255,255,255,0.16)',
+                boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.12), 0 1px 2px rgba(0,0,0,0.25)',
                 letterSpacing: '0.01em',
               }}
             >
@@ -509,10 +513,12 @@ export const StationHero = memo(({ station }: StationHeroProps) => {
           <div
             className="px-3 py-1.5 rounded-full text-xs font-bold"
             style={{
-              background: 'rgba(0,0,0,0.55)',
+              // Bumped opacity 0.55 → 0.7 to compensate for the missing
+              // blur. iOS hint shows once per dwell — the blur cost was
+              // bundled with the always-rendered glass pills above.
+              background: 'rgba(0,0,0,0.7)',
               border: `1px solid ${accentSecondary}66`,
               color: accentSecondary,
-              backdropFilter: 'blur(6px)',
             }}
           >
             Tap to hear
