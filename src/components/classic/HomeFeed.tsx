@@ -2334,11 +2334,13 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onNavVisibilityChange, onSwitc
 
     const onTouchStart = (e: TouchEvent) => {
       const tgt = e.target as HTMLElement;
-      // Skip ripple inside form fields + horizontally-scrolling rails
-      // (vibes, stations, etc. tagged with data-no-ripple). Trail rings
-      // were spawning every 35ms during horizontal drag, scattering
-      // across the cards' own animations and reading as glitch.
-      if (tgt.closest('input,select,textarea,[contenteditable="true"],[data-no-ripple]')) return;
+      // Skip ripple inside form fields only. The data-no-ripple
+      // suppression on vibes/stations was reverted in v619 — once we
+      // landed contain:paint + the VoyoLiveCard 4Hz cascade fix, the
+      // perceived "glitch on rails" turned out to be the cascade, not
+      // the ripples. Ripples are part of the home rhythm; they belong
+      // everywhere on the feed canvas.
+      if (tgt.closest('input,select,textarea,[contenteditable="true"]')) return;
       const t = e.touches[0];
       holdX = t.clientX; holdY = t.clientY;
       lastRingX = t.clientX; lastRingY = t.clientY; lastRingTime = Date.now();
@@ -2352,17 +2354,6 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onNavVisibilityChange, onSwitc
       if (!touching) return;
       const t = e.touches[0];
       holdX = t.clientX; holdY = t.clientY;
-      // Re-check the no-ripple boundary on each move — a finger that
-      // started outside vibes/stations and dragged INTO them was still
-      // spawning trail rings across the cards (touchstart-only check
-      // didn't catch the boundary cross). elementFromPoint on every
-      // tick sounds expensive but is cheap; happens at most once per
-      // 35ms (the trail throttle).
-      const tgt = document.elementFromPoint(t.clientX, t.clientY) as HTMLElement | null;
-      if (tgt?.closest('[data-no-ripple]')) {
-        cancelHold();
-        return;
-      }
       // Any movement resets the hold timer — keeps hold tied to stillness
       cancelHold();
       holdTimer = setTimeout(startHoldPulse, 220);
@@ -3164,7 +3155,7 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onNavVisibilityChange, onSwitc
           countdown, Classics shimmer, etc.) can invalidate the rendering
           of this section's GPU layer too. With contain:paint, the browser
           knows VibesReel's paint output is self-contained. */}
-      <div className="mb-12" data-no-ripple style={{ contain: 'paint' }}>
+      <div className="mb-12" style={{ contain: 'paint' }}>
         <div className="px-4 mb-1.5">
           <h2 className="text-white font-semibold text-base">Vibes</h2>
         </div>
@@ -3207,7 +3198,7 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onNavVisibilityChange, onSwitc
               intent — soft drag stays where you let go, hard flick still
               snaps. Mandatory was forcing every micro-scroll to commit.
               contain:paint scopes paint cascades — see Vibes section above. */}
-          <div className="mb-12 -mx-1" data-no-ripple style={{ contain: 'paint' }}>
+          <div className="mb-12 -mx-1" style={{ contain: 'paint' }}>
             <div className="flex gap-3 overflow-x-auto snap-x snap-proximity scrollbar-hide px-4 pb-2">
               {stations.map((station) => (
                 <Safe name={`Station:${station.id}`} key={station.id}>
