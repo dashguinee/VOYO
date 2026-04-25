@@ -31,44 +31,24 @@ interface StationHeroProps {
 }
 
 /**
- * YouTube animated WebP preview — 6-second loop served by ytimg CDN.
- * Replaces the iframe approach entirely for station previews:
- *   · No process slot, no YT player JS, no postMessage round-trips
- *   · GPU-decoded on a separate thread, GPU-composited
- *   · ~250-400KB per clip vs ~50-100MB per iframe instance
- *   · Auto-loops natively (no loop=1 query gymnastics)
- * Falls back to static thumb on 404 / region block via onError.
- */
-function getMotionThumb(videoId: string): string {
-  return `https://i.ytimg.com/an_webp/${videoId}/mqdefault_6s.webp`;
-}
-
-/**
- * StationHero — clean rebuild v625.
+ * StationHero — v625.1 (Ken Burns + zero iframes).
  *
- * Architecture (no iframes):
- *   · Static poster (hqdefault.jpg, ~25KB) — ALWAYS rendered as backdrop.
- *   · Motion thumb (animated WebP, 6s loop) — mounted ONLY when card is
- *     in view (>40% intersection). Fades in over the static when loaded.
- *     Unmounts when card leaves view → frees decode memory.
- *   · Tap → commit + play track in the deck (full audio via main player).
+ * Tried YT's animated WebP endpoint (i.ytimg.com/an_webp/...) but it's
+ * unreliable — only exists for high-traffic videos, 404s for most
+ * curated music, leaving the rail looking dead.
  *
- * Why this beats iframes:
- *   YT iframes hit mobile process limits (3-4 max), each costs ~50MB RAM
- *   + YT JS boot. 5 stations × iframe = ~250MB and parallel boot storm.
- *   12 african-vibes iframes simultaneously = system collapse on iPhone.
- *   Motion-thumb WebPs are pure image decode — 12 of them total ~3MB,
- *   no process slots, no JS boot. 200× memory reduction vs iframes.
+ * Pivot: skip "real video preview" entirely. Use the static thumbnail
+ * with a slow Ken Burns scale animation when the card is in view.
+ * Reads as "alive" without depending on any external URL endpoint.
+ * Same architectural win — zero iframes on Home, zero process slots,
+ * zero YT JS boot. Tap → main player handles real playback.
  *
- * Single IntersectionObserver per card handles both fetch trigger
- * (loading=lazy on the always-rendered static thumb) AND motion-thumb
- * mount lifecycle. No mount-storm risk, no rail-level coordinator.
+ * Aligned with "premium = restraint" memo: one signature gesture
+ * (slow scale) instead of a stack of competing motion sources.
  */
 export const StationHero = memo(({ station }: StationHeroProps) => {
   const cardRef = useRef<HTMLDivElement>(null);
   const [cardInView, setCardInView] = useState(false);
-  const [motionLoaded, setMotionLoaded] = useState(false);
-  const [motionFailed, setMotionFailed] = useState(false);
   const [subscribed, setSubscribed] = useState(false);
 
   const accentPrimary = station.accent_colors?.primary ?? '#007749';
@@ -106,10 +86,6 @@ export const StationHero = memo(({ station }: StationHeroProps) => {
     obs.observe(el);
     return () => obs.disconnect();
   }, []);
-
-  // Reset motion-load state when card leaves view — next time it enters,
-  // the WebP will fade in fresh.
-  useEffect(() => { if (!cardInView) setMotionLoaded(false); }, [cardInView]);
 
   const commit = useCallback(async () => {
     if (supabase && !subscribed) {
@@ -152,44 +128,37 @@ export const StationHero = memo(({ station }: StationHeroProps) => {
         boxShadow: `inset 0 0 32px rgba(212,175,110,0.08), 0 8px 32px ${accentPrimary}22`,
       }}
     >
-      {/* Static poster — always mounted. Cheap thumbnail decode; carries
-          the station visually whether or not motion is active. */}
+      {/* Static poster with Ken Burns motion when card is in view.
+          The kb-still class freezes the transform; kb-live runs a slow
+          12s scale + drift cycle. animation-play-state pause when off-
+          screen ensures zero GPU work for inactive cards. */}
       <img
         src={getThumb(videoId)}
         alt=""
         decoding="async"
         loading="lazy"
         aria-hidden="true"
-        className="absolute inset-0 w-full h-full object-cover"
+        className={`absolute inset-0 w-full h-full object-cover ${cardInView ? 'station-kb-live' : 'station-kb-still'}`}
         style={{
           filter: 'brightness(0.52) blur(0.4px)',
-          transform: 'scale(1.62) translateY(5%)',
           pointerEvents: 'none',
         }}
       />
-      {/* Motion thumb — animated WebP overlay. Only mounted when in view;
-          unmounts on scroll-out (frees decoded memory). Fades in over
-          the static poster on load — no black flash, no loader. Falls
-          back silently to static-only if the WebP 404s (some videos
-          don't have animated previews — region blocks, fresh uploads). */}
-      {cardInView && !motionFailed && (
-        <img
-          src={getMotionThumb(videoId)}
-          alt=""
-          decoding="async"
-          aria-hidden="true"
-          className="absolute inset-0 w-full h-full object-cover"
-          style={{
-            filter: 'brightness(0.52) blur(0.4px)',
-            transform: 'scale(1.62) translateY(5%)',
-            pointerEvents: 'none',
-            opacity: motionLoaded ? 1 : 0,
-            transition: 'opacity 600ms cubic-bezier(0.16, 1, 0.3, 1)',
-          }}
-          onLoad={() => setMotionLoaded(true)}
-          onError={() => setMotionFailed(true)}
-        />
-      )}
+      <style>{`
+        .station-kb-still {
+          transform: scale(1.62) translateY(5%);
+        }
+        .station-kb-live {
+          animation: station-kb 14s ease-in-out infinite alternate;
+        }
+        @keyframes station-kb {
+          0%   { transform: scale(1.62) translateY(5%) translateX(0); }
+          100% { transform: scale(1.74) translateY(2%) translateX(-1.5%); }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .station-kb-live { animation: none; transform: scale(1.62) translateY(5%); }
+        }
+      `}</style>
 
       {/* Top fade. */}
       <div

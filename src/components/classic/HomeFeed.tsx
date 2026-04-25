@@ -899,15 +899,12 @@ const decodeVoyoId = (trackId: string): string => {
   }
 };
 
-// YouTube animated WebP preview — replaces iframes for OYÉ Africa cards.
-// Same architecture rationale as StationHero (v625): zero process slots,
-// zero YT JS, ~250-400KB per card vs ~50-100MB iframe each. With 12
-// cards potentially in proximity at once, iframes hit iOS Safari's
-// 3-4 process limit immediately. WebPs scale freely.
-function getMotionThumb(videoId: string): string {
-  return `https://i.ytimg.com/an_webp/${videoId}/mqdefault_6s.webp`;
-}
-
+// AfricanVibesVideoCard — v625.1 (Ken Burns + zero iframes).
+// YT animated WebP endpoint (i.ytimg.com/an_webp/...) was 404ing for
+// every curated track — only exists for high-traffic videos. Pivoted
+// to static thumb + Ken Burns scale animation when card is in view.
+// Reads as alive without depending on any external endpoint. Same
+// architectural win as StationHero — zero iframes, zero process slots.
 const AfricanVibesVideoCard = memo(({
   track,
   idx,
@@ -922,8 +919,6 @@ const AfricanVibesVideoCard = memo(({
 }) => {
   const cardRef = useRef<HTMLButtonElement>(null);
   const [cardInView, setCardInView] = useState(idx === 0);
-  const [motionLoaded, setMotionLoaded] = useState(false);
-  const [motionFailed, setMotionFailed] = useState(false);
   useEffect(() => {
     const el = cardRef.current;
     if (!el) return;
@@ -934,15 +929,9 @@ const AfricanVibesVideoCard = memo(({
     obs.observe(el);
     return () => obs.disconnect();
   }, []);
-  // First card is always-active when section is visible (per Dash:
-  // "first card keeps its current function"). Other cards activate
+  // First card always-active when section visible; other cards activate
   // when scrolled into view.
   const isActive = sectionInView && (idx === 0 || cardInView);
-  // Reset motion-load state when card leaves active state — fresh fade-in
-  // next time it returns.
-  useEffect(() => { if (!isActive) setMotionLoaded(false); }, [isActive]);
-
-  const youtubeId = useMemo(() => decodeVoyoId(track.trackId), [track.trackId]);
 
   return (
     <button
@@ -971,38 +960,35 @@ const AfricanVibesVideoCard = memo(({
       />
 
       <div className="relative w-full h-full rounded-xl overflow-hidden bg-black">
-        {/* Static thumbnail — always rendered as backdrop. */}
-        <SmartImage
-          src={getThumb(track.trackId, 'high')}
-          trackId={track.trackId}
-          alt={track.title}
-          artist={track.artist}
-          title={track.title}
-          className="absolute inset-0 w-full h-full object-cover"
-          style={{ transform: 'scale(1.8)' }}
-          lazy={false}
-        />
-
-        {/* Motion-thumb WebP — animated 6s preview, mounted only when
-            active (in-view or first card). Replaces YT iframe entirely:
-            zero process slots, zero JS boot, GPU-decoded image. Falls
-            back silently to static-only on 404 / region block. */}
-        {isActive && !motionFailed && (
-          <img
-            src={getMotionThumb(youtubeId)}
-            alt=""
-            decoding="async"
-            aria-hidden="true"
+        {/* Static thumbnail with Ken Burns motion when card is active.
+            kb-still freezes the transform; kb-live runs a slow 14s scale
+            cycle (alternate). animation-play-state via class swap so
+            inactive cards do zero GPU work. */}
+        <div
+          className={isActive ? 'avc-kb-live' : 'avc-kb-still'}
+          style={{ position: 'absolute', inset: 0 }}
+        >
+          <SmartImage
+            src={getThumb(track.trackId, 'high')}
+            trackId={track.trackId}
+            alt={track.title}
+            artist={track.artist}
+            title={track.title}
             className="absolute inset-0 w-full h-full object-cover"
-            style={{
-              transform: 'scale(1.8)',
-              opacity: motionLoaded ? 1 : 0,
-              transition: 'opacity 600ms cubic-bezier(0.16, 1, 0.3, 1)',
-            }}
-            onLoad={() => setMotionLoaded(true)}
-            onError={() => setMotionFailed(true)}
+            lazy={false}
           />
-        )}
+        </div>
+        <style>{`
+          .avc-kb-still { transform: scale(1.8); }
+          .avc-kb-live  { animation: avc-kb 14s ease-in-out infinite alternate; }
+          @keyframes avc-kb {
+            0%   { transform: scale(1.80) translateX(0%); }
+            100% { transform: scale(1.92) translateX(-2%); }
+          }
+          @media (prefers-reduced-motion: reduce) {
+            .avc-kb-live { animation: none; transform: scale(1.8); }
+          }
+        `}</style>
 
         {/* Purple overlay */}
         <div
