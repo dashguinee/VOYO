@@ -2389,6 +2389,9 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onNavVisibilityChange, onSwitc
 
   // Audio-reactive ambient glow — reads CSS vars written by freqPump (10fps),
   // drives a soft radial pulse behind the feed. Zero React re-renders.
+  // Gated by isPlaying via getState (no subscribe — avoids re-rendering
+  // HomeFeed when isPlaying flips). rAF only fires while music is playing
+  // so we're not burning frames into a static glow during paused/idle.
   useEffect(() => {
     const glow = audioGlowRef.current;
     if (!glow) return;
@@ -2397,6 +2400,12 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onNavVisibilityChange, onSwitc
     const pump = () => {
       rafId = requestAnimationFrame(pump);
       if (++frame % 6 !== 0) return; // ~10fps, matches freqPump cadence
+      // Skip writes if music isn't playing — glow stays at its last
+      // value (or 0 from initial). No CSS var read, no style write.
+      if (!usePlayerStore.getState().isPlaying) {
+        if (glow.style.opacity !== '0') glow.style.opacity = '0';
+        return;
+      }
       const root = document.documentElement;
       const bass = parseFloat(root.style.getPropertyValue('--voyo-bass') || '0');
       const energy = parseFloat(root.style.getPropertyValue('--voyo-energy') || '0');
@@ -2407,13 +2416,26 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onNavVisibilityChange, onSwitc
     return () => cancelAnimationFrame(rafId);
   }, []);
 
-  // Track scroll position for gesture overscroll detection
+  // Track scroll position for gesture overscroll detection. Throttled
+  // via rAF so the layout-forcing reads (scrollTop/scrollHeight/clientHeight)
+  // happen at most once per frame instead of on every scroll event
+  // (60+/sec during fast scroll). Reading these properties forces the
+  // browser to flush pending layout — was a hot source of scroll jank.
+  const scrollRafRef = useRef<number | null>(null);
   const handleFeedScroll = useCallback(() => {
-    const el = feedScrollRef.current;
-    if (!el) return;
-    const { scrollTop, scrollHeight, clientHeight } = el;
-    feedAtTopRef.current = scrollTop < 8;
-    feedAtBottomRef.current = scrollTop + clientHeight >= scrollHeight - 8;
+    if (scrollRafRef.current !== null) return;
+    scrollRafRef.current = requestAnimationFrame(() => {
+      scrollRafRef.current = null;
+      const el = feedScrollRef.current;
+      if (!el) return;
+      const { scrollTop, scrollHeight, clientHeight } = el;
+      feedAtTopRef.current = scrollTop < 8;
+      feedAtBottomRef.current = scrollTop + clientHeight >= scrollHeight - 8;
+    });
+  }, []);
+  // Cleanup any pending rAF on unmount.
+  useEffect(() => () => {
+    if (scrollRafRef.current !== null) cancelAnimationFrame(scrollRafRef.current);
   }, []);
 
   // Overscroll gesture — detect push-past-bottom / push-past-top
