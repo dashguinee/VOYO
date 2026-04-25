@@ -25,7 +25,7 @@ import { devWarn } from '../../utils/logger';
 import { supabase, isSupabaseConfigured } from '../../lib/supabase';
 import { getYouTubeId } from '../../utils/voyoId';
 import { getVibeEssence } from '../../services/essenceEngine';
-import { voyoStream } from '../../services/voyoStream';
+import { voyoStream, ensureTrackReady } from '../../services/voyoStream';
 import { onSignal as oyaPlanSignal } from '../../services/oyoPlan';
 import { useBackGuard } from '../../hooks/useBackGuard';
 import { useR2KnownStore, markR2KnownMany } from '../../store/r2KnownStore';
@@ -590,11 +590,14 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap, onEnterVideoMode
     // app.oyeCommit sets. oyeCommit also handles addToQueue (de-duped),
     // boost, and signals — single canonical entry point.
     //
-    // Then mark warming (purple "cooking" lightning on the Oye button)
-    // and run the two-stage pill — slow + deliberate:
-    //   1. "Oye · Warming up" (3s, soft fade in, neon glow holds)
-    //   2. "Play now →"        (7s, soft fade in, skip-to-now action)
-    //   3. "in Disco" pill fires when R2 lands (separate watcher effect).
+    // R2 EXTRACTION KICKED AT PRIORITY 10 RIGHT HERE. Without this, the
+    // server-side lane only sees the addToQueue-triggered ensureTrackReady
+    // at priority 7 — meaning the track sits at p=7 for the entire 10s
+    // warming + play_now window before AudioPlayer bumps it to p=10. With
+    // this call, the user's first tap signals "USER WANTS THIS NOW" → lane
+    // jumps it. By the time Play Now fires, R2 is much more likely to
+    // already be ready → instant clean playback, no iframe fallback needed.
+    void ensureTrackReady(track, null, { priority: 10 });
     app.oyeCommit(track);
 
     markWarming(track.trackId);
@@ -625,6 +628,10 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap, onEnterVideoMode
   // boost/queue/signal fanout.
   const handleOyeCommit = useCallback((track: Track) => {
     addSearchResultsToPool([track]);
+    // Same priority-10 R2 kick as the row-tap path. Explicit Oye is
+    // strictly stronger user intent than a row tap — must not lose
+    // priority by going through addToQueue's p=7 path alone.
+    void ensureTrackReady(track, null, { priority: 10 });
     app.oyeCommit(track);
     markWarming(track.trackId);
     // DI notification fires after glow settles (600ms)
