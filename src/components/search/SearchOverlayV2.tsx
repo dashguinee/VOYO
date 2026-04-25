@@ -709,11 +709,9 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap, onEnterVideoMode
                 // padding + margin together, which forced layout reflow on
                 // every frame of the 260ms slide → the "glitchy" feel.
                 // Padding/margin/background now snap on threshold cross
-                // (instant), the slide stays GPU-only. contain:layout
-                // scopes the reflow if it ever does happen.
+                // (instant), the slide stays GPU-only.
                 transition: 'transform 260ms cubic-bezier(0.4, 0, 0.2, 1)',
                 willChange: 'transform',
-                contain: 'layout',
                 background: searchAtBottom
                   ? 'linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,0.55) 30%, rgba(0,0,0,0.85) 100%)'
                   : 'transparent',
