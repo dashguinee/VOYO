@@ -899,6 +899,15 @@ const decodeVoyoId = (trackId: string): string => {
   }
 };
 
+// YouTube animated WebP preview — replaces iframes for OYÉ Africa cards.
+// Same architecture rationale as StationHero (v625): zero process slots,
+// zero YT JS, ~250-400KB per card vs ~50-100MB iframe each. With 12
+// cards potentially in proximity at once, iframes hit iOS Safari's
+// 3-4 process limit immediately. WebPs scale freely.
+function getMotionThumb(videoId: string): string {
+  return `https://i.ytimg.com/an_webp/${videoId}/mqdefault_6s.webp`;
+}
+
 const AfricanVibesVideoCard = memo(({
   track,
   idx,
@@ -911,13 +920,10 @@ const AfricanVibesVideoCard = memo(({
   sectionInView: boolean;
   onTrackPlay: (track: Track) => void;
 }) => {
-  const iframeRef = useRef<HTMLIFrameElement>(null);
-  const [isLoaded, setIsLoaded] = useState(false);
-  // Card-level visibility — determined by THIS card's IntersectionObserver
-  // (not by parent activeIdx). Replaces the broken desktop-only mouseEnter
-  // logic that left mobile users stuck on the first card.
   const cardRef = useRef<HTMLButtonElement>(null);
   const [cardInView, setCardInView] = useState(idx === 0);
+  const [motionLoaded, setMotionLoaded] = useState(false);
+  const [motionFailed, setMotionFailed] = useState(false);
   useEffect(() => {
     const el = cardRef.current;
     if (!el) return;
@@ -929,86 +935,14 @@ const AfricanVibesVideoCard = memo(({
     return () => obs.disconnect();
   }, []);
   // First card is always-active when section is visible (per Dash:
-  // "first card keeps its current function"). Other cards play only
-  // when scrolled into view. Multiple cards may be active at once on
-  // wider viewports — that's fine, all are muted.
+  // "first card keeps its current function"). Other cards activate
+  // when scrolled into view.
   const isActive = sectionInView && (idx === 0 || cardInView);
-  // isReady: true 1s after both isActive and isLoaded — gives YouTube's JS
-  // time to fully initialize before we send playVideo and before the iframe
-  // fades in (hides the native YouTube loading state / big play button flash).
-  const [isReady, setIsReady] = useState(false);
+  // Reset motion-load state when card leaves active state — fresh fade-in
+  // next time it returns.
+  useEffect(() => { if (!isActive) setMotionLoaded(false); }, [isActive]);
 
-  // Decode VOYO ID to real YouTube ID
   const youtubeId = useMemo(() => decodeVoyoId(track.trackId), [track.trackId]);
-
-  const embedUrl = useMemo(() => {
-    const params = new URLSearchParams({
-      // autoplay=1 — video starts the moment the iframe boots, not after
-      // our 1s postMessage(playVideo) cycle. Combined with mute=1 (which
-      // YouTube requires for browser autoplay), the video is already
-      // running by the time the iframe fades in. No more "thumbnail then
-      // gap then video" — feels instant.
-      autoplay: '1',
-      mute: '1',
-      controls: '0',
-      disablekb: '1',
-      fs: '0',
-      iv_load_policy: '3',
-      modestbranding: '1',
-      playsinline: '1',
-      rel: '0',
-      showinfo: '0',
-      enablejsapi: '1',
-      origin: window.location.origin,
-    });
-    return `https://www.youtube.com/embed/${youtubeId}?${params.toString()}`;
-  }, [youtubeId]);
-
-  // With autoplay=1 in the URL, the video starts on iframe boot — no
-  // more 1s playVideo postMessage delay. We only need pause + resume:
-  //   · Card leaves view → pauseVideo (saves CPU + bandwidth)
-  //   · Card returns to view → playVideo (resume from where it left)
-  useEffect(() => {
-    if (!iframeRef.current || !isLoaded) return;
-    if (isActive) {
-      iframeRef.current.contentWindow?.postMessage(
-        '{"event":"command","func":"playVideo","args":""}', '*'
-      );
-    } else {
-      iframeRef.current.contentWindow?.postMessage(
-        '{"event":"command","func":"pauseVideo","args":""}', '*'
-      );
-    }
-  }, [isActive, isLoaded]);
-
-  // isReady gates the iframe's opacity — thumbnail stays on top until
-  // YouTube has had time to paint the first video frame, so the user
-  // never sees the native YT loading UI / big play button. Tightened
-  // from 1000ms → 500ms now that autoplay=1 starts the video at boot
-  // (not after our delayed postMessage).
-  useEffect(() => {
-    if (!isLoaded || !isActive) { setIsReady(false); return; }
-    const t = setTimeout(() => setIsReady(true), 500);
-    return () => clearTimeout(t);
-  }, [isLoaded, isActive]);
-
-  // Lazy-mount the iframe itself — off-active cards show only the
-  // thumbnail. Was mounting 10+ YouTube player instances in parallel
-  // across the rail; now at most 1 (active) + 1 (recently-active
-  // lingering briefly) decode video at a time. Big battery + memory
-  // win on long carousels. Unmount delayed 800ms on inactive so a
-  // quick scroll-through doesn't thrash mount/unmount.
-  const [shouldMountIframe, setShouldMountIframe] = useState(isActive);
-  useEffect(() => {
-    if (isActive) {
-      setShouldMountIframe(true);
-      return;
-    }
-    const t = setTimeout(() => setShouldMountIframe(false), 800);
-    return () => clearTimeout(t);
-  }, [isActive]);
-
-  // Previews are always muted — audio only through AudioPlayer
 
   return (
     <button
@@ -1020,7 +954,6 @@ const AfricanVibesVideoCard = memo(({
         // Guided presence — the card the user is looking at rises to
         // full opacity; passed cards recede to 0.8. Smooth 700ms Apple
         // easing leads the eye through the rail without snap changes.
-        // First card stays at full opacity (always-present hero).
         opacity: isActive ? 1 : 0.8,
         transition: 'opacity 700ms cubic-bezier(0.16, 1, 0.3, 1)',
       }}
@@ -1038,7 +971,7 @@ const AfricanVibesVideoCard = memo(({
       />
 
       <div className="relative w-full h-full rounded-xl overflow-hidden bg-black">
-        {/* Thumbnail - SmartImage with fallback chain */}
+        {/* Static thumbnail — always rendered as backdrop. */}
         <SmartImage
           src={getThumb(track.trackId, 'high')}
           trackId={track.trackId}
@@ -1050,36 +983,25 @@ const AfricanVibesVideoCard = memo(({
           lazy={false}
         />
 
-        {/* Video iframe — mounted only when the card is active (or was
-            recently). Static thumbnail fills the visual the rest of
-            the time. */}
-        {shouldMountIframe && (
-          <div
-            className="absolute inset-0"
+        {/* Motion-thumb WebP — animated 6s preview, mounted only when
+            active (in-view or first card). Replaces YT iframe entirely:
+            zero process slots, zero JS boot, GPU-decoded image. Falls
+            back silently to static-only on 404 / region block. */}
+        {isActive && !motionFailed && (
+          <img
+            src={getMotionThumb(youtubeId)}
+            alt=""
+            decoding="async"
+            aria-hidden="true"
+            className="absolute inset-0 w-full h-full object-cover"
             style={{
-              opacity: isReady ? 1 : 0,
-              // Same Apple curve as the outer card opacity so the
-              // thumbnail→video crossfade feels part of the same gesture.
+              transform: 'scale(1.8)',
+              opacity: motionLoaded ? 1 : 0,
               transition: 'opacity 600ms cubic-bezier(0.16, 1, 0.3, 1)',
             }}
-          >
-            <iframe
-              ref={iframeRef}
-              src={embedUrl}
-              className="pointer-events-none"
-              style={{
-                border: 'none',
-                position: 'absolute',
-                top: '50%',
-                left: '50%',
-                transform: 'translate(-50%, -50%)',
-                width: '300%',
-                height: '300%',
-              }}
-              allow="accelerometer; autoplay; encrypted-media"
-              onLoad={() => setIsLoaded(true)}
-            />
-          </div>
+            onLoad={() => setMotionLoaded(true)}
+            onError={() => setMotionFailed(true)}
+          />
         )}
 
         {/* Purple overlay */}
