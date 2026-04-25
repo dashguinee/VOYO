@@ -11,7 +11,7 @@
  * - Add friends via Command Center
  */
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { devWarn } from '../../utils/logger';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
@@ -71,6 +71,15 @@ export const ProfilePage = () => {
 
   // Generate profile URL (uses DASH ID)
   const profileUrl = `${window.location.origin}/${urlDashId}`;
+  // Memoize the QR src so the URL string is reference-stable across
+  // renders. Inline template literals build a new string every render
+  // even when content is unchanged → React calls setAttribute('src',...)
+  // → browser re-validates the cache → wasted decode every time the
+  // ProfilePage re-renders for any reason.
+  const profileQrSrc = useMemo(
+    () => `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(profileUrl)}&bgcolor=ffffff&color=7c3aed&format=svg`,
+    [profileUrl],
+  );
   const voyoId = urlDashId ? `V${urlDashId}` : '';
 
   // Copy to clipboard
@@ -780,7 +789,7 @@ export const ProfilePage = () => {
               {/* QR Code */}
               <div className="p-4 rounded-xl bg-white mx-auto w-48 h-48 mb-4">
                 <img
-                  src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(profileUrl)}&bgcolor=ffffff&color=7c3aed&format=svg`}
+                  src={profileQrSrc}
                   alt="Profile QR Code"
                   loading="lazy"
                   decoding="async"

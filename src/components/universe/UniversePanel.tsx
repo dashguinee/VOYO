@@ -5,7 +5,7 @@
  * Auth via DASH Command Center
  */
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { devWarn } from '../../utils/logger';
 import {
   X, Download, Upload, Key, Users, Music, Heart, Clock, Zap,
@@ -62,6 +62,13 @@ export const UniversePanel = ({ isOpen, onClose }: UniversePanelProps) => {
   // Portal state
   const [isPortalOpen, setIsPortalOpen] = useState(false);
   const [portalUrl, setPortalUrl] = useState('');
+  // Memoized QR src so the string ref stays stable across re-renders —
+  // see ProfilePage for the same pattern. Cuts unnecessary cache
+  // re-validations when the panel re-renders for unrelated reasons.
+  const portalQrSrc = useMemo(
+    () => `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(portalUrl)}&bgcolor=ffffff&color=7c3aed&format=svg`,
+    [portalUrl],
+  );
 
   // UI state
   const [copied, setCopied] = useState(false);
@@ -510,8 +517,10 @@ export const UniversePanel = ({ isOpen, onClose }: UniversePanelProps) => {
                       <div className="p-4 rounded-xl bg-white/5 border border-white/10 text-center">
                         <div className="w-40 h-40 mx-auto bg-white rounded-xl overflow-hidden flex items-center justify-center p-2">
                           <img
-                            src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(portalUrl)}&bgcolor=ffffff&color=7c3aed&format=svg`}
+                            src={portalQrSrc}
                             alt="Portal QR Code"
+                            decoding="async"
+                            loading="lazy"
                             className="w-full h-full"
                           />
                         </div>
