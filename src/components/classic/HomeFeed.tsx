@@ -899,12 +899,13 @@ const decodeVoyoId = (trackId: string): string => {
   }
 };
 
-// AfricanVibesVideoCard — v625.1 (Ken Burns + zero iframes).
-// YT animated WebP endpoint (i.ytimg.com/an_webp/...) was 404ing for
-// every curated track — only exists for high-traffic videos. Pivoted
-// to static thumb + Ken Burns scale animation when card is in view.
-// Reads as alive without depending on any external endpoint. Same
-// architectural win as StationHero — zero iframes, zero process slots.
+// AfricanVibesVideoCard — restored v617 iframe model + v618 guided presence.
+// WebP-replacement experiment (v625-v626) reverted: YT's animated thumb
+// endpoint 404'd for our curated catalog. Back to the iframe approach
+// (lazy mount on isActive, autoplay=1, postMessage pause/resume) that
+// was working pre-WebP-pivot. Combined with the v619 ripple revert and
+// v620 perf wins — let cache settle, see if glitches were the experiment
+// itself rather than the underlying architecture.
 const AfricanVibesVideoCard = memo(({
   track,
   idx,
@@ -917,6 +918,8 @@ const AfricanVibesVideoCard = memo(({
   sectionInView: boolean;
   onTrackPlay: (track: Track) => void;
 }) => {
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const [isLoaded, setIsLoaded] = useState(false);
   const cardRef = useRef<HTMLButtonElement>(null);
   const [cardInView, setCardInView] = useState(idx === 0);
   useEffect(() => {
@@ -932,6 +935,56 @@ const AfricanVibesVideoCard = memo(({
   // First card always-active when section visible; other cards activate
   // when scrolled into view.
   const isActive = sectionInView && (idx === 0 || cardInView);
+  const [isReady, setIsReady] = useState(false);
+
+  // Decode VOYO ID to real YouTube ID
+  const youtubeId = useMemo(() => decodeVoyoId(track.trackId), [track.trackId]);
+
+  const embedUrl = useMemo(() => {
+    const params = new URLSearchParams({
+      autoplay: '1',
+      mute: '1',
+      controls: '0',
+      disablekb: '1',
+      fs: '0',
+      iv_load_policy: '3',
+      modestbranding: '1',
+      playsinline: '1',
+      rel: '0',
+      showinfo: '0',
+      enablejsapi: '1',
+      origin: window.location.origin,
+    });
+    return `https://www.youtube.com/embed/${youtubeId}?${params.toString()}`;
+  }, [youtubeId]);
+
+  // Pause/resume via postMessage based on isActive — iframe stays alive
+  // (no remount), just suspends decode while card is off-screen.
+  useEffect(() => {
+    if (!iframeRef.current || !isLoaded) return;
+    const cmd = isActive ? 'playVideo' : 'pauseVideo';
+    iframeRef.current.contentWindow?.postMessage(
+      `{"event":"command","func":"${cmd}","args":""}`, '*'
+    );
+  }, [isActive, isLoaded]);
+
+  // 500ms ready gate — thumbnail stays visible until YT paints first frame.
+  useEffect(() => {
+    if (!isLoaded || !isActive) { setIsReady(false); return; }
+    const t = setTimeout(() => setIsReady(true), 500);
+    return () => clearTimeout(t);
+  }, [isLoaded, isActive]);
+
+  // Lazy mount with 800ms grace — quick scroll-throughs don't reload YT.
+  const [shouldMountIframe, setShouldMountIframe] = useState(isActive);
+  useEffect(() => {
+    if (isActive) {
+      setShouldMountIframe(true);
+      return;
+    }
+    const t = setTimeout(() => setShouldMountIframe(false), 800);
+    return () => clearTimeout(t);
+  }, [isActive]);
 
   return (
     <button
@@ -940,9 +993,8 @@ const AfricanVibesVideoCard = memo(({
       style={{
         width: '95px',
         height: '142px',
-        // Guided presence — the card the user is looking at rises to
-        // full opacity; passed cards recede to 0.8. Smooth 700ms Apple
-        // easing leads the eye through the rail without snap changes.
+        // Guided presence — active card at full opacity, passed cards
+        // recede to 0.8. 700ms Apple ease leads the eye through the rail.
         opacity: isActive ? 1 : 0.8,
         transition: 'opacity 700ms cubic-bezier(0.16, 1, 0.3, 1)',
       }}
@@ -960,35 +1012,45 @@ const AfricanVibesVideoCard = memo(({
       />
 
       <div className="relative w-full h-full rounded-xl overflow-hidden bg-black">
-        {/* Static thumbnail with Ken Burns motion when card is active.
-            kb-still freezes the transform; kb-live runs a slow 14s scale
-            cycle (alternate). animation-play-state via class swap so
-            inactive cards do zero GPU work. */}
-        <div
-          className={isActive ? 'avc-kb-live' : 'avc-kb-still'}
-          style={{ position: 'absolute', inset: 0 }}
-        >
-          <SmartImage
-            src={getThumb(track.trackId, 'high')}
-            trackId={track.trackId}
-            alt={track.title}
-            artist={track.artist}
-            title={track.title}
-            className="absolute inset-0 w-full h-full object-cover"
-            lazy={false}
-          />
-        </div>
-        <style>{`
-          .avc-kb-still { transform: scale(1.8); }
-          .avc-kb-live  { animation: avc-kb 14s ease-in-out infinite alternate; }
-          @keyframes avc-kb {
-            0%   { transform: scale(1.80) translateX(0%); }
-            100% { transform: scale(1.92) translateX(-2%); }
-          }
-          @media (prefers-reduced-motion: reduce) {
-            .avc-kb-live { animation: none; transform: scale(1.8); }
-          }
-        `}</style>
+        {/* Thumbnail backdrop — always rendered. */}
+        <SmartImage
+          src={getThumb(track.trackId, 'high')}
+          trackId={track.trackId}
+          alt={track.title}
+          artist={track.artist}
+          title={track.title}
+          className="absolute inset-0 w-full h-full object-cover"
+          style={{ transform: 'scale(1.8)' }}
+          lazy={false}
+        />
+
+        {/* Video iframe — mounted only when active or recently active. */}
+        {shouldMountIframe && (
+          <div
+            className="absolute inset-0"
+            style={{
+              opacity: isReady ? 1 : 0,
+              transition: 'opacity 600ms cubic-bezier(0.16, 1, 0.3, 1)',
+            }}
+          >
+            <iframe
+              ref={iframeRef}
+              src={embedUrl}
+              className="pointer-events-none"
+              style={{
+                border: 'none',
+                position: 'absolute',
+                top: '50%',
+                left: '50%',
+                transform: 'translate(-50%, -50%)',
+                width: '300%',
+                height: '300%',
+              }}
+              allow="accelerometer; autoplay; encrypted-media"
+              onLoad={() => setIsLoaded(true)}
+            />
+          </div>
+        )}
 
         {/* Purple overlay */}
         <div
@@ -1005,12 +1067,6 @@ const AfricanVibesVideoCard = memo(({
             {track.tags?.[0] || 'Afrobeats'}
           </span>
         </div>
-
-        {/* Sound toggle removed - previews always muted, audio through AudioPlayer */}
-        {/* Recording dot removed (2026-04-25) — the red dot on the active
-            card cheapened the carousel + its "REC" semantics weren't true
-            (cards aren't recording, they're playing). Subtraction over
-            ornament. */}
 
         {/* Track info */}
         <div className="absolute bottom-0 left-0 right-0 p-1.5 z-20">

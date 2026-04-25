@@ -30,30 +30,50 @@ interface StationHeroProps {
   station: Station;
 }
 
+function muxYTUrl(videoId: string): string {
+  const params = new URLSearchParams({
+    autoplay: '1',           // autoplay-on-mount → no loader visible at viewport
+    mute: '1',
+    loop: '1',
+    playlist: videoId,       // required for loop= to work on a single video
+    controls: '0',
+    modestbranding: '1',
+    playsinline: '1',
+    rel: '0',
+    enablejsapi: '1',
+  });
+  return `https://www.youtube.com/embed/${videoId}?${params.toString()}`;
+}
+
 /**
- * StationHero — v625.1 (Ken Burns + zero iframes).
+ * StationHero — rewritten v623 (radio-tuning model).
  *
- * Tried YT's animated WebP endpoint (i.ytimg.com/an_webp/...) but it's
- * unreliable — only exists for high-traffic videos, 404s for most
- * curated music, leaving the rail looking dead.
+ * Lifecycle ("like a radio always tuning, only on your viewport"):
+ *   · Card NEAR (rootMargin 50%)  → iframe mounts + autoplays muted.
+ *     By the time the user scrolls into view, the video is already
+ *     playing. No YT loader visible at the viewport.
+ *   · Card IN VIEW (>50% visible) → iframe stays playing (resume if
+ *     it was paused on a brief scroll-out).
+ *   · Card OUT of view (still near) → postMessage pauseVideo. Iframe
+ *     stays mounted; no reload, no re-decode on return.
+ *   · Card LEAVES near (after 800ms grace) → iframe unmounts. Memory
+ *     freed for cards that drift far off-screen.
  *
- * Pivot: skip "real video preview" entirely. Use the static thumbnail
- * with a slow Ken Burns scale animation when the card is in view.
- * Reads as "alive" without depending on any external URL endpoint.
- * Same architectural win — zero iframes on Home, zero process slots,
- * zero YT JS boot. Tap → main player handles real playback.
- *
- * Aligned with "premium = restraint" memo: one signature gesture
- * (slow scale) instead of a stack of competing motion sources.
+ * Single-iframe-per-rail approach (parent isActive prop) was tried
+ * briefly and rejected — Dash wanted continuous-tuning feel, not
+ * one-at-a-time switch-and-reload.
  */
 export const StationHero = memo(({ station }: StationHeroProps) => {
   const cardRef = useRef<HTMLDivElement>(null);
-  const [cardInView, setCardInView] = useState(false);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const [isNear, setIsNear] = useState(false);
+  const [isInView, setIsInView] = useState(false);
+  const [shouldMount, setShouldMount] = useState(false);
+  const [iframeReady, setIframeReady] = useState(false);
   const [subscribed, setSubscribed] = useState(false);
 
   const accentPrimary = station.accent_colors?.primary ?? '#007749';
   const accentSecondary = station.accent_colors?.secondary ?? '#FFB612';
-  const videoId = station.hero_video_id;
 
   // Existing-subscription check.
   useEffect(() => {
@@ -72,20 +92,50 @@ export const StationHero = memo(({ station }: StationHeroProps) => {
     return () => { cancelled = true; };
   }, [station.id]);
 
-  // Single observer — drives motion-thumb mount + decorative animation
-  // pause-when-offscreen. 0.4 threshold is the "card is meaningfully on
-  // screen" signal; below that it's still scrolling in/out and the
-  // motion thumb is wasted decode.
+  // Two observers: proximity (mount gate) + visibility (play/pause gate).
+  // Proximity uses rootMargin 50% → iframe mounts ~half a viewport
+  // before the card enters view, gives YT enough time to boot so the
+  // video is already running by the time the user arrives.
   useEffect(() => {
     const el = cardRef.current;
     if (!el) return;
-    const obs = new IntersectionObserver(
-      ([entry]) => setCardInView(entry.intersectionRatio > 0.4),
-      { threshold: [0, 0.4, 0.8] }
+    const nearObs = new IntersectionObserver(
+      (entries) => setIsNear(entries[0].isIntersecting),
+      { rootMargin: '50% 0px 50% 0px' }
     );
-    obs.observe(el);
-    return () => obs.disconnect();
+    const viewObs = new IntersectionObserver(
+      (entries) => setIsInView(entries[0].intersectionRatio > 0.5),
+      { threshold: [0, 0.5, 1] }
+    );
+    nearObs.observe(el);
+    viewObs.observe(el);
+    return () => { nearObs.disconnect(); viewObs.disconnect(); };
   }, []);
+
+  // Mount management with grace period — iframe stays alive 800ms after
+  // leaving the proximity zone, so a quick scroll-through-and-back
+  // doesn't reload the YT player.
+  useEffect(() => {
+    if (isNear) {
+      setShouldMount(true);
+      return;
+    }
+    const t = setTimeout(() => {
+      setShouldMount(false);
+      setIframeReady(false);
+    }, 800);
+    return () => clearTimeout(t);
+  }, [isNear]);
+
+  // Pause/resume via postMessage based on visibility — no mount/unmount,
+  // no reload. The iframe is already running (autoplay=1), we just
+  // suspend frame decode while the card is off-screen.
+  useEffect(() => {
+    const win = iframeRef.current?.contentWindow;
+    if (!win || !iframeReady) return;
+    const cmd = isInView ? 'playVideo' : 'pauseVideo';
+    win.postMessage(`{"event":"command","func":"${cmd}","args":""}`, '*');
+  }, [isInView, iframeReady]);
 
   const commit = useCallback(async () => {
     if (supabase && !subscribed) {
@@ -95,12 +145,12 @@ export const StationHero = memo(({ station }: StationHeroProps) => {
       if (!error || error.code === '23505') setSubscribed(true);
     }
     app.playTrack({
-      id: videoId,
-      trackId: videoId,
+      id: station.hero_video_id,
+      trackId: station.hero_video_id,
       title: station.title,
       artist: station.curator ?? 'Station',
       album: station.title,
-      coverUrl: getThumb(videoId),
+      coverUrl: getThumb(station.hero_video_id),
       tags: ['station', station.id],
       mood: 'afro',
       region: station.location_code ?? 'ZA',
@@ -108,7 +158,7 @@ export const StationHero = memo(({ station }: StationHeroProps) => {
       duration: 0,
       createdAt: new Date().toISOString(),
     }, 'vibe');
-  }, [station, subscribed, videoId]);
+  }, [station, subscribed]);
 
   return (
     <div
@@ -128,39 +178,45 @@ export const StationHero = memo(({ station }: StationHeroProps) => {
         boxShadow: `inset 0 0 32px rgba(212,175,110,0.08), 0 8px 32px ${accentPrimary}22`,
       }}
     >
-      {/* Static poster with Ken Burns motion when card is in view.
-          The kb-still class freezes the transform; kb-live runs a slow
-          12s scale + drift cycle. animation-play-state pause when off-
-          screen ensures zero GPU work for inactive cards. */}
+      {/* Poster — always mounted as backdrop. Carries the station
+          visually while iframe boots; stays underneath the iframe so
+          there's never a black flash on mount/unmount transitions. */}
       <img
-        src={getThumb(videoId)}
+        src={getThumb(station.hero_video_id)}
         alt=""
         decoding="async"
         loading="lazy"
         aria-hidden="true"
-        className={`absolute inset-0 w-full h-full object-cover ${cardInView ? 'station-kb-live' : 'station-kb-still'}`}
+        className="absolute inset-0 w-full h-full object-cover"
         style={{
           filter: 'brightness(0.52) blur(0.4px)',
+          transform: 'scale(1.62) translateY(5%)',
           pointerEvents: 'none',
         }}
       />
-      <style>{`
-        .station-kb-still {
-          transform: scale(1.62) translateY(5%);
-        }
-        .station-kb-live {
-          animation: station-kb 14s ease-in-out infinite alternate;
-        }
-        @keyframes station-kb {
-          0%   { transform: scale(1.62) translateY(5%) translateX(0); }
-          100% { transform: scale(1.74) translateY(2%) translateX(-1.5%); }
-        }
-        @media (prefers-reduced-motion: reduce) {
-          .station-kb-live { animation: none; transform: scale(1.62) translateY(5%); }
-        }
-      `}</style>
+      {/* Iframe — mounted when card is near (50% rootMargin); fades in
+          over poster once YT signals onLoad. Stays mounted until card
+          drifts far off-screen + 800ms grace. */}
+      {shouldMount && (
+        <iframe
+          ref={iframeRef}
+          src={muxYTUrl(station.hero_video_id)}
+          className="absolute inset-0 w-full h-full"
+          style={{
+            border: 0,
+            filter: 'brightness(0.52) blur(0.4px)',
+            transform: 'scale(1.62) translateY(5%)',
+            pointerEvents: 'none',
+            opacity: iframeReady ? 1 : 0,
+            transition: 'opacity 600ms cubic-bezier(0.16, 1, 0.3, 1)',
+          }}
+          allow="autoplay; encrypted-media; picture-in-picture"
+          title={station.title}
+          onLoad={() => setIframeReady(true)}
+        />
+      )}
 
-      {/* Top fade. */}
+      {/* Top fade — catches YT title flash. */}
       <div
         className="absolute inset-x-0 top-0 pointer-events-none"
         style={{
@@ -180,7 +236,7 @@ export const StationHero = memo(({ station }: StationHeroProps) => {
         }}
       />
 
-      {/* Soft bronze full-frame wash. */}
+      {/* Soft bronze full-frame wash — unifies iframe palette. */}
       <div
         className="absolute inset-0 pointer-events-none mix-blend-overlay"
         style={{
@@ -200,14 +256,15 @@ export const StationHero = memo(({ station }: StationHeroProps) => {
         }}
       />
 
-      {/* Top-right bronze halo — spinning only when in view. */}
+      {/* Top-right bronze halo — spinning only when card is in view
+          (animation paused otherwise, no GPU work). */}
       <div
         className="absolute top-3 right-3 w-8 h-8 rounded-full pointer-events-none"
         style={{
           background: `radial-gradient(circle, ${accentSecondary}40 0%, ${accentPrimary}18 60%, transparent 100%)`,
           border: `1px solid ${accentSecondary}4D`,
           animation: 'voyoSpin 14s linear infinite',
-          animationPlayState: cardInView ? 'running' : 'paused',
+          animationPlayState: isInView ? 'running' : 'paused',
         }}
       />
 
@@ -280,7 +337,7 @@ export const StationHero = memo(({ station }: StationHeroProps) => {
                     background: accentPrimary,
                     boxShadow: `0 0 6px ${accentPrimary}`,
                     animation: 'voyoBreath 2s ease-in-out infinite',
-                    animationPlayState: cardInView ? 'running' : 'paused',
+                    animationPlayState: isInView ? 'running' : 'paused',
                   }}
                 />
                 {station.location_code ? `${station.location_code} · ` : ''}
@@ -290,8 +347,13 @@ export const StationHero = memo(({ station }: StationHeroProps) => {
           )}
         </div>
 
-        {/* Join button — silver/platinum metallic when not joined,
-            bronze-fill stamped pill smaller when joined. */}
+        {/* Join — finished-product treatment.
+            Not joined: silver/platinum metallic pill. The gradient + bevel
+              + lift shadow already do the premium read; previous shimmer
+              was animation-noise on top of an already-finished object
+              (per Dash's "premium = restraint" memo).
+            Joined: bronze-fill stamped pill, smaller. The "owned/complete"
+              state reads warmer + more compact — the journey done. */}
         <div className="flex items-center gap-2 pt-3">
           <button
             onClick={(e) => { e.stopPropagation(); commit(); }}
