@@ -163,9 +163,9 @@ export function DreamBackdrop({ visible, onDismiss, children }: DreamBackdropPro
       <div
         className="absolute inset-0"
         style={{
-          backdropFilter: 'blur(12px) saturate(110%) brightness(0.6)',
-          WebkitBackdropFilter: 'blur(12px) saturate(110%) brightness(0.6)',
-          background: 'rgba(8, 6, 16, 0.45)',
+          backdropFilter: 'blur(24px) saturate(110%) brightness(0.6)',
+          WebkitBackdropFilter: 'blur(24px) saturate(110%) brightness(0.6)',
+          background: 'rgba(8, 6, 16, 0.35)',
         }}
       />
 

@@ -185,10 +185,7 @@ export const VoyoBottomNav = ({ onDahub, onHome, oyoSurface = 'home', playerMode
     };
 
     fetchUnread();
-    const interval = setInterval(() => {
-      if (document.hidden) return;
-      fetchUnread();
-    }, 30000);
+    const interval = setInterval(fetchUnread, 30000);
 
     let subscription: ReturnType<typeof messagesAPI.subscribe> | null = null;
     try {

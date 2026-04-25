@@ -75,8 +75,8 @@ export const AccountMenu = ({ isOpen, onClose, onOpenSettings }: AccountMenuProp
           background: 'linear-gradient(180deg, rgba(28,22,42,0.94) 0%, rgba(16,12,26,0.94) 100%)',
           border: '1px solid rgba(255,255,255,0.08)',
           boxShadow: '0 24px 64px rgba(0,0,0,0.7), 0 0 0 1px rgba(139,92,246,0.12)',
-          backdropFilter: 'blur(14px) saturate(140%)',
-          WebkitBackdropFilter: 'blur(14px) saturate(140%)',
+          backdropFilter: 'blur(24px) saturate(160%)',
+          WebkitBackdropFilter: 'blur(24px) saturate(160%)',
           animation: 'acc-menu-in 220ms cubic-bezier(0.34,1.56,0.64,1) forwards',
         }}
       >

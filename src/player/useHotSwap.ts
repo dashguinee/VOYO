@@ -613,11 +613,6 @@ export function useHotSwap(
     document.addEventListener('visibilitychange', onVis);
 
     return () => {
-      // visibilitychange listener was leaking — every track change added
-      // a new one without removing the prior. Bounded but real (N tracks
-      // → N stale listeners → N parallel pokes on every visibility flip).
-      // Removed cleanly here now.
-      document.removeEventListener('visibilitychange', onVis);
       if (snapRef.current) { clearInterval(snapRef.current); snapRef.current = null; }
       if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
       if (rtReconnectTimerRef.current) {

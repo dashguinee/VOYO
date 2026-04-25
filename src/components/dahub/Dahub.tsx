@@ -1220,7 +1220,7 @@ export function Dahub({ userId, userName, userAvatar, coreId, appContext, onClos
                           {/* WhatsApp Banner Fallback */}
                           <a href="https://wa.me/224611361300" target="_blank" rel="noopener noreferrer" className="block mt-2">
                             <div className="relative rounded-xl overflow-hidden border border-white/[0.06]">
-                              <img src="/landing/wa-dash-banner.webp" alt="DASH WhatsApp" decoding="async" loading="lazy" className="w-full rounded-xl" />
+                              <img src="/landing/wa-dash-banner.webp" alt="DASH WhatsApp" className="w-full rounded-xl" />
                               <div className="absolute inset-0 rounded-xl flex items-end justify-between px-3 pb-2" style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.8) 0%, transparent 60%)' }}>
                                 <span className="text-[11px] text-white/65">Prefer WhatsApp?</span>
                                 <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full" style={{ background: '#25D366', color: '#fff' }}>Message Us</span>
