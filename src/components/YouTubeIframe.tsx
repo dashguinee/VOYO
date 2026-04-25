@@ -103,7 +103,13 @@ OverlayTimingSync.displayName = 'OverlayTimingSync';
 
 export const YouTubeIframe = memo(() => {
   const playerRef = useRef<YT.Player | null>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
+  // mountRef is the STABLE parent. YT.Player(target) REPLACES `target` with
+  // an iframe element — if we hand it our React-controlled ref directly, the
+  // ref ends up pointing at the iframe (or an orphaned div) and the next
+  // re-init attaches a player to a dead node. Each init now creates a fresh
+  // child div inside mountRef and feeds THAT to YT.Player, so the parent
+  // mount point is invariant across destroy/init cycles.
+  const mountRef = useRef<HTMLDivElement>(null);
   const isApiLoadedRef = useRef(false);
   const currentVideoIdRef = useRef<string | null>(null);
   const initializingRef = useRef(false);
@@ -213,13 +219,13 @@ export const YouTubeIframe = memo(() => {
       playerRef.current = null;
       iframeBridge.register(null);
       currentVideoIdRef.current = null;
-      if (containerRef.current) containerRef.current.innerHTML = '';
+      if (mountRef.current) mountRef.current.innerHTML = '';
     }
   }, [playbackSource, videoTarget]);
 
   const initPlayer = useCallback((videoId: string) => {
     if (!isApiLoadedRef.current || !window.YT?.Player) return;
-    if (!containerRef.current) return;
+    if (!mountRef.current) return;
     if (initializingRef.current) return;
     if (playerRef.current && currentVideoIdRef.current === videoId) return;
 
@@ -232,11 +238,17 @@ export const YouTubeIframe = memo(() => {
       iframeBridge.register(null);
     }
 
-    containerRef.current.innerHTML = '';
+    // Fresh target div per init. YT.Player swaps this element for an
+    // iframe; mountRef stays the stable parent across re-inits.
+    mountRef.current.innerHTML = '';
+    const target = document.createElement('div');
+    target.style.cssText = 'width:100%;height:100%;';
+    mountRef.current.appendChild(target);
+
     const ps = usePlayerStore.getState().playbackSource;
     const isBoosted = ps === 'cached' || ps === 'r2';
 
-    playerRef.current = new window.YT.Player(containerRef.current, {
+    playerRef.current = new window.YT.Player(target, {
       width: '100%',
       height: '100%',
       videoId,
@@ -570,8 +582,13 @@ export const YouTubeIframe = memo(() => {
   useEffect(() => {
     if ((playbackSource !== 'cached' && playbackSource !== 'r2') || !isPlaying) return;
 
-    const DRIFT_THRESHOLD = 2; // seconds - only sync if drift is noticeable
-    const CHECK_INTERVAL = 5000; // check every 5 seconds
+    // Tightened 2026-04-25 (Issue #4): old 5s/2s window allowed up to ~7s
+    // of visible A/V offset before correction — brutal on music videos
+    // where the artist's mouth is on screen. 1.5s/0.6s caps perceived
+    // drift at ~2s while still well above the YouTube buffer-thrash zone
+    // (sub-300ms seekTo calls cause re-buffer flicker).
+    const DRIFT_THRESHOLD = 0.6;
+    const CHECK_INTERVAL = 1500;
 
     // CRITICAL: read currentTime via getState() inside the callback, NOT
     // from the closure. The previous version had `currentTime` in the dep
@@ -767,9 +784,13 @@ export const YouTubeIframe = memo(() => {
         setShowPortraitNextUp={setShowPortraitNextUp}
       />
 
-      {/* Video container */}
+      {/* Video container — mountRef is the stable parent. initPlayer
+          appends a fresh child div on each init; YT.Player replaces THAT
+          with the iframe. Without this indirection the React ref ends up
+          orphaned after the first init and re-mounts attach players to
+          dead nodes (Issue #3: floating container shows, video black). */}
       <div style={getVideoStyle()}>
-        <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
+        <div ref={mountRef} style={{ width: '100%', height: '100%' }} />
       </div>
 
       {/* Portrait drag + tap layer. Drag to move the floating player.
