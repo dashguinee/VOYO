@@ -3034,8 +3034,10 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onNavVisibilityChange, onSwitc
       {/* 🌍 African Vibes - cultural pillar, holds its ground.
           Watch More moved OFF the header (Apr 2026): it now only appears at the
           end of the carousel after scrolling, with a golden-beam reveal and a
-          purple Open VOYO morph. Header stays clean, CTA earns the scroll. */}
-      <div className="mt-5 mb-10">
+          purple Open VOYO morph. Header stays clean, CTA earns the scroll.
+          contain:paint scopes the AfricanVibesVideoCard iframe loads + the
+          carousel's bronze breath animations to this section. */}
+      <div className="mt-5 mb-10" style={{ contain: 'paint' }}>
         <div className="px-4 mb-5 flex items-center gap-3">
           <AfricaIcon size={36} />
           <div className="flex-1">
@@ -3105,9 +3107,14 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onNavVisibilityChange, onSwitc
       )}
 
 
-      {/* Top 10 on VOYO — state/countdown fully isolated in Top10Section */}
+      {/* Top 10 on VOYO — state/countdown fully isolated in Top10Section.
+          contain:paint scopes the countdown's text-shadow + box-shadow
+          animations to this section so they can't cascade into Vibes/
+          Stations below during the countdown sequence. */}
       {hasTrending && (
-        <Top10Section tracks={trending.slice(0, 10)} onTrackPlay={onTrackPlay} />
+        <div style={{ contain: 'paint' }}>
+          <Top10Section tracks={trending.slice(0, 10)} onTrackPlay={onTrackPlay} />
+        </div>
       )}
 
       {/* Vibes reel — one horizontal scroll interleaving AI vibe-covers
