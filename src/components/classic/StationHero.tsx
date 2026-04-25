@@ -1,5 +1,5 @@
 import { memo, useEffect, useRef, useState, useCallback } from 'react';
-import { Play } from 'lucide-react';
+import { Play, Check } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { app } from '../../services/oyo';
 import { getUserHash } from '../../services/centralDJ';
@@ -30,20 +30,9 @@ interface StationHeroProps {
   station: Station;
 }
 
-// iOS blocks programmatic unmute without user gesture — dwell-fade falls back to a tap cue.
-const IS_IOS = typeof navigator !== 'undefined'
-  && /iPhone|iPad|iPod/.test(navigator.userAgent)
-  && !(window as unknown as { MSStream?: unknown }).MSStream;
-
-// Dwell before audio ramps in. Was 7000ms — felt slow enough that users
-// saw the YT loader finish, the video play, and still sat in silence for
-// several seconds. 2s is long enough to register intent (not a pass-by
-// scroll) without letting the user stare at a muted player.
-const DWELL_MS = 2000;
-
 function muxYTUrl(videoId: string): string {
   const params = new URLSearchParams({
-    autoplay: '1',
+    autoplay: '1',           // autoplay-on-mount → no loader visible at viewport
     mute: '1',
     loop: '1',
     playlist: videoId,       // required for loop= to work on a single video
@@ -56,40 +45,37 @@ function muxYTUrl(videoId: string): string {
   return `https://www.youtube.com/embed/${videoId}?${params.toString()}`;
 }
 
+/**
+ * StationHero — rewritten v623 (radio-tuning model).
+ *
+ * Lifecycle ("like a radio always tuning, only on your viewport"):
+ *   · Card NEAR (rootMargin 50%)  → iframe mounts + autoplays muted.
+ *     By the time the user scrolls into view, the video is already
+ *     playing. No YT loader visible at the viewport.
+ *   · Card IN VIEW (>50% visible) → iframe stays playing (resume if
+ *     it was paused on a brief scroll-out).
+ *   · Card OUT of view (still near) → postMessage pauseVideo. Iframe
+ *     stays mounted; no reload, no re-decode on return.
+ *   · Card LEAVES near (after 800ms grace) → iframe unmounts. Memory
+ *     freed for cards that drift far off-screen.
+ *
+ * Single-iframe-per-rail approach (parent isActive prop) was tried
+ * briefly and rejected — Dash wanted continuous-tuning feel, not
+ * one-at-a-time switch-and-reload.
+ */
 export const StationHero = memo(({ station }: StationHeroProps) => {
   const cardRef = useRef<HTMLDivElement>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
-  const dwellTimerRef = useRef<number | null>(null);
-  // Tracks the fade-in interval so we can cancel it on unmount OR when
-  // the card leaves view before the ramp reaches target. Without this
-  // ref the ramp leaks a setInterval that keeps calling postMessage
-  // into a dead iframe forever.
-  const fadeIntervalRef = useRef<number | null>(null);
-
+  const [isNear, setIsNear] = useState(false);
   const [isInView, setIsInView] = useState(false);
-  // `isNearby`: card is within ~2.5 viewport-heights of the visible area.
-  // Iframe only mounts when nearby — off-screen stations don't load video
-  // at all (massive battery + bandwidth win when the rail has 5+ stations).
-  const [isNearby, setIsNearby] = useState(false);
-  // Live mirror of isInView for the iframe onLoad callback. Without this
-  // ref, onLoad captures the initial (false) value and can't tell whether
-  // the card became visible while the YT player was booting.
-  const isInViewRef = useRef(false);
-  const [isPreviewingAudio, setIsPreviewingAudio] = useState(false);
-  const [subscribed, setSubscribed] = useState(false);
-  const [showIosHint, setShowIosHint] = useState(false);
-  // Smooth handoff between the static poster and the live iframe. Without
-  // this gate, isNearby flipping true unmounted the img + mounted a fresh
-  // iframe in the same frame — black flash until YT's first paint. Now
-  // the img stays mounted as backdrop and the iframe fades in over it
-  // once YT is ready. Reset to false when iframe unmounts (isNearby false).
+  const [shouldMount, setShouldMount] = useState(false);
   const [iframeReady, setIframeReady] = useState(false);
-  useEffect(() => { if (!isNearby) setIframeReady(false); }, [isNearby]);
+  const [subscribed, setSubscribed] = useState(false);
 
-  const accentPrimary = station.accent_colors?.primary ?? '#007749'; // SA green fallback
-  const accentSecondary = station.accent_colors?.secondary ?? '#FFB612'; // SA gold fallback
+  const accentPrimary = station.accent_colors?.primary ?? '#007749';
+  const accentSecondary = station.accent_colors?.secondary ?? '#FFB612';
 
-  // Check existing subscription on mount.
+  // Existing-subscription check.
   useEffect(() => {
     if (!supabase) return;
     let cancelled = false;
@@ -106,103 +92,50 @@ export const StationHero = memo(({ station }: StationHeroProps) => {
     return () => { cancelled = true; };
   }, [station.id]);
 
-  // Two observers with different thresholds:
-  //   - proximity (rootMargin 250% 0): iframe mount gate. Larger margin
-  //     than before so the YouTube embed loads + starts muted autoplay
-  //     well before the card scrolls into view. Kills the "see the YT
-  //     loader" moment + the mid-scroll iframe-mount jank.
-  //   - visibility (>0.35 intersectionRatio): preview / dwell / pause
-  //     gate. Lower than 0.6 so the dwell timer starts as soon as the
-  //     card is meaningfully on-screen — audio ramp begins by the time
-  //     the user is actually focused on it.
+  // Two observers: proximity (mount gate) + visibility (play/pause gate).
+  // Proximity uses rootMargin 50% → iframe mounts ~half a viewport
+  // before the card enters view, gives YT enough time to boot so the
+  // video is already running by the time the user arrives.
   useEffect(() => {
     const el = cardRef.current;
     if (!el) return;
-    // Tightened from 250% → 100% (1 viewport of buffer instead of 2.5).
-    // 250% mounted iframes 5 viewports out — when user scrolled toward
-    // the section, all stations' isNearby flipped simultaneously and
-    // 5 YT iframes booted in parallel, causing visible glitch from the
-    // mass network + parse + paint storm. 100% pre-loads when user is
-    // ~1 screen away — still fades in smoothly via the v611 handoff,
-    // doesn't flood the main thread on first arrival.
     const nearObs = new IntersectionObserver(
-      (entries) => setIsNearby(entries[0].isIntersecting),
-      { rootMargin: '100% 0px 100% 0px' }
+      (entries) => setIsNear(entries[0].isIntersecting),
+      { rootMargin: '50% 0px 50% 0px' }
     );
     const viewObs = new IntersectionObserver(
-      (entries) => setIsInView(entries[0].isIntersecting && entries[0].intersectionRatio > 0.35),
-      { threshold: [0.2, 0.35, 0.6, 0.85] }
+      (entries) => setIsInView(entries[0].intersectionRatio > 0.5),
+      { threshold: [0, 0.5, 1] }
     );
     nearObs.observe(el);
     viewObs.observe(el);
     return () => { nearObs.disconnect(); viewObs.disconnect(); };
   }, []);
 
-  useEffect(() => { isInViewRef.current = isInView; }, [isInView]);
-
+  // Mount management with grace period — iframe stays alive 800ms after
+  // leaving the proximity zone, so a quick scroll-through-and-back
+  // doesn't reload the YT player.
   useEffect(() => {
-    if (!isInView) {
-      if (dwellTimerRef.current) window.clearTimeout(dwellTimerRef.current);
-      dwellTimerRef.current = null;
-      // Cancel any active audio-ramp — was leaking a setInterval that
-      // kept messaging a paused/dead iframe when the card scrolled away.
-      if (fadeIntervalRef.current != null) {
-        window.clearInterval(fadeIntervalRef.current);
-        fadeIntervalRef.current = null;
-      }
-      setIsPreviewingAudio(false);
-      setShowIosHint(false);
-      // PAUSE (not just mute) — a muted iframe still decodes video +
-      // streams bytes, which was the station rail's main battery hit.
-      // pauseVideo stops decode entirely until the card returns to view.
-      postYTMessage('pauseVideo');
-      postYTMessage('mute');
+    if (isNear) {
+      setShouldMount(true);
       return;
     }
-    // Returning to view: resume playback before starting the dwell timer.
-    postYTMessage('playVideo');
-    dwellTimerRef.current = window.setTimeout(() => {
-      if (IS_IOS) setShowIosHint(true);
-      else fadeInAudio();
-    }, DWELL_MS);
-    return () => {
-      if (dwellTimerRef.current) window.clearTimeout(dwellTimerRef.current);
-      // Defensive cleanup on effect teardown (component unmount or
-      // isInView flip). Mirrors the !isInView branch above.
-      if (fadeIntervalRef.current != null) {
-        window.clearInterval(fadeIntervalRef.current);
-        fadeIntervalRef.current = null;
-      }
-    };
-  }, [isInView]);
+    const t = setTimeout(() => {
+      setShouldMount(false);
+      setIframeReady(false);
+    }, 800);
+    return () => clearTimeout(t);
+  }, [isNear]);
 
-  const postYTMessage = useCallback((func: 'mute' | 'unMute' | 'setVolume' | 'playVideo' | 'pauseVideo', arg?: number) => {
-    const iframe = iframeRef.current?.contentWindow;
-    if (!iframe) return;
-    const args = arg !== undefined ? [arg] : [];
-    iframe.postMessage(JSON.stringify({ event: 'command', func, args }), '*');
-  }, []);
-
-  const fadeInAudio = useCallback(() => {
-    setIsPreviewingAudio(true);
-    postYTMessage('unMute');
-    let v = 0;
-    postYTMessage('setVolume', 0);
-    // Cancel any prior ramp before starting a new one (e.g. scroll out
-    // + back in during a single dwell cycle).
-    if (fadeIntervalRef.current != null) {
-      window.clearInterval(fadeIntervalRef.current);
-      fadeIntervalRef.current = null;
-    }
-    fadeIntervalRef.current = window.setInterval(() => {
-      v += 4;
-      postYTMessage('setVolume', Math.min(v, 55));
-      if (v >= 55 && fadeIntervalRef.current != null) {
-        window.clearInterval(fadeIntervalRef.current);
-        fadeIntervalRef.current = null;
-      }
-    }, 90);
-  }, [postYTMessage]);
+  // Pause/resume via postMessage based on visibility — no mount/unmount,
+  // no reload. The iframe is already running (autoplay=1), we just
+  // suspend frame decode while the card is off-screen.
+  useEffect(() => {
+    const win = iframeRef.current?.contentWindow;
+    if (!win || !iframeReady) return;
+    const cmd = isInView ? 'playVideo' : 'pauseVideo';
+    win.postMessage(`{"event":"command","func":"${cmd}","args":""}`, '*');
+  }, [isInView, iframeReady]);
 
   const commit = useCallback(async () => {
     if (supabase && !subscribed) {
@@ -225,10 +158,7 @@ export const StationHero = memo(({ station }: StationHeroProps) => {
       duration: 0,
       createdAt: new Date().toISOString(),
     }, 'vibe');
-    // Also mute the background preview iframe so we don't double-play.
-    postYTMessage('mute');
-    setIsPreviewingAudio(false);
-  }, [station, subscribed, postYTMessage]);
+  }, [station, subscribed]);
 
   return (
     <div
@@ -248,11 +178,9 @@ export const StationHero = memo(({ station }: StationHeroProps) => {
         boxShadow: `inset 0 0 32px rgba(212,175,110,0.08), 0 8px 32px ${accentPrimary}22`,
       }}
     >
-      {/* Static poster — ALWAYS mounted as the backdrop. Single cheap
-          thumbnail; carries the station visually when the iframe isn't
-          present (off-screen) AND while the iframe is booting (smooth
-          handoff). When iframe is ready + visible, it fades in over the
-          poster — no black flash on proximity flip. */}
+      {/* Poster — always mounted as backdrop. Carries the station
+          visually while iframe boots; stays underneath the iframe so
+          there's never a black flash on mount/unmount transitions. */}
       <img
         src={getThumb(station.hero_video_id)}
         alt=""
@@ -266,50 +194,29 @@ export const StationHero = memo(({ station }: StationHeroProps) => {
           pointerEvents: 'none',
         }}
       />
-      {/* Live iframe overlays when within proximity (rootMargin 250%).
-          Far-offscreen stations show ONLY the poster — saves a YT player
-          + video decode + bandwidth per card. Fades in over 600ms when
-          YT signals onLoad. */}
-      {isNearby && (
+      {/* Iframe — mounted when card is near (50% rootMargin); fades in
+          over poster once YT signals onLoad. Stays mounted until card
+          drifts far off-screen + 800ms grace. */}
+      {shouldMount && (
         <iframe
           ref={iframeRef}
           src={muxYTUrl(station.hero_video_id)}
           className="absolute inset-0 w-full h-full"
           style={{
             border: 0,
-            filter: isPreviewingAudio ? 'brightness(0.82)' : 'brightness(0.52) blur(0.4px)',
-            // scale 1.62 zooms enough to clip ~40% of the top black strip
-            // while keeping the subject framed; translateY drops YT's
-            // title flash into the top fade.
+            filter: 'brightness(0.52) blur(0.4px)',
             transform: 'scale(1.62) translateY(5%)',
             pointerEvents: 'none',
             opacity: iframeReady ? 1 : 0,
-            transition: 'opacity 600ms cubic-bezier(0.16, 1, 0.3, 1), filter 500ms ease',
+            transition: 'opacity 600ms cubic-bezier(0.16, 1, 0.3, 1)',
           }}
           allow="autoplay; encrypted-media; picture-in-picture"
           title={station.title}
-          onLoad={() => {
-            setIframeReady(true);
-            // autoplay=1 in the URL starts the video the moment the iframe
-            // boots. If we're mounted-nearby-but-not-in-view, that's pure
-            // wasted decode + stream. Push pauseVideo as soon as the YT
-            // API is reachable — retry once because postMessage can land
-            // before YT's command handler is listening.
-            if (isInViewRef.current) return;
-            postYTMessage('pauseVideo');
-            postYTMessage('mute');
-            window.setTimeout(() => {
-              if (isInViewRef.current) return;
-              postYTMessage('pauseVideo');
-              postYTMessage('mute');
-            }, 800);
-          }}
+          onLoad={() => setIframeReady(true)}
         />
       )}
 
-      {/* Top fade — bronze-tinted darkening catches the YT title flash
-          and keeps the card calm. Short (22% height), strong near the
-          edge, vanishes into the mid-frame. */}
+      {/* Top fade — catches YT title flash. */}
       <div
         className="absolute inset-x-0 top-0 pointer-events-none"
         style={{
@@ -319,10 +226,7 @@ export const StationHero = memo(({ station }: StationHeroProps) => {
         }}
       />
 
-      {/* Bottom fade — bronze wash that blends into the title block.
-          Darker than the old pure-black gradient, pulled warmer so the
-          whole card reads as "lit-by-firelight" rather than "movie
-          poster". */}
+      {/* Bottom fade — bronze wash blending into title block. */}
       <div
         className="absolute inset-x-0 bottom-0 pointer-events-none"
         style={{
@@ -332,9 +236,7 @@ export const StationHero = memo(({ station }: StationHeroProps) => {
         }}
       />
 
-      {/* Soft bronze wash over the full frame — very low opacity (4-5%)
-          unifies iframe color temperature with the rest of the card so
-          the video stops fighting the VOYO palette. */}
+      {/* Soft bronze full-frame wash — unifies iframe palette. */}
       <div
         className="absolute inset-0 pointer-events-none mix-blend-overlay"
         style={{
@@ -343,7 +245,7 @@ export const StationHero = memo(({ station }: StationHeroProps) => {
         }}
       />
 
-      {/* Top-left bronze corner flourish — kept subtler than before. */}
+      {/* Top-left bronze flourish. */}
       <div
         className="absolute top-0 left-0 pointer-events-none"
         style={{
@@ -354,13 +256,15 @@ export const StationHero = memo(({ station }: StationHeroProps) => {
         }}
       />
 
-      {/* Top-right rotating bronze halo — unchanged, just toned down. */}
+      {/* Top-right bronze halo — spinning only when card is in view
+          (animation paused otherwise, no GPU work). */}
       <div
         className="absolute top-3 right-3 w-8 h-8 rounded-full pointer-events-none"
         style={{
           background: `radial-gradient(circle, ${accentSecondary}40 0%, ${accentPrimary}18 60%, transparent 100%)`,
           border: `1px solid ${accentSecondary}4D`,
           animation: 'voyoSpin 14s linear infinite',
+          animationPlayState: isInView ? 'running' : 'paused',
         }}
       />
 
@@ -394,20 +298,9 @@ export const StationHero = memo(({ station }: StationHeroProps) => {
               <>
                 <span className="text-white/25 text-[11px]">·</span>
                 <span className="text-white/45 text-[11px]">opens with</span>
-                {/* Frosted glass pill — premium, unambiguous "this is an
-                    artist name" tag. Subtle white gradient, backdrop-blur
-                    so the bronze wash reads through without drowning the
-                    text. Visually distinct from plain metadata copy. */}
                 <span
                   className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold text-white/95"
                   style={{
-                    // Pumped the gradient + boxShadow to compensate for
-                    // the backdropFilter:blur removal — same glassy read,
-                    // zero per-frame background-pixel sampling. Stations
-                    // rail had 15 simultaneous backdrop-filters during
-                    // scroll (5 cards × 3 pills each), recomputing every
-                    // frame. The visible delta without blur is minimal;
-                    // the cost during scroll was real jank.
                     background: 'linear-gradient(135deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0.08) 100%)',
                     border: '1px solid rgba(255,255,255,0.18)',
                     boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.14), 0 1px 2px rgba(0,0,0,0.25)',
@@ -425,7 +318,6 @@ export const StationHero = memo(({ station }: StationHeroProps) => {
             <span
               className="inline-flex items-center px-2 py-0.5 rounded-full font-semibold text-white/90"
               style={{
-                // Same gradient bump — blur removed, glass read preserved.
                 background: 'linear-gradient(135deg, rgba(255,255,255,0.16) 0%, rgba(255,255,255,0.07) 100%)',
                 border: '1px solid rgba(255,255,255,0.16)',
                 boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.12), 0 1px 2px rgba(0,0,0,0.25)',
@@ -445,6 +337,7 @@ export const StationHero = memo(({ station }: StationHeroProps) => {
                     background: accentPrimary,
                     boxShadow: `0 0 6px ${accentPrimary}`,
                     animation: 'voyoBreath 2s ease-in-out infinite',
+                    animationPlayState: isInView ? 'running' : 'paused',
                   }}
                 />
                 {station.location_code ? `${station.location_code} · ` : ''}
@@ -454,81 +347,60 @@ export const StationHero = memo(({ station }: StationHeroProps) => {
           )}
         </div>
 
+        {/* Join — finished-product treatment.
+            Not joined: silver/platinum metallic pill. The gradient + bevel
+              + lift shadow already do the premium read; previous shimmer
+              was animation-noise on top of an already-finished object
+              (per Dash's "premium = restraint" memo).
+            Joined: bronze-fill stamped pill, smaller. The "owned/complete"
+              state reads warmer + more compact — the journey done. */}
         <div className="flex items-center gap-2 pt-3">
-          {/* Join — silver/platinum metallic pill. Reads as a precious
-              object against the bronze/brown frame, not a busy accent
-              piece. Multi-stop gradient with a warm-white highlight on
-              the 30% band gives it dimensional "pressed metal" feel.
-              Inner inset ring + soft shadow = frame, not flatness. */}
           <button
             onClick={(e) => { e.stopPropagation(); commit(); }}
-            className="relative overflow-hidden flex items-center gap-2 pl-2 pr-4 py-2 rounded-full text-[13px] font-bold transition-transform active:scale-95"
-            style={{
+            className={`relative flex items-center gap-2 rounded-full font-bold transition-transform active:scale-[0.96] ${
+              subscribed ? 'pl-1.5 pr-3.5 py-1.5 text-[12px]' : 'pl-2 pr-4 py-2 text-[13px]'
+            }`}
+            style={subscribed ? {
+              color: '#1b0e04',
+              background: 'linear-gradient(135deg, #f0d39a 0%, #d4a053 45%, #b07d2c 100%)',
+              boxShadow: '0 5px 14px rgba(176,125,44,0.4), inset 0 1px 0 rgba(255,220,160,0.45), inset 0 -1px 0 rgba(0,0,0,0.2)',
+              border: '1px solid rgba(255,220,160,0.45)',
+              letterSpacing: '0.02em',
+            } : {
               color: '#1b1b22',
-              background:
-                'linear-gradient(135deg, #f7f7fa 0%, #e4e4ea 28%, #b9b9c1 55%, #d8d8df 78%, #f1f1f4 100%)',
-              boxShadow:
-                '0 6px 18px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.9), inset 0 -1px 0 rgba(0,0,0,0.18)',
+              background: 'linear-gradient(135deg, #f7f7fa 0%, #e4e4ea 28%, #b9b9c1 55%, #d8d8df 78%, #f1f1f4 100%)',
+              boxShadow: '0 6px 18px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.9), inset 0 -1px 0 rgba(0,0,0,0.18)',
               border: '1px solid rgba(255,255,255,0.35)',
               letterSpacing: '0.02em',
             }}
-            aria-label={subscribed ? 'Enter joined station' : 'Join station'}
+            aria-label={subscribed ? 'Joined — tap to play' : 'Join station'}
           >
-            {/* Shimmer overlay — a thin warm-white highlight band sweeps
-                across the silver once every ~8s. 88% of the cycle is idle
-                (band parked off-screen at opacity 0), so the motion reads
-                as invitation, not noise. Subtler than Oye's continuous
-                bubble — it catches the eye, then gets out of the way. */}
-            {!subscribed && (
-              <span
-                aria-hidden="true"
-                className="absolute inset-y-0 -inset-x-2 pointer-events-none"
-                style={{
-                  background:
-                    'linear-gradient(115deg, transparent 35%, rgba(255,255,255,0.78) 50%, transparent 65%)',
-                  mixBlendMode: 'overlay',
-                  animation: 'voyo-join-shimmer 8s cubic-bezier(0.4, 0, 0.2, 1) infinite',
-                }}
-              />
-            )}
             <span
-              className="relative w-7 h-7 rounded-full flex items-center justify-center"
-              style={{
+              className={`relative rounded-full flex items-center justify-center ${
+                subscribed ? 'w-5 h-5' : 'w-7 h-7'
+              }`}
+              style={subscribed ? {
+                background: 'rgba(27,14,4,0.85)',
+                boxShadow: 'inset 0 1px 1px rgba(255,220,160,0.3)',
+              } : {
                 background: 'linear-gradient(135deg, #1b1b22 0%, #2a2a33 100%)',
                 boxShadow: 'inset 0 1px 1px rgba(255,255,255,0.12), 0 1px 2px rgba(0,0,0,0.4)',
               }}
             >
-              <Play className="w-3.5 h-3.5" fill="#f7f7fa" style={{ color: '#f7f7fa' }} />
+              {subscribed ? (
+                <Check className="w-3 h-3" style={{ color: '#f0d39a' }} strokeWidth={3} />
+              ) : (
+                <Play className="w-3.5 h-3.5" fill="#f7f7fa" style={{ color: '#f7f7fa' }} />
+              )}
             </span>
-            <span className="relative">{subscribed ? 'Joined' : 'Join'}</span>
+            <span>{subscribed ? 'Joined' : 'Join'}</span>
           </button>
         </div>
       </div>
 
-      {showIosHint && (
-        <div
-          className="absolute inset-x-0 top-1/2 -translate-y-1/2 flex justify-center pointer-events-none"
-          style={{ animation: 'voyoBreath 2s ease-in-out infinite' }}
-        >
-          <div
-            className="px-3 py-1.5 rounded-full text-xs font-bold"
-            style={{
-              // Bumped opacity 0.55 → 0.7 to compensate for the missing
-              // blur. iOS hint shows once per dwell — the blur cost was
-              // bundled with the always-rendered glass pills above.
-              background: 'rgba(0,0,0,0.7)',
-              border: `1px solid ${accentSecondary}66`,
-              color: accentSecondary,
-            }}
-          >
-            Tap to hear
-          </div>
-        </div>
-      )}
-
       <style>{`
-        @keyframes voyoSpin  { from { transform: rotate(0deg);} to { transform: rotate(360deg);} }
-        @keyframes voyoBreath{ 0%,100% { opacity: 0.55; transform: scale(1);} 50% { opacity: 1; transform: scale(1.08);} }
+        @keyframes voyoSpin   { from { transform: rotate(0deg);} to { transform: rotate(360deg);} }
+        @keyframes voyoBreath { 0%,100% { opacity: 0.55; transform: scale(1);} 50% { opacity: 1; transform: scale(1.08);} }
       `}</style>
     </div>
   );
