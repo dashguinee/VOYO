@@ -787,8 +787,8 @@ const ClassicsDiskCard = memo(({ track, index, isSelected, onPlay }: {
         <div
           className={`relative rounded-full overflow-hidden ${isSelected ? 'classics-disk-spin' : 'classics-disk-drift'}`}
           style={{
-            width: 120,
-            height: 120,
+            width: 130,
+            height: 130,
             ['--drift-dur' as string]: `${driftDuration}s`,
             ['--drift-delay' as string]: `${driftDelay}s`,
             boxShadow: isSelected
@@ -803,7 +803,7 @@ const ClassicsDiskCard = memo(({ track, index, isSelected, onPlay }: {
             trackId={track.trackId}
             artist={track.artist}
             title={track.title}
-            style={{ transform: 'scale(1.45)' }}
+            style={{ transform: 'scale(1.5)' }}
           />
           {/* Vinyl grooves */}
           <div
@@ -1776,30 +1776,28 @@ const Top10Section = memo(({ tracks, onTrackPlay }: Top10SectionProps) => {
         </p>
       </div>
       <style>{`
+        /* Simplified — was -43% horizontal slide which read as performative
+           "trying hard". Now a gentle ±8% breath, color subtly warms +
+           cools. Premium = restraint. */
         @keyframes top10-header-drift {
-          0%        { transform: translateX(0);    color: #fff; }
-          8%        { transform: translateX(0);    color: #fff; }
-          34%       { transform: translateX(-43%); color: rgba(220,167,75,0.95); }
-          64%       { transform: translateX(-43%); color: rgba(220,167,75,0.95); }
-          92%       { transform: translateX(0);    color: #fff; }
-          96%, 100% { transform: translateX(0);    color: #fff; }
+          0%, 100%  { transform: translateX(0);    color: #fff; }
+          50%       { transform: translateX(-8%);  color: rgba(220,167,75,0.92); }
         }
         .top10-header-scroll {
-          animation: top10-header-drift 22s ease-in-out infinite;
-          /* will-change removed — modern Chrome/Safari already promote
-             animated transforms to GPU heuristically. Explicit will-change
-             pinned a layer permanently even when the header was scrolled
-             off-screen, costing memory + composite work for nothing. */
+          animation: top10-header-drift 14s ease-in-out infinite;
         }
+        /* Simplified — was 0.3↔1.0 opacity swing (dramatic). Now 0.55↔0.82,
+           reads as ambient atmosphere instead of a pulsing strobe. */
         @keyframes top10-bg-pulse {
-          0%, 7%    { opacity: 0.3; }
-          34%, 64%  { opacity: 1; }
-          93%, 100% { opacity: 0.3; }
+          0%, 100% { opacity: 0.55; }
+          50%      { opacity: 0.82; }
         }
         .top10-bg-glow {
           background: radial-gradient(ellipse 90% 70% at 50% 50%, rgba(139,92,246,0.2) 0%, rgba(139,92,246,0.07) 50%, transparent 80%);
-          animation: top10-bg-pulse 22s ease-in-out infinite;
-          will-change: opacity;
+          animation: top10-bg-pulse 14s ease-in-out infinite;
+          /* will-change dropped — modern browsers GPU-promote opacity
+             animations heuristically. Explicit pin kept the layer alive
+             even when section was off-screen. */
         }
         @keyframes top10-subtitle-flash {
           0%   { opacity: 0; transform: translateY(4px); }
@@ -2818,13 +2816,15 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onNavVisibilityChange, onSwitc
       <Safe name="Classics">
         {classicsTracks.length > 0 && (
           <div
-            className="mb-10 pt-10 pb-10 relative overflow-hidden"
+            className="mb-10 pt-12 pb-12 relative overflow-hidden"
             style={{
               background: 'radial-gradient(ellipse 120% 80% at 30% 0%, rgba(212,160,83,0.18) 0%, rgba(212,160,83,0.07) 45%, transparent 75%)',
               // contain:paint scopes the disc-drift, disc-spin, glow-pulse
               // and subtitle shimmer animations to this section. Their
               // paint cascades can no longer leak into the Vibes /
-              // Stations rails below.
+              // Stations rails below. pt/pb-12 (was -10) gives the
+              // selected-disc 56px outer-glow room to render without
+              // clipping at the section edges.
               contain: 'paint',
             }}
           >
