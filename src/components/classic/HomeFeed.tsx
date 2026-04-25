@@ -1014,7 +1014,16 @@ const AfricanVibesVideoCard = memo(({
     <button
       ref={cardRef}
       className="flex-shrink-0 relative rounded-xl"
-      style={{ width: '95px', height: '142px' }}
+      style={{
+        width: '95px',
+        height: '142px',
+        // Guided presence — the card the user is looking at rises to
+        // full opacity; passed cards recede to 0.8. Smooth 700ms Apple
+        // easing leads the eye through the rail without snap changes.
+        // First card stays at full opacity (always-present hero).
+        opacity: isActive ? 1 : 0.8,
+        transition: 'opacity 700ms cubic-bezier(0.16, 1, 0.3, 1)',
+      }}
       onClick={() => onTrackPlay(track)}
     >
       {/* Bronze glow - stronger for hero (idx 0) */}
@@ -1046,8 +1055,13 @@ const AfricanVibesVideoCard = memo(({
             the time. */}
         {shouldMountIframe && (
           <div
-            className="absolute inset-0 transition-opacity duration-300"
-            style={{ opacity: isReady ? 1 : 0 }}
+            className="absolute inset-0"
+            style={{
+              opacity: isReady ? 1 : 0,
+              // Same Apple curve as the outer card opacity so the
+              // thumbnail→video crossfade feels part of the same gesture.
+              transition: 'opacity 600ms cubic-bezier(0.16, 1, 0.3, 1)',
+            }}
           >
             <iframe
               ref={iframeRef}
