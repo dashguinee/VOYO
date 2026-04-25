@@ -8,7 +8,12 @@
  * - Mobile-first, touch-friendly design
  */
 
-import { useState, useMemo, useEffect, useRef, memo, useCallback } from 'react';
+import { useState, useMemo, useEffect, useRef, memo, useCallback, lazy, Suspense } from 'react';
+
+// HomeFeedDeep is the second surface — Stations, OYO Picks, Artist Radar.
+// React.lazy = own chunk, fetched on demand once the user scrolls within
+// one viewport of the seam. Stations no longer mounts on first paint.
+const HomeFeedDeep = lazy(() => import('./HomeFeedDeep'));
 import { useShallow } from 'zustand/shallow';
 import { devWarn } from '../../utils/logger';
 import { Search, Play, Zap } from 'lucide-react';
@@ -24,7 +29,7 @@ import { getUserTopTracks, getPoolAwareHotTracks, getPoolAwareDiscoveryTracks, c
 import { curateAllSections } from '../../services/poolCurator';
 import type { PooledTrack } from '../../store/trackPoolStore';
 import type { HistoryItem } from '../../types';
-import { getInsights as getOyoInsights } from '../../services/oyoDJ';
+// getOyoInsights moved to HomeFeedDeep.tsx (only oyosPicks consumed it).
 import { usePools, app } from '../../services/oyo';
 import { usePreferenceStore } from '../../store/preferenceStore';
 import { usePlayerStore } from '../../store/playerStore';
@@ -34,7 +39,7 @@ import { OyeButton } from '../oye/OyeButton';
 import { Track } from '../../types';
 // TiviPlusCrossPromo moved to DaHub
 import { SignInPrompt } from '../social/SignInPrompt';
-import { StationHero, type Station } from './StationHero';
+// StationHero + Station type moved to HomeFeedDeep.tsx (only Stations rail consumed them).
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../hooks/useAuth';
 import { useBackGuard } from '../../hooks/useBackGuard';
@@ -61,30 +66,7 @@ const getNewReleases = (pool: Track[], limit: number = 15): Track[] => {
     .slice(0, limit);
 };
 
-// Pool-based: Get artists you love from pool + history
-const getArtistsYouLove = (history: HistoryItem[], pool: Track[], limit: number = 8): { name: string; tracks: Track[]; playCount: number }[] => {
-  const artistPlays: Record<string, { tracks: Set<string>; count: number }> = {};
-  history.forEach(item => {
-    if (item.track?.artist) {
-      const artist = item.track.artist;
-      if (!artistPlays[artist]) {
-        artistPlays[artist] = { tracks: new Set(), count: 0 };
-      }
-      artistPlays[artist].tracks.add(item.track.id);
-      artistPlays[artist].count++;
-    }
-  });
-  return Object.entries(artistPlays)
-    .map(([name, data]) => ({
-      name,
-      playCount: data.count,
-      // Get tracks from pool instead of static TRACKS
-      tracks: pool.filter(t => typeof t.artist === 'string' && t.artist.toLowerCase().includes(name.toLowerCase())).slice(0, 5),
-    }))
-    .filter(a => a.tracks.length > 0)
-    .sort((a, b) => b.playCount - a.playCount)
-    .slice(0, limit);
-};
+// getArtistsYouLove moved to HomeFeedDeep.tsx (only consumer)
 
 const getTrendingTracks = (hotPool: PooledTrack[], limit: number = 15): Track[] => {
   return [...hotPool]
@@ -220,266 +202,8 @@ const ShelfWithRefresh = ({ title, onSeeAll, children }: ShelfWithRefreshProps) 
 );
 
 
-// ============================================
-// CENTER-FOCUSED CAROUSEL - For New Releases
-// Center card big, sides smaller (like Landscape player selector)
-// ============================================
-
-interface CenterCarouselProps {
-  tracks: Track[];
-  onPlay: (track: Track) => void;
-  // Right-end "Discover more" pill turns into a tappable affordance
-  // when this callback is provided. Leaves the pill non-interactive
-  // if the callsite doesn't wire it (backwards-compatible).
-  onDiscover?: () => void;
-}
-
-// Scattered VOYO text for left end - arrow pattern (clean, no dot)
-const VoyoScatter = () => (
-  <div className="relative w-16 h-20">
-    {['VOYO', 'VOYO', 'VOYO'].map((text, i) => (
-      <span
-        key={i}
-        className="absolute text-[8px] font-black tracking-wider"
-        style={{
-          background: 'linear-gradient(135deg, #a78bfa, #8b5cf6)',
-          backgroundClip: 'text',
-          WebkitBackgroundClip: 'text',
-          color: 'transparent',
-          top: `${15 + i * 25}%`,
-          left: `${10 + (i % 2) * 20}%`,
-          transform: `rotate(${-15 + i * 15}deg)`,
-        }}
-      >
-        {text}
-      </span>
-    ))}
-  </div>
-);
-
-// Smooth pulsing circle while scrolling
-const PulsingCircle = () => (
-  <div
-    className="w-4 h-4 rounded-full"
-    style={{
-      background: 'linear-gradient(135deg, rgba(139, 92, 246, 0.8), rgba(124, 58, 237, 0.7))',
-      boxShadow: '0 0 12px rgba(139, 92, 246, 0.4)',
-    }}
-  />
-);
-
-const CARD_W = 130;
-const CARD_GAP = 12;
-
-const CenterFocusedCarousel = ({ tracks, onPlay, onDiscover }: CenterCarouselProps) => {
-  // Defensive: empty or malformed tracks → render nothing, never crash.
-  // Memoised so array identity is stable across renders that don't touch
-  // the source, avoiding downstream re-renders.
-  const safeTracks = useMemo(
-    () => (Array.isArray(tracks) ? tracks.filter(t => t && t.id) : []),
-    [tracks],
-  );
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const [centerIndex, setCenterIndex] = useState(0);
-  const [scrollState, setScrollState] = useState<'left-end' | 'scrolling' | 'right-end'>('left-end');
-  // rAF-throttle + cached last-values so we only fire setState when the
-  // computed bucket actually changed. Previously firing at ~60fps during
-  // scroll = re-render storm on the entire carousel.
-  const scrollRafRef = useRef<number | null>(null);
-  const lastIndexRef = useRef(0);
-  const lastStateRef = useRef<'left-end' | 'scrolling' | 'right-end'>('left-end');
-
-  const handleScroll = () => {
-    if (scrollRafRef.current != null) return;
-    scrollRafRef.current = requestAnimationFrame(() => {
-      scrollRafRef.current = null;
-      const container = scrollRef.current;
-      if (!container) return;
-      const { scrollLeft, scrollWidth, clientWidth } = container;
-      const step = CARD_W + CARD_GAP;
-      const maxIndex = Math.max(0, safeTracks.length - 1);
-      const newIndex = Math.min(Math.max(Math.round(scrollLeft / step), 0), maxIndex);
-      if (newIndex !== lastIndexRef.current) {
-        lastIndexRef.current = newIndex;
-        setCenterIndex(newIndex);
-      }
-      const maxScroll = scrollWidth - clientWidth;
-      const nextState: 'left-end' | 'scrolling' | 'right-end' =
-        scrollLeft < 40 ? 'left-end'
-          : scrollLeft > maxScroll - 40 ? 'right-end'
-          : 'scrolling';
-      if (nextState !== lastStateRef.current) {
-        lastStateRef.current = nextState;
-        setScrollState(nextState);
-      }
-    });
-  };
-  useEffect(() => () => {
-    if (scrollRafRef.current != null) cancelAnimationFrame(scrollRafRef.current);
-  }, []);
-
-  return (
-    <div className="relative">
-      {/* LEFT END: Scattered VOYO text */}
-      
-        {scrollState === 'left-end' && (
-          <div
-            className="absolute left-2 top-1/2 -translate-y-1/2 z-10 pointer-events-none"
-          >
-            <VoyoScatter />
-          </div>
-        )}
-      
-
-      {/* WHILE SCROLLING: Smooth pulsing circle */}
-      
-        {scrollState === 'scrolling' && (
-          <div
-            className="absolute left-4 top-1/2 -translate-y-1/2 z-10 pointer-events-none"
-          >
-            <PulsingCircle />
-          </div>
-        )}
-      
-
-      {/* RIGHT END: "New drops coming soon" */}
-      
-        {scrollState === 'right-end' && (
-          <div
-            className={`absolute right-4 top-1/2 -translate-y-1/2 z-10 ${onDiscover ? 'pointer-events-auto' : 'pointer-events-none'}`}
-          >
-            {/* Glass pill — Giraf's Activity-page duration-pill recipe
-                retuned to VOYO's purple accent. Tappable when the parent
-                wires onDiscover (opens the search overlay on OYO's Picks
-                so the user has somewhere to go after hitting the rail's
-                right-end), otherwise stays a passive visual cue. */}
-            {onDiscover ? (
-              <button
-                type="button"
-                onClick={onDiscover}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-semibold tracking-wide whitespace-nowrap voyo-tap-scale voyo-hover-scale"
-                style={{
-                  background: 'rgba(255,255,255,0.08)',
-                  border: '1px solid rgba(196,181,253,0.20)',
-                  color: 'rgba(196,181,253,0.92)',
-                  backdropFilter: 'blur(10px) saturate(130%)',
-                  WebkitBackdropFilter: 'blur(10px) saturate(130%)',
-                  boxShadow: '0 6px 18px -6px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.08)',
-                }}
-                aria-label="Discover more — open search"
-              >
-                Discover more
-                <span aria-hidden="true" className="opacity-70">→</span>
-              </button>
-            ) : (
-              <span
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-semibold tracking-wide whitespace-nowrap"
-                style={{
-                  background: 'rgba(255,255,255,0.08)',
-                  border: '1px solid rgba(196,181,253,0.20)',
-                  color: 'rgba(196,181,253,0.92)',
-                  backdropFilter: 'blur(10px) saturate(130%)',
-                  WebkitBackdropFilter: 'blur(10px) saturate(130%)',
-                  boxShadow: '0 6px 18px -6px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.08)',
-                }}
-              >
-                Discover more
-                <span aria-hidden="true" className="opacity-70">→</span>
-              </span>
-            )}
-          </div>
-        )}
-      
-      <div
-        ref={scrollRef}
-        className="flex gap-3 overflow-x-auto scrollbar-hide py-2"
-        style={{
-          // proximity (not mandatory) — browser can assist snap without
-          // fighting the user's horizontal swipe. Combined with snap-
-          // align on the DIRECT flex child below, this is what finally
-          // lets OYO's Picks scroll on iOS/Android.
-          scrollSnapType: 'x proximity',
-          paddingLeft: `calc(50% - ${CARD_W / 2}px)`, // center first card
-          paddingRight: `calc(50% - ${CARD_W / 2}px)`,
-          WebkitOverflowScrolling: 'touch',
-        }}
-        onScroll={handleScroll}
-      >
-        {safeTracks.map((track, index) => {
-          const isCenter = index === centerIndex;
-          const distance = Math.abs(index - centerIndex);
-          const scale = isCenter ? 1 : Math.max(0.75, 1 - distance * 0.15);
-          const opacity = isCenter ? 1 : Math.max(0.5, 1 - distance * 0.25);
-
-          return (
-            <div
-              key={track.id}
-              className="flex-shrink-0"
-              style={{
-                // Snap-align + width BELONG on the direct flex child of
-                // the scroll container. On the nested div, Safari/iOS
-                // silently ignored snap points.
-                scrollSnapAlign: 'center',
-                width: CARD_W,
-                transform: `scale(${scale})`,
-                opacity,
-                transition: 'transform 260ms cubic-bezier(0.2, 0.8, 0.2, 1), opacity 260ms ease',
-                transformOrigin: 'center',
-              }}
-            >
-              <TrackCardGestures
-                track={track}
-                onTap={() => onPlay(track)}
-                className="cursor-pointer"
-              >
-                <div
-                  className="relative rounded-xl overflow-hidden mb-2 bg-white/5"
-                  style={{
-                    width: CARD_W,
-                    height: CARD_W,
-                    boxShadow: isCenter ? '0 8px 30px rgba(139, 92, 246, 0.3)' : '0 4px 15px rgba(0,0,0,0.3)',
-                  }}
-                >
-                  <SmartImage
-                    src={getThumb(track.trackId)}
-                    alt={track.title}
-                    className="w-full h-full object-cover"
-                    trackId={track.trackId}
-                    artist={track.artist}
-                    title={track.title}
-                  />
-                  {isCenter && (
-                    <>
-                      <div className="absolute bottom-2 right-2">
-                        <div
-                          className="w-8 h-8 rounded-full flex items-center justify-center backdrop-blur-md"
-                          style={{
-                            background: 'rgba(139, 92, 246, 0.45)',
-                            border: '1px solid rgba(255,255,255,0.15)',
-                            boxShadow: '0 4px 12px rgba(139, 92, 246, 0.3)',
-                          }}
-                        >
-                          <Play className="w-4 h-4 text-white ml-0.5" fill="white" />
-                        </div>
-                      </div>
-                      <div className="absolute inset-0 rounded-xl ring-2 ring-purple-500/50 pointer-events-none" />
-                    </>
-                  )}
-                </div>
-                <p className={`text-sm font-medium truncate ${isCenter ? 'text-white' : 'text-white/60'}`}>
-                  {track.title}
-                </p>
-                <p className={`text-xs truncate ${isCenter ? 'text-white/70' : 'text-white/40'}`}>
-                  {track.artist}
-                </p>
-              </TrackCardGestures>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-};
+// CenterFocusedCarousel + helpers (VoyoScatter, PulsingCircle, CARD_W, CARD_GAP)
+// moved to HomeFeedDeep.tsx (only consumer is OYO's Picks).
 
 // ============================================
 // TRACK CARD COMPONENT
@@ -840,47 +564,6 @@ const ClassicsDiskCard = memo(({ track, index, isSelected, onPlay }: {
 });
 ClassicsDiskCard.displayName = 'ClassicsDiskCard';
 
-// ============================================
-// ARTIST CARD COMPONENT
-// ============================================
-
-interface ArtistCardProps {
-  artist: { name: string; tracks: Track[]; playCount: number };
-  onPlay: (track: Track) => void;
-}
-
-const ArtistCard = memo(({ artist, onPlay }: ArtistCardProps) => {
-  const firstTrack = artist.tracks[0];
-
-  return (
-    <button
-      className="flex-shrink-0 w-28"
-      onClick={() => firstTrack && onPlay(firstTrack)}
-      style={{ scrollSnapAlign: 'start' }}
-    >
-      <div className="relative w-20 h-20 rounded-full overflow-hidden mb-3 bg-white/5 mx-auto shadow-lg shadow-black/30">
-        {firstTrack && (
-          <SmartImage
-            src={getThumb(firstTrack.trackId)}
-            alt={artist.name}
-            className="w-full h-full object-cover"
-            style={{ objectPosition: 'center 35%', transform: 'scale(1.4)' }}
-            trackId={firstTrack.trackId}
-            artist={artist.name}
-            title={firstTrack.title}
-          />
-        )}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent" />
-        <div className="absolute bottom-1 left-1/2 -translate-x-1/2 px-1.5 py-0.5 rounded-full bg-purple-500/80 text-[8px] text-white font-medium">
-          {artist.playCount}
-        </div>
-      </div>
-      <p className="text-white text-xs font-medium truncate text-center">{artist.name}</p>
-      <p className="text-white/40 text-[10px] truncate text-center">{artist.tracks.length} tracks</p>
-    </button>
-  );
-});
-ArtistCard.displayName = 'ArtistCard';
 
 // ============================================
 // AFRICAN VIBES VIDEO CARD - With golden glow & video
@@ -2219,24 +1902,6 @@ const NextVoyageShelf = memo(({ tracks, onPlay, onPlaylist }: NextVoyageShelfPro
 });
 NextVoyageShelf.displayName = 'NextVoyageShelf';
 
-interface ArtistRadarShelfProps {
-  artists: Array<{ name: string; tracks: Track[]; playCount: number }>;
-  onPlay: (track: Track) => void;
-}
-
-const ArtistRadarShelf = memo(({ artists, onPlay }: ArtistRadarShelfProps) => (
-  <div className="mb-10">
-    <div className="px-4 mb-5">
-      <h2 className="text-white font-semibold text-base">Your Artist Radar</h2>
-    </div>
-    <div className="flex gap-6 px-4 overflow-x-auto scrollbar-hide">
-      {artists.map((artist) => (
-        <ArtistCard key={artist.name} artist={artist} onPlay={onPlay} />
-      ))}
-    </div>
-  </div>
-));
-ArtistRadarShelf.displayName = 'ArtistRadarShelf';
 
 // ============================================
 // HOME FEED COMPONENT
@@ -2270,42 +1935,8 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onNavVisibilityChange, onSwitc
   // without losing stability WITHIN a single session.
   const [sessionSeed] = useState(() => Date.now());
 
-  // Stations — curator-led vibe hubs, shown as a horizontal snap-scroll rail
-  // above the shelves. Rail animates parallax on scroll when >1 station.
-  // stationsLoading gates a skeleton rail while the query is in flight so
-  // users on slow networks see continuity instead of a ghost gap that
-  // jolts into content 2-3s later.
-  const [stations, setStations] = useState<Station[]>([]);
-  const [stationsLoading, setStationsLoading] = useState(true);
-  // A/B kill-switch for diagnosing scroll glitches. Set
-  // `?nostations=1` in the URL OR run `localStorage.setItem(
-  // 'voyo-stations-off', '1')` in DevTools, then refresh. Stations rail
-  // skips rendering entirely (no iframes, no observers, no styling).
-  // Default ON; toggle via either signal.
-  const stationsEnabled = useMemo(() => {
-    if (typeof window === 'undefined') return true;
-    try {
-      if (new URLSearchParams(window.location.search).has('nostations')) return false;
-      if (localStorage.getItem('voyo-stations-off') === '1') return false;
-    } catch { /* private mode — fall through */ }
-    return true;
-  }, []);
-  useEffect(() => {
-    if (!supabase) { setStationsLoading(false); return; }
-    let cancelled = false;
-    (async () => {
-      const { data } = await supabase
-        .from('voyo_stations')
-        .select('*')
-        .eq('is_featured', true)
-        .not('hero_r2_key', 'is', null)
-        .order('sort_order', { ascending: true });
-      if (cancelled) return;
-      if (data) setStations(data as Station[]);
-      setStationsLoading(false);
-    })();
-    return () => { cancelled = true; };
-  }, []);
+  // Stations / OYO Picks / Artist Radar / Empty State all moved to
+  // HomeFeedDeep (lazy-loaded, own state + own remote fetch).
 
   // ── Vibes on Vibes — live friend presence ──────────────────────────────────
   const { isLoggedIn, dashId } = useAuth();
@@ -2700,7 +2331,7 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onNavVisibilityChange, onSwitc
   // every render and break the shelf's React.memo compare.
   const recentlyPlayed12 = useMemo(() => recentlyPlayed.slice(0, 12), [recentlyPlayed]);
   const heavyRotation = useMemo(() => getUserTopTracks(15), [history]);
-  const artistsYouLove = useMemo(() => getArtistsYouLove(history, hotPool, 8), [history, hotPool]);
+  // artistsYouLove moved to HomeFeedDeep (only Artist Radar consumed it).
   const vibes = VIBES;
 
   // Get user preferences for personalized scoring (still used by tag-rows)
@@ -2721,36 +2352,7 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onNavVisibilityChange, onSwitc
   // "That's All / For Now" sign-off lands.
   const discoverMoreTracks21 = useMemo(() => discoverMoreTracks.slice(0, 21), [discoverMoreTracks]);
 
-  // OYO's Picks = hot stream with favorite-artist bubble + de-dup vs the
-  // row above. Compact because pools.hot already did the behavior rerank.
-  // Defensive: missing track fields + getOyoInsights storage corruption
-  // can't crash the shelf — returns [] on any error so Safe isn't needed
-  // for correctness, only for the render tree below.
-  const oyosPicks = useMemo(() => {
-    try {
-      const hot = Array.isArray(pools.hot) ? pools.hot : [];
-      if (hot.length === 0) return [];
-      let favs = new Set<string>();
-      try {
-        const insights = getOyoInsights();
-        if (insights?.favoriteArtists) {
-          favs = new Set(insights.favoriteArtists
-            .filter((a): a is string => typeof a === 'string')
-            .map(a => a.toLowerCase()));
-        }
-      } catch { /* insights may be unavailable on first run */ }
-      const dedup = Array.isArray(discoverMoreTracks) ? discoverMoreTracks : [];
-      const usedIds = new Set(dedup.map(t => t?.id).filter(Boolean));
-      const filtered = hot.filter(t => t?.id && !usedIds.has(t.id));
-      return [
-        ...filtered.filter(t => favs.has((t.artist ?? '').toLowerCase())),
-        ...filtered.filter(t => !favs.has((t.artist ?? '').toLowerCase())),
-      ].slice(0, 15);
-    } catch (e) {
-      devWarn('[HomeFeed] oyosPicks failed:', e);
-      return [];
-    }
-  }, [pools.hot, discoverMoreTracks]);
+  // oyosPicks moved to HomeFeedDeep (only OYO's Picks shelf consumed it).
 
   // African Vibes: West African tags + user's afro-heat preference weighting.
   // Empty pool / any failure → empty shelf, no crash.
@@ -2846,7 +2448,7 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onNavVisibilityChange, onSwitc
 
   const hasHistory = recentlyPlayed.length > 0;
   const hasPreferences = heavyRotation.length > 0;
-  const hasArtists = artistsYouLove.length > 0;
+  // hasArtists check moved into HomeFeedDeep (which renders Artist Radar).
   const hasTrending = trending.length > 0;
   const hasDiscoverMore = discoverMoreTracks.length > 0;
 
@@ -3269,53 +2871,17 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onNavVisibilityChange, onSwitc
       )}
 
 
-      {/* ═══════════════════════════════════════════════════════════════
-          DEEP PAGE — sentinel + lazy mount + morphy fade-in.
-          Everything below this seam (Top10, Vibes, Stations, OYO Picks,
-          Artist Radar) is deferred until the user scrolls within one
-          viewport of this point. First paint stays light — Stations no
-          longer glitches the cold load. Morphy fade reads as a depth
-          shift between two surfaces, not a continuous landing scroll.
-          ═══════════════════════════════════════════════════════════════ */}
-      <div ref={deepSentinelRef} aria-hidden="true" style={{ height: 1, marginBottom: -1 }} />
-      {!deepMounted ? (
-        // Placeholder: reserve enough height so the scroll position
-        // stays anchored when the deep mount lands. ~3 screens worth of
-        // content estimated; under-shoot is fine (just a small jump),
-        // over-shoot leaves an awkward gap.
-        <div aria-hidden="true" style={{ minHeight: '180vh' }} />
-      ) : (
-        <div className="voyo-deep-fade-in" style={{ transformOrigin: 'top center' }}>
-          <style>{`
-            @keyframes voyo-deep-emerge {
-              from { opacity: 0; transform: scale(0.97); }
-              to   { opacity: 1; transform: scale(1); }
-            }
-            .voyo-deep-fade-in {
-              animation: voyo-deep-emerge 800ms cubic-bezier(0.16, 1, 0.3, 1) both;
-            }
-          `}</style>
-
-      {/* Top 10 on VOYO — state/countdown fully isolated in Top10Section.
+      {/* Top 10 on VOYO — last shelf on Page 1 above the seam.
           contain:paint scopes the countdown's text-shadow + box-shadow
-          animations to this section so they can't cascade into Vibes/
-          Stations below during the countdown sequence. */}
+          animations so they can't cascade into Vibes below. */}
       {hasTrending && (
         <div style={{ contain: 'paint' }}>
           <Top10Section tracks={trending.slice(0, 10)} onTrackPlay={playTrackFull} />
         </div>
       )}
 
-      {/* Vibes reel — one horizontal scroll interleaving AI vibe-covers
-          with real track cards pulled from the hot-pool for that vibe.
-          Tap AI card → open the vibe (playFromVibe); tap track card →
-          play that exact track. Lightweight: 5 thumbs per vibe, all
-          R2-cached so playback is instant on tap. */}
-      {/* contain: paint scopes paint invalidations to this section. Without
-          it, an animation flip elsewhere on Home (Top10 box-shadow during
-          countdown, Classics shimmer, etc.) can invalidate the rendering
-          of this section's GPU layer too. With contain:paint, the browser
-          knows VibesReel's paint output is self-contained. */}
+      {/* Vibes reel — last surface on Page 1 above the seam.
+          contain:paint scopes paint cascades. */}
       <div className="mb-12" style={{ contain: 'paint' }}>
         <div className="px-4 mb-1.5">
           <h2 className="text-white font-semibold text-base">Vibes</h2>
@@ -3323,98 +2889,35 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onNavVisibilityChange, onSwitc
         <Safe name="VibesReel"><VibesReel vibes={vibes} onOpenVibe={handleVibeSelect} /></Safe>
       </div>
 
-      {/* Stations rail — DJ-curated vibes (deeper commitment than Vibes buttons).
-          Horizontal snap-scroll. Cards autoplay muted; 7s dwell fades audio in
-          (iOS shows "Tap to hear"); tap commits to deck + R2 audio.
-          Skeleton row renders while the query is in flight to kill the
-          "ghost-then-jolt" layout shift on slow networks. */}
-      {!stationsEnabled ? null : stationsLoading && stations.length === 0 ? (
-        <div className="mb-12 -mx-1" aria-busy="true" aria-label="Loading stations">
-          <div className="flex gap-3 overflow-hidden scrollbar-hide px-4 pb-2">
-            {[0, 1].map((i) => (
-              <div
-                key={i}
-                className="snap-center flex-shrink-0 w-[82vw] max-w-[420px] rounded-2xl"
-                style={{
-                  aspectRatio: '4 / 5',
-                  background: 'linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.02) 100%)',
-                  border: '1px solid rgba(255,255,255,0.04)',
-                  animation: 'voyo-skeleton-pulse 1.8s ease-in-out infinite',
-                }}
-              />
-            ))}
+      {/* ═══════════════════════════════════════════════════════════════
+          SEAM — handoff from Page 1 (above) to Page 2 (HomeFeedDeep).
+          Sentinel triggers chunk fetch + mount when user is one viewport
+          away. Suspense fallback reserves height so scroll stays anchored.
+          Morphy fade-in reads as a depth shift between two surfaces.
+          ═══════════════════════════════════════════════════════════════ */}
+      <div ref={deepSentinelRef} aria-hidden="true" style={{ height: 1, marginBottom: -1 }} />
+      {deepMounted ? (
+        <Suspense
+          fallback={<div aria-hidden="true" style={{ minHeight: '180vh' }} />}
+        >
+          <div className="voyo-deep-fade-in" style={{ transformOrigin: 'top center' }}>
+            <style>{`
+              @keyframes voyo-deep-emerge {
+                from { opacity: 0; transform: scale(0.97); }
+                to   { opacity: 1; transform: scale(1); }
+              }
+              .voyo-deep-fade-in {
+                animation: voyo-deep-emerge 800ms cubic-bezier(0.16, 1, 0.3, 1) both;
+              }
+            `}</style>
+            <HomeFeedDeep onSearch={onSearch} onTrackPlay={onTrackPlay} />
           </div>
-          <style>{`
-            @keyframes voyo-skeleton-pulse {
-              0%, 100% { opacity: 0.55; }
-              50%      { opacity: 0.85; }
-            }
-          `}</style>
-        </div>
-      ) : stations.length > 0 && (
-        <Safe name="StationsRail">
-          {/* mb-12 matches Vibes + OYO's Picks bookend rhythm — stations no
-              longer feels cramped against neighbours.
-              snap-proximity (was snap-mandatory) follows the gesture
-              intent — soft drag stays where you let go, hard flick still
-              snaps. Mandatory was forcing every micro-scroll to commit.
-              contain:paint scopes paint cascades — see Vibes section above. */}
-          <div className="mb-12 -mx-1" style={{ contain: 'paint' }}>
-            <div className="flex gap-3 overflow-x-auto snap-x snap-proximity scrollbar-hide px-4 pb-2">
-              {stations.map((station) => (
-                <Safe name={`Station:${station.id}`} key={station.id}>
-                  <div className="snap-center flex-shrink-0 w-[82vw] max-w-[420px]">
-                    <StationHero station={station} />
-                  </div>
-                </Safe>
-              ))}
-            </div>
-          </div>
-        </Safe>
+        </Suspense>
+      ) : (
+        // Pre-mount placeholder — same height the deep page roughly takes,
+        // so the scroll position is stable when the lazy chunk arrives.
+        <div aria-hidden="true" style={{ minHeight: '180vh' }} />
       )}
-
-      {/* TIVI+ moved to DaHub */}
-
-      {/* OYO's Picks — OYO-curated surface, the app's voice in the feed.
-          Only renders when we actually have tracks — an empty header with
-          no carousel below is worse than the shelf being absent. */}
-      {oyosPicks.length > 0 && (
-        <div className="mb-12">
-          <div className="px-4 mb-5 flex items-center gap-2">
-            <h2 className="text-white font-semibold text-base">OYO's Picks</h2>
-            <div className="h-[2px] w-6 rounded-full" style={{ background: '#8b5cf6', opacity: 0.6 }} />
-          </div>
-          <Safe name="OyosPicks"><CenterFocusedCarousel tracks={oyosPicks} onPlay={playTrack} onDiscover={onSearch} /></Safe>
-        </div>
-      )}
-
-      {/* Your Artist Radar — personal-history shelf, lives at the bottom
-          as a closing beat. Memo'd — only rerenders when artistsYouLove or
-          playTrack identity actually changes. */}
-      {hasArtists && (
-        <ArtistRadarShelf artists={artistsYouLove} onPlay={playTrack} />
-      )}
-
-      {/* Empty State */}
-      {!hasHistory && !hasPreferences && (
-        <div className="px-4 py-8 text-center">
-          <p className="text-white/50 text-sm mb-4">Start listening to build your personalized collection</p>
-          <button
-            className="px-6 py-3 rounded-full bg-gradient-to-r from-purple-500 to-violet-600 text-white font-bold"
-            onClick={() => {
-              // Pool-aware: Use dynamic pool
-              const poolTracks = hotPool.length > 0 ? hotPool : getPoolAwareHotTracks(15);
-              const randomTrack = poolTracks[0];
-              if (randomTrack) onTrackPlay(randomTrack);
-            }}
-          >
-            Discover Music
-          </button>
-        </div>
-      )}
-        </div>
-      )}
-      {/* ═══════════════ END DEEP PAGE ═══════════════ */}
 
       {/* Vibes on Vibes — Live Friends Sheet (portal-like, renders on top) */}
       {vibesSheetOpen && (
