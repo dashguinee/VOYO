@@ -899,42 +899,56 @@ const decodeVoyoId = (trackId: string): string => {
   }
 };
 
-// AfricanVibesVideoCard — restored v617 iframe model + v618 guided presence.
-// WebP-replacement experiment (v625-v626) reverted: YT's animated thumb
-// endpoint 404'd for our curated catalog. Back to the iframe approach
-// (lazy mount on isActive, autoplay=1, postMessage pause/resume) that
-// was working pre-WebP-pivot. Combined with the v619 ripple revert and
-// v620 perf wins — let cache settle, see if glitches were the experiment
-// itself rather than the underlying architecture.
+// AfricanVibesVideoCard — v628 (3-mount window).
+//
+// At most 3 iframes mounted across the rail at any time:
+//   · Active card (idx === activeIdx) — playing
+//   · 2 neighbors (|idx - activeIdx| <= 1) — mounted but paused
+//   · Cards beyond — unmounted (800ms grace before unmount when window
+//     slides, so quick scroll-throughs don't reload YT)
+//
+// As user scrolls, the 3-window slides:
+//   · Old active pauses (postMessage), stays mounted as new neighbor
+//   · New active resumes (postMessage) on its already-mounted iframe —
+//     no reload, no YT JS reboot, instant frame-painted play
+//   · Old far-edge unmounts after 800ms grace
+//   · New far-edge mounts (autoplay=1 starts decoding)
+//
+// activeIdx is computed at parent level via a single IntersectionObserver
+// across all card refs, with hysteresis to prevent flicker between
+// adjacent cards mid-scroll.
 const AfricanVibesVideoCard = memo(({
   track,
   idx,
+  activeIdx,
   sectionInView,
-  onTrackPlay
+  registerRef,
+  onTrackPlay,
 }: {
   track: Track;
   idx: number;
+  activeIdx: number;
   /** Carousel-level visibility — the OYÉ Africa section is in viewport. */
   sectionInView: boolean;
+  /** Parent's ref-collector — card registers itself on mount so the
+   *  rail-level observer can compute the most-centered active card. */
+  registerRef: (idx: number, el: HTMLButtonElement | null) => void;
   onTrackPlay: (track: Track) => void;
 }) => {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [isLoaded, setIsLoaded] = useState(false);
   const cardRef = useRef<HTMLButtonElement>(null);
-  const [cardInView, setCardInView] = useState(idx === 0);
+  // Register with parent on mount so it can observe + pick activeIdx.
   useEffect(() => {
-    const el = cardRef.current;
-    if (!el) return;
-    const obs = new IntersectionObserver(
-      ([entry]) => setCardInView(entry.intersectionRatio > 0.5),
-      { threshold: [0, 0.5, 1] }
-    );
-    obs.observe(el);
-    return () => obs.disconnect();
-  }, []);
-  // First card always-active when section visible; other cards activate
-  // when scrolled into view.
-  const isActive = sectionInView && (idx === 0 || cardInView);
+    registerRef(idx, cardRef.current);
+    return () => registerRef(idx, null);
+  }, [idx, registerRef]);
+
+  // Active = the centered card, plays its video.
+  const isActive = sectionInView && idx === activeIdx;
+  // Within mount window = active + immediate neighbors. Caps mounted
+  // iframes at 3 across the rail no matter how many cards exist.
+  const inWindow = sectionInView && Math.abs(idx - activeIdx) <= 1;
   const [isReady, setIsReady] = useState(false);
 
   // Decode VOYO ID to real YouTube ID
@@ -975,16 +989,18 @@ const AfricanVibesVideoCard = memo(({
     return () => clearTimeout(t);
   }, [isLoaded, isActive]);
 
-  // Lazy mount with 800ms grace — quick scroll-throughs don't reload YT.
-  const [shouldMountIframe, setShouldMountIframe] = useState(isActive);
+  // Mount when in the 3-window (active + 2 neighbors). 800ms grace
+  // before unmount when window slides past — quick scroll-throughs
+  // don't trigger YT reboot.
+  const [shouldMountIframe, setShouldMountIframe] = useState(inWindow);
   useEffect(() => {
-    if (isActive) {
+    if (inWindow) {
       setShouldMountIframe(true);
       return;
     }
     const t = setTimeout(() => setShouldMountIframe(false), 800);
     return () => clearTimeout(t);
-  }, [isActive]);
+  }, [inWindow]);
 
   return (
     <button
@@ -1107,10 +1123,81 @@ const AfricanVibesCarousel = ({
   const [isInView, setIsInView] = useState(false);
   const [sentinelState, setSentinelState] = useState<EndSentinelState>('hidden');
   const lastWatchedRef = useRef<Track | null>(null);
+  // activeIdx — drives the 3-mount window. Computed via a single
+  // IntersectionObserver across all card refs (most-intersecting wins,
+  // with hysteresis to prevent flicker mid-scroll between two adjacent
+  // cards).
+  const [activeIdx, setActiveIdx] = useState(0);
+  const cardRefsMap = useRef<Map<number, HTMLButtonElement>>(new Map());
+  const ratiosRef = useRef<Map<number, number>>(new Map());
+  const cardObserverRef = useRef<IntersectionObserver | null>(null);
+
+  // Card-registration callback — each card calls on mount/unmount so
+  // the rail's observer can track all current card elements.
+  const registerCardRef = useCallback((idx: number, el: HTMLButtonElement | null) => {
+    const map = cardRefsMap.current;
+    const obs = cardObserverRef.current;
+    const prev = map.get(idx);
+    if (prev && prev !== el && obs) obs.unobserve(prev);
+    if (el) {
+      map.set(idx, el);
+      obs?.observe(el);
+    } else {
+      map.delete(idx);
+      ratiosRef.current.delete(idx);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+    const obs = new IntersectionObserver(
+      (entries) => {
+        let updated = false;
+        entries.forEach((entry) => {
+          const target = entry.target as HTMLElement;
+          // Find which idx this target represents (linear scan, n=12 max).
+          for (const [idx, el] of cardRefsMap.current) {
+            if (el === target) {
+              ratiosRef.current.set(idx, entry.intersectionRatio);
+              updated = true;
+              break;
+            }
+          }
+        });
+        if (!updated) return;
+        // Pick idx with highest visibility. Hysteresis: 5% gap before
+        // flipping, so adjacent cards mid-scroll don't ping-pong activeIdx.
+        let bestIdx = -1;
+        let bestRatio = 0;
+        ratiosRef.current.forEach((ratio, idx) => {
+          if (ratio > bestRatio) {
+            bestRatio = ratio;
+            bestIdx = idx;
+          }
+        });
+        if (bestIdx < 0 || bestRatio < 0.3) return;
+        setActiveIdx((prev) => {
+          if (prev === bestIdx) return prev;
+          const prevRatio = ratiosRef.current.get(prev) ?? 0;
+          if (bestRatio - prevRatio < 0.05) return prev; // hysteresis
+          return bestIdx;
+        });
+      },
+      {
+        root: containerRef.current,
+        threshold: [0, 0.25, 0.5, 0.75, 1],
+      }
+    );
+    cardObserverRef.current = obs;
+    cardRefsMap.current.forEach((el) => obs.observe(el));
+    return () => {
+      obs.disconnect();
+      cardObserverRef.current = null;
+    };
+  }, []);
 
   // lastWatched — first track is the default opener; if a card has been
-  // tapped, that wins. Carousel-level "active card" tracking is no longer
-  // needed (each card owns its own viewport-driven play state).
+  // tapped, that wins.
   useEffect(() => {
     if (tracks[0]) lastWatchedRef.current = tracks[0];
   }, [tracks]);
@@ -1166,7 +1253,9 @@ const AfricanVibesCarousel = ({
           key={track.id}
           track={track}
           idx={idx}
+          activeIdx={activeIdx}
           sectionInView={isInView}
+          registerRef={registerCardRef}
           onTrackPlay={(t) => { lastWatchedRef.current = t; onTrackPlay(t); }}
         />
       ))}
