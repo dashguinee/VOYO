@@ -271,9 +271,11 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap, onEnterVideoMode
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [warmingSet, r2KnownSet, results]);
 
-  // Scroll-driven UX: section header fades 15-25%, search bar slides to
-  // bottom (thumb-zone) at 45%+. Lets users keep refining without scrolling
-  // back up — common pattern in music apps.
+  // Scroll-driven UX: section header fades 28-42%, search bar slides to
+  // bottom (thumb-zone) at 65%+. Delayed 2026-04-26 — was 15-25% / 45%
+  // which deployed too eagerly with 35 results to scan, header docked
+  // before user had explored the list. Gives the search results more
+  // breathing room before the chrome reflows.
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [scrollPct, setScrollPct] = useState(0);
   // rAF-throttle + quantize scroll state: without this, onScroll fires
@@ -301,8 +303,8 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap, onEnterVideoMode
   useEffect(() => () => {
     if (scrollRafRef.current != null) cancelAnimationFrame(scrollRafRef.current);
   }, []);
-  const sectionHeaderOpacity = Math.max(0, 1 - Math.max(0, (scrollPct - 0.15)) / 0.10);
-  const searchAtBottom = scrollPct >= 0.45;
+  const sectionHeaderOpacity = Math.max(0, 1 - Math.max(0, (scrollPct - 0.28)) / 0.14);
+  const searchAtBottom = scrollPct >= 0.65;
 
   // R2 cache awareness — for each result, async batch-check the edge
   // worker /exists/ endpoint. Tracks already in R2 get a "✦ DISCO" badge
@@ -450,7 +452,7 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap, onEnterVideoMode
           p_party: essence.party,
           p_workout: essence.workout,
           p_late_night: essence.late_night,
-          p_limit: 25,
+          p_limit: 35,
         }).then(
           ({ data }) => (data || []).map((t: any) => ({
             voyoId: t.youtube_id,
@@ -464,7 +466,7 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap, onEnterVideoMode
         )
       : Promise.resolve([] as SearchResult[]);
 
-    const ytPromise = searchMusic(searchQuery, 25).catch((err: unknown) => {
+    const ytPromise = searchMusic(searchQuery, 35).catch((err: unknown) => {
       devWarn('[Search] YT error:', err);
       return [] as SearchResult[];
     });
@@ -670,14 +672,13 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap, onEnterVideoMode
               to   { opacity: 1; }
             }
           `}</style>
-          {/* Backdrop */}
+          {/* Backdrop — solid 90% black scrim. Was blur(16px) full-screen
+              backdrop-filter; that repainted across the whole viewport on
+              every scroll frame and was the dominant search-page jank
+              source on mobile. The dim alone gives enough separation. */}
           <div
-            className="fixed inset-0 z-40 bg-black/80"
+            className="fixed inset-0 z-40 bg-black/90"
             onClick={onClose}
-            style={{
-              backdropFilter: 'blur(16px)',
-              WebkitBackdropFilter: 'blur(16px)',
-              }}
           />
 
           {/* Main Container - Full width, no portal zones */}
@@ -704,8 +705,15 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap, onEnterVideoMode
                 transform: searchAtBottom
                   ? 'translateY(calc(100dvh - 100% - max(16px, env(safe-area-inset-top, 16px)) - max(16px, env(safe-area-inset-bottom, 16px))))'
                   : 'translateY(0)',
-                transition: 'transform 260ms cubic-bezier(0.4, 0, 0.2, 1), background-color 220ms ease, padding 220ms ease',
+                // Transform-only transition. Previously animated background +
+                // padding + margin together, which forced layout reflow on
+                // every frame of the 260ms slide → the "glitchy" feel.
+                // Padding/margin/background now snap on threshold cross
+                // (instant), the slide stays GPU-only. contain:layout
+                // scopes the reflow if it ever does happen.
+                transition: 'transform 260ms cubic-bezier(0.4, 0, 0.2, 1)',
                 willChange: 'transform',
+                contain: 'layout',
                 background: searchAtBottom
                   ? 'linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,0.55) 30%, rgba(0,0,0,0.85) 100%)'
                   : 'transparent',
