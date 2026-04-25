@@ -2215,6 +2215,19 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onNavVisibilityChange, onSwitc
   // jolts into content 2-3s later.
   const [stations, setStations] = useState<Station[]>([]);
   const [stationsLoading, setStationsLoading] = useState(true);
+  // A/B kill-switch for diagnosing scroll glitches. Set
+  // `?nostations=1` in the URL OR run `localStorage.setItem(
+  // 'voyo-stations-off', '1')` in DevTools, then refresh. Stations rail
+  // skips rendering entirely (no iframes, no observers, no styling).
+  // Default ON; toggle via either signal.
+  const stationsEnabled = useMemo(() => {
+    if (typeof window === 'undefined') return true;
+    try {
+      if (new URLSearchParams(window.location.search).has('nostations')) return false;
+      if (localStorage.getItem('voyo-stations-off') === '1') return false;
+    } catch { /* private mode — fall through */ }
+    return true;
+  }, []);
   useEffect(() => {
     if (!supabase) { setStationsLoading(false); return; }
     let cancelled = false;
@@ -3189,7 +3202,7 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onNavVisibilityChange, onSwitc
           (iOS shows "Tap to hear"); tap commits to deck + R2 audio.
           Skeleton row renders while the query is in flight to kill the
           "ghost-then-jolt" layout shift on slow networks. */}
-      {stationsLoading && stations.length === 0 ? (
+      {!stationsEnabled ? null : stationsLoading && stations.length === 0 ? (
         <div className="mb-12 -mx-1" aria-busy="true" aria-label="Loading stations">
           <div className="flex gap-3 overflow-hidden scrollbar-hide px-4 pb-2">
             {[0, 1].map((i) => (
