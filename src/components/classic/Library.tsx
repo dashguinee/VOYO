@@ -29,17 +29,18 @@ import { useTabHistory } from '../../hooks/useTabHistory';
 import { CardHoldActions } from '../ui/CardHoldActions';
 import { useKnowledgeStore } from '../../knowledge/KnowledgeStore';
 
-// Base filter tabs — five clean primary sets. "Disco" replaces the old
-// mix of 'offline' + 'recent' since our narralogy defines Disco = any
-// track that can play instantly (local cache OR known in R2).
+// Base filter tabs — three clean primary sets. Collapsed from five to
+// match the narralogy: 'My Disco' is your gold-filled (Oye'd) tracks,
+// 'Oyed' is the broader gravity field — anything in your bucket OR
+// cached locally (the union of the old Bucket + Disco tabs), and
+// 'Just Played' replaces History with a verb users feel rather than
+// read. 'All' was redundant with My Disco + Oyed combined; dropped.
 // Playlists render as a SECONDARY chip row so they can intersect with
 // the primary filter instead of crowding the same space.
 const BASE_FILTERS = [
-  { id: 'all',     label: 'All' },
-  { id: 'liked',   label: 'Liked' },
-  { id: 'disco',   label: 'Disco' },
-  { id: 'bucket',  label: 'Bucket' },
-  { id: 'history', label: 'History' },
+  { id: 'my-disco',    label: 'My Disco' },
+  { id: 'oyed',        label: 'Oyed' },
+  { id: 'just-played', label: 'Just Played' },
 ];
 
 type PlayMode = 'magic' | 'in-order' | 'shuffle';
@@ -419,7 +420,7 @@ interface LibraryProps {
 }
 
 export const Library = ({ onTrackClick }: LibraryProps) => {
-  const [activeFilter, setActiveFilterRaw] = useState('all');
+  const [activeFilter, setActiveFilterRaw] = useState('my-disco');
   // Wrapper: save outgoing filter's scroll position, restore incoming
   // filter's. Runs even on the initial tap-to-switch gesture so user
   // never loses their place mid-list.
@@ -547,14 +548,14 @@ export const Library = ({ onTrackClick }: LibraryProps) => {
   }, []);
   const headerOpacity = !isScrolled ? 1 : isScrolling ? 0.18 : 0.94;
 
-  // System back peels the filter stack too — user taps All → Liked →
-  // Bucket, back press returns to Liked, then All, then up to the
-  // page-level back-guard. Feels layered like a native app.
+  // System back peels the filter stack too — user taps My Disco → Oyed
+  // → Just Played, back press returns to Oyed, then My Disco, then up
+  // to the page-level back-guard. Feels layered like a native app.
   useTabHistory(activeFilter, setActiveFilter, 'library-filter');
 
-  // Primary filter row — the five fixed tabs. Playlists live in their
-  // own sub-row below so they can intersect with whichever primary tab
-  // is active.
+  // Primary filter row — three fixed tabs (My Disco / Oyed / Just Played).
+  // Playlists live in their own sub-row below so they can intersect with
+  // whichever primary tab is active.
   const filters = BASE_FILTERS;
 
   // Compute liked tracks set from preferences
@@ -598,7 +599,7 @@ export const Library = ({ onTrackClick }: LibraryProps) => {
   const trackQualityMap = new Map(cachedTracks.map(t => [t.id, t.quality]));
 
   // Compose pipeline:
-  //   1. primary filter picks the base set (all / liked / disco / bucket / history)
+  //   1. primary filter picks the base set (my-disco / oyed / just-played)
   //   2. optional playlist intersection narrows it further
   //   3. searchQuery narrows by substring
   //   4. sort/shuffle applied by the active play mode
@@ -615,39 +616,37 @@ export const Library = ({ onTrackClick }: LibraryProps) => {
     // ── Step 1: base set by primary filter ───────────────────────
     let base: Track[];
     switch (activeFilter) {
-      case 'bucket':
-        base = queue.map(q => q.track);
-        break;
-      case 'history':
+      case 'just-played':
         base = [...history].reverse().map(h => h.track);
         break;
-      case 'disco':
-        // Locally downloaded tracks — certified-offline. The Disco tab
-        // is the "guaranteed to play instantly, even without network"
-        // slice. Differs from "All" which includes curated library
-        // tracks that rely on R2 edge (online-only in worst case).
-        base = boostedTracks;
+      case 'oyed': {
+        // Union of "in your gravity right now": current bucket (queue) ∪
+        // Disco (locally cached / offline-ready). Queue first so the
+        // tracks actively coming up next are at the top, then cached
+        // tracks. Deduped by trackId since a tracked queued from Disco
+        // would otherwise appear twice.
+        const seen = new Set<string>();
+        const merged: Track[] = [];
+        for (const q of queue) {
+          if (!seen.has(q.track.id)) { seen.add(q.track.id); merged.push(q.track); }
+        }
+        for (const t of boostedTracks) {
+          if (!seen.has(t.id)) { seen.add(t.id); merged.push(t); }
+        }
+        base = merged;
         break;
-      case 'liked':
-        // All OYÉd tracks — looks across EVERY source (KnowledgeStore, history,
-        // queue, TRACKS), not just the 27-track seed. This is why OYÉd feed
-        // tracks now appear in the Liked tab.
+      }
+      case 'my-disco':
+      default:
+        // All OYÉd tracks (gold-filled in narralogy) — looks across EVERY
+        // source (KnowledgeStore, history, queue, TRACKS), not just the
+        // 27-track seed. Renamed from 'liked' 2026-04-25 to match the
+        // user-facing "My Disco" label and reinforce the gold-filled =
+        // your personal disco rotation read.
         base = Array.from(likedTracks)
           .map(id => allKnownTracks.get(id))
           .filter((t): t is Track => !!t);
         break;
-      default: {
-        // "All" = liked tracks ∪ curated library ∪ locally cached, deduped by id.
-        const seen = new Set<string>();
-        base = [];
-        // Liked tracks first (user's personal picks float to the top)
-        for (const id of likedTracks) {
-          const t = allKnownTracks.get(id);
-          if (t && !seen.has(t.id)) { seen.add(t.id); base.push(t); }
-        }
-        for (const t of TRACKS) { if (!seen.has(t.id)) { seen.add(t.id); base.push(t); } }
-        for (const t of boostedTracks) { if (!seen.has(t.id)) { seen.add(t.id); base.push(t); } }
-      }
     }
 
     // ── Step 2: intersect with playlist if selected ──────────────
@@ -683,9 +682,9 @@ export const Library = ({ onTrackClick }: LibraryProps) => {
     }
 
     if (playMode === 'magic') {
-      // Magic Mix — anti-burial tiers on Liked (surface forgotten
+      // Magic Mix — anti-burial tiers on My Disco (surface forgotten
       // favorites), simple deterministic shuffle elsewhere.
-      if (activeFilter === 'liked') {
+      if (activeFilter === 'my-disco') {
         const now = Date.now();
         const day7 = 7 * 24 * 60 * 60 * 1000;
         const day30 = 30 * 24 * 60 * 60 * 1000;
@@ -814,14 +813,13 @@ export const Library = ({ onTrackClick }: LibraryProps) => {
 
   const emptyStateCopy = (() => {
     switch (activeFilter) {
-      case 'disco': return 'No tracks downloaded yet — tap ⚡ Oye on any song and it lands here, ready to play offline.';
-      case 'bucket': return 'Add tracks to your bucket to queue them up.';
-      case 'history': return 'Your listening history will appear here.';
-      case 'liked': return 'Tap ⚡ Oye on songs you love — they collect here.';
+      case 'oyed': return 'Tap ⚡ Oye on any song — your bucket and offline-ready tracks collect here.';
+      case 'just-played': return 'Your listening history will appear here.';
+      case 'my-disco':
       default:
         return searchQuery
           ? 'Nothing in your Disco matches yet — check the suggestions below.'
-          : 'Your Disco is empty. Play anything and it grows from there.';
+          : 'Your Disco is empty. Tap ⚡ Oye on songs you love and they collect here.';
     }
   })();
 
@@ -924,7 +922,7 @@ export const Library = ({ onTrackClick }: LibraryProps) => {
           </div>
         </div>
 
-        {/* Primary filter tabs — the five fixed sets. */}
+        {/* Primary filter tabs — three fixed sets. */}
         <div className="flex gap-2 px-4 pb-2 overflow-x-auto scrollbar-hide">
           {filters.map((filter) => {
             const isActive = activeFilter === filter.id;
@@ -945,7 +943,7 @@ export const Library = ({ onTrackClick }: LibraryProps) => {
                 onClick={() => setActiveFilter(filter.id)}
               >
                 {filter.label}
-                {filter.id === 'bucket' && queue.length > 0 && (
+                {filter.id === 'oyed' && queue.length > 0 && (
                   <span
                     className="ml-1.5 px-1.5 py-0.5 text-[10px] rounded-full"
                     style={{
@@ -1018,10 +1016,9 @@ export const Library = ({ onTrackClick }: LibraryProps) => {
         <div className="px-4 pt-2 pb-1 flex items-center gap-2 text-[11px] text-white/35 tracking-wide">
           <span>
             {orderedTracks.length} {
-              activeFilter === 'disco'   ? 'offline-ready'
-              : activeFilter === 'bucket'  ? 'in bucket'
-              : activeFilter === 'history' ? 'played'
-              : activeFilter === 'liked'   ? 'liked'
+              activeFilter === 'oyed'        ? 'in rotation'
+              : activeFilter === 'just-played' ? 'played'
+              : activeFilter === 'my-disco'    ? (orderedTracks.length === 1 ? 'oyé' : 'oyés')
               : orderedTracks.length === 1 ? 'track' : 'tracks'
             }
           </span>
@@ -1046,11 +1043,11 @@ export const Library = ({ onTrackClick }: LibraryProps) => {
           />
         )}
 
-        {/* In your Loop — only surfaces on the Liked tab when the user
+        {/* In your Loop — only surfaces on the My Disco tab when the user
             has repeat-played tracks. Circle carousel, lives between the
             Play button and the full list so it feels like a personal
             context block, not a catalogue shelf. */}
-        {activeFilter === 'liked' && inYourLoop.length > 0 && (
+        {activeFilter === 'my-disco' && inYourLoop.length > 0 && (
           <div className="mb-5 mt-1">
             <div className="px-4 mb-3 flex items-center gap-2">
               <span
