@@ -2821,6 +2821,11 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onNavVisibilityChange, onSwitc
             className="mb-10 pt-10 pb-10 relative overflow-hidden"
             style={{
               background: 'radial-gradient(ellipse 120% 80% at 30% 0%, rgba(212,160,83,0.18) 0%, rgba(212,160,83,0.07) 45%, transparent 75%)',
+              // contain:paint scopes the disc-drift, disc-spin, glow-pulse
+              // and subtitle shimmer animations to this section. Their
+              // paint cascades can no longer leak into the Vibes /
+              // Stations rails below.
+              contain: 'paint',
             }}
           >
             <style>{`

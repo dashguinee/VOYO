@@ -118,9 +118,16 @@ export const StationHero = memo(({ station }: StationHeroProps) => {
   useEffect(() => {
     const el = cardRef.current;
     if (!el) return;
+    // Tightened from 250% → 100% (1 viewport of buffer instead of 2.5).
+    // 250% mounted iframes 5 viewports out — when user scrolled toward
+    // the section, all stations' isNearby flipped simultaneously and
+    // 5 YT iframes booted in parallel, causing visible glitch from the
+    // mass network + parse + paint storm. 100% pre-loads when user is
+    // ~1 screen away — still fades in smoothly via the v611 handoff,
+    // doesn't flood the main thread on first arrival.
     const nearObs = new IntersectionObserver(
       (entries) => setIsNearby(entries[0].isIntersecting),
-      { rootMargin: '250% 0px 250% 0px' }
+      { rootMargin: '100% 0px 100% 0px' }
     );
     const viewObs = new IntersectionObserver(
       (entries) => setIsInView(entries[0].isIntersecting && entries[0].intersectionRatio > 0.35),
