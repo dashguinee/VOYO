@@ -413,6 +413,7 @@ function TrackCardHorizontal({
           alt=""
           style={S.trackThumb}
           loading="lazy"
+          decoding="async"
           draggable={false}
         />
       ) : (
@@ -452,6 +453,7 @@ function TrackCardVertical({
           alt=""
           style={S.trackThumb}
           loading="lazy"
+          decoding="async"
           draggable={false}
         />
       ) : (
@@ -482,6 +484,7 @@ function MomentCardSmall({ moment }: { moment: ArtistMoment }) {
           alt=""
           style={S.momentThumb}
           loading="lazy"
+          decoding="async"
           draggable={false}
         />
       ) : (

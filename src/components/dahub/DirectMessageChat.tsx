@@ -301,7 +301,7 @@ export function DirectMessageChat({
 
         <div className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-semibold overflow-hidden bg-gradient-to-br from-purple-500 to-violet-600 text-white flex-shrink-0">
           {friendAvatar ? (
-            <img src={friendAvatar} alt="" className="w-full h-full object-cover" />
+            <img src={friendAvatar} alt="" decoding="async" className="w-full h-full object-cover" />
           ) : (
             getInitials(friendName)
           )}

@@ -281,7 +281,7 @@ export const StationHero = memo(({ station }: StationHeroProps) => {
           src={getThumb(station.hero_video_id)}
           alt=""
           decoding="async"
-          fetchPriority="high"
+          loading="lazy"
           aria-hidden="true"
           className="absolute inset-0 w-full h-full object-cover"
           style={{
