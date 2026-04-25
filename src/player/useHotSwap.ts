@@ -83,30 +83,17 @@ async function performHotSwap(
   const stillCurrent = () =>
     usePlayerStore.getState().currentTrack?.trackId === trackId;
 
-  // Position priority: live iframe → snapshot → fall back to 0 (cold).
-  let t = iframeBridge.getCurrentTime();
-  let posSource: 'live' | 'snapshot' | 'cold' | 'restart' = 'live';
-  if (t == null || !isFinite(t)) {
-    if (snapshot && snapshot.trackId === trackId && snapshot.seconds > 0) {
-      t = snapshot.seconds;
-      posSource = 'snapshot';
-    } else {
-      t = 0;
-      posSource = 'cold';
-    }
-  }
-
-  // Per Dash 2026-04-25: "restart if less than 15s in." If the user is
-  // still in the intro window when R2 lands, restart the track from 0
-  // via the existing crossfade — the user gets the full song from the
-  // top, no jarring mid-line jump. Past 15s, seamless in-place swap.
-  // 'restart' posSource is logged so we can verify the threshold feels
-  // right in telemetry over time.
-  const RESTART_THRESHOLD_S = 15;
-  if (t > 0 && t < RESTART_THRESHOLD_S) {
-    t = 0;
-    posSource = 'restart';
-  }
+  // Per Dash 2026-04-26: "don't hot swap, restart with r2 audio when r2
+  // is in." Always restart from 0 when R2 lands — no in-place crossfade,
+  // no position-matching. The user hears the song begin again with the
+  // R2 (high-quality) audio. Unambiguous: if you hear the restart, R2
+  // is now serving the audio. Solves the "shows boosted but didn't
+  // hotswap" perception bug — the upgrade is now audible.
+  const t = 0;
+  const posSource: 'restart' = 'restart';
+  // (Live iframe time + snapshot were used for position-matching;
+  // both obsolete under always-restart. Param kept for future reuse.)
+  void snapshot;
 
   logPlaybackEvent({
     event_type: 'trace', track_id: trackId,
