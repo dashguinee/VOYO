@@ -158,7 +158,10 @@ export const VoyoLiveCard = ({ onSwitchToVOYO }: VoyoLiveCardProps = {}) => {
     };
 
     loadData();
-    const interval = setInterval(loadData, 30000);
+    const interval = setInterval(() => {
+      if (document.hidden) return;
+      loadData();
+    }, 30000);
     return () => clearInterval(interval);
   }, [dashId, isLoggedIn, currentTrack]);
 
@@ -449,7 +452,7 @@ export const VoyoLiveCard = ({ onSwitchToVOYO }: VoyoLiveCardProps = {}) => {
                       className="absolute inset-0 rounded-full overflow-hidden border-[3px] border-white shadow-xl"
                       style={{ animation: `voyo-absorb-out ${ABSORB_MS}ms cubic-bezier(0.4, 0, 0.2, 1) forwards` }}
                     >
-                      <img src={avatars[prevCenterIndex]} alt="" className="w-full h-full object-cover" />
+                      <img src={avatars[prevCenterIndex]} alt="" decoding="async" className="w-full h-full object-cover" />
                     </div>
                   )}
                   <div
@@ -457,7 +460,7 @@ export const VoyoLiveCard = ({ onSwitchToVOYO }: VoyoLiveCardProps = {}) => {
                     className="absolute inset-0 rounded-full overflow-hidden border-[3px] border-white shadow-xl"
                     style={{ animation: `voyo-absorb-in ${ABSORB_MS}ms cubic-bezier(0.4, 0, 0.2, 1) forwards` }}
                   >
-                    <img src={avatars[centerIndex]} alt="" className="w-full h-full object-cover" />
+                    <img src={avatars[centerIndex]} alt="" decoding="async" className="w-full h-full object-cover" />
                   </div>
                 </div>
 
@@ -480,7 +483,7 @@ export const VoyoLiveCard = ({ onSwitchToVOYO }: VoyoLiveCardProps = {}) => {
                       zIndex: 10 - i,
                       }}
                   >
-                    <img src={avatar} alt="" className="w-full h-full object-cover" />
+                    <img src={avatar} alt="" decoding="async" className="w-full h-full object-cover" />
                   </div>
                 );
               })}
@@ -521,7 +524,7 @@ export const VoyoLiveCard = ({ onSwitchToVOYO }: VoyoLiveCardProps = {}) => {
                             className="w-full h-full object-cover"
                           />
                           <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full border border-white overflow-hidden">
-                            <img src={prevFriend1.avatar} alt={prevFriend1.name} className="w-full h-full object-cover" />
+                            <img src={prevFriend1.avatar} alt={prevFriend1.name} decoding="async" loading="lazy" className="w-full h-full object-cover" />
                           </div>
                         </div>
                       )}
@@ -537,7 +540,7 @@ export const VoyoLiveCard = ({ onSwitchToVOYO }: VoyoLiveCardProps = {}) => {
                           className="w-full h-full object-cover"
                         />
                         <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full border border-white overflow-hidden">
-                          <img src={friend1.avatar} alt={friend1.name} className="w-full h-full object-cover" />
+                          <img src={friend1.avatar} alt={friend1.name} decoding="async" loading="lazy" className="w-full h-full object-cover" />
                         </div>
                       </div>
                     </div>
@@ -556,7 +559,7 @@ export const VoyoLiveCard = ({ onSwitchToVOYO }: VoyoLiveCardProps = {}) => {
                             className="w-full h-full object-cover"
                           />
                           <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full border border-white overflow-hidden">
-                            <img src={prevFriend2.avatar} alt={prevFriend2.name} className="w-full h-full object-cover" />
+                            <img src={prevFriend2.avatar} alt={prevFriend2.name} decoding="async" loading="lazy" className="w-full h-full object-cover" />
                           </div>
                         </div>
                       )}
@@ -572,7 +575,7 @@ export const VoyoLiveCard = ({ onSwitchToVOYO }: VoyoLiveCardProps = {}) => {
                           className="w-full h-full object-cover"
                         />
                         <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full border border-white overflow-hidden">
-                          <img src={friend2.avatar} alt={friend2.name} className="w-full h-full object-cover" />
+                          <img src={friend2.avatar} alt={friend2.name} decoding="async" loading="lazy" className="w-full h-full object-cover" />
                         </div>
                       </div>
                     </div>

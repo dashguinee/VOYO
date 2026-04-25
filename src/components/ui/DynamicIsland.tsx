@@ -378,12 +378,14 @@ export const DynamicIsland = ({ appCode = 'voyo', dashId: dashIdProp = null }: D
       source.connect(analyserRef.current);
       analyserRef.current.fftSize = 32;
 
-      // Animate waveform
+      // Animate waveform — throttled to ~15Hz, pre-allocated buffer.
+      // Mirrors VoyoPortraitPlayer's recording pump for parity.
+      const buf = new Uint8Array(analyserRef.current.frequencyBinCount);
+      let frameMod = 0;
       const updateWaveform = () => {
-        if (analyserRef.current) {
-          const data = new Uint8Array(analyserRef.current.frequencyBinCount);
-          analyserRef.current.getByteFrequencyData(data);
-          const levels = Array.from(data.slice(0, 5)).map(v => Math.max(0.2, v / 255));
+        if (analyserRef.current && (frameMod++ & 3) === 0) {
+          analyserRef.current.getByteFrequencyData(buf);
+          const levels = Array.from(buf.slice(0, 5)).map(v => Math.max(0.2, v / 255));
           setWaveformLevels(levels);
         }
         animationRef.current = requestAnimationFrame(updateWaveform);

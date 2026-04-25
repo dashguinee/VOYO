@@ -4013,6 +4013,24 @@ export const VoyoPortraitPlayer = ({
     }, 500); // Small delay to let queue update first
   }, [handleModeToQueue, intentRecordDragToQueue, refreshRecommendations]);
 
+  // Stable per-mode handlers map. Each NeonBillboardCard previously
+  // received 3 inline arrow closures (onClick / onDragToQueue /
+  // onDoubleTap) that recreated on every render of this 6k-line
+  // always-mounted parent — breaking the React.memo on the cards. Now
+  // bound once per mode and stable as long as the underlying handlers
+  // are. 5 cards × 3 closures = 15 fewer prop diffs per parent render.
+  const modeHandlers = useMemo(() => {
+    const map: Record<string, { onClick: () => void; onDrag: () => void; onDouble: () => void }> = {};
+    for (const m of DEFAULT_MIX_MODES) {
+      map[m.id] = {
+        onClick: () => handleModeBoost(m.id),
+        onDrag: () => handleModeToQueueWithIntent(m.id),
+        onDouble: () => handleModeReaction(m.id as ReactionCategory),
+      };
+    }
+    return map;
+  }, [handleModeBoost, handleModeToQueueWithIntent, handleModeReaction]);
+
   // Enhanced queue addition that also records intent
   const trackQueueAdditionWithIntent = useCallback((track: Track) => {
     const modeId = detectTrackMode(track);
@@ -4809,8 +4827,17 @@ export const VoyoPortraitPlayer = ({
   // Get actual queue tracks (FIX 1: Show more queue items for better UX)
   const queueTracks = queue.slice(0, 3).map(q => q.track);
 
-  // Track IDs that have been played (for overlay)
-  const playedTrackIds = new Set(history.map(h => h.track.id));
+  // Memoised: 8-card hot/discovery belt slices + the played-id Set were
+  // recreated on every parent render, breaking memo on PortalBelt
+  // (large memoised child) and SmallCard (per-row memo'd child) — every
+  // track tick / queue add / reaction pulse flushed the rails. Stabilised
+  // by content of `hotTracks` / `discoverTracks` / `history` only.
+  const hotBeltTracks = useMemo(() => hotTracks.slice(0, 8), [hotTracks]);
+  const discoverBeltTracks = useMemo(() => discoverTracks.slice(0, 8), [discoverTracks]);
+  const playedTrackIds = useMemo(
+    () => new Set(history.map(h => h.track.id)),
+    [history],
+  );
 
   // Handle reaction with store integration
   const handleReaction = (type: ReactionType, emoji: string, text: string, multiplier: number) => {
@@ -5543,7 +5570,7 @@ export const VoyoPortraitPlayer = ({
 
             {/* HOT Cards Belt (loops within this zone) */}
             <PortalBelt
-              tracks={hotTracks.slice(0, 8)}
+              tracks={hotBeltTracks}
               onTap={playTrack}
               onQueueAdd={trackQueueAddition}
               playedTrackIds={playedTrackIds}
@@ -5677,7 +5704,7 @@ export const VoyoPortraitPlayer = ({
           >
             {/* DISCOVERY Cards Belt (loops within this zone) */}
             <PortalBelt
-              tracks={discoverTracks.slice(0, 8)}
+              tracks={discoverBeltTracks}
               onTap={playTrack}
               onQueueAdd={trackQueueAddition}
               playedTrackIds={playedTrackIds}
@@ -5774,9 +5801,9 @@ export const VoyoPortraitPlayer = ({
               delay={0}
               mood="energetic"
               textAnimation="bounce"
-              onClick={() => handleModeBoost('afro-heat')}
-              onDragToQueue={() => handleModeToQueueWithIntent('afro-heat')}
-              onDoubleTap={() => handleModeReaction('afro-heat')}
+              onClick={modeHandlers['afro-heat'].onClick}
+              onDragToQueue={modeHandlers['afro-heat'].onDrag}
+              onDoubleTap={modeHandlers['afro-heat'].onDouble}
               isActive={isModeActive('afro-heat')}
               boostLevel={modeBoosts['afro-heat'] || 0}
               queueMultiplier={queueMultipliers['afro-heat'] || 1}
@@ -5794,9 +5821,9 @@ export const VoyoPortraitPlayer = ({
               delay={1}
               mood="chill"
               textAnimation="slideUp"
-              onClick={() => handleModeBoost('chill-vibes')}
-              onDragToQueue={() => handleModeToQueueWithIntent('chill-vibes')}
-              onDoubleTap={() => handleModeReaction('chill-vibes')}
+              onClick={modeHandlers['chill-vibes'].onClick}
+              onDragToQueue={modeHandlers['chill-vibes'].onDrag}
+              onDoubleTap={modeHandlers['chill-vibes'].onDouble}
               isActive={isModeActive('chill-vibes')}
               boostLevel={modeBoosts['chill-vibes'] || 0}
               queueMultiplier={queueMultipliers['chill-vibes'] || 1}
@@ -5814,9 +5841,9 @@ export const VoyoPortraitPlayer = ({
               delay={2}
               mood="hype"
               textAnimation="scaleIn"
-              onClick={() => handleModeBoost('party-mode')}
-              onDragToQueue={() => handleModeToQueueWithIntent('party-mode')}
-              onDoubleTap={() => handleModeReaction('party-mode')}
+              onClick={modeHandlers['party-mode'].onClick}
+              onDragToQueue={modeHandlers['party-mode'].onDrag}
+              onDoubleTap={modeHandlers['party-mode'].onDouble}
               isActive={isModeActive('party-mode')}
               boostLevel={modeBoosts['party-mode'] || 0}
               queueMultiplier={queueMultipliers['party-mode'] || 1}
@@ -5834,9 +5861,9 @@ export const VoyoPortraitPlayer = ({
               delay={3}
               mood="mysterious"
               textAnimation="rotateIn"
-              onClick={() => handleModeBoost('late-night')}
-              onDragToQueue={() => handleModeToQueueWithIntent('late-night')}
-              onDoubleTap={() => handleModeReaction('late-night')}
+              onClick={modeHandlers['late-night'].onClick}
+              onDragToQueue={modeHandlers['late-night'].onDrag}
+              onDoubleTap={modeHandlers['late-night'].onDouble}
               isActive={isModeActive('late-night')}
               boostLevel={modeBoosts['late-night'] || 0}
               queueMultiplier={queueMultipliers['late-night'] || 1}
@@ -5854,9 +5881,9 @@ export const VoyoPortraitPlayer = ({
               delay={4}
               mood="intense"
               textAnimation="bounce"
-              onClick={() => handleModeBoost('workout')}
-              onDragToQueue={() => handleModeToQueueWithIntent('workout')}
-              onDoubleTap={() => handleModeReaction('workout')}
+              onClick={modeHandlers['workout'].onClick}
+              onDragToQueue={modeHandlers['workout'].onDrag}
+              onDoubleTap={modeHandlers['workout'].onDouble}
               isActive={isModeActive('workout')}
               boostLevel={modeBoosts['workout'] || 0}
               queueMultiplier={queueMultipliers['workout'] || 1}

@@ -209,8 +209,8 @@ export function InstallBanner() {
           className="pointer-events-auto w-full max-w-sm rounded-2xl px-4 py-3.5 flex items-center gap-3 select-none"
           style={{
             background: 'rgba(15, 12, 24, 0.82)',
-            backdropFilter: 'blur(24px) saturate(140%)',
-            WebkitBackdropFilter: 'blur(24px) saturate(140%)',
+            backdropFilter: 'blur(14px) saturate(130%)',
+            WebkitBackdropFilter: 'blur(14px) saturate(130%)',
             border: '1px solid rgba(255,255,255,0.06)',
             boxShadow: '0 20px 60px -20px rgba(0,0,0,0.7), 0 1px 0 rgba(255,255,255,0.04) inset',
             opacity,

@@ -294,8 +294,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
     // Initial presence update
     updatePresence();
 
-    // Update every 30 seconds
-    presenceIntervalRef.current = setInterval(updatePresence, 30000);
+    // Update every 30 seconds — but skip when tab hidden (browser throttles
+    // anyway; visibilitychange handler below re-pings on return).
+    presenceIntervalRef.current = setInterval(() => {
+      if (document.hidden) return;
+      updatePresence();
+    }, 30000);
 
     // visibilitychange: re-ping immediately when the tab comes back to the
     // foreground. Browsers throttle setInterval to 1-2min on hidden tabs so

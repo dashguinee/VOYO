@@ -24,13 +24,14 @@ if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/service-worker.js', { updateViaCache: 'none' })
       .then((reg) => {
-        // Battery: skip updates when tab is backgrounded; bumped 5min → 15min
-        // (still surfaces fresh deploys quickly, ~96 wakes/day → ~32, and
-        // the visibility guard stops idle/locked-screen wakes entirely).
+        // Battery: skip updates when tab is backgrounded. Bumped 15min → 60min
+        // (~32 wakes/day → ~8). Most user sessions are <60min anyway, so the
+        // window between deploy and the user seeing the prompt rarely matters
+        // — and visibilitychange below handles foreground returns immediately.
         setInterval(() => {
           if (document.hidden) return;
           reg.update();
-        }, 15 * 60 * 1000);
+        }, 60 * 60 * 1000);
       })
       .catch(() => { /* SW registration failed — non-critical, app works without it */ });
   });

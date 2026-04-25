@@ -155,11 +155,13 @@ body {
   text-shadow: 0 0 10px currentColor, 0 0 20px currentColor, 0 0 40px currentColor;
 }
 
-/* Glass Effect */
+/* Glass Effect — desktop blur capped at 12px (was 20px). Mobile-Safari /
+   Android Chrome hangs on 16+px blur during scroll; mobile media query
+   below caps it tighter still (10px). Reduced 2026-04-26 perf pass. */
 .glass {
-  background: rgba(18, 18, 26, 0.8);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  background: rgba(18, 18, 26, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
@@ -273,23 +275,30 @@ body {
 /* ============================================ */
 
 .glass-panel {
-  background: rgba(255, 255, 255, 0.05);
-  backdrop-filter: blur(40px);
-  -webkit-backdrop-filter: blur(40px);
+  /* 40px → 14px desktop. The 40px blur was the worst offender for
+     Home/OYO modal scroll jank on mid-range devices (mobile Safari +
+     Android Chrome both hang during composite). Bumped opacity to
+     compensate for the visual loss. */
+  background: rgba(255, 255, 255, 0.07);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
   border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .glass-nav {
-  background: rgba(10, 10, 15, 0.65);
-  backdrop-filter: blur(16px) saturate(150%);
-  -webkit-backdrop-filter: blur(16px) saturate(150%);
+  /* 16px + saturate(150%) → 10px + saturate(120%). Nav is always
+     visible during scroll = highest blur cost. */
+  background: rgba(10, 10, 15, 0.72);
+  backdrop-filter: blur(10px) saturate(120%);
+  -webkit-backdrop-filter: blur(10px) saturate(120%);
   border-top: 1px solid rgba(139, 92, 246, 0.08);
 }
 
 .glass-card {
-  background: rgba(20, 20, 30, 0.6);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  /* 20px → 12px. */
+  background: rgba(20, 20, 30, 0.68);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   border: 1px solid rgba(255, 255, 255, 0.08);
 }
 

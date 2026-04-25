@@ -1132,6 +1132,15 @@ const AfricanVibesCarousel = ({
   const ratiosRef = useRef<Map<number, number>>(new Map());
   const cardObserverRef = useRef<IntersectionObserver | null>(null);
 
+  // Stable per-card play handler — wraps onTrackPlay with the lastWatched
+  // bookkeeping, memoised so memo'd AfricanVibesVideoCard children keep
+  // their identity across parent re-renders. lastWatchedRef is a ref so
+  // it doesn't need to be in deps.
+  const handleCardPlay = useCallback((t: Track) => {
+    lastWatchedRef.current = t;
+    onTrackPlay(t);
+  }, [onTrackPlay]);
+
   // Card-registration callback — each card calls on mount/unmount so
   // the rail's observer can track all current card elements.
   const registerCardRef = useCallback((idx: number, el: HTMLButtonElement | null) => {
@@ -1256,7 +1265,7 @@ const AfricanVibesCarousel = ({
           activeIdx={activeIdx}
           sectionInView={isInView}
           registerRef={registerCardRef}
-          onTrackPlay={(t) => { lastWatchedRef.current = t; onTrackPlay(t); }}
+          onTrackPlay={handleCardPlay}
         />
       ))}
 
@@ -1486,9 +1495,9 @@ const FriendSearchPill = ({ open, friends, loading, onClose, onFriendTap }: Frie
           bottom: '20%',
           maxWidth: 380,
           margin: '0 auto',
-          background: 'rgba(20, 20, 28, 0.72)',
-          backdropFilter: 'blur(24px) saturate(180%)',
-          WebkitBackdropFilter: 'blur(24px) saturate(180%)',
+          background: 'rgba(20, 20, 28, 0.86)',
+          backdropFilter: 'blur(14px) saturate(140%)',
+          WebkitBackdropFilter: 'blur(14px) saturate(140%)',
           border: '1px solid rgba(255,255,255,0.08)',
           boxShadow: '0 20px 60px rgba(0,0,0,0.4)',
           maxHeight: '60vh',
@@ -1509,8 +1518,8 @@ const FriendSearchPill = ({ open, friends, loading, onClose, onFriendTap }: Frie
               height: 44,
               background: 'rgba(255,255,255,0.08)',
               border: '1px solid rgba(255,255,255,0.10)',
-              backdropFilter: 'blur(20px)',
-              WebkitBackdropFilter: 'blur(20px)',
+              backdropFilter: 'blur(12px)',
+              WebkitBackdropFilter: 'blur(12px)',
             }}
           >
             <Search className="w-4 h-4 text-white/40 flex-shrink-0" strokeWidth={2} />
@@ -2563,7 +2572,10 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onNavVisibilityChange, onSwitc
     };
 
     fetchOnlineFriends();
-    const interval = setInterval(fetchOnlineFriends, 30_000);
+    const interval = setInterval(() => {
+      if (document.hidden) return;
+      fetchOnlineFriends();
+    }, 30_000);
     return () => { cancelled = true; clearInterval(interval); };
   }, [isLoggedIn, dashId]);
 
@@ -3229,7 +3241,7 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onNavVisibilityChange, onSwitc
           Stations below during the countdown sequence. */}
       {hasTrending && (
         <div style={{ contain: 'paint' }}>
-          <Top10Section tracks={trending.slice(0, 10)} onTrackPlay={onTrackPlay} />
+          <Top10Section tracks={trending.slice(0, 10)} onTrackPlay={playTrackFull} />
         </div>
       )}
 
