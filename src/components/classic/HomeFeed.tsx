@@ -2299,7 +2299,11 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onNavVisibilityChange, onSwitc
 
     const onTouchStart = (e: TouchEvent) => {
       const tgt = e.target as HTMLElement;
-      if (tgt.closest('input,select,textarea,[contenteditable="true"]')) return;
+      // Skip ripple inside form fields + horizontally-scrolling rails
+      // (vibes, stations, etc. tagged with data-no-ripple). Trail rings
+      // were spawning every 35ms during horizontal drag, scattering
+      // across the cards' own animations and reading as glitch.
+      if (tgt.closest('input,select,textarea,[contenteditable="true"],[data-no-ripple]')) return;
       const t = e.touches[0];
       holdX = t.clientX; holdY = t.clientY;
       lastRingX = t.clientX; lastRingY = t.clientY; lastRingTime = Date.now();
@@ -3095,7 +3099,7 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onNavVisibilityChange, onSwitc
           Tap AI card → open the vibe (playFromVibe); tap track card →
           play that exact track. Lightweight: 5 thumbs per vibe, all
           R2-cached so playback is instant on tap. */}
-      <div className="mb-12">
+      <div className="mb-12" data-no-ripple>
         <div className="px-4 mb-1.5">
           <h2 className="text-white font-semibold text-base">Vibes</h2>
         </div>
@@ -3132,7 +3136,7 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onNavVisibilityChange, onSwitc
         </div>
       ) : stations.length > 0 && (
         <Safe name="StationsRail">
-          <div className="mb-8 -mx-1">
+          <div className="mb-8 -mx-1" data-no-ripple>
             <div className="flex gap-3 overflow-x-auto snap-x snap-mandatory scrollbar-hide px-4 pb-2">
               {stations.map((station) => (
                 <Safe name={`Station:${station.id}`} key={station.id}>
