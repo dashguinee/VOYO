@@ -93,37 +93,81 @@ const getTrendingTracks = (hotPool: PooledTrack[], limit: number = 15): Track[] 
 };
 
 // OYÉ section header rotation. African capitals + diaspora-heavy
-// places where the music lives. Order is loosely curated as a tour:
-// West Africa → Central/East/South → Caribbean → North Africa →
-// global diaspora cities → Indian Ocean islands → Brazil → Americas
-// → back to smaller West African names. 'My People' anchors every
-// few entries so the section's identity reasserts.
-const OYE_TITLES = [
-  'My People',
+// places where the music lives. Tagged by category so the subtitle
+// can pair "From {current} to {random other in same category}" —
+// the journey stays coherent (Conakry → Bamako, not Conakry → Bahia).
+// 'My People' is the anchor and keeps its original "From Lagos to
+// Johannesburg" subtitle.
+type OyeTitleType = 'anchor' | 'west_africa' | 'central_east_south' | 'caribbean' | 'north_africa' | 'diaspora' | 'indian_ocean' | 'brazil';
+const OYE_TITLES: ReadonlyArray<{ name: string; type: OyeTitleType }> = [
+  { name: 'My People', type: 'anchor' },
   // West Africa
-  'Conakry', 'Lagos', 'Bamako', 'Dakar', 'Accra', 'Abidjan', 'Freetown',
-  'My People',
+  { name: 'Conakry', type: 'west_africa' },
+  { name: 'Lagos', type: 'west_africa' },
+  { name: 'Bamako', type: 'west_africa' },
+  { name: 'Dakar', type: 'west_africa' },
+  { name: 'Accra', type: 'west_africa' },
+  { name: 'Abidjan', type: 'west_africa' },
+  { name: 'Freetown', type: 'west_africa' },
+  { name: 'My People', type: 'anchor' },
   // Central + East + Southern
-  'Kinshasa', 'Yaoundé', 'Joburg', 'Nairobi', 'Addis', 'Kigali',
+  { name: 'Kinshasa', type: 'central_east_south' },
+  { name: 'Yaoundé', type: 'central_east_south' },
+  { name: 'Joburg', type: 'central_east_south' },
+  { name: 'Nairobi', type: 'central_east_south' },
+  { name: 'Addis', type: 'central_east_south' },
+  { name: 'Kigali', type: 'central_east_south' },
   // Caribbean
-  'Kingston', 'Guadeloupe', 'Port-au-Prince', 'Trinidad', 'Martinique',
-  'My People',
+  { name: 'Kingston', type: 'caribbean' },
+  { name: 'Guadeloupe', type: 'caribbean' },
+  { name: 'Port-au-Prince', type: 'caribbean' },
+  { name: 'Trinidad', type: 'caribbean' },
+  { name: 'Martinique', type: 'caribbean' },
+  { name: 'My People', type: 'anchor' },
   // North Africa
-  'Casablanca', 'Algiers', 'Cairo', 'Tunis',
+  { name: 'Casablanca', type: 'north_africa' },
+  { name: 'Algiers', type: 'north_africa' },
+  { name: 'Cairo', type: 'north_africa' },
+  { name: 'Tunis', type: 'north_africa' },
   // Diaspora cities
-  'Brixton', 'Harlem', 'Brooklyn', 'Paris', 'Brussels', 'Lisbon',
-  'My People',
+  { name: 'Brixton', type: 'diaspora' },
+  { name: 'Harlem', type: 'diaspora' },
+  { name: 'Brooklyn', type: 'diaspora' },
+  { name: 'Paris', type: 'diaspora' },
+  { name: 'Brussels', type: 'diaspora' },
+  { name: 'Lisbon', type: 'diaspora' },
+  { name: 'My People', type: 'anchor' },
   // Indian Ocean
-  'Seychelles', 'Mauritius', 'Antananarivo',
+  { name: 'Seychelles', type: 'indian_ocean' },
+  { name: 'Mauritius', type: 'indian_ocean' },
+  { name: 'Antananarivo', type: 'indian_ocean' },
   // Brazil
-  'Bahia', 'Salvador',
-  // Americas
-  'Atlanta', 'New Orleans', 'Houston', 'Toronto',
+  { name: 'Bahia', type: 'brazil' },
+  { name: 'Salvador', type: 'brazil' },
+  // Americas (diaspora cities continued)
+  { name: 'Atlanta', type: 'diaspora' },
+  { name: 'New Orleans', type: 'diaspora' },
+  { name: 'Houston', type: 'diaspora' },
+  { name: 'Toronto', type: 'diaspora' },
   // Smaller West African
-  'Cotonou', 'Lomé', 'Monrovia', 'Niamey', 'Ouaga',
-  // Southern + East
-  'Maputo', 'Luanda', 'Harare', 'Kampala',
-] as const;
+  { name: 'Cotonou', type: 'west_africa' },
+  { name: 'Lomé', type: 'west_africa' },
+  { name: 'Monrovia', type: 'west_africa' },
+  { name: 'Niamey', type: 'west_africa' },
+  { name: 'Ouaga', type: 'west_africa' },
+  // Southern + East continued
+  { name: 'Maputo', type: 'central_east_south' },
+  { name: 'Luanda', type: 'central_east_south' },
+  { name: 'Harare', type: 'central_east_south' },
+  { name: 'Kampala', type: 'central_east_south' },
+];
+
+// Pre-compute siblings by type so the subtitle pick is O(1) per cycle.
+const OYE_SIBLINGS: Record<OyeTitleType, string[]> = OYE_TITLES.reduce((acc, t) => {
+  if (!acc[t.type]) acc[t.type] = [];
+  if (!acc[t.type].includes(t.name)) acc[t.type].push(t.name);
+  return acc;
+}, {} as Record<OyeTitleType, string[]>);
 
 // Section-filtered helpers (use curator tags from poolCurator)
 const getWestAfricanTracks = (hotPool: PooledTrack[], limit: number = 15): Track[] => {
@@ -2367,7 +2411,20 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onNavVisibilityChange, onSwitc
       stop();
     };
   }, []);
-  const oyeTitleSuffix = OYE_TITLES[oyeTitleIndex];
+  const oyeTitle = OYE_TITLES[oyeTitleIndex];
+  const oyeTitleSuffix = oyeTitle.name;
+  // Subtitle: "From {current} to {random sibling of same type}".
+  // Anchor ('My People') keeps the original "From Lagos to Johannesburg".
+  // useMemo picks a fresh sibling on each index change so the journey
+  // varies but never lands on the same destination as the source.
+  const oyeSubtitle = useMemo(() => {
+    if (oyeTitle.type === 'anchor') return 'From Lagos to Johannesburg';
+    const siblings = OYE_SIBLINGS[oyeTitle.type].filter(s => s !== oyeTitle.name);
+    if (siblings.length === 0) return `From ${oyeTitle.name}`;
+    const to = siblings[Math.floor(Math.random() * siblings.length)];
+    return `From ${oyeTitle.name} to ${to}`;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [oyeTitleIndex]);
   const [boostSettingsOpen, setBoostSettingsOpen] = useState(false);
   // Session seed drives shelf rotation — every reload / pull-to-refresh gets
   // a fresh number, so shelves surface different tracks from the big pool
@@ -3311,15 +3368,17 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onNavVisibilityChange, onSwitc
               </span>
             </h2>
             <p
+              key={oyeSubtitle}
               className="text-[9px] font-medium tracking-wider uppercase mt-1.5"
               style={{
                 background: 'linear-gradient(90deg, #D4A053 0%, #C4943D 100%)',
                 WebkitBackgroundClip: 'text',
                 WebkitTextFillColor: 'transparent',
                 opacity: 0.85,
+                animation: 'voyo-oye-suffix-fade 700ms cubic-bezier(0.16, 1, 0.3, 1)',
               }}
             >
-              From Lagos to Johannesburg
+              {oyeSubtitle}
             </p>
           </div>
         </div>
