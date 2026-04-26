@@ -387,8 +387,24 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap, onEnterVideoMode
       setActiveIndex(-1);
       searchIdRef.current++; // cancel any in-flight search
       if (debounceRef.current) clearTimeout(debounceRef.current);
+      // (audit-2 P0-HFS-1) Drain pill timers on close — without this,
+      // a "warming" pill scheduled to morph to "Play now →" would fire
+      // its setTimeout AFTER the user closed search, then surface in
+      // the NEXT search session attached to the previous track. Tap
+      // = wrong-track playback. Same for the play_now auto-dismiss.
+      if (toastTimerRef.current) { clearTimeout(toastTimerRef.current); toastTimerRef.current = null; }
+      if (morphTimerRef.current) { clearTimeout(morphTimerRef.current); morphTimerRef.current = null; }
+      setToast(null);
     }
   }, [isOpen]);
+
+  // Unmount cleanup — same drains as close, in case the overlay is
+  // unmounted while still open (route swap, parent destroy).
+  useEffect(() => () => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    if (morphTimerRef.current) clearTimeout(morphTimerRef.current);
+  }, []);
 
   // Reset keyboard-nav index when results change — don't leave a ghost
   // selection pointing at an old result that no longer exists.

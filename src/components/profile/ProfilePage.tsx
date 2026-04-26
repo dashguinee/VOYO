@@ -231,6 +231,7 @@ export const ProfilePage = () => {
     if (!hasJoinedPortal || !urlDashId || !supabase) return;
 
     const sub = makeReconnectingChannel(
+      supabase!,
       () =>
         supabase!
           .channel(`jam-${urlDashId}`)

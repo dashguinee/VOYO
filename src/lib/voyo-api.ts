@@ -436,6 +436,7 @@ export const friendsAPI = {
     if (!commandCenter || friendIds.length === 0) return null;
 
     const sub = makeReconnectingChannel(
+      commandCenter!,
       () =>
         commandCenter!
           .channel('friends_presence')
@@ -636,6 +637,7 @@ export const messagesAPI = {
     if (!commandCenter) return null;
 
     const sub = makeReconnectingChannel(
+      commandCenter!,
       () =>
         commandCenter!
           .channel(`messages:${dashId}`)
@@ -677,6 +679,7 @@ export const messagesAPI = {
       `or(and(from_id.eq.${currentUser},to_id.eq.${otherUser}),and(from_id.eq.${otherUser},to_id.eq.${currentUser}))`;
 
     const sub = makeReconnectingChannel(
+      commandCenter!,
       () =>
         commandCenter!
           .channel(`convo:${channelId}`)
@@ -720,6 +723,7 @@ export const messagesAPI = {
     if (!commandCenter) return () => {};
 
     const sub = makeReconnectingChannel(
+      commandCenter!,
       () =>
         commandCenter!
           .channel(`incoming:${dashId}`)

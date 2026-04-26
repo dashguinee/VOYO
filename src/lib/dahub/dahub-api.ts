@@ -524,6 +524,7 @@ export const messagesAPI = {
     // event: '*' catches both INSERT (new messages) and UPDATE (read receipts).
     // Previously INSERT-only — read_at updates were silently dropped.
     const sub = makeReconnectingChannel(
+      ccSupabase,
       () =>
         ccSupabase
           .channel(`messages:${userId}`)
@@ -609,6 +610,7 @@ export const presenceAPI = {
     // onReconnect re-pings so the friend list reflects current reality.
     const filter = `core_id=in.(${friendIds.join(',')})`;
     const sub = makeReconnectingChannel(
+      ccSupabase,
       () =>
         ccSupabase
           .channel('presence-updates')

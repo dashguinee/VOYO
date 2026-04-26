@@ -413,6 +413,7 @@ export const useReactionStore = create<ReactionStore>((set, get) => ({
     devLog('[Reactions] Subscribing to realtime updates (reconnecting)...');
 
     const sub = makeReconnectingChannel(
+      supabase!,
       () =>
         supabase!
           .channel('reactions-realtime')

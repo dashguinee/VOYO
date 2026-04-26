@@ -16,15 +16,32 @@
  *   sub.unsubscribe();
  */
 
-import type { RealtimeChannel } from '@supabase/supabase-js';
+import type { RealtimeChannel, SupabaseClient } from '@supabase/supabase-js';
 
+/**
+ * (audit-2 P0-RT-3) Now requires the SupabaseClient that owns the
+ * channel. Previously only called channel.unsubscribe() — which closes
+ * the WebSocket subscription but does NOT remove the channel from the
+ * client's internal registry. Every reconnect (TIMED_OUT/CLOSED/
+ * CHANNEL_ERROR) and every disposal leaked one entry per cycle.
+ * Re-creating the same name (messages:${id}, friends_presence, etc.)
+ * with the prior channel still in the registry caused Supabase to
+ * reject duplicate subscriptions silently.
+ */
 export function makeReconnectingChannel(
+  client: SupabaseClient,
   createChannel: () => RealtimeChannel,
   onReconnect?: () => void,
 ): { unsubscribe: () => void } {
   let channel: RealtimeChannel | null = null;
   let disposed = false;
   let retryCount = 0;
+
+  const tearDown = (ch: RealtimeChannel | null) => {
+    if (!ch) return;
+    try { ch.unsubscribe(); } catch {}
+    try { client.removeChannel(ch); } catch {}
+  };
 
   function wire() {
     if (disposed) return;
@@ -43,7 +60,7 @@ export function makeReconnectingChannel(
         retryCount++;
         setTimeout(() => {
           if (!disposed) {
-            try { channel?.unsubscribe(); } catch {}
+            tearDown(channel);
             wire();
           }
         }, delay);
@@ -56,7 +73,8 @@ export function makeReconnectingChannel(
   return {
     unsubscribe: () => {
       disposed = true;
-      try { channel?.unsubscribe(); } catch {}
+      tearDown(channel);
+      channel = null;
     },
   };
 }

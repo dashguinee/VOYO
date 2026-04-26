@@ -226,23 +226,25 @@ export function AuthProvider({ children }: AuthProviderProps) {
       if (e.key === STORAGE_KEY || e.key === null) {
         try {
           const newSession = getDashSession('V');
-          const currentSession = getDashSession('V'); // Get fresh current state
-          const wasLoggedIn = Boolean(currentSession);
-          const isNowLoggedIn = Boolean(newSession);
-
-          setSession(newSession);
-
-        // User just logged in
-        if (!wasLoggedIn && isNowLoggedIn && newSession?.user.core_id) {
-          devLog('[VOYO Auth] User logged in:', newSession.user.core_id);
-          loadOrCreateProfile(newSession.user.core_id);
-        }
-
-        // User logged out
-        if (wasLoggedIn && !isNowLoggedIn) {
-          devLog('[VOYO Auth] User logged out');
-          setProfile(null);
-        }
+          // (audit-2 P0-RT-1) The previous version compared
+          // getDashSession() to itself in the same tick — both reads
+          // returned the same value, so the login/logout transition
+          // branches were mathematically unreachable. Cross-tab signin
+          // never loaded the profile; cross-tab signout never cleared
+          // it. Use the functional setSession form so we diff against
+          // the actual previous React state.
+          setSession(prev => {
+            const wasLoggedIn = Boolean(prev);
+            const isNowLoggedIn = Boolean(newSession);
+            if (!wasLoggedIn && isNowLoggedIn && newSession?.user.core_id) {
+              devLog('[VOYO Auth] User logged in (cross-tab):', newSession.user.core_id);
+              loadOrCreateProfile(newSession.user.core_id);
+            } else if (wasLoggedIn && !isNowLoggedIn) {
+              devLog('[VOYO Auth] User logged out (cross-tab)');
+              setProfile(null);
+            }
+            return newSession;
+          });
         } catch (err) {
           devWarn('[VOYO Auth] Storage change error:', err);
         }
@@ -321,27 +323,32 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }, [isLoggedIn, updatePresence]);
 
   // ========================================
-  // EFFECT: Auto-sync on preference changes
+  // EFFECT: Auto-sync on preference changes (debounced)
   // ========================================
   useEffect(() => {
     if (!isLoggedIn) return;
-
-    // Debounced sync when preferences change
+    // (audit-2 P0-RT-2) The previous version returned a cleanup
+    // function from INSIDE the Zustand subscribe listener, but
+    // Zustand discards listener return values — so every preference
+    // mutation queued a fresh, unkillable 5s setTimeout. Rapid
+    // likes/plays = N parallel syncs hammering profileAPI.
+    // Fix: a closure-local debounce ref the listener clears + resets
+    // each tick, cleaned up properly in the effect's return.
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
     const unsubscribe = usePreferenceStore.subscribe((state, prevState) => {
-      // Check if preferences actually changed
       const prefsChanged = state.trackPreferences !== prevState.trackPreferences;
-
-      if (prefsChanged) {
-        // Debounce sync
-        const timeout = setTimeout(() => {
-          syncToCloud();
-        }, 5000); // Wait 5s after last change
-
-        return () => clearTimeout(timeout);
-      }
+      if (!prefsChanged) return;
+      if (debounceTimer) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        debounceTimer = null;
+        syncToCloud();
+      }, 5000);
     });
 
-    return unsubscribe;
+    return () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      unsubscribe();
+    };
   }, [isLoggedIn, syncToCloud]);
 
   // ========================================
