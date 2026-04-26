@@ -1875,11 +1875,13 @@ const Top10Section = memo(({ tracks, onTrackPlay }: Top10SectionProps) => {
       <div className="relative px-4 mb-6" style={{ zIndex: 1 }}>
         <div className="overflow-hidden flex items-center gap-2">
           <h2 className="top10-header-scroll text-white font-semibold text-base whitespace-nowrap inline-block">VOYO Top 10</h2>
-          {/* Live dot — appears ONLY when the gold #1 card is the active
-              countdown card. Mimics the "OYÉ Live" orange dot to signal
-              "this is happening right now". Fades in/out gently in sync
-              with the gold treatment, blinks softly while present.
-              Restraint: scarce moment, not constant chrome. */}
+          {/* Live dot — appears in the CALM static moment (before
+              countdown kicks in). Mimics the "OYÉ Live" orange dot to
+              signal "this is happening right now". When the countdown
+              starts and the cards begin rotating, the rotation itself
+              IS the live signal — so the dot fades back out and lets
+              the gold moment own the screen. Soft 2.4s heartbeat blink
+              while visible. Apple easing on the fade. */}
           <span
             aria-hidden="true"
             className="inline-block rounded-full"
@@ -1888,12 +1890,10 @@ const Top10Section = memo(({ tracks, onTrackPlay }: Top10SectionProps) => {
               height: 6,
               background: '#F4A23E',
               boxShadow: '0 0 8px rgba(244,162,62,0.7), 0 0 16px rgba(244,162,62,0.35)',
-              opacity: countdownActive && activeIdx === 0 ? 1 : 0,
-              animation: countdownActive && activeIdx === 0
-                ? 'voyo-top10-live-blink 2.4s ease-in-out infinite'
-                : 'none',
-              // Gold-sync: matches the 0.8s box-shadow transition on the
-              // #1 card so the dot's fade tracks the same rhythm.
+              opacity: countdownActive ? 0 : 1,
+              animation: countdownActive
+                ? 'none'
+                : 'voyo-top10-live-blink 2.4s ease-in-out infinite',
               transition: 'opacity 0.8s ease-in-out',
             }}
           />
