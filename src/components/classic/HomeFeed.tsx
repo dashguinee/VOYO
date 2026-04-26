@@ -439,8 +439,8 @@ const CenterFocusedCarousel = ({ tracks, onPlay, onDiscover }: CenterCarouselPro
                   background: 'rgba(255,255,255,0.08)',
                   border: '1px solid rgba(196,181,253,0.20)',
                   color: 'rgba(196,181,253,0.92)',
-                  backdropFilter: 'blur(10px) saturate(130%)',
-                  WebkitBackdropFilter: 'blur(10px) saturate(130%)',
+                  backdropFilter: 'blur(10px)',
+                  WebkitBackdropFilter: 'blur(10px)',
                   boxShadow: '0 6px 18px -6px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.08)',
                 }}
                 aria-label="Discover more — open search"
@@ -455,8 +455,8 @@ const CenterFocusedCarousel = ({ tracks, onPlay, onDiscover }: CenterCarouselPro
                   background: 'rgba(255,255,255,0.08)',
                   border: '1px solid rgba(196,181,253,0.20)',
                   color: 'rgba(196,181,253,0.92)',
-                  backdropFilter: 'blur(10px) saturate(130%)',
-                  WebkitBackdropFilter: 'blur(10px) saturate(130%)',
+                  backdropFilter: 'blur(10px)',
+                  WebkitBackdropFilter: 'blur(10px)',
                   boxShadow: '0 6px 18px -6px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.08)',
                 }}
               >

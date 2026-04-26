@@ -273,12 +273,20 @@ export const PortraitVOYO = ({ onSearch, onDahub, onHome }: PortraitVOYOProps) =
         <div
           className="absolute inset-0 z-0 pb-20 transition-all duration-400"
           style={{
+            // contain:paint scopes the player's paint cascades from the
+            // sibling Feed layer + the rest of the app — the always-mounted
+            // 6k-line tree was bleeding into surrounding paints on low-end.
+            contain: 'paint',
             transform: voyoActiveTab === 'music' ? 'scale(1)' : 'scale(0.95)',
             opacity: voyoActiveTab === 'music' ? 1 : 0,
-            filter: voyoActiveTab === 'music' ? 'blur(0px)' : 'blur(10px)',
+            // filter:blur dropped from the transition — Safari re-rasterized
+            // the entire 6k-line tree mid-transition, same compositor bug
+            // we fixed for Layer B in v672. The opacity+scale alone reads
+            // as a clean handoff (the layer is opacity:0 by the time blur
+            // would have peaked anyway).
             pointerEvents: voyoActiveTab === 'music' ? 'auto' : 'none',
             visibility: voyoActiveTab === 'music' ? 'visible' : 'hidden',
-            transitionProperty: 'transform, opacity, filter, visibility',
+            transitionProperty: 'transform, opacity, visibility',
           }}
         >
           <Suspense fallback={
