@@ -5467,7 +5467,7 @@ export const VoyoPortraitPlayer = ({
           When the cube dock is open, the min-height grows so the chat
           space slides in without pushing the rail offscreen. */}
       <div
-        className={`flex-shrink-0 w-full backdrop-blur-2xl relative z-40 flex flex-col pt-3 pb-7 transition-[min-height] duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+        className={`flex-shrink-0 w-full relative z-40 flex flex-col pt-3 pb-7 transition-[min-height] duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] ${
           cubeDockOpen ? 'min-h-[480px]' : oyeBarBehavior === 'fade' ? 'min-h-[360px]' : ''
         }`}
         style={{
