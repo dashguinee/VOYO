@@ -83,17 +83,25 @@ async function performHotSwap(
   const stillCurrent = () =>
     usePlayerStore.getState().currentTrack?.trackId === trackId;
 
-  // Per Dash 2026-04-26: "don't hot swap, restart with r2 audio when r2
-  // is in." Always restart from 0 when R2 lands — no in-place crossfade,
-  // no position-matching. The user hears the song begin again with the
-  // R2 (high-quality) audio. Unambiguous: if you hear the restart, R2
-  // is now serving the audio. Solves the "shows boosted but didn't
-  // hotswap" perception bug — the upgrade is now audible.
-  const t = 0;
-  const posSource: 'restart' = 'restart';
-  // (Live iframe time + snapshot were used for position-matching;
-  // both obsolete under always-restart. Param kept for future reuse.)
-  void snapshot;
+  // Per Dash 2026-04-26: "after 15s in iframe no restart hot swap, we
+  // do only hot swap." Always position-match — pick the best known
+  // playback position and slide R2 in seamlessly under the user. No
+  // restart, no rewind. v633's 15s-restart rule and v642's always-
+  // restart are both gone.
+  //
+  // Position priority: live iframe time → snapshot (in case iframe died) →
+  // fall back to 0 only as a true cold start.
+  let t = iframeBridge.getCurrentTime();
+  let posSource: 'live' | 'snapshot' | 'cold' = 'live';
+  if (t == null || !isFinite(t)) {
+    if (snapshot && snapshot.trackId === trackId && snapshot.seconds > 0) {
+      t = snapshot.seconds;
+      posSource = 'snapshot';
+    } else {
+      t = 0;
+      posSource = 'cold';
+    }
+  }
 
   logPlaybackEvent({
     event_type: 'trace', track_id: trackId,
