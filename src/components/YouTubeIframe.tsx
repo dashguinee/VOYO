@@ -69,7 +69,14 @@ const OverlayTimingSync = memo(({
 }) => {
   const currentTime = usePlayerStore((s) => s.currentTime);
   const duration = usePlayerStore((s) => s.duration);
+  const currentTrackId = usePlayerStore((s) => s.currentTrack?.trackId ?? null);
   const lastRef = useRef({ np: false, nu: false, pnu: false });
+  // Per-track latch for the portrait Next Up overlay. Once it fires for
+  // a track, we leave it on until the track changes — currentTime jitter
+  // from the audio element + iframe drift sync was bouncing it across
+  // the 8s threshold and re-mounting the overlay multiple times in a
+  // single end zone.
+  const pnuLatchedTrackRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (videoTarget === 'hidden') {
@@ -79,6 +86,7 @@ const OverlayTimingSync = memo(({
         setShowPortraitNextUp(false);
         lastRef.current = { np: false, nu: false, pnu: false };
       }
+      pnuLatchedTrackRef.current = null;
       return;
     }
     // > 1s avoids the frame where currentTime ticks from 0 → 0.x right at
@@ -89,15 +97,34 @@ const OverlayTimingSync = memo(({
     const midTrack = currentTime > 30 && duration > 60 && currentTime >= duration * 0.45 && currentTime < duration * 0.55;
     const endTrack = timeRemaining > 0 && timeRemaining < 20;
     const nu = (midTrack || endTrack) && !!upcomingTrack;
+
+    // Track change → reset the portrait-overlay latch so the next track's
+    // end zone can fire fresh.
+    if (pnuLatchedTrackRef.current && pnuLatchedTrackRef.current !== currentTrackId) {
+      pnuLatchedTrackRef.current = null;
+    }
+
     const portraitEndZone = timeRemaining > 0 && timeRemaining < 8;
-    const pnu = videoTarget === 'portrait' && portraitEndZone && !!upcomingTrack;
+    const portraitConditionsMet = videoTarget === 'portrait' && portraitEndZone && !!upcomingTrack && !!currentTrackId;
+
+    let pnu: boolean;
+    if (pnuLatchedTrackRef.current === currentTrackId) {
+      // Already shown for this track — keep it up regardless of jitter
+      // until the track ID changes (above).
+      pnu = true;
+    } else if (portraitConditionsMet) {
+      pnu = true;
+      pnuLatchedTrackRef.current = currentTrackId;
+    } else {
+      pnu = false;
+    }
 
     const prev = lastRef.current;
     if (prev.np !== np) { setShowNowPlaying(np); }
     if (prev.nu !== nu) { setShowNextUp(nu); }
     if (prev.pnu !== pnu) { setShowPortraitNextUp(pnu); }
     lastRef.current = { np, nu, pnu };
-  }, [currentTime, duration, videoTarget, upcomingTrack, setShowNowPlaying, setShowNextUp, setShowPortraitNextUp]);
+  }, [currentTime, duration, videoTarget, upcomingTrack, currentTrackId, setShowNowPlaying, setShowNextUp, setShowPortraitNextUp]);
 
   return null;
 });
