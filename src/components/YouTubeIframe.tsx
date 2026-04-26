@@ -14,6 +14,7 @@
 import { useEffect, useRef, useCallback, memo, useState, type Dispatch, type SetStateAction } from 'react';
 import { usePlayerStore } from '../store/playerStore';
 import { iframeBridge } from '../player/iframeBridge';
+import { pipService } from '../services/pipService';
 import { markTrackAsFailed } from '../services/trackVerifier';
 import { logPlaybackEvent } from '../services/telemetry';
 import { devLog } from '../utils/logger';
@@ -884,6 +885,66 @@ export const YouTubeIframe = memo(() => {
           style={{ width: '100%', height: '100%' }}
         />
       </div>
+
+      {/* "Take Out" button — orange OYÉ-Live treatment. Only when the
+          floating mini player is up. Tap = enter PiP (canvas-composite
+          card with VOYO chrome). Top-right corner so the drag layer
+          owns the rest of the surface. zIndex above the drag layer
+          (5) so taps land here, not on the close-on-tap fallback. */}
+      {isPortraitMode && (
+        <style>{`
+          @keyframes voyo-takeout-pulse {
+            0%, 100% { box-shadow: 0 2px 10px rgba(0,0,0,0.4), 0 0 12px rgba(244,162,62,0.25); }
+            50%      { box-shadow: 0 2px 10px rgba(0,0,0,0.4), 0 0 22px rgba(244,162,62,0.55); }
+          }
+          @keyframes voyo-takeout-dot {
+            0%, 100% { opacity: 1;   box-shadow: 0 0 6px  rgba(244,162,62,0.7); }
+            50%      { opacity: 0.55; box-shadow: 0 0 10px rgba(244,162,62,0.95); }
+          }
+        `}</style>
+      )}
+      {isPortraitMode && (
+        <button
+          type="button"
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.stopPropagation();
+            void pipService.enter();
+          }}
+          aria-label="Take out — Picture-in-Picture"
+          className="absolute top-2 right-2 voyo-tap-scale"
+          style={{
+            zIndex: 8,
+            padding: '5px 9px',
+            borderRadius: 999,
+            background: 'rgba(20,12,4,0.78)',
+            border: '1px solid rgba(244,162,62,0.55)',
+            color: '#F4A23E',
+            fontSize: 9,
+            fontWeight: 700,
+            letterSpacing: '0.14em',
+            textTransform: 'uppercase',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 5,
+            boxShadow: '0 2px 10px rgba(0,0,0,0.4), 0 0 12px rgba(244,162,62,0.25)',
+            animation: 'voyo-takeout-pulse 3.2s ease-in-out infinite',
+          }}
+        >
+          <span
+            aria-hidden="true"
+            style={{
+              width: 5,
+              height: 5,
+              borderRadius: '50%',
+              background: '#F4A23E',
+              boxShadow: '0 0 6px rgba(244,162,62,0.7)',
+              animation: 'voyo-takeout-dot 2.4s ease-in-out infinite',
+            }}
+          />
+          Take Out
+        </button>
+      )}
 
       {/* Portrait drag + tap layer. Drag to move the floating player.
           Tap (no drag) to close. */}

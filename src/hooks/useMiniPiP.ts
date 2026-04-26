@@ -216,22 +216,12 @@ export function useMiniPiP() {
     }
   }, [currentTrack?.trackId, upcomingTrack?.trackId, paintCard]);
 
-  // Auto-enter PiP on visibility hidden when playing. Slight delay so quick
-  // tab switches don't trigger. The user-gesture token from any recent tap
-  // is preserved by Safari/Chrome long enough for this to land.
-  useEffect(() => {
-    const onVis = () => {
-      if (document.visibilityState !== 'hidden') return;
-      if (!isPlaying || !currentTrack) return;
-      setTimeout(() => {
-        if (document.visibilityState === 'hidden' && !isActiveRef.current) {
-          void enterPiP();
-        }
-      }, 400);
-    };
-    document.addEventListener('visibilitychange', onVis);
-    return () => document.removeEventListener('visibilitychange', onVis);
-  }, [isPlaying, currentTrack, enterPiP]);
+  // No auto-enter. Per Dash: PiP is an EXPLICIT user action via the
+  // "Take Out" button on the floating mini player. Auto-firing on
+  // visibilitychange surprises the user and burns the gesture token
+  // for nothing on quick tab switches. Keep _isPlaying ref-only to
+  // avoid the unused-var lint.
+  void isPlaying;
 
   // Cleanup on unmount — exit PiP, remove the off-screen video element.
   useEffect(() => () => {
