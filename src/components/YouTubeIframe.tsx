@@ -472,11 +472,21 @@ export const YouTubeIframe = memo(() => {
             devLog('[YouTubeIframe] Video not found:', videoId);
             if (videoId) markTrackAsFailed(videoId, errorCode);
             // Re-check on fire: if the hot-swap completed during this
-            // 500ms window, don't skip away from a working track.
+            // 500ms window, don't skip away from a working track. Also
+            // check that we're STILL on this track — user may have
+            // manually skipped to another iframe-as-audio track during
+            // the 500ms; without the trackId guard we'd nextTrack() the
+            // newly-landed track. (audit-2 P1-IF-4)
             setTimeout(() => {
-              const ps = usePlayerStore.getState().playbackSource;
+              const store = usePlayerStore.getState();
+              const ps = store.playbackSource;
               if (ps === 'cached' || ps === 'r2') {
                 devLog('[YouTubeIframe] 100 recovery skipped — hot-swap won');
+                return;
+              }
+              const liveYtId = getYouTubeId(store.currentTrack?.trackId ?? '');
+              if (liveYtId !== videoId) {
+                devLog('[YouTubeIframe] 100 recovery skipped — user navigated away');
                 return;
               }
               logPlaybackEvent({
@@ -505,11 +515,19 @@ export const YouTubeIframe = memo(() => {
             devLog('[YouTubeIframe] Embed blocked, no alternative source:', videoId);
             if (videoId) markTrackAsFailed(videoId, errorCode);
             // Same re-check as the 100 path: hot-swap may have won the
-            // race during the 500ms delay. Don't skip a newly-ready track.
+            // race during the 500ms delay. Don't skip a newly-ready
+            // track. Also trackId guard so a manual skip during the
+            // 500ms can't get the wrong track skipped. (audit-2 P1-IF-4)
             setTimeout(() => {
-              const ps = usePlayerStore.getState().playbackSource;
+              const store = usePlayerStore.getState();
+              const ps = store.playbackSource;
               if (ps === 'cached' || ps === 'r2') {
                 devLog('[YouTubeIframe] embed-blocked recovery skipped — hot-swap won');
+                return;
+              }
+              const liveYtId = getYouTubeId(store.currentTrack?.trackId ?? '');
+              if (liveYtId !== videoId) {
+                devLog('[YouTubeIframe] embed-blocked recovery skipped — user navigated away');
                 return;
               }
               logPlaybackEvent({

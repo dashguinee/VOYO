@@ -1325,6 +1325,11 @@ export const VoyoMoments: React.FC<VoyoMomentsProps> = ({ onPlayFullTrack, onArt
   useEffect(() => {
     if (showOverlay) {
       setFeedNavDim(false);
+      // (audit-2 P1) Reset the swipe counter too, otherwise next nav
+      // immediately re-arms dim because counter is still ≥5. Especially
+      // matters for keyboard users who never hit the touchstart path
+      // that's the only other place this resets.
+      swipeCountRef.current = 0;
       if (dimTimerRef.current) clearTimeout(dimTimerRef.current);
     } else {
       armDimTimer();
@@ -1552,6 +1557,11 @@ export const VoyoMoments: React.FC<VoyoMomentsProps> = ({ onPlayFullTrack, onArt
     if (tapTimer.current) clearTimeout(tapTimer.current);
     if (volTimer.current) clearTimeout(volTimer.current);
     if (starHoldTimer.current) clearTimeout(starHoldTimer.current);
+    // (audit-2 P1) headerHideTimer was missed from the original cleanup.
+    // wakeHeaderOnTap schedules a 5s setHeaderVisible(false); without
+    // this clear, unmounting within 5s of a wake fires setState on a
+    // dead component (React 18 warning + zombie state on next mount).
+    if (headerHideTimer.current) clearTimeout(headerHideTimer.current);
   }, []);
 
   // slideVariants + sv removed — they were leftover from a stripped

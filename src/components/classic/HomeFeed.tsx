@@ -1002,6 +1002,18 @@ const AfricanVibesVideoCard = memo(({
     return () => clearTimeout(t);
   }, [inWindow]);
 
+  // (audit-2 P1) Reset isLoaded when the iframe unmounts. Without this,
+  // scrolling back-and-forth under the 3-mount-window grace left
+  // isLoaded=true from the previous mount; the resume postMessage
+  // (line 978) fired against a fresh iframe that hadn't booted yet,
+  // YT silently dropped it, the card stayed paused.
+  useEffect(() => {
+    if (!shouldMountIframe) {
+      setIsLoaded(false);
+      setIsReady(false);
+    }
+  }, [shouldMountIframe]);
+
   return (
     <button
       ref={cardRef}

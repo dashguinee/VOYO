@@ -274,6 +274,14 @@ const YouTubeInterceptor = ({ onVideoExtracted }: InterceptorProps) => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [successAnimation, setSuccessAnimation] = useState(false);
+  // (audit-2 P1) Track feedback-clear timeouts so unmount cancels them.
+  // Both success-clear (2s) and error-clear (2s) used raw setTimeout
+  // with no ref → setState on dead component if Interceptor unmounted
+  // (e.g. user manually skipped during the 2s window).
+  const feedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => {
+    if (feedbackTimerRef.current) clearTimeout(feedbackTimerRef.current);
+  }, []);
 
   // Random style - changes each time interceptor appears
   const [style, setStyle] = useState<InterceptorStyle>('floaty');
@@ -338,7 +346,9 @@ const YouTubeInterceptor = ({ onVideoExtracted }: InterceptorProps) => {
 
       // Success animation
       setSuccessAnimation(true);
-      setTimeout(() => {
+      if (feedbackTimerRef.current) clearTimeout(feedbackTimerRef.current);
+      feedbackTimerRef.current = setTimeout(() => {
+        feedbackTimerRef.current = null;
         setSuccessAnimation(false);
         setFeedback(null);
       }, 2000);
@@ -346,7 +356,11 @@ const YouTubeInterceptor = ({ onVideoExtracted }: InterceptorProps) => {
     } catch (err) {
       devWarn('[Interceptor] Error:', err);
       setFeedback('Oops! Try again');
-      setTimeout(() => setFeedback(null), 2000);
+      if (feedbackTimerRef.current) clearTimeout(feedbackTimerRef.current);
+      feedbackTimerRef.current = setTimeout(() => {
+        feedbackTimerRef.current = null;
+        setFeedback(null);
+      }, 2000);
     } finally {
       setIsProcessing(false);
     }
