@@ -48,7 +48,7 @@
 
 import { useEffect, useRef, RefObject } from 'react';
 import { usePlayerStore } from '../../store/playerStore';
-import { trace } from '../../services/telemetry';
+import { trace, logPlaybackEvent } from '../../services/telemetry';
 import { getBatteryState } from '../../services/battery';
 import { devLog, devWarn } from '../../utils/logger';
 import { playbackState } from '../playback/playbackState';
@@ -196,11 +196,23 @@ export function useBgEngine(params: UseBgEngineParams): BgEngineApi {
         // after extended backgrounding. teardownAudioChain releases the dead
         // node references so the useAudioChain hook re-wires on next render.
         devWarn('[BG] AudioContext closed on FG return — tearing down chain for re-wire');
-        trace('ctx_closed_teardown', usePlayerStore.getState().currentTrack?.trackId, { hidden: document.hidden });
+        const tid = usePlayerStore.getState().currentTrack?.trackId;
+        trace('ctx_closed_teardown', tid, { hidden: document.hidden });
+        // Typed event_type so dashboards can query disconnect rate directly
+        // instead of digging through the trace meta.
+        logPlaybackEvent({ event_type: 'bg_disconnect', track_id: tid || '-', meta: { reason: 'ctx_closed' } });
         try { teardownAudioChain(); } catch {}
         // The useAudioChain hook will re-wire on next render cycle.
       } else if (ctx && (ctx.state === 'suspended' || (ctx.state as string) === 'interrupted')) {
-        ctx.resume().catch(() => {});
+        const wasState = ctx.state;
+        ctx.resume().then(() => {
+          // Typed bg_reconnect alongside ae_resume — dashboards prefer typed.
+          logPlaybackEvent({
+            event_type: 'bg_reconnect',
+            track_id: usePlayerStore.getState().currentTrack?.trackId || '-',
+            meta: { from: wasState, hidden: document.hidden },
+          });
+        }).catch(() => {});
         devLog('🔄 [BG] AudioContext resumed on FG return');
       }
 
