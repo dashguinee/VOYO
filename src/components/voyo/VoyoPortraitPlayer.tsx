@@ -1064,9 +1064,8 @@ const BackdropLibrary = ({
 // rest of the UI instead of running on its own mount-time clock.
 // ============================================
 // Take Out chip — appears 5s after the floating mini player engages.
-// Lives in the same spot the Mini Player toggle was (top-right of the
-// floating mini iframe, which sits at viewport center). Fixed-positioned
-// so the BigCenterCard's opacity:0 fade can't take it down with it.
+// Pinned to bottom-right of the viewport (safe-area aware) so it sits
+// out of the way of the iframe and the mix board, always reachable.
 // z:70 puts it above the iframe (z:60) so it's always tappable.
 const TakeOutChip = memo(() => {
   const [ready, setReady] = useState(false);
@@ -1082,11 +1081,8 @@ const TakeOutChip = memo(() => {
       className="rounded-full backdrop-blur-sm border flex items-center voyo-tap-scale"
       style={{
         position: 'fixed',
-        // Anchor to the floating mini iframe (216px wide, fixed at
-        // viewport center). Top-right corner of the iframe, with a
-        // small gap so the chip doesn't graze the iframe's rounded edge.
-        top: 'calc(50% - 108px - 44px)',  // iframe top = 50% - half(216px); chip above by 44px
-        left: 'calc(50% + 108px - 110px)', // iframe right = 50% + 108; chip extends 110px back
+        bottom: 'calc(env(safe-area-inset-bottom, 0px) + 16px)',
+        right: 'calc(env(safe-area-inset-right, 0px) + 14px)',
         padding: '6px 12px',
         gap: 6,
         background: 'rgba(244,162,62,0.22)',
@@ -1099,7 +1095,7 @@ const TakeOutChip = memo(() => {
         minHeight: 44,
         zIndex: 70,
         opacity: ready ? 1 : 0,
-        transform: ready ? 'translateY(0)' : 'translateY(-4px)',
+        transform: ready ? 'translateY(0)' : 'translateY(4px)',
         pointerEvents: ready ? 'auto' : 'none',
         transition: 'opacity 700ms cubic-bezier(0.16, 1, 0.3, 1), transform 700ms cubic-bezier(0.16, 1, 0.3, 1)',
       }}
