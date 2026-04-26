@@ -2218,6 +2218,14 @@ const ReactionBar = memo(({
   const animationRef = useRef<number | null>(null);
   const recognitionRef = useRef<any>(null);
   const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Three nested countdown timers (3→2→1→startVoiceRecording) inside
+  // handleMicHoldStart. Tracked together so handleMicHoldEnd / unmount
+  // can cancel ALL of them, not just the outer 400ms holdTimer. Without
+  // this, releasing or unmounting mid-countdown still fired
+  // startVoiceRecording() at 3000ms, leaking MediaStream + MediaRecorder
+  // + AudioContext + SpeechRecognition + perpetual rAF on a dead
+  // component. (audit-2 P0-PUI-2)
+  const micCountdownTimersRef = useRef<Array<ReturnType<typeof setTimeout>>>([]);
 
   // Start voice recording for DJ commands
   const startVoiceRecording = async () => {
@@ -2299,15 +2307,34 @@ const ReactionBar = memo(({
       setVoiceCountdown(3);
       haptics.medium();
 
-      // Countdown 3-2-1
-      setTimeout(() => setVoiceCountdown(2), 1000);
-      setTimeout(() => setVoiceCountdown(1), 2000);
-      setTimeout(() => {
+      // Countdown 3-2-1 — track each timer so release/unmount can
+      // cancel them. (audit-2 P0-PUI-2)
+      micCountdownTimersRef.current.push(setTimeout(() => setVoiceCountdown(2), 1000));
+      micCountdownTimersRef.current.push(setTimeout(() => setVoiceCountdown(1), 2000));
+      micCountdownTimersRef.current.push(setTimeout(() => {
         setVoiceCountdown(null);
         startVoiceRecording();
-      }, 3000);
+      }, 3000));
     }, 400);
   };
+
+  // Cancel all in-flight mic countdown timers. Called from
+  // handleMicHoldEnd AND from the unmount cleanup below.
+  const cancelMicCountdown = useCallback(() => {
+    for (const t of micCountdownTimersRef.current) clearTimeout(t);
+    micCountdownTimersRef.current = [];
+  }, []);
+
+  // (audit-2 P0-PUI-2) Unmount cleanup for the voice surface — cancel
+  // any pending countdowns AND release active mic/recorder/context if
+  // recording was already in flight. Runs once on unmount.
+  useEffect(() => () => {
+    if (holdTimerRef.current) clearTimeout(holdTimerRef.current);
+    for (const t of micCountdownTimersRef.current) clearTimeout(t);
+    micCountdownTimersRef.current = [];
+    try { stopVoiceRecording(); } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Handle hold release - submit voice command
   const handleMicHoldEnd = () => {
@@ -2315,6 +2342,9 @@ const ReactionBar = memo(({
       clearTimeout(holdTimerRef.current);
       holdTimerRef.current = null;
     }
+    // Cancel any pending countdown timers — without this, releasing
+    // mid-countdown still fired startVoiceRecording at 3000ms.
+    cancelMicCountdown();
 
     // If was recording, stop and submit
     if (isRecording) {
@@ -3593,7 +3623,14 @@ export const VoyoPortraitPlayer = ({
   // All in-player taps go through app.playTrack → registers with lanes at p=10.
   const playTrack = useCallback((track: Track) => app.playTrack(track, 'queue'), []);
   const addReaction = usePlayerStore(s => s.addReaction);
-  const reactions = usePlayerStore(s => s.reactions);
+  // useShallow on reactions[] — playerStore.addReaction does
+  // `set({ reactions: [...state.reactions, newReaction] })` which breaks
+  // default === on every realtime broadcast (reactions are pushed across
+  // users). Without useShallow this 6k-line always-mounted component
+  // re-renders on EVERY reaction insert across the user base. The block
+  // comment 8 lines above this line literally explains the same pattern
+  // for queue/history/hotTracks — this selector got missed. (audit-2 P0-PUI-3)
+  const reactions = usePlayerStore(useShallow(s => s.reactions));
   const seekTo = usePlayerStore(s => s.seekTo);
   const jammingWith = usePlayerStore(s => s.jammingWith);
   const endJam = usePlayerStore(s => s.endJam);
@@ -4798,8 +4835,17 @@ export const VoyoPortraitPlayer = ({
   // Cleanup on unmount
   useEffect(() => {
     return () => {
+      // skeepEscalateTimer is actually a setTimeout (despite the
+      // clearInterval call working in browsers). Renaming would be
+      // semantic; keeping clearInterval here for now since both clear
+      // the same handle space in DOM impls.
       if (skeepEscalateTimer.current) clearInterval(skeepEscalateTimer.current);
       if (skeepHoldTimer.current) clearTimeout(skeepHoldTimer.current);
+      // (audit-2 P0-PUI-1) skeepSeekInterval was missed from this
+      // cleanup. The 100ms seekTo() interval kept scrubbing whatever
+      // track the next-mounted player loaded after this player
+      // unmounted (rotate device, Suspense fallback, etc).
+      if (skeepSeekInterval.current) clearInterval(skeepSeekInterval.current);
     };
   }, []);
 

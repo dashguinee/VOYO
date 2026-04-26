@@ -112,6 +112,13 @@ export const YouTubeIframe = memo(() => {
   const mountRef = useRef<HTMLDivElement>(null);
   const isApiLoadedRef = useRef(false);
   const currentVideoIdRef = useRef<string | null>(null);
+  // Pending videoId when initPlayer is called while a previous init is in
+  // flight (initializingRef.current === true). Without this, a rapid track
+  // skip A→B left initPlayer(B) silently no-op, currentVideoIdRef stuck at
+  // A, and the on-screen player stuck on track A while audio played track B.
+  // (audit-2 P0-IF-1) On A's onReady/onError we drain pendingVideoIdRef
+  // and re-call initPlayer for B.
+  const pendingVideoIdRef = useRef<string | null>(null);
   const initializingRef = useRef(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const initPlayerRef = useRef<((id: string) => void) | null>(null);
@@ -219,6 +226,13 @@ export const YouTubeIframe = memo(() => {
       playerRef.current = null;
       iframeBridge.register(null);
       currentVideoIdRef.current = null;
+      // (audit-2 P0-IF-2) Drain initializingRef. If destroy fires WHILE
+      // a `new YT.Player()` is in flight (onReady not yet called), the
+      // ref would stay true forever and brick every subsequent init for
+      // the rest of the session. Clear it here so the next initPlayer
+      // call can proceed.
+      initializingRef.current = false;
+      pendingVideoIdRef.current = null;
       if (mountRef.current) mountRef.current.innerHTML = '';
     }
   }, [playbackSource, videoTarget]);
@@ -226,7 +240,13 @@ export const YouTubeIframe = memo(() => {
   const initPlayer = useCallback((videoId: string) => {
     if (!isApiLoadedRef.current || !window.YT?.Player) return;
     if (!mountRef.current) return;
-    if (initializingRef.current) return;
+    if (initializingRef.current) {
+      // Don't drop the request — record the latest desired videoId so
+      // onReady/onError can drain it once the in-flight init settles.
+      // (audit-2 P0-IF-1)
+      pendingVideoIdRef.current = videoId;
+      return;
+    }
     if (playerRef.current && currentVideoIdRef.current === videoId) return;
 
     initializingRef.current = true;
@@ -268,6 +288,27 @@ export const YouTubeIframe = memo(() => {
       events: {
         onReady: (e: any) => {
           initializingRef.current = false;
+          // Drain any pending init request that arrived while we were
+          // racing. If the user skipped A→B before A's onReady fired,
+          // pendingVideoIdRef holds B; recurse so B gets its own player.
+          // (audit-2 P0-IF-1)
+          const pendingId = pendingVideoIdRef.current;
+          if (pendingId && pendingId !== videoId) {
+            pendingVideoIdRef.current = null;
+            // Tear down A immediately — we're about to build B's player.
+            try { e.target?.destroy?.(); } catch {}
+            playerRef.current = null;
+            iframeBridge.register(null);
+            currentVideoIdRef.current = null;
+            initPlayerRef.current?.(pendingId);
+            return;
+          }
+          pendingVideoIdRef.current = null;
+          // Defensive: YT can fire onReady against a player we already
+          // destroyed in the destroy effect (rare but observed). Skip
+          // bridge registration if our local ref doesn't agree this is
+          // the live player. (audit-2 P0-IF-2 follow-up)
+          if (!playerRef.current || !e?.target?.getPlayerState) return;
           // Register the player on the bridge so AudioPlayer can read
           // iframe currentTime + fade volume during the iframe→R2 hot-swap.
           iframeBridge.register(e.target);
@@ -391,6 +432,19 @@ export const YouTubeIframe = memo(() => {
         onError: (e: any) => {
           const errorCode = e.data;
           initializingRef.current = false;
+          // Drain pending init same as onReady — on error the in-flight
+          // player is dead, but a track-skip B may be queued. (audit-2 P0-IF-1)
+          const pendingId = pendingVideoIdRef.current;
+          if (pendingId && pendingId !== videoId) {
+            pendingVideoIdRef.current = null;
+            try { e.target?.destroy?.(); } catch {}
+            playerRef.current = null;
+            iframeBridge.register(null);
+            currentVideoIdRef.current = null;
+            initPlayerRef.current?.(pendingId);
+            return;
+          }
+          pendingVideoIdRef.current = null;
 
           // YouTube iframe error codes:
           //   2   = invalid param
