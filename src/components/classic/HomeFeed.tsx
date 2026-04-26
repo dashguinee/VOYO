@@ -1875,12 +1875,12 @@ const Top10Section = memo(({ tracks, onTrackPlay }: Top10SectionProps) => {
       <div className="relative px-4 mb-6" style={{ zIndex: 1 }}>
         <div className="overflow-hidden flex items-center gap-2">
           <h2 className="top10-header-scroll text-white font-semibold text-base whitespace-nowrap inline-block">VOYO Top 10</h2>
-          {/* Live dot — present in the CALM static moment, fades to
-              very low (not gone) while the countdown animates. Mimics
-              the "OYÉ Live" dot but quieter: narrow blink range
-              (0.42→0.62), 4.5s breath, max ~0.62 opacity so it reads
-              as ambient atmosphere — never demanding. Tuned per Dash:
-              "fade very low while top10 animates", "should be subtle". */}
+          {/* Live dot — single continuous slow breath. Always cycling
+              (no countdown gating), so the dot never "kicks on/off" —
+              just keeps tide-breathing whether the cards rotate or not.
+              Asymmetric keyframe: faster gentle inhale (~30% of cycle),
+              long slow exhale back to deep low (~70% of cycle). 7s
+              cycle, range 0.12 → 0.68. Reads as living atmosphere. */}
           <span
             aria-hidden="true"
             className="inline-block rounded-full"
@@ -1889,11 +1889,7 @@ const Top10Section = memo(({ tracks, onTrackPlay }: Top10SectionProps) => {
               height: 6,
               background: '#F4A23E',
               boxShadow: '0 0 6px rgba(244,162,62,0.45), 0 0 12px rgba(244,162,62,0.18)',
-              opacity: countdownActive ? 0.18 : 0.62,
-              animation: countdownActive
-                ? 'none'
-                : 'voyo-top10-live-blink 4.5s ease-in-out infinite',
-              transition: 'opacity 1.5s cubic-bezier(0.16, 1, 0.3, 1)',
+              animation: 'voyo-top10-live-breath 7s cubic-bezier(0.4, 0, 0.4, 1) infinite',
             }}
           />
         </div>
@@ -1939,13 +1935,16 @@ const Top10Section = memo(({ tracks, onTrackPlay }: Top10SectionProps) => {
           animation: top10-subtitle-flash 4.2s ease forwards;
           color: rgba(212,160,83,0.75);
         }
-        /* Live dot — narrow ambient breath. Range 0.42→0.62 so the
-           range itself is subtle (~20pp swing). 4.5s cycle reads as a
-           slow tide, not a heartbeat. Range tuned per Dash:
-           "appears too fast, blinks too fast, too visible". */
-        @keyframes voyo-top10-live-blink {
-          0%, 100% { opacity: 0.62; }
-          50%      { opacity: 0.42; }
+        /* Live dot — asymmetric breath cycle. Inhale is short and gentle
+           (~30% of cycle, opacity rises from deep 0.12 to soft peak 0.68),
+           exhale is long and slow (~70% of cycle, drifts back down to deep
+           low). The deep low dwell at the bookends gives the cycle a clear
+           rhythm — present then receding then present again, never a
+           constant blink. Tuned per Dash: "smoother and deeper, cyclical". */
+        @keyframes voyo-top10-live-breath {
+          0%   { opacity: 0.12; }
+          30%  { opacity: 0.68; }
+          100% { opacity: 0.12; }
         }
         @keyframes top10-marquee {
           0% { transform: translateX(0); }
