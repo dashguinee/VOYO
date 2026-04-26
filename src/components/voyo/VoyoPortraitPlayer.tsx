@@ -1063,58 +1063,6 @@ const BackdropLibrary = ({
 // Any tap / reveal resets both timers — the button breathes with the
 // rest of the UI instead of running on its own mount-time clock.
 // ============================================
-// Take Out chip — appears 5s after the floating mini player engages.
-// Pinned to bottom-right of the viewport (safe-area aware) so it sits
-// out of the way of the iframe and the mix board, always reachable.
-// z:70 puts it above the iframe (z:60) so it's always tappable.
-const TakeOutChip = memo(() => {
-  const [ready, setReady] = useState(false);
-  useEffect(() => {
-    const t = setTimeout(() => setReady(true), 5000);
-    return () => clearTimeout(t);
-  }, []);
-  return (
-    <button
-      type="button"
-      onClick={(e) => { e.stopPropagation(); void pipService.enter(); }}
-      aria-label="Take Out — Picture-in-Picture"
-      className="rounded-full backdrop-blur-sm border flex items-center voyo-tap-scale"
-      style={{
-        position: 'fixed',
-        bottom: 'calc(env(safe-area-inset-bottom, 0px) + 16px)',
-        right: 'calc(env(safe-area-inset-right, 0px) + 14px)',
-        padding: '6px 12px',
-        gap: 6,
-        background: 'rgba(244,162,62,0.22)',
-        border: '1.5px solid rgba(244,162,62,0.60)',
-        color: '#F4A23E',
-        fontSize: 12,
-        fontWeight: 600,
-        letterSpacing: '0.04em',
-        boxShadow: '0 0 16px rgba(244,162,62,0.50), 0 0 28px rgba(244,162,62,0.25)',
-        minHeight: 44,
-        zIndex: 70,
-        opacity: ready ? 1 : 0,
-        transform: ready ? 'translateY(0)' : 'translateY(4px)',
-        pointerEvents: ready ? 'auto' : 'none',
-        transition: 'opacity 700ms cubic-bezier(0.16, 1, 0.3, 1), transform 700ms cubic-bezier(0.16, 1, 0.3, 1)',
-      }}
-    >
-      <span
-        aria-hidden="true"
-        style={{
-          width: 6, height: 6, borderRadius: '50%',
-          background: '#FBBF77',
-          boxShadow: '0 0 6px rgba(251,191,119,0.9)',
-        }}
-      />
-      <Play size={12} fill="currentColor" />
-      <span>Take Out</span>
-    </button>
-  );
-});
-TakeOutChip.displayName = 'TakeOutChip';
-
 const ExpandVideoButton = memo(({ onClick, isIframeAudio, isMiniPlayerActive, controlsActive }: { onClick: () => void; isIframeAudio: boolean; isMiniPlayerActive: boolean; controlsActive: boolean }) => {
   const [mode, setMode] = useState<'active' | 'dimmed'>('active');
   const [extraFaded, setExtraFaded] = useState(false);
@@ -1903,7 +1851,10 @@ const BigCenterCard = memo(({ track, onExpandVideo, onShowLyrics, hideThumb, isI
   // Wraps the card in a 3D space. perspective: 1200px is deep enough
   // that the rotations look natural, not fish-eye. The card inside
   // transforms in this 3D space.
-  <div style={{ perspective: '1200px' }}>
+  // Sized to match the card so the morphing chip (rendered as a
+  // sibling, not a child) can anchor to the same top-right corner
+  // without inheriting the card's opacity:0 fade in mini-player mode.
+  <div className="relative w-56 h-56 md:w-64 md:h-64" style={{ perspective: '1200px' }}>
   <div
     className="relative w-56 h-56 md:w-64 md:h-64 rounded-[2rem] overflow-hidden z-20 group"
     style={{
@@ -2031,13 +1982,6 @@ const BigCenterCard = memo(({ track, onExpandVideo, onShowLyrics, hideThumb, isI
         }}
     />
 
-    {/* Video mode / Mini Player button. Pulses + shows a live dot when
-        playbackSource === 'iframe' (audio is flowing through the iframe,
-        tap to open the mini player and see the video). */}
-    {onExpandVideo && (
-      <ExpandVideoButton onClick={onExpandVideo} isIframeAudio={!!isIframeAudio} isMiniPlayerActive={isMiniPlayerActive} controlsActive={controlsActive} />
-    )}
-
     {/* ── EDGE HIGHLIGHT ─────────────────────────────────────────────
         The left border is slightly brighter than the right (the light
         source is top-left, matching the glossy gradient above). This
@@ -2055,6 +1999,12 @@ const BigCenterCard = memo(({ track, onExpandVideo, onShowLyrics, hideThumb, isI
         }}
     />
   </div>
+  {/* Mini Player → Take Out morphing chip. Sibling of the faded card so
+      it stays visible after BigCenterCard fades to opacity:0 in
+      mini-player mode (CSS opacity cascades to descendants). */}
+  {onExpandVideo && (
+    <ExpandVideoButton onClick={onExpandVideo} isIframeAudio={!!isIframeAudio} isMiniPlayerActive={isMiniPlayerActive} controlsActive={controlsActive} />
+  )}
   {/* Close perspective container */}
   </div>
   );
@@ -5270,11 +5220,6 @@ export const VoyoPortraitPlayer = ({
               <Play size={32} className="text-white/20" />
             </div>
           )}
-
-          {/* TAKE OUT chip — fixed-positioned just above the floating
-              mini iframe. 5s mount-delay so user enjoys the video first.
-              Tap → pipService.enter() (PiP card flies out). */}
-          {videoTarget === 'portrait' && <TakeOutChip />}
 
           {/* LEFT QUICK CONTROLS - ")" arc: center reaches IN toward card.
               Always mounted (conditional isControlsRevealed now controls
