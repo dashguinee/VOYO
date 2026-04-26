@@ -4311,6 +4311,48 @@ export const VoyoPortraitPlayer = ({
   // reset (snaps the canvas closed and returns to home). Fast scroll
   // detection compares dy/dt against a velocity threshold.
   const [portalProgress, setPortalProgress] = useState(0); // 0 = home, 1 = full canvas
+
+  // PiP / Take Out mode tracking. While in PiP, drop a "Next up: X" Oyo
+  // pill every 5 song changes — ambient reminder for the user when they
+  // come back to the app, without spamming per-track overlays.
+  // enterpictureinpicture/leavepictureinpicture bubble from the video
+  // element to document, so document is the right global listening point.
+  const isPipActiveRef = useRef(false);
+  const pipSongCountRef = useRef(0);
+  useEffect(() => {
+    const onEnter = () => { isPipActiveRef.current = true; pipSongCountRef.current = 0; };
+    const onLeave = () => { isPipActiveRef.current = false; pipSongCountRef.current = 0; };
+    document.addEventListener('enterpictureinpicture', onEnter);
+    document.addEventListener('leavepictureinpicture', onLeave);
+    return () => {
+      document.removeEventListener('enterpictureinpicture', onEnter);
+      document.removeEventListener('leavepictureinpicture', onLeave);
+    };
+  }, []);
+
+  // Per-track-change tick: while PiP is the active mode, every 5th song
+  // change drops an Oyo pill with the next track. Reads upcomingTrack
+  // from the live queue at fire time so the message reflects the queue
+  // as it stands, not a stale closure capture.
+  const currentTrackIdForPip = currentTrack?.trackId ?? null;
+  useEffect(() => {
+    if (!currentTrackIdForPip || !isPipActiveRef.current) return;
+    pipSongCountRef.current += 1;
+    if (pipSongCountRef.current % 5 !== 0) return;
+    const next = usePlayerStore.getState().queue[0]?.track;
+    if (!next?.title) return;
+    const phrasings = [
+      `Next up · ${next.title}`,
+      `${next.title} coming next`,
+      `Coming up · ${next.title}`,
+      `Up next · ${next.title}`,
+      `${next.title} on deck`,
+    ];
+    const text = phrasings[Math.floor(Math.random() * phrasings.length)];
+    try {
+      window.dispatchEvent(new CustomEvent('voyo:oyo-says', { detail: { text } }));
+    } catch { /* never break */ }
+  }, [currentTrackIdForPip]);
   const lastScrollY = useRef(0);
   const lastScrollAt = useRef(0);
   const wheelResetting = useRef(false);
