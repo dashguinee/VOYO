@@ -1097,6 +1097,19 @@ const ExpandVideoButton = memo(({ onClick, isIframeAudio, isMiniPlayerActive, co
     return () => { clearTimeout(t1); clearTimeout(t2); };
   }, [isMiniPlayerActive]);
 
+  // After Take Out settles for ~2.2s, park the chip (fade out from the
+  // card spot). User has seen the morph; the bottom-right rising chip
+  // takes over for subsequent invocations. Resets if mini player closes.
+  const [parked, setParked] = useState(false);
+  useEffect(() => {
+    if (phase !== 'takeout') {
+      setParked(false);
+      return;
+    }
+    const t = setTimeout(() => setParked(true), 2200);
+    return () => clearTimeout(t);
+  }, [phase]);
+
   const isDimmed = mode === 'dimmed';
   const isTakeout = phase === 'takeout' || phase === 'morphing';
   const isOrange = phase === 'takeout';
@@ -1151,7 +1164,8 @@ const ExpandVideoButton = memo(({ onClick, isIframeAudio, isMiniPlayerActive, co
               : (isIframeAudio && !isDimmed && phase === 'mini'
                   ? 'voyo-iframe-pulse 1.6s ease-in-out infinite'
                   : 'none'),
-          opacity: extraFaded ? 0.8 : 1,
+          opacity: parked ? 0 : (extraFaded ? 0.8 : 1),
+          pointerEvents: parked ? 'none' : 'auto',
           transition: [
             'padding 700ms cubic-bezier(0.16, 1, 0.3, 1)',
             'background 900ms cubic-bezier(0.16, 1, 0.3, 1)',
@@ -1197,6 +1211,71 @@ const ExpandVideoButton = memo(({ onClick, isIframeAudio, isMiniPlayerActive, co
     </>
   );
 });
+
+// ============================================
+// BOTTOM TAKE OUT CHIP — rises from bottom-right when user scrolls
+// to the mix-board area. After 5s settled, decays to 7% opacity (still
+// tappable, just out of the way). Only mounts when mini player is up.
+// ============================================
+const BottomTakeOutChip = memo(({ portalProgress }: { portalProgress: number }) => {
+  const [decayed, setDecayed] = useState(false);
+  // riseProgress: 0 below 0.2, 1 by 0.45 — rises in tandem with the
+  // mix-board layer climbing into view.
+  const riseProgress = Math.max(0, Math.min(1, (portalProgress - 0.2) / 0.25));
+  const risen = riseProgress >= 1;
+
+  useEffect(() => {
+    if (!risen) {
+      setDecayed(false);
+      return;
+    }
+    const t = setTimeout(() => setDecayed(true), 5000);
+    return () => clearTimeout(t);
+  }, [risen]);
+
+  return (
+    <button
+      type="button"
+      onClick={(e) => { e.stopPropagation(); void pipService.enter(); }}
+      aria-label="Take Out — Picture-in-Picture"
+      className="rounded-full backdrop-blur-sm border flex items-center voyo-tap-scale"
+      style={{
+        position: 'fixed',
+        bottom: 'calc(env(safe-area-inset-bottom, 0px) + 16px)',
+        right: 'calc(env(safe-area-inset-right, 0px) + 14px)',
+        padding: '6px 12px',
+        gap: 6,
+        background: 'rgba(244,162,62,0.20)',
+        border: '1.5px solid rgba(244,162,62,0.55)',
+        color: '#F4A23E',
+        fontSize: 12,
+        fontWeight: 600,
+        letterSpacing: '0.04em',
+        boxShadow: '0 0 14px rgba(244,162,62,0.45), 0 0 24px rgba(244,162,62,0.20)',
+        minHeight: 44,
+        zIndex: 70,
+        opacity: decayed ? 0.07 : riseProgress,
+        transform: `translateY(${(1 - riseProgress) * 36}px)`,
+        pointerEvents: riseProgress > 0.5 ? 'auto' : 'none',
+        transition: decayed
+          ? 'opacity 1.6s cubic-bezier(0.16, 1, 0.3, 1)'
+          : 'opacity 220ms ease-out, transform 360ms cubic-bezier(0.16, 1, 0.3, 1)',
+      }}
+    >
+      <span
+        aria-hidden="true"
+        style={{
+          width: 6, height: 6, borderRadius: '50%',
+          background: '#FBBF77',
+          boxShadow: '0 0 6px rgba(251,191,119,0.9)',
+        }}
+      />
+      <Play size={12} fill="currentColor" />
+      <span>Take Out</span>
+    </button>
+  );
+});
+BottomTakeOutChip.displayName = 'BottomTakeOutChip';
 
 // ============================================
 // RIGHT-SIDE TOOLBAR - Vertical action buttons
@@ -6183,6 +6262,14 @@ export const VoyoPortraitPlayer = ({
           </div>
         )}
       
+
+      {/* BOTTOM-RIGHT TAKE OUT CHIP — rises into view when user scrolls
+          toward the mix board (portalProgress > 0.2), settles, then
+          decays to 7% opacity after 5s. Only mounted while the mini
+          player is up — otherwise Take Out has nothing to take out. */}
+      {videoTarget === 'portrait' && (
+        <BottomTakeOutChip portalProgress={portalProgress} />
+      )}
 
       {/* LYRICS OVERLAY - Tap album art to show */}
       {showLyricsOverlay && currentTrack && (
