@@ -6129,7 +6129,11 @@ export const VoyoPortraitPlayer = ({
         }}
       />
 
-
+      {/* Scroll runway — settle room for the player surface to breathe.
+          Was 1200px when Layer C lived here; now 480px since Layer C is
+          gone. Just enough so OYO can scroll into a clean settled state
+          past the music shelves. */}
+      <div className="flex-shrink-0 w-full" style={{ height: '480px' }} />
 
       {/* BOOST SETTINGS PANEL */}
       <div data-no-canvas-swipe="true">
