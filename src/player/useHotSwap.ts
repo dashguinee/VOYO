@@ -302,9 +302,16 @@ export function useHotSwap(
   // can see how long each track spent on iframe before the R2 swap landed.
   const iframeStartedAtRef = useRef<number>(0);
 
-  // Watcher setup — fires on every iframe-mode track.
+  // Watcher setup — fires on every iframe-mode track LONGER than 5min.
+  // Per Dash 2026-04-26: short songs don't need hot swap (R2 lands ~11s
+  // and the song is over before users care); the iframe-as-audio plays
+  // out fine and the next play hits R2 fast path. Hot swap is gated to
+  // long tracks + mixes (>5min) where users would otherwise eat iframe
+  // quality for the rest of a 7-minute beat tape.
+  const HOTSWAP_MIN_DURATION_S = 5 * 60; // 5 minutes
   useEffect(() => {
     if (playbackSource !== 'iframe' || !currentTrack) return;
+    if (!currentTrack.duration || currentTrack.duration < HOTSWAP_MIN_DURATION_S) return;
     const trackId = currentTrack.trackId;
     iframeStartedAtRef.current = Date.now();
 
