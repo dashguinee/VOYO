@@ -1056,24 +1056,30 @@ const BackdropLibrary = ({
 // Any tap / reveal resets both timers — the button breathes with the
 // rest of the UI instead of running on its own mount-time clock.
 // ============================================
-// Standalone Take Out chip — sits in the SAME spot the Mini Player toggle
-// occupied (top-3 right-3 of the BigCenterCard area). Rendered as a
-// sibling of the card so it stays visible when the card fades to
-// opacity:0 in mini mode. 5s mount-delay so user enjoys the video first.
-const TakeOutChip = memo(({ controlsActive }: { controlsActive: boolean }) => {
+// Take Out chip — appears 5s after the floating mini player engages.
+// Lives in the same spot the Mini Player toggle was (top-right of the
+// floating mini iframe, which sits at viewport center). Fixed-positioned
+// so the BigCenterCard's opacity:0 fade can't take it down with it.
+// z:70 puts it above the iframe (z:60) so it's always tappable.
+const TakeOutChip = memo(() => {
   const [ready, setReady] = useState(false);
   useEffect(() => {
     const t = setTimeout(() => setReady(true), 5000);
     return () => clearTimeout(t);
   }, []);
-  const visible = ready && controlsActive;
   return (
     <button
       type="button"
       onClick={(e) => { e.stopPropagation(); void pipService.enter(); }}
       aria-label="Take Out — Picture-in-Picture"
-      className="absolute top-3 right-3 z-[70] rounded-full backdrop-blur-sm border flex items-center voyo-tap-scale"
+      className="rounded-full backdrop-blur-sm border flex items-center voyo-tap-scale"
       style={{
+        position: 'fixed',
+        // Anchor to the floating mini iframe (216px wide, fixed at
+        // viewport center). Top-right corner of the iframe, with a
+        // small gap so the chip doesn't graze the iframe's rounded edge.
+        top: 'calc(50% - 108px - 44px)',  // iframe top = 50% - half(216px); chip above by 44px
+        left: 'calc(50% + 108px - 110px)', // iframe right = 50% + 108; chip extends 110px back
         padding: '6px 12px',
         gap: 6,
         background: 'rgba(244,162,62,0.22)',
@@ -1084,9 +1090,10 @@ const TakeOutChip = memo(({ controlsActive }: { controlsActive: boolean }) => {
         letterSpacing: '0.04em',
         boxShadow: '0 0 16px rgba(244,162,62,0.50), 0 0 28px rgba(244,162,62,0.25)',
         minHeight: 44,
-        opacity: visible ? 1 : 0,
-        transform: visible ? 'translateY(0)' : 'translateY(-4px)',
-        pointerEvents: visible ? 'auto' : 'none',
+        zIndex: 70,
+        opacity: ready ? 1 : 0,
+        transform: ready ? 'translateY(0)' : 'translateY(-4px)',
+        pointerEvents: ready ? 'auto' : 'none',
         transition: 'opacity 700ms cubic-bezier(0.16, 1, 0.3, 1), transform 700ms cubic-bezier(0.16, 1, 0.3, 1)',
       }}
     >
@@ -5281,14 +5288,10 @@ export const VoyoPortraitPlayer = ({
             </div>
           )}
 
-          {/* TAKE OUT chip — sits where the Mini Player toggle was
-              (top-right corner of the card area), but as a SIBLING of
-              BigCenterCard so it stays visible when the card fades to
-              opacity:0 in mini mode. 5s mount-delay so user enjoys the
-              video first. Tap → pipService.enter() (PiP card flies out). */}
-          {videoTarget === 'portrait' && (
-            <TakeOutChip controlsActive={isControlsRevealed} />
-          )}
+          {/* TAKE OUT chip — fixed-positioned just above the floating
+              mini iframe. 5s mount-delay so user enjoys the video first.
+              Tap → pipService.enter() (PiP card flies out). */}
+          {videoTarget === 'portrait' && <TakeOutChip />}
 
           {/* LEFT QUICK CONTROLS - ")" arc: center reaches IN toward card.
               Always mounted (conditional isControlsRevealed now controls
