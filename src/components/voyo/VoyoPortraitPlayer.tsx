@@ -2932,6 +2932,39 @@ const FullscreenVideoPlayer = ({
   <div
     className="fixed inset-0 z-[100] bg-black flex flex-col"
   >
+    {/* Take Out — orange OYÉ-Live treatment, top-right. Same chrome as
+        the morphed Mini Player → Take Out chip on BigCenterCard, but
+        always-orange here (we're already in fullscreen video mode, no
+        morph needed). Tap → pipService.enter() → canvas-composite PiP. */}
+    <button
+      type="button"
+      onClick={() => { void pipService.enter(); }}
+      aria-label="Take Out — Picture-in-Picture"
+      className="absolute top-3 right-3 z-[110] rounded-full backdrop-blur-sm border flex items-center voyo-tap-scale"
+      style={{
+        padding: '7px 12px',
+        gap: 6,
+        background: 'rgba(244,162,62,0.18)',
+        border: '1px solid rgba(244,162,62,0.55)',
+        color: '#F4A23E',
+        fontSize: 11,
+        fontWeight: 700,
+        letterSpacing: '0.10em',
+        boxShadow: '0 0 14px rgba(244,162,62,0.45), 0 0 24px rgba(244,162,62,0.22)',
+        minHeight: 38,
+      }}
+    >
+      <span
+        aria-hidden="true"
+        style={{
+          width: 6, height: 6, borderRadius: '50%',
+          background: '#F4A23E',
+          boxShadow: '0 0 6px rgba(244,162,62,0.9)',
+        }}
+      />
+      Take Out
+    </button>
+
     {/* Video Container - YouTube iframe would go here */}
     <div className="flex-1 relative bg-black flex items-center justify-center">
       {/* Placeholder - in production this would be a YouTube embed */}
