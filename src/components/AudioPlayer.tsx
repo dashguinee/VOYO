@@ -32,6 +32,7 @@ import type { BoostPreset } from '../audio/graph/boostPresets';
 // so one fix = both paths. R2_AUDIO stays here for the src-assignment URL.
 import { r2HasTrack, R2_AUDIO_BASE as R2_AUDIO } from '../player/r2Probe';
 import { useHotSwap } from '../player/useHotSwap';
+import { useMiniPiP } from '../hooks/useMiniPiP';
 import { useR2KnownStore } from '../store/r2KnownStore';
 import { getYouTubeId } from '../utils/voyoId';
 export type { BoostPreset };
@@ -173,6 +174,14 @@ export const AudioPlayer = () => {
   // the cusp (~1s before R2 lands) so they don't eat iframe quality for
   // the rest of the song. Creating our own experience, true to our feels.
   useHotSwap(currentTrack, playbackSource, audioRef);
+
+  // Mini PiP — canvas-composite (album art + Now Playing + Next Up
+  // chrome) PiP'd via captureStream. Auto-enters when app goes
+  // background while playing, restores naturally on FG return.
+  // Registers with pipService so the existing Mini Player tap buttons
+  // (escape-Oye + VoyoPortraitPlayer expand) actually fire.
+  // (audit-2 P1-IF-3 — pipService.register was never called before.)
+  useMiniPiP();
 
   // Request screen wake-lock while playing so the device doesn't deep-sleep.
   useWakeLock(isPlaying);
