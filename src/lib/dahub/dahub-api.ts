@@ -12,6 +12,7 @@ import { createClient } from '@supabase/supabase-js';
 import { supabase } from '../supabase';
 import { devLog, devWarn } from '../../utils/logger';
 import { makeReconnectingChannel } from '../realtime/reconnect';
+import { trace } from '../../services/telemetry';
 
 // Command Center's Supabase credentials (social + notifications data).
 // Two naming schemes coexist — accept either so legacy deployments and
@@ -218,9 +219,11 @@ export const friendsAPI = {
         p_nickname: nickname || null
       });
 
+      if (error) trace('dahub_fail', null, { op: 'add_friend', code: error.code, msg: error.message?.slice(0, 80) });
       return !error;
-    } catch (err) {
+    } catch (err: any) {
       devWarn('[DAHUB] Failed to add friend:', err);
+      trace('dahub_fail', null, { op: 'add_friend', err: err?.name || 'unknown', msg: String(err?.message || '').slice(0, 80) });
       return false;
     }
   },
@@ -234,9 +237,11 @@ export const friendsAPI = {
         p_friend_id: friendId
       });
 
+      if (error) trace('dahub_fail', null, { op: 'remove_friend', code: error.code, msg: error.message?.slice(0, 80) });
       return !error;
-    } catch (err) {
+    } catch (err: any) {
       devWarn('[DAHUB] Failed to remove friend:', err);
+      trace('dahub_fail', null, { op: 'remove_friend', err: err?.name || 'unknown', msg: String(err?.message || '').slice(0, 80) });
       return false;
     }
   },
@@ -443,7 +448,10 @@ export const messagesAPI = {
         attachment_type: attachment?.type || null,
         attachment_data: attachment?.data || null
       });
-      if (error) return false;
+      if (error) {
+        trace('dahub_fail', null, { op: 'send_message', code: error.code, msg: error.message?.slice(0, 80) });
+        return false;
+      }
 
       // Fire-and-forget notification insert for the recipient. Targeted
       // via target_user so only they see it; app='all' so it lands in
@@ -468,8 +476,9 @@ export const messagesAPI = {
         });
 
       return true;
-    } catch (err) {
+    } catch (err: any) {
       devWarn('[DAHUB] Failed to send message:', err);
+      trace('dahub_fail', null, { op: 'send_message', err: err?.name || 'unknown', msg: String(err?.message || '').slice(0, 80) });
       return false;
     }
   },
@@ -483,9 +492,11 @@ export const messagesAPI = {
         p_friend_id: friendId
       });
 
+      if (error) trace('dahub_fail', null, { op: 'mark_read', code: error.code, msg: error.message?.slice(0, 80) });
       return !error;
-    } catch (err) {
+    } catch (err: any) {
       devWarn('[DAHUB] Failed to mark messages read:', err);
+      trace('dahub_fail', null, { op: 'mark_read', err: err?.name || 'unknown', msg: String(err?.message || '').slice(0, 80) });
       return false;
     }
   },
@@ -579,9 +590,11 @@ export const presenceAPI = {
         p_activity_data: activityData || null
       });
 
+      if (error) trace('dahub_fail', null, { op: 'update_presence', code: error.code, msg: error.message?.slice(0, 80) });
       return !error;
-    } catch (err) {
+    } catch (err: any) {
       devWarn('[DAHUB] Failed to update presence:', err);
+      trace('dahub_fail', null, { op: 'update_presence', err: err?.name || 'unknown', msg: String(err?.message || '').slice(0, 80) });
       return false;
     }
   },

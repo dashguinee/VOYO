@@ -33,6 +33,7 @@
 import type { Track } from '../types';
 import { onSignal as oyoPlanSignal } from './oyoPlan';
 import { usePlayerStore } from '../store/playerStore';
+import { trace } from './telemetry';
 
 // ── Queue upsert helper (internal + exported via ensureTrackReady) ────────
 
@@ -69,7 +70,16 @@ async function queueUpsertForPreWarm(
       p_artist:     track.artist ?? null,
       p_session:    sessionId,
     }),
-  }).catch(() => {});
+  }).then(res => {
+    // Non-2xx on the queue RPC means the lane priority bump didn't take —
+    // user-clicked tracks won't jump the line. Worth surfacing.
+    if (!res.ok) trace('api_fail', track.trackId, { endpoint: 'queue_rpc', status: res.status });
+  }).catch((err) => {
+    trace('api_fail', track.trackId, {
+      endpoint: 'queue_rpc',
+      err: err?.name === 'TimeoutError' ? 'timeout' : (err?.name || 'unknown'),
+    });
+  });
 }
 
 const R2_POLL_INTERVAL_MS = 2000;
