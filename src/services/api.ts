@@ -10,6 +10,7 @@
  */
 
 import { devLog, devWarn } from '../utils/logger';
+import { trace } from './telemetry';
 
 // Production endpoints
 const API_URL = 'https://voyo-edge.dash-webtv.workers.dev';
@@ -46,6 +47,7 @@ export async function searchMusic(query: string, limit: number = 10): Promise<Se
 
   if (!response.ok) {
     devWarn(`[API] YouTube search failed: ${response.status}`);
+    trace('api_fail', null, { endpoint: 'search', status: response.status });
     return []; // Return empty, don't throw - let caller handle gracefully
   }
 
@@ -138,7 +140,10 @@ export async function tryEdgeExtraction(voyoId: string): Promise<EdgeStreamResul
 
     // Guard against non-2xx responses that return HTML or empty bodies —
     // calling .json() on those throws and we want to return null cleanly.
-    if (!response.ok) return null;
+    if (!response.ok) {
+      trace('api_fail', youtubeId, { endpoint: 'edge_extract', status: response.status });
+      return null;
+    }
 
     const data = await response.json();
 
@@ -147,7 +152,12 @@ export async function tryEdgeExtraction(voyoId: string): Promise<EdgeStreamResul
     }
 
     return null;
-  } catch (error) {
+  } catch (error: any) {
+    trace('api_fail', youtubeId, {
+      endpoint: 'edge_extract',
+      err: error?.name === 'TimeoutError' ? 'timeout' : (error?.name || 'unknown'),
+      msg: String(error?.message || '').slice(0, 80),
+    });
     return null;
   }
 }
@@ -182,6 +192,7 @@ export async function checkR2Cache(videoId: string, preferQuality: 'high' | 'low
     });
 
     if (!response.ok) {
+      trace('api_fail', youtubeId, { endpoint: 'r2_exists', status: response.status });
       return { exists: false, url: null, hasHigh: false, hasLow: false, quality: null };
     }
 
@@ -202,7 +213,14 @@ export async function checkR2Cache(videoId: string, preferQuality: 'high' | 'low
     }
 
     return { exists: false, url: null, hasHigh: false, hasLow: false, quality: null };
-  } catch {
+  } catch (error: any) {
+    // Telemetry only on non-abort failures — AbortController is normal flow.
+    if (error?.name !== 'AbortError') {
+      trace('api_fail', youtubeId, {
+        endpoint: 'r2_exists',
+        err: error?.name === 'TimeoutError' ? 'timeout' : (error?.name || 'unknown'),
+      });
+    }
     return { exists: false, url: null, hasHigh: false, hasLow: false, quality: null };
   }
 }
@@ -232,6 +250,7 @@ export async function uploadToR2(
     );
 
     if (!response.ok) {
+      trace('api_fail', youtubeId, { endpoint: 'r2_upload', status: response.status });
       return { success: false, error: `Upload failed (${response.status})` };
     }
 
@@ -245,6 +264,11 @@ export async function uploadToR2(
     return { success: false, error: data.error || 'Upload failed' };
   } catch (err: any) {
     devWarn(`🌐 [R2] Upload failed for ${youtubeId}:`, err.message);
+    trace('api_fail', youtubeId, {
+      endpoint: 'r2_upload',
+      err: err?.name === 'TimeoutError' ? 'timeout' : (err?.name || 'unknown'),
+      msg: String(err?.message || '').slice(0, 80),
+    });
     return { success: false, error: err.message };
   }
 }
@@ -421,8 +445,17 @@ export async function prefetchTrack(trackId: string): Promise<boolean> {
     const response = await fetch(`${API_URL}/prefetch?v=${trackId}`, {
       signal: AbortSignal.timeout(5000),
     });
+    if (!response.ok) {
+      trace('api_fail', trackId, { endpoint: 'prefetch', status: response.status });
+    }
     return response.ok;
-  } catch (error) {
+  } catch (error: any) {
+    if (error?.name !== 'AbortError') {
+      trace('api_fail', trackId, {
+        endpoint: 'prefetch',
+        err: error?.name === 'TimeoutError' ? 'timeout' : (error?.name || 'unknown'),
+      });
+    }
     return false;
   }
 }
