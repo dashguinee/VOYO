@@ -22,6 +22,7 @@
     "react-dom": "^19.2.0",
     "react-router-dom": "^7.10.1",
     "tailwindcss": "^4.1.17",
+    "web-vitals": "^5.2.0",
     "zustand": "^5.0.9"
   },
   "devDependencies": {

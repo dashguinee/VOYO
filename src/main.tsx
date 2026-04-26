@@ -5,12 +5,17 @@ import './index.css'
 import App from './App.tsx'
 import { ProfilePage } from './components/profile/ProfilePage'
 import { installErrorReporter } from './utils/errorReporter'
+import { installWebVitals } from './services/webVitals'
 
 // Wire window-level error capture before React mounts. Catches everything
 // that escapes React's error boundaries — uncaught promises, sync throws
 // in non-React modules, async event handlers. Routes to telemetry as
 // 'window_error' / 'unhandled_rejection' subtypes.
 installErrorReporter();
+
+// LCP / INP / CLS sampling. One sample per metric per page lifecycle,
+// written as event_type='vital'. Lets us watch p75 perf on real devices.
+installWebVitals();
 
 // ── PWA rotation safety net ──
 // Manifest sets "orientation": "any" and no code locks orientation today,

@@ -35,6 +35,7 @@ export type PlaybackEventType =
   | 'source_resolved'    // a source (cache/r2/vps/edge) delivered the track
   | 'stall'              // playback stalled during streaming
   | 'skip_auto'          // track auto-skipped (watchdog / max-retry / recovery)
+  | 'vital'              // web-vital sample: LCP, INP, CLS (one per metric per session)
   | 'trace';             // full-session debug trace (localStorage.voyoDebug = '1')
 
 export type PlaybackSource =
