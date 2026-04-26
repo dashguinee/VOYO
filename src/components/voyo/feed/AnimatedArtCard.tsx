@@ -54,6 +54,15 @@ export const AnimatedArtCard = ({
   // Calculate animation duration from BPM
   const beatDuration = 60 / bpm; // Seconds per beat
 
+  // Inactive cards live in the 3-window mount neighborhood but the user
+  // isn't looking at them. Cap the heavy 80-200px box-shadow blurs so
+  // mid-tier Android compositor isn't burning GPU painting glows nobody
+  // sees. Active card keeps its full bloom — feel unchanged.
+  const heavyShadowOval     = isActive ? 'inset 0 0 80px 30px rgba(0,0,0,0.5), inset 0 0 160px 60px rgba(0,0,0,0.25)' : 'inset 0 0 60px 24px rgba(0,0,0,0.5), inset 0 0 80px 30px rgba(0,0,0,0.25)';
+  const ovalBloom           = (color: string) => isActive ? `0 0 80px ${color}25, 0 0 160px ${color}10` : `0 0 60px ${color}18, 0 0 80px ${color}08`;
+  const discBloom           = (color: string) => isActive ? `0 0 60px ${color}30, 0 0 120px ${color}15, inset 0 0 30px rgba(0,0,0,0.5)` : `0 0 40px ${color}20, 0 0 60px ${color}08, inset 0 0 30px rgba(0,0,0,0.5)`;
+  const heavyShadowFullscreen = isActive ? 'inset 0 0 100px 40px rgba(0,0,0,0.6), inset 0 0 200px 80px rgba(0,0,0,0.3)' : 'inset 0 0 60px 24px rgba(0,0,0,0.6), inset 0 0 100px 40px rgba(0,0,0,0.3)';
+
   // ============================================
   // FLOATING OVAL MODE - Album art in oval shape floating in darkness
   // ============================================
@@ -76,7 +85,7 @@ export const AnimatedArtCard = ({
         <div
           className="absolute inset-0 pointer-events-none z-20"
           style={{
-            boxShadow: 'inset 0 0 80px 30px rgba(0,0,0,0.5), inset 0 0 160px 60px rgba(0,0,0,0.25)',
+            boxShadow: heavyShadowOval,
             }}
         />
 
@@ -103,7 +112,7 @@ export const AnimatedArtCard = ({
               height: '44vw', // Wider and slimmer
               maxHeight: '38vh',
               borderRadius: '42%', // Smoother edges - between square and oval
-              boxShadow: `0 0 80px ${dominantColor}25, 0 0 160px ${dominantColor}10`,
+              boxShadow: ovalBloom(dominantColor),
               opacity: imageLoaded ? 1 : 0,
               transform: isPlaying ? 'scale(1.015)' : 'scale(1)',
               transition: 'opacity 0.5s cubic-bezier(0.16, 1, 0.3, 1), transform 0.6s cubic-bezier(0.16, 1, 0.3, 1)',
@@ -174,7 +183,7 @@ export const AnimatedArtCard = ({
         <div
           className="absolute inset-0 pointer-events-none z-20"
           style={{
-            boxShadow: 'inset 0 0 80px 30px rgba(0,0,0,0.5), inset 0 0 160px 60px rgba(0,0,0,0.25)',
+            boxShadow: heavyShadowOval,
             }}
         />
 
@@ -210,7 +219,7 @@ export const AnimatedArtCard = ({
               className="absolute inset-0 rounded-full"
               style={{
                 background: `linear-gradient(135deg, #1a1a1a 0%, #333 50%, #1a1a1a 100%)`,
-                boxShadow: `0 0 60px ${dominantColor}30, 0 0 120px ${dominantColor}15, inset 0 0 30px rgba(0,0,0,0.5)`,
+                boxShadow: discBloom(dominantColor),
                 }}
             />
 
@@ -338,7 +347,7 @@ export const AnimatedArtCard = ({
       <div
         className="absolute inset-0 pointer-events-none z-10"
         style={{
-          boxShadow: 'inset 0 0 100px 40px rgba(0,0,0,0.6), inset 0 0 200px 80px rgba(0,0,0,0.3)',
+          boxShadow: heavyShadowFullscreen,
           }}
       />
 

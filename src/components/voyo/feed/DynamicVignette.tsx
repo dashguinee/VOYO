@@ -175,7 +175,12 @@ export const DynamicVignette = ({
       <div
         className="absolute inset-0 pointer-events-none z-10"
         style={{
-          boxShadow: 'inset 0 0 100px 40px rgba(0,0,0,0.6), inset 0 0 200px 80px rgba(0,0,0,0.3)',
+          // Inactive cards (3-window neighbors) cap the heavy 100/200px
+          // blurs so mid-tier Android compositor isn't burning GPU painting
+          // shadows nobody sees. Active card unchanged — feel preserved.
+          boxShadow: isActive
+            ? 'inset 0 0 100px 40px rgba(0,0,0,0.6), inset 0 0 200px 80px rgba(0,0,0,0.3)'
+            : 'inset 0 0 60px 24px rgba(0,0,0,0.6), inset 0 0 100px 40px rgba(0,0,0,0.3)',
           }}
       />
 
