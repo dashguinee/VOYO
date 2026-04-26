@@ -789,13 +789,22 @@ export const YouTubeIframe = memo(() => {
         setShowPortraitNextUp={setShowPortraitNextUp}
       />
 
-      {/* Video container — mountRef is the stable parent. initPlayer
-          appends a fresh child div on each init; YT.Player replaces THAT
-          with the iframe. Without this indirection the React ref ends up
-          orphaned after the first init and re-mounts attach players to
-          dead nodes (Issue #3: floating container shows, video black). */}
+      {/* Video container — mountRef hosts the YT.Player iframe. The
+          inner div is keyed on youtubeId so React unmounts + remounts
+          it cleanly on every track change. That guarantees:
+            - mountRef.current always points to a freshly-attached div
+              (never an orphaned reference from a prior YT.Player swap)
+            - any iframe YouTube injected for the previous video is
+              physically removed from the DOM by React, not just
+              destroyed via the API (which could leave stale frames)
+          Fixes the "216×216 floating container shows but video stays
+          black" symptom that recurred after track changes. */}
       <div style={getVideoStyle()}>
-        <div ref={mountRef} style={{ width: '100%', height: '100%' }} />
+        <div
+          key={youtubeId || 'voyo-iframe-empty'}
+          ref={mountRef}
+          style={{ width: '100%', height: '100%' }}
+        />
       </div>
 
       {/* Portrait drag + tap layer. Drag to move the floating player.
