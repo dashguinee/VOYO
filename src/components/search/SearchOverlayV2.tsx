@@ -320,11 +320,22 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap, onEnterVideoMode
   useEffect(() => {
     if (results.length === 0) { setCachedSet(new Set()); return; }
     let cancelled = false;
+    // (audit-2 P1) AbortController so fast typing doesn't stack 35
+    // in-flight /exists/ fetches per query behind the browser's 6-conn
+    // cap. Previously the `cancelled` flag only suppressed the result
+    // write — the fetches themselves kept running, blocking the
+    // connection slots the latest query needed. AbortController also
+    // composes with the per-fetch 4s timeout via AbortSignal.any.
+    const controller = new AbortController();
     const ids = results.map(r => r.voyoId).filter(id => /^[A-Za-z0-9_-]{11}$/.test(id));
-    // Concurrent /exists/ checks, capped at 25 in-flight
     const checkOne = async (id: string): Promise<[string, boolean]> => {
       try {
-        const res = await fetch(`https://voyo-edge.dash-webtv.workers.dev/exists/${id}`, { signal: AbortSignal.timeout(4000) });
+        const timeoutSignal = AbortSignal.timeout(4000);
+        // AbortSignal.any combines effect-cleanup abort + per-fetch timeout
+        const signal = (AbortSignal as { any?: (sigs: AbortSignal[]) => AbortSignal }).any
+          ? (AbortSignal as { any: (sigs: AbortSignal[]) => AbortSignal }).any([controller.signal, timeoutSignal])
+          : controller.signal;
+        const res = await fetch(`https://voyo-edge.dash-webtv.workers.dev/exists/${id}`, { signal });
         if (!res.ok) return [id, false];
         const data = await res.json();
         return [id, !!(data?.exists && (data?.high || data?.low))];
@@ -344,7 +355,7 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap, onEnterVideoMode
       // Energy plays clean" — by then gateToR2 had populated the store.
       if (next.size) markR2KnownMany(Array.from(next));
     });
-    return () => { cancelled = true; };
+    return () => { cancelled = true; controller.abort(); };
   }, [results]);
 
   // Pre-warm top 3 results as soon as they appear — fire-and-forget.

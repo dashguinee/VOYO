@@ -198,14 +198,19 @@ export const useDownloadStore = create<DownloadStore>((set, get) => ({
     // NORMALIZE: Always use raw YouTube ID for storage (not VOYO encoded)
     const normalizedId = decodeVoyoId(trackId);
     devLog('🎵 BOOST: Starting boost for trackId:', trackId, '→ normalized:', normalizedId, '| title:', title);
-    const { downloads, manualBoostCount, autoBoostEnabled, boostStartTimes } = get();
 
-    // Record boost start time for hot-swap feature
+    // (audit-2 P1) Re-read get() at every set() instead of capturing
+    // the snapshot at function entry. Concurrent boostTrack calls
+    // within the await getTrackQuality() window previously stomped
+    // each other — the loser's "downloading" entry vanished from the
+    // UI until its first progress callback healed it. Same pattern
+    // poisoned manualBoostCount (under-counts → delays auto-boost
+    // prompt).
     const boostStartTime = Date.now();
-    set({ boostStartTimes: { ...boostStartTimes, [normalizedId]: boostStartTime } });
+    set({ boostStartTimes: { ...get().boostStartTimes, [normalizedId]: boostStartTime } });
 
     // Already downloading or complete?
-    const existing = downloads.get(normalizedId);
+    const existing = get().downloads.get(normalizedId);
     if (existing && (existing.status === 'downloading' || existing.status === 'complete')) {
       return;
     }
@@ -213,7 +218,7 @@ export const useDownloadStore = create<DownloadStore>((set, get) => ({
     // Check if already cached at boosted quality (skip if already HD)
     const currentQuality = await getTrackQuality(normalizedId);
     if (currentQuality === 'boosted') {
-      const newDownloads = new Map(downloads);
+      const newDownloads = new Map(get().downloads);
       newDownloads.set(normalizedId, { trackId: normalizedId, progress: 100, status: 'complete' });
       set({ downloads: newDownloads });
       return;
@@ -221,7 +226,7 @@ export const useDownloadStore = create<DownloadStore>((set, get) => ({
     // If standard quality exists, we'll upgrade to boosted (re-download)
 
     // Update status to downloading
-    const newDownloads = new Map(downloads);
+    const newDownloads = new Map(get().downloads);
     newDownloads.set(normalizedId, { trackId: normalizedId, progress: 0, status: 'downloading' });
     set({ downloads: newDownloads });
 
@@ -280,14 +285,16 @@ export const useDownloadStore = create<DownloadStore>((set, get) => ({
         devLog(`🎵 BOOST: Completed in ${boostDuration.toFixed(1)}s - ${isFastBoost ? '⚡ FAST (DJ rewind!)' : '📦 Normal'}`);
         devLog(`🎵 BOOST: Network speed estimate: ${networkStats.speed.toFixed(0)} kbps`);
 
-        // Increment manual boost count
-        const newCount = manualBoostCount + 1;
+        // Increment manual boost count — re-read live state instead of
+        // captured snapshot so concurrent boosts compose correctly.
+        // (audit-2 P1 — same race as the downloads Map.)
+        const newCount = get().manualBoostCount + 1;
         try { localStorage.setItem('voyo-manual-boost-count', String(newCount)); } catch {}
 
         // Show auto-boost prompt after 3 manual boosts (if not already enabled)
         let dismissed = false;
         try { dismissed = !!localStorage.getItem('voyo-auto-boost-dismissed'); } catch {}
-        const shouldPrompt = newCount >= 3 && !autoBoostEnabled && !dismissed;
+        const shouldPrompt = newCount >= 3 && !get().autoBoostEnabled && !dismissed;
 
         set({
           downloads: finalDownloads,

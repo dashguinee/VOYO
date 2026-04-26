@@ -115,12 +115,21 @@ export const VoyoLiveCard = ({ onSwitchToVOYO }: VoyoLiveCardProps = {}) => {
   useEffect(() => {
     if (!dashId || !isLoggedIn) return;
 
+    // (audit-2 P1-RT-5) cancelled flag so stale fetches don't write
+    // into state after the effect re-runs (currentTrack flip, sign-out
+    // mid-fetch). Without this, an in-flight Promise resolved against
+    // the OLD dashId closure and overrode whatever the new effect
+    // just wrote — visible glitch on every track change + auth flash
+    // (friend ring repopulating after sign-out).
+    let cancelled = false;
+
     const loadData = async () => {
       try {
         const [friendsList, activity] = await Promise.all([
           friendsAPI.getFriends(dashId),
           activityAPI.getFriendsActivity(dashId),
         ]);
+        if (cancelled) return;
         setFriends(friendsList);
         setFriendsActivity(activity);
 
@@ -158,8 +167,13 @@ export const VoyoLiveCard = ({ onSwitchToVOYO }: VoyoLiveCardProps = {}) => {
     };
 
     loadData();
-    const interval = setInterval(loadData, 30000);
-    return () => clearInterval(interval);
+    // Visibility-gate: skip BG ticks (browser throttles intervals on
+    // hidden tabs anyway, and no point firing while the user can't see).
+    const interval = setInterval(() => {
+      if (document.hidden) return;
+      loadData();
+    }, 30000);
+    return () => { cancelled = true; clearInterval(interval); };
   }, [dashId, isLoggedIn, currentTrack]);
 
   // Build avatars from real friends or defaults
