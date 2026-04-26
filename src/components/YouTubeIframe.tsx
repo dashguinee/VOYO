@@ -665,13 +665,15 @@ export const YouTubeIframe = memo(() => {
     // on the dominant pure-audio flow.
     if (videoTarget === 'hidden') return;
 
-    // Tightened 2026-04-25 (Issue #4): old 5s/2s window allowed up to ~7s
-    // of visible A/V offset before correction — brutal on music videos
-    // where the artist's mouth is on screen. 1.5s/0.6s caps perceived
-    // drift at ~2s while still well above the YouTube buffer-thrash zone
-    // (sub-300ms seekTo calls cause re-buffer flicker).
-    const DRIFT_THRESHOLD = 0.6;
-    const CHECK_INTERVAL = 1500;
+    // Loosened 2026-04-26: was 1.5s/0.6s. Each correction is a YT
+    // seekTo() which causes a visible re-buffer "load" — the YT iframe
+    // API has no smoother sync mechanism (setPlaybackRate only takes
+    // discrete 0.25 steps, useless for fractional convergence). So the
+    // best we can do is correct LESS often. 0.6s threshold caught almost
+    // every drift; 1.5s only catches actually-noticeable offsets. Music
+    // videos rarely lip-sync-critical so the tradeoff is worth it.
+    const DRIFT_THRESHOLD = 1.5;
+    const CHECK_INTERVAL = 2500;
 
     // CRITICAL: read currentTime via getState() inside the callback, NOT
     // from the closure. The previous version had `currentTime` in the dep

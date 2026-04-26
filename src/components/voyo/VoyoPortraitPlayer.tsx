@@ -2928,14 +2928,21 @@ const FullscreenVideoPlayer = ({
   isPlaying: boolean;
   onClose: () => void;
   onTogglePlay: () => void;
-}) => (
+}) => {
+  // 5s delayed reveal — let user enjoy the video first, then offer
+  // Take Out. Mirrors the BigCenterCard morph timing rhythm.
+  const [showTakeOut, setShowTakeOut] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setShowTakeOut(true), 5000);
+    return () => clearTimeout(t);
+  }, []);
+  return (
   <div
     className="fixed inset-0 z-[100] bg-black flex flex-col"
   >
-    {/* Take Out — orange OYÉ-Live treatment, top-right. Same chrome as
-        the morphed Mini Player → Take Out chip on BigCenterCard, but
-        always-orange here (we're already in fullscreen video mode, no
-        morph needed). Tap → pipService.enter() → canvas-composite PiP. */}
+    {/* Take Out — orange OYÉ-Live treatment, top-right. Fades in 5s
+        after fullscreen mode opens. Same chrome as the morphed Mini
+        Player → Take Out chip on BigCenterCard, always-orange here. */}
     <button
       type="button"
       onClick={() => { void pipService.enter(); }}
@@ -2952,6 +2959,10 @@ const FullscreenVideoPlayer = ({
         letterSpacing: '0.10em',
         boxShadow: '0 0 14px rgba(244,162,62,0.45), 0 0 24px rgba(244,162,62,0.22)',
         minHeight: 38,
+        opacity: showTakeOut ? 1 : 0,
+        transform: showTakeOut ? 'translateY(0)' : 'translateY(-4px)',
+        pointerEvents: showTakeOut ? 'auto' : 'none',
+        transition: 'opacity 700ms cubic-bezier(0.16, 1, 0.3, 1), transform 700ms cubic-bezier(0.16, 1, 0.3, 1)',
       }}
     >
       <span
@@ -3012,7 +3023,8 @@ const FullscreenVideoPlayer = ({
       </div>
     </div>
   </div>
-);
+  );
+};
 
 // ============================================
 // WORD TRANSLATION POPUP - Shows when tapping a word
