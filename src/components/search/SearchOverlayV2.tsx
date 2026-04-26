@@ -602,7 +602,7 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap, onEnterVideoMode
     if (t.type === 'warming') return;
     const ms =
       t.type === 'play_now' ? 7000 :
-      t.type === 'in_disco' ? 2500 :
+      t.type === 'in_disco' ? 3500 :  // ritual moment — give it room to land
       1500;
     toastTimerRef.current = setTimeout(() => setToast(null), ms);
   }, []);
@@ -711,6 +711,17 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap, onEnterVideoMode
             @keyframes voyo-toast-fade {
               from { opacity: 0; }
               to   { opacity: 1; }
+            }
+            /* Disco-arrive — one-shot golden burst the moment R2 lands.
+               This is the PATIENCE-AS-CONTRIBUTION ritual closing: the
+               user's tap pulled this song into Disco for everyone, and
+               THIS is the moment they feel it. Scale + shadow expand
+               then settle (no infinite loop — restraint). Apple easing,
+               ~1.4s total. */
+            @keyframes voyo-disco-arrive {
+              0%   { opacity: 0; transform: translateX(-50%) scale(0.92); box-shadow: 0 0 0 rgba(212,175,110,0); }
+              35%  { opacity: 1; transform: translateX(-50%) scale(1.05); box-shadow: 0 0 30px rgba(212,175,110,0.55), 0 8px 28px rgba(0,0,0,0.55); }
+              100% { opacity: 1; transform: translateX(-50%) scale(1.00); box-shadow: 0 0 14px rgba(212,175,110,0.18), 0 6px 20px rgba(0,0,0,0.45); }
             }
           `}</style>
           {/* Backdrop — solid 90% black scrim. Was blur(16px) full-screen
@@ -1096,7 +1107,14 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap, onEnterVideoMode
               <div
                 key={toast.type}
                 className="fixed bottom-24 left-1/2 z-[60] -translate-x-1/2"
-                style={{ animation: 'voyo-toast-fade 0.6s cubic-bezier(0.16, 1, 0.3, 1)' }}
+                style={{
+                  // 'in_disco' is the ritual-completion moment — give it
+                  // its own one-shot golden burst keyframe instead of
+                  // the calm fade everyone else uses. (Wave D)
+                  animation: toast.type === 'in_disco'
+                    ? 'voyo-disco-arrive 1.4s cubic-bezier(0.16, 1, 0.3, 1) both'
+                    : 'voyo-toast-fade 0.6s cubic-bezier(0.16, 1, 0.3, 1)',
+                }}
               >
                 {toast.type === 'play_now' ? (
                   <div
@@ -1120,24 +1138,36 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap, onEnterVideoMode
                     </button>
                   </div>
                 ) : toast.type === 'in_disco' ? (
-                  /* "Landed in Disco" — subtle gold confirm. Track is now
-                     in R2, the OyeButton has flipped to gold-filled,
-                     warming pulse is gone. This pill closes the loop:
-                     the user sees the journey from purple → gold complete. */
+                  /* "Landed in Disco" — the ritual-completion moment.
+                     Patience-as-contribution: the user's tap pulled this
+                     song into Disco for everyone, and THIS is when they
+                     feel it. Slightly larger than other pills because
+                     this IS the moment to celebrate. The voyo-disco-arrive
+                     keyframe (above) does the gold burst; the pill itself
+                     is more present (font weight, gold tint, two-line
+                     stack) so it reads as a "landed" moment, not a
+                     toast. (Wave D) */
                   <div
-                    className="flex items-center gap-2 px-3.5 py-2 rounded-full"
+                    className="flex flex-col items-center px-5 py-2.5 rounded-2xl"
                     style={{
-                      background: 'rgba(20,16,12,0.90)',
+                      background: 'linear-gradient(180deg, rgba(28,22,12,0.95) 0%, rgba(18,14,8,0.96) 100%)',
                       backdropFilter: 'blur(14px)',
-                      border: '1px solid rgba(212,175,110,0.32)',
-                      boxShadow: '0 6px 20px rgba(0,0,0,0.45), 0 0 14px rgba(212,175,110,0.12)',
+                      border: '1px solid rgba(212,175,110,0.45)',
+                      // boxShadow handled by the keyframe so it can pulse
                     }}
                   >
-                    <span className="text-[rgba(232,208,158,0.95)] text-[10.5px] font-bold tracking-[0.12em] uppercase">
-                      ✦ in Disco
+                    <span
+                      className="text-[11px] font-bold tracking-[0.18em] uppercase"
+                      style={{
+                        background: 'linear-gradient(135deg, #E8D09E 0%, #D4A053 50%, #C4943D 100%)',
+                        WebkitBackgroundClip: 'text',
+                        WebkitTextFillColor: 'transparent',
+                        backgroundClip: 'text',
+                      }}
+                    >
+                      ✦ Landed in Disco
                     </span>
-                    <span className="text-white/15 text-[10.5px]">·</span>
-                    <span className="text-white/55 text-[10.5px] truncate max-w-[140px]">
+                    <span className="text-white/65 text-[11px] truncate max-w-[200px] mt-0.5">
                       {toast.trackTitle}
                     </span>
                   </div>
