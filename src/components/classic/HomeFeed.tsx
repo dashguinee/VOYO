@@ -3230,7 +3230,7 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onNavVisibilityChange, onSwitc
               className="text-white text-[22px] leading-none"
               style={{ fontWeight: 800, letterSpacing: '-0.01em' }}
             >
-              OYÉ Africa
+              OYÉ My People
             </h2>
             <p
               className="text-[9px] font-medium tracking-wider uppercase mt-1.5"
