@@ -54,6 +54,7 @@ import { app } from '../../services/oyo';
 
 // OYO Island - DJ Voice Search & Chat
 import { OyoIsland } from './OyoIsland';
+import { OyoSays } from './OyoSays';
 import { VoyoLoadOrb } from './VoyoLoadOrb';
 
 // YouTube Iframe - Unified streaming + video display
@@ -1096,6 +1097,29 @@ const ExpandVideoButton = memo(({ onClick, isIframeAudio, isMiniPlayerActive, co
     const t2 = setTimeout(() => setPhase('takeout'), 5000 + 900);
     return () => { clearTimeout(t1); clearTimeout(t2); };
   }, [isMiniPlayerActive]);
+
+  // When Take Out becomes ready (chip settles to orange), Oyo drops an
+  // ambient one-liner in the dynamic island. Random pick from a small
+  // bag, fires once per mini-player session (gated on the mount).
+  useEffect(() => {
+    if (phase !== 'takeout') return;
+    const lines = [
+      "I'm ready",
+      "Let's go",
+      "Ready",
+      "Zouu where we going snap?",
+      "Pocket time",
+      "Let's roll",
+    ];
+    const text = lines[Math.floor(Math.random() * lines.length)];
+    try {
+      window.dispatchEvent(new CustomEvent('voyo:oyo-says', { detail: { text } }));
+    } catch { /* never break */ }
+    // Only fire on the first transition into takeout for this session;
+    // phase machine is gated by isMiniPlayerActive so a session reset
+    // (mini close → reopen) re-arms it naturally.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase === 'takeout']);
 
   // After Take Out settles for ~2.2s, park the chip (fade out from the
   // card spot). User has seen the morph; the bottom-right rising chip
@@ -6270,6 +6294,12 @@ export const VoyoPortraitPlayer = ({
       {videoTarget === 'portrait' && (
         <BottomTakeOutChip portalProgress={portalProgress} />
       )}
+
+      {/* OYO SAYS — ambient one-line pill at the top of the viewport.
+          Listens for window 'voyo:oyo-says' events. Currently fires
+          when Take Out is ready; future moments can tap the same
+          channel via window.dispatchEvent(...). */}
+      <OyoSays />
 
       {/* LYRICS OVERLAY - Tap album art to show */}
       {showLyricsOverlay && currentTrack && (
