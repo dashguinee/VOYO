@@ -22,11 +22,11 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { usePlayerStore } from '../../store/playerStore';
 import { useTrackPoolStore } from '../../store/trackPoolStore';
 
-const HOLD_MS = 2000;
+const HOLD_MS = 4000;
 const FADE_MS = 380;
 const MIN_GAP_MS = 1200;       // whispers don't flap faster than this
 const TRENDING_REBEAT_MS = 28_000;
-const ANCHOR_RESTORE_MS = 3000; // a major tale holds longer before anchor restores
+const ANCHOR_RESTORE_MS = 4500; // a major tale holds longer before anchor restores
 
 type Accent = 'bronze' | 'purple' | 'emerald' | 'orange';
 type Severity = 'whisper' | 'major';
