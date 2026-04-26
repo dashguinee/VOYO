@@ -18,6 +18,7 @@ import { markTrackAsFailed } from '../services/trackVerifier';
 import { logPlaybackEvent } from '../services/telemetry';
 import { devLog } from '../utils/logger';
 import { pipService } from '../services/pipService';
+import { haptics } from '../utils/haptics';
 
 const YT_STATES = {
   UNSTARTED: -1,
@@ -941,6 +942,11 @@ export const YouTubeIframe = memo(() => {
               y: dragStartRef.current.oy + dy,
             });
             const g = computePortalGlow(nextX);
+            const prev = portalGlowRef.current;
+            // Haptics on upward threshold crossings only.
+            // Selection-tick when entering portal proximity, light when armed.
+            if (prev < 0.3 && g >= 0.3) haptics.selection();
+            if (prev < PORTAL_ARM && g >= PORTAL_ARM) haptics.light();
             portalGlowRef.current = g;
             setPortalGlow(g);
           }}
@@ -950,6 +956,7 @@ export const YouTubeIframe = memo(() => {
             // Portal armed → drop = Take Out (PiP). Hide the floating
             // mini, fade portal back to 0, fire pipService.
             if (portalGlowRef.current >= PORTAL_ARM) {
+              haptics.success();
               void pipService.enter();
               setVideoTarget('hidden');
               setPortraitPos(DEFAULT_PORTRAIT_POS);
@@ -982,7 +989,27 @@ export const YouTubeIframe = memo(() => {
           viewport regardless of where the iframe container lives. */}
       {isPortraitMode && (
         <>
-          {/* Soft outer halo — wide gradient that bleeds inward */}
+          {/* App-side reaction — wide warm wash that bleeds far into the
+              app interior (260px). Reads as the phone's right edge bezel
+              "lighting up" from inside, so the app feels like it's
+              acknowledging the gesture, not just showing a chrome strip. */}
+          <div
+            style={{
+              position: 'fixed',
+              top: 0,
+              right: 0,
+              bottom: 0,
+              width: '260px',
+              pointerEvents: 'none',
+              zIndex: 64,
+              opacity: portalGlow * 0.55,
+              background: 'linear-gradient(to left, rgba(244,162,62,0.30) 0%, rgba(244,162,62,0.08) 50%, transparent 100%)',
+              transition: 'opacity 200ms ease-out',
+              willChange: 'opacity',
+              mixBlendMode: 'screen',
+            }}
+          />
+          {/* Soft outer halo — tighter gradient closer to the seam */}
           <div
             style={{
               position: 'fixed',
