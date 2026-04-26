@@ -2268,19 +2268,30 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onNavVisibilityChange, onSwitc
   // jolts into content 2-3s later.
   const [stations, setStations] = useState<Station[]>([]);
   const [stationsLoading, setStationsLoading] = useState(true);
-  // STATIONS DISABLED 2026-04-26 — relaunching as weekend special.
-  // The rail itself works (Supabase fetch, hero cards, autoplay-on-dwell)
-  // but is held back from default Home so it lands as a moment, not as
-  // a permanent shelf. Re-enable: flip STATIONS_LIVE to true.
-  // Override for testing: `?stations=1` in URL OR
-  // `localStorage.setItem('voyo-stations-on', '1')`.
+  // STATIONS + VIBES DISABLED 2026-04-26 — both relaunching as weekend
+  // moments. Code paths intact (Supabase fetch + hero cards for Stations,
+  // VibesReel for Vibes); just held back from default Home rendering.
+  // Re-enable: flip the corresponding _LIVE constant to true.
+  // Per-shelf testing override:
+  //   ?stations=1 | localStorage 'voyo-stations-on'='1' → stations on
+  //   ?vibes=1    | localStorage 'voyo-vibes-on'='1'    → vibes on
   const STATIONS_LIVE = false;
+  const VIBES_LIVE = false;
   const stationsEnabled = useMemo(() => {
     if (STATIONS_LIVE) return true;
     if (typeof window === 'undefined') return false;
     try {
       if (new URLSearchParams(window.location.search).has('stations')) return true;
       if (localStorage.getItem('voyo-stations-on') === '1') return true;
+    } catch { /* private mode — fall through */ }
+    return false;
+  }, []);
+  const vibesEnabled = useMemo(() => {
+    if (VIBES_LIVE) return true;
+    if (typeof window === 'undefined') return false;
+    try {
+      if (new URLSearchParams(window.location.search).has('vibes')) return true;
+      if (localStorage.getItem('voyo-vibes-on') === '1') return true;
     } catch { /* private mode — fall through */ }
     return false;
   }, []);
@@ -3237,22 +3248,16 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onNavVisibilityChange, onSwitc
         </div>
       )}
 
-      {/* Vibes reel — one horizontal scroll interleaving AI vibe-covers
-          with real track cards pulled from the hot-pool for that vibe.
-          Tap AI card → open the vibe (playFromVibe); tap track card →
-          play that exact track. Lightweight: 5 thumbs per vibe, all
-          R2-cached so playback is instant on tap. */}
-      {/* contain: paint scopes paint invalidations to this section. Without
-          it, an animation flip elsewhere on Home (Top10 box-shadow during
-          countdown, Classics shimmer, etc.) can invalidate the rendering
-          of this section's GPU layer too. With contain:paint, the browser
-          knows VibesReel's paint output is self-contained. */}
-      <div className="mb-12" style={{ contain: 'paint' }}>
-        <div className="px-4 mb-1.5">
-          <h2 className="text-white font-semibold text-base">Vibes</h2>
+      {/* Vibes reel — disabled 2026-04-26 (relaunching with stations as
+          weekend special). Re-enable via VIBES_LIVE=true OR ?vibes=1. */}
+      {vibesEnabled && (
+        <div className="mb-12" style={{ contain: 'paint' }}>
+          <div className="px-4 mb-1.5">
+            <h2 className="text-white font-semibold text-base">Vibes</h2>
+          </div>
+          <Safe name="VibesReel"><VibesReel vibes={vibes} onOpenVibe={handleVibeSelect} /></Safe>
         </div>
-        <Safe name="VibesReel"><VibesReel vibes={vibes} onOpenVibe={handleVibeSelect} /></Safe>
-      </div>
+      )}
 
       {/* Stations rail — DJ-curated vibes (deeper commitment than Vibes buttons).
           Horizontal snap-scroll. Cards autoplay muted; 7s dwell fades audio in
