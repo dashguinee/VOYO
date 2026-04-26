@@ -1076,16 +1076,17 @@ const ExpandVideoButton = memo(({ onClick, isIframeAudio, isMiniPlayerActive, co
     return () => { clearTimeout(t1); clearTimeout(t2); };
   }, [controlsActive]);
 
-  // Mini Player → Take Out morph. 1.5s gap after mini engages, 0.9s
-  // morph window (text fade + single purple pulse), then settle to
-  // orange Take Out. Reverses cleanly if user closes the mini player.
+  // Mini Player → Take Out morph. 5s gap after mini engages (let user
+  // enjoy the video first), 0.9s morph window (text fade + single
+  // purple pulse), then settle to orange Take Out. Reverses cleanly
+  // if user closes the mini player.
   useEffect(() => {
     if (!isMiniPlayerActive) {
       setPhase('mini');
       return;
     }
-    const t1 = setTimeout(() => setPhase('morphing'), 1500);
-    const t2 = setTimeout(() => setPhase('takeout'), 1500 + 900);
+    const t1 = setTimeout(() => setPhase('morphing'), 5000);
+    const t2 = setTimeout(() => setPhase('takeout'), 5000 + 900);
     return () => { clearTimeout(t1); clearTimeout(t2); };
   }, [isMiniPlayerActive]);
 
@@ -2929,53 +2930,10 @@ const FullscreenVideoPlayer = ({
   onClose: () => void;
   onTogglePlay: () => void;
 }) => {
-  // 5s delayed reveal — let user enjoy the video first, then offer
-  // Take Out. Mirrors the BigCenterCard morph timing rhythm.
-  const [showTakeOut, setShowTakeOut] = useState(false);
-  useEffect(() => {
-    const t = setTimeout(() => setShowTakeOut(true), 5000);
-    return () => clearTimeout(t);
-  }, []);
   return (
   <div
     className="fixed inset-0 z-[100] bg-black flex flex-col"
   >
-    {/* Take Out — orange OYÉ-Live treatment, top-right. Fades in 5s
-        after fullscreen mode opens. Same chrome as the morphed Mini
-        Player → Take Out chip on BigCenterCard, always-orange here. */}
-    <button
-      type="button"
-      onClick={() => { void pipService.enter(); }}
-      aria-label="Take Out — Picture-in-Picture"
-      className="absolute top-3 right-3 z-[110] rounded-full backdrop-blur-sm border flex items-center voyo-tap-scale"
-      style={{
-        padding: '7px 12px',
-        gap: 6,
-        background: 'rgba(244,162,62,0.18)',
-        border: '1px solid rgba(244,162,62,0.55)',
-        color: '#F4A23E',
-        fontSize: 11,
-        fontWeight: 700,
-        letterSpacing: '0.10em',
-        boxShadow: '0 0 14px rgba(244,162,62,0.45), 0 0 24px rgba(244,162,62,0.22)',
-        minHeight: 38,
-        opacity: showTakeOut ? 1 : 0,
-        transform: showTakeOut ? 'translateY(0)' : 'translateY(-4px)',
-        pointerEvents: showTakeOut ? 'auto' : 'none',
-        transition: 'opacity 700ms cubic-bezier(0.16, 1, 0.3, 1), transform 700ms cubic-bezier(0.16, 1, 0.3, 1)',
-      }}
-    >
-      <span
-        aria-hidden="true"
-        style={{
-          width: 6, height: 6, borderRadius: '50%',
-          background: '#F4A23E',
-          boxShadow: '0 0 6px rgba(244,162,62,0.9)',
-        }}
-      />
-      Take Out
-    </button>
-
     {/* Video Container - YouTube iframe would go here */}
     <div className="flex-1 relative bg-black flex items-center justify-center">
       {/* Placeholder - in production this would be a YouTube embed */}
