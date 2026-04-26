@@ -1875,13 +1875,12 @@ const Top10Section = memo(({ tracks, onTrackPlay }: Top10SectionProps) => {
       <div className="relative px-4 mb-6" style={{ zIndex: 1 }}>
         <div className="overflow-hidden flex items-center gap-2">
           <h2 className="top10-header-scroll text-white font-semibold text-base whitespace-nowrap inline-block">VOYO Top 10</h2>
-          {/* Live dot — appears in the CALM static moment (before
-              countdown kicks in). Mimics the "OYÉ Live" orange dot to
-              signal "this is happening right now". When the countdown
-              starts and the cards begin rotating, the rotation itself
-              IS the live signal — so the dot fades back out and lets
-              the gold moment own the screen. Soft 2.4s heartbeat blink
-              while visible. Apple easing on the fade. */}
+          {/* Live dot — present in the CALM static moment, fades to
+              very low (not gone) while the countdown animates. Mimics
+              the "OYÉ Live" dot but quieter: narrow blink range
+              (0.42→0.62), 4.5s breath, max ~0.62 opacity so it reads
+              as ambient atmosphere — never demanding. Tuned per Dash:
+              "fade very low while top10 animates", "should be subtle". */}
           <span
             aria-hidden="true"
             className="inline-block rounded-full"
@@ -1889,12 +1888,12 @@ const Top10Section = memo(({ tracks, onTrackPlay }: Top10SectionProps) => {
               width: 6,
               height: 6,
               background: '#F4A23E',
-              boxShadow: '0 0 8px rgba(244,162,62,0.7), 0 0 16px rgba(244,162,62,0.35)',
-              opacity: countdownActive ? 0 : 1,
+              boxShadow: '0 0 6px rgba(244,162,62,0.45), 0 0 12px rgba(244,162,62,0.18)',
+              opacity: countdownActive ? 0.18 : 0.62,
               animation: countdownActive
                 ? 'none'
-                : 'voyo-top10-live-blink 2.4s ease-in-out infinite',
-              transition: 'opacity 0.8s ease-in-out',
+                : 'voyo-top10-live-blink 4.5s ease-in-out infinite',
+              transition: 'opacity 1.5s cubic-bezier(0.16, 1, 0.3, 1)',
             }}
           />
         </div>
@@ -1940,14 +1939,13 @@ const Top10Section = memo(({ tracks, onTrackPlay }: Top10SectionProps) => {
           animation: top10-subtitle-flash 4.2s ease forwards;
           color: rgba(212,160,83,0.75);
         }
-        /* Live dot — soft 2.4s blink. Range 0.55→1 (not 0→1) so it never
-           fully disappears mid-cycle; reads as a steady heartbeat, not a
-           flash. Apple easing keeps the in/out gentle. The dot's MOUNT
-           visibility is gated by countdownActive && activeIdx === 0
-           (gold moment only). */
+        /* Live dot — narrow ambient breath. Range 0.42→0.62 so the
+           range itself is subtle (~20pp swing). 4.5s cycle reads as a
+           slow tide, not a heartbeat. Range tuned per Dash:
+           "appears too fast, blinks too fast, too visible". */
         @keyframes voyo-top10-live-blink {
-          0%, 100% { opacity: 1; }
-          50%      { opacity: 0.55; }
+          0%, 100% { opacity: 0.62; }
+          50%      { opacity: 0.42; }
         }
         @keyframes top10-marquee {
           0% { transform: translateX(0); }
