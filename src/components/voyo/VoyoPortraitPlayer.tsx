@@ -1056,6 +1056,55 @@ const BackdropLibrary = ({
 // Any tap / reveal resets both timers — the button breathes with the
 // rest of the UI instead of running on its own mount-time clock.
 // ============================================
+// Standalone Take Out chip — sits in the SAME spot the Mini Player toggle
+// occupied (top-3 right-3 of the BigCenterCard area). Rendered as a
+// sibling of the card so it stays visible when the card fades to
+// opacity:0 in mini mode. 5s mount-delay so user enjoys the video first.
+const TakeOutChip = memo(({ controlsActive }: { controlsActive: boolean }) => {
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setReady(true), 5000);
+    return () => clearTimeout(t);
+  }, []);
+  const visible = ready && controlsActive;
+  return (
+    <button
+      type="button"
+      onClick={(e) => { e.stopPropagation(); void pipService.enter(); }}
+      aria-label="Take Out — Picture-in-Picture"
+      className="absolute top-3 right-3 z-[70] rounded-full backdrop-blur-sm border flex items-center voyo-tap-scale"
+      style={{
+        padding: '6px 12px',
+        gap: 6,
+        background: 'rgba(244,162,62,0.22)',
+        border: '1.5px solid rgba(244,162,62,0.60)',
+        color: '#F4A23E',
+        fontSize: 12,
+        fontWeight: 600,
+        letterSpacing: '0.04em',
+        boxShadow: '0 0 16px rgba(244,162,62,0.50), 0 0 28px rgba(244,162,62,0.25)',
+        minHeight: 44,
+        opacity: visible ? 1 : 0,
+        transform: visible ? 'translateY(0)' : 'translateY(-4px)',
+        pointerEvents: visible ? 'auto' : 'none',
+        transition: 'opacity 700ms cubic-bezier(0.16, 1, 0.3, 1), transform 700ms cubic-bezier(0.16, 1, 0.3, 1)',
+      }}
+    >
+      <span
+        aria-hidden="true"
+        style={{
+          width: 6, height: 6, borderRadius: '50%',
+          background: '#FBBF77',
+          boxShadow: '0 0 6px rgba(251,191,119,0.9)',
+        }}
+      />
+      <Play size={12} fill="currentColor" />
+      <span>Take Out</span>
+    </button>
+  );
+});
+TakeOutChip.displayName = 'TakeOutChip';
+
 const ExpandVideoButton = memo(({ onClick, isIframeAudio, isMiniPlayerActive, controlsActive }: { onClick: () => void; isIframeAudio: boolean; isMiniPlayerActive: boolean; controlsActive: boolean }) => {
   const [mode, setMode] = useState<'active' | 'dimmed'>('active');
   const [extraFaded, setExtraFaded] = useState(false);
@@ -5230,6 +5279,15 @@ export const VoyoPortraitPlayer = ({
             <div className="w-48 h-48 rounded-[2rem] bg-white/5 border border-white/10 flex items-center justify-center">
               <Play size={32} className="text-white/20" />
             </div>
+          )}
+
+          {/* TAKE OUT chip — sits where the Mini Player toggle was
+              (top-right corner of the card area), but as a SIBLING of
+              BigCenterCard so it stays visible when the card fades to
+              opacity:0 in mini mode. 5s mount-delay so user enjoys the
+              video first. Tap → pipService.enter() (PiP card flies out). */}
+          {videoTarget === 'portrait' && (
+            <TakeOutChip controlsActive={isControlsRevealed} />
           )}
 
           {/* LEFT QUICK CONTROLS - ")" arc: center reaches IN toward card.
