@@ -1,35 +1,48 @@
 /**
- * DynamicIsland — iPhone-style notification pill, hoisted out of App.tsx.
+ * DynamicIsland — iPhone-style notification pill + reply surface.
  *
- * Sources notifications from three places, merged into one stream:
- *   1. Legacy `window.pushNotification(notif)` — any code can imperatively
- *      surface a notification. Kept for backwards compat with voyo's
- *      internal taste-graph / OYO triggers.
- *   2. Demo timers (track drop, friend activity, achievement) — fire on
- *      mount so the UI has something to show before backend events land.
- *   3. `useDashNotifications({ appCode, dashId })` — realtime Supabase
- *      stream from the cross-app `dash_notifications` table. Admin
- *      pushes from Hub, friend-message notifications, and any other
- *      ecosystem event lands here automatically.
+ * One pill, three states:
+ *   COLLAPSED  — small dark pill showing the current notification
+ *                preview. Wave-on-arrival, settles to dark, fades.
+ *                Drag horizontally to cycle queued notifications.
+ *                Drag up to dismiss.
+ *   EXPANDED   — full card with title/subtitle + action buttons
+ *                (queue/like for music, reply for message, view for
+ *                system). Stays until the user acts.
+ *   REPLYING   — purple-wave card with text input (tap to type) and
+ *                tap-to-speak voice mode (countdown → record → send).
  *
- * The component is self-contained and reusable across voyo and Hub —
- * pass the appCode and dashId and it does the rest.
+ * Sources: window.pushNotification(), useDashNotifications realtime
+ * stream, dev-only demo timers. All deduped by id, capped at NOTIF_CAP
+ * in memory. Notifications originating from dash_notifications get
+ * marked read on dismiss/action so future loads keep the read state.
  */
 
-import { useState, useEffect, useRef } from 'react';
+import {
+  useState,
+  useEffect,
+  useRef,
+  useCallback,
+  useMemo,
+  type CSSProperties,
+  type PointerEvent as ReactPointerEvent,
+} from 'react';
 import { useDashNotifications, type DashNotification } from '../../hooks/useDashNotifications';
 import { useAuth } from '../../hooks/useAuth';
 import { devLog, devWarn } from '../../utils/logger';
 
-// Dynamic Island - iPhone-style notification pill
+// ── Types ────────────────────────────────────────────────────────────
+
+type NotifType = 'music' | 'message' | 'system' | 'admin';
+
 interface Notification {
   id: string;
-  type: 'music' | 'message' | 'system' | 'admin';
+  type: NotifType;
   title: string;
   subtitle: string;
   read?: boolean;
-  color?: string; // Custom color for friends
-  url?: string;   // Optional deep link from dash_notifications
+  color?: string;
+  url?: string;
 }
 
 interface DynamicIslandProps {
@@ -40,817 +53,735 @@ interface DynamicIslandProps {
   dashId?: string | null;
 }
 
-function typeForApp(app: string): Notification['type'] {
-  if (app === 'hub' || app === 'all') return 'admin';
-  return 'system';
-}
+/**
+ * Phase machine. Replaces the previous 5 booleans + 'wave|dark|idle'
+ * tag with one source of truth.
+ *
+ *   hidden     → nothing on screen, no queue activity worth surfacing
+ *   wave       → fresh notification, liquid-purple intro (WAVE_MS)
+ *   dark       → settled compact pill (DARK_MS before fading)
+ *   fading     → opacity ramp out (FADE_MS)
+ *   dot        → minimal corner pulse, user can tap to resurface
+ *   expanded   → big card with actions, no auto-fade
+ *   replying   → reply input + voice surface, no auto-fade
+ *   sending    → reply submitted, fade-and-clear ramp
+ */
+type Phase = 'hidden' | 'wave' | 'dark' | 'fading' | 'dot' | 'expanded' | 'replying' | 'sending';
 
-function mapDashNotification(row: DashNotification): Notification {
-  return {
-    id: row.id,
-    type: typeForApp(row.app),
-    title: row.title,
-    subtitle: row.body || '',
-    url: row.url ?? undefined,
-    read: row.read,
-  };
-}
+// ── Tunables ─────────────────────────────────────────────────────────
 
-export const DynamicIsland = ({ appCode = 'voyo', dashId: dashIdProp = null }: DynamicIslandProps = {}) => {
-  // Auto-resolve dashId from the auth hook if the consumer didn't pass one.
-  // Lets App.tsx just render <DynamicIsland /> without prop-drilling auth.
+const NOTIF_CAP = 20; // hard cap on in-memory queue
+const DRAG_X_THRESHOLD = 40;
+const DRAG_Y_THRESHOLD = 40;
+
+const TIMING = {
+  WAVE_MS:           3000,
+  DARK_MS:           3000,
+  FADE_MS:            600,
+  DOT_AUTO_HIDE_MS:  3000,
+  TRANSITION_MS:      300,
+  SEND_RAMP_MS:       800,
+  REPLY_FOCUS_MS:     500,
+  COUNTDOWN_STEP_MS: 1000,
+} as const;
+
+// ── Color helpers ────────────────────────────────────────────────────
+
+const TYPE_COLOR: Record<NotifType, string> = {
+  music:   '#a855f7',
+  message: '#8b5cf6',
+  system:  '#ef4444',
+  admin:   '#ef4444',
+};
+
+const dotColor = (n: Notification | undefined): string =>
+  n?.color ?? (n ? TYPE_COLOR[n.type] : '#71717a');
+
+// ── Mappers ──────────────────────────────────────────────────────────
+
+const mapDashNotification = (row: DashNotification): Notification => ({
+  id: row.id,
+  type: row.app === 'hub' || row.app === 'all' ? 'admin' : 'system',
+  title: row.title,
+  subtitle: row.body || '',
+  url: row.url ?? undefined,
+  read: row.read,
+});
+
+// ── Component ────────────────────────────────────────────────────────
+
+export const DynamicIsland = ({
+  appCode = 'voyo',
+  dashId: dashIdProp = null,
+}: DynamicIslandProps = {}) => {
+  // Resolve dashId from auth if not passed — lets App.tsx mount as <DynamicIsland />
   const { dashId: authDashId } = useAuth();
   const dashId = dashIdProp ?? authDashId ?? null;
 
+  // ── Core state ─────────────────────────────────────────────────────
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [isExpanded, setIsExpanded] = useState(false);
-  const [isVisible, setIsVisible] = useState(false);
-  const [isFading, setIsFading] = useState(false);
-  const [phase, setPhase] = useState<'wave' | 'dark' | 'idle'>('idle');
-  const [isReplying, setIsReplying] = useState(false);
+  const [phase, setPhase] = useState<Phase>('hidden');
   const [replyText, setReplyText] = useState('');
-  const [isNewNotification, setIsNewNotification] = useState(false); // Wave only for new
-  const [showTapFeedback, setShowTapFeedback] = useState(false); // Tap-to-resurface animation
-  const fadeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const phaseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const replyInputRef = useRef<HTMLInputElement>(null);
-
-  const currentNotification = notifications[currentIndex];
-  const unreadCount = notifications.filter(n => !n.read).length;
-
-  // ── Realtime merge: pull dash_notifications from the Command Center
-  // Supabase into the same in-memory notification list as the legacy
-  // demo/pushNotification flow. Dedups by id so initial fetch + realtime
-  // stream don't double-insert. ─────────────────────────────────────────
-  const { notifications: dashRows, markRead: markDashRead } = useDashNotifications({
-    appCode,
-    dashId,
-  });
-  const seenRowIdsRef = useRef<Set<string>>(new Set());
-  useEffect(() => {
-    if (dashRows.length === 0) return;
-    const fresh = dashRows.filter(r => !seenRowIdsRef.current.has(r.id));
-    if (fresh.length === 0) return;
-    fresh.forEach(r => seenRowIdsRef.current.add(r.id));
-    // Newest-first in dashRows; append in reverse so the very newest ends
-    // up at the end of our local list (matching pushNotification order
-    // and auto-navigating `setCurrentIndex(newList.length - 1)`).
-    const mapped = [...fresh].reverse().map(mapDashNotification);
-    setNotifications(prev => {
-      const filtered = mapped.filter(m => !prev.some(p => p.id === m.id));
-      if (filtered.length === 0) return prev;
-      const next = [...prev, ...filtered];
-      setCurrentIndex(next.length - 1);
-      return next;
-    });
-    triggerNewNotification();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dashRows]);
-
-  // When the user dismisses / marks a notification read locally, and it
-  // originated from the realtime stream, also mark it read in the hook
-  // so future re-renders keep that state.
-  const handleMarkRead = (id: string) => {
-    markDashRead(id);
-    setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
-  };
-  // Keep lint happy — referenced below via window? No, just for callers.
-  void handleMarkRead;
-
-  // Expose function to add notifications globally
-  useEffect(() => {
-    window.pushNotification = (notif: Notification) => {
-      setNotifications(prev => {
-        const newList = [...prev, notif];
-        // Navigate to the new notification (use callback to avoid stale closure)
-        setCurrentIndex(newList.length - 1);
-        return newList;
-      });
-      triggerNewNotification(); // Wave for new notifications
-    };
-
-    if (!import.meta.env.DEV) return;
-
-    // Demo: Auto-trigger notifications to show the full flow (dev only)
-    const demo1 = setTimeout(() => {
-      window.pushNotification?.({
-        id: '1',
-        type: 'music',
-        title: 'Burna Boy',
-        subtitle: 'Higher just dropped'
-      });
-    }, 1000);
-
-    const demo2 = setTimeout(() => {
-      window.pushNotification?.({
-        id: '2',
-        type: 'message',
-        title: 'Aziz',
-        subtitle: 'yo come check this out'
-      });
-    }, 8000);
-
-    const demo3 = setTimeout(() => {
-      window.pushNotification?.({
-        id: '3',
-        type: 'system',
-        title: 'VOYO',
-        subtitle: 'notification system ready'
-      });
-    }, 15000);
-
-    return () => {
-      clearTimeout(demo1);
-      clearTimeout(demo2);
-      clearTimeout(demo3);
-    };
-  }, []);
-
-  // NEW NOTIFICATION: wave → dark → fade
-  const triggerNewNotification = () => {
-    if (phaseTimerRef.current) clearTimeout(phaseTimerRef.current);
-    if (fadeTimerRef.current) clearTimeout(fadeTimerRef.current);
-
-    // Reset everything first, then start wave
-    setIsFading(false);
-    setIsExpanded(false);
-    setIsNewNotification(true);
-    setPhase('wave');
-
-    // Small delay to ensure clean state before showing
-    requestAnimationFrame(() => {
-      setIsVisible(true);
-    });
-
-    // Wave (3s) → Dark (3s) → Fade
-    phaseTimerRef.current = setTimeout(() => {
-      setIsNewNotification(false);
-      setPhase('dark');
-
-      phaseTimerRef.current = setTimeout(() => {
-        setIsFading(true);
-        phaseTimerRef.current = setTimeout(() => {
-          setIsVisible(false);
-          setPhase('idle');
-          setIsFading(false);
-        }, 600);
-      }, 3000);
-    }, 3000);
-  };
-
-  // MANUAL RESURFACE: just dark (no wave)
-  const triggerManualResurface = () => {
-    if (phaseTimerRef.current) clearTimeout(phaseTimerRef.current);
-    if (fadeTimerRef.current) clearTimeout(fadeTimerRef.current);
-
-    setIsVisible(true);
-    setIsExpanded(false);
-    setIsFading(false);
-    setIsNewNotification(false);
-    setPhase('dark');
-
-    // Dark (3s) → Fade
-    phaseTimerRef.current = setTimeout(() => {
-      setIsFading(true);
-      phaseTimerRef.current = setTimeout(() => {
-        setIsVisible(false);
-        setPhase('idle');
-        setIsFading(false);
-      }, 600);
-    }, 3000);
-  };
-
-  // When expanded - NO auto-dismiss. User must take action.
-  // Only clear any pending fade timers
-  useEffect(() => {
-    if (isExpanded) {
-      // Cancel any auto-fade - expanded stays until user acts
-      if (phaseTimerRef.current) clearTimeout(phaseTimerRef.current);
-      if (fadeTimerRef.current) clearTimeout(fadeTimerRef.current);
-      setIsFading(false);
-    }
-  }, [isExpanded]);
-
-  // Dismiss current notification
-  const dismissCurrent = () => {
-    const remaining = notifications.filter((_, i) => i !== currentIndex);
-    setNotifications(remaining);
-
-    // Always fade out gracefully
-    setIsFading(true);
-    setTimeout(() => {
-      setIsVisible(false);
-      setIsExpanded(false);
-      setIsReplying(false);
-      setIsFading(false);
-      setPhase('idle');
-
-      if (remaining.length > 0) {
-        setCurrentIndex(Math.min(currentIndex, remaining.length - 1));
-        // Don't auto-show next - user can tap to resurface
-      }
-    }, 400);
-  };
-
-  // Navigate notifications (collapsed: swipe left/right, swipe up to dismiss)
-  const handleCollapsedDrag = (_: any, info: { offset: { x: number; y: number } }) => {
-    if (info.offset.y < -40) {
-      // Swipe up - dismiss
-      dismissCurrent();
-    } else if (Math.abs(info.offset.x) > 40) {
-      // Swipe left/right - navigate (no wave, just change)
-      if (info.offset.x > 0 && currentIndex > 0) {
-        setCurrentIndex(currentIndex - 1);
-      } else if (info.offset.x < 0 && currentIndex < notifications.length - 1) {
-        setCurrentIndex(currentIndex + 1);
-      }
-    }
-  };
-
-  // Expanded: swipe up to dismiss, left/right to navigate with wave transition
+  const [transcript, setTranscript] = useState('');
+  const [waveformLevels, setWaveformLevels] = useState<number[]>([0.3, 0.3, 0.3, 0.3, 0.3]);
+  const [countdown, setCountdown] = useState<number | null>(null);
   const [isTransitioning, setIsTransitioning] = useState(false);
 
-  const handleExpandedDrag = (_: any, info: { offset: { x: number; y: number } }) => {
-    if (info.offset.y < -50) {
-      // Swipe up - dismiss
-      dismissCurrent();
-    } else if (Math.abs(info.offset.x) > 50 && !isTransitioning) {
-      const newIndex = info.offset.x > 0
-        ? Math.max(0, currentIndex - 1)
-        : Math.min(notifications.length - 1, currentIndex + 1);
+  const currentNotification = notifications[currentIndex];
+  const hasQueue = notifications.length > 0;
+  const unreadCount = notifications.filter((n) => !n.read).length;
 
-      if (newIndex !== currentIndex) {
-        // Wave transition between notifications
-        setIsTransitioning(true);
+  // ── Refs ───────────────────────────────────────────────────────────
+  const phaseTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const replyInputRef = useRef<HTMLInputElement>(null);
+  const seenIdsRef = useRef<Set<string>>(new Set());
+  const dashOriginIdsRef = useRef<Set<string>>(new Set()); // ids that came from dash_notifications
 
-        // Wave washes out current
-        setTimeout(() => {
-          setCurrentIndex(newIndex);
-          // Wave washes in new
-          setTimeout(() => {
-            setIsTransitioning(false);
-          }, 300);
-        }, 300);
-      }
-    }
-  };
+  // Drag tracking (pointer events on the container)
+  const dragStartRef = useRef<{ x: number; y: number } | null>(null);
+  const dragHandledRef = useRef(false);
 
-  const handleTap = () => {
-    // Cancel any pending fade
-    if (phaseTimerRef.current) clearTimeout(phaseTimerRef.current);
-    if (fadeTimerRef.current) clearTimeout(fadeTimerRef.current);
-    setIsFading(false);
-
-    if (!isExpanded) {
-      // Collapsed → Expand (stays until user acts)
-      setPhase('idle');
-      setIsExpanded(true);
-    } else {
-      // Expanded → Collapse back to dark (with timer)
-      setIsExpanded(false);
-      setPhase('dark');
-      phaseTimerRef.current = setTimeout(() => {
-        setIsFading(true);
-        setTimeout(() => {
-          setIsVisible(false);
-          setPhase('idle');
-          setIsFading(false);
-        }, 600);
-      }, 3000);
-    }
-  };
-
-  // Manual resurface - tap header when notifications exist but not visible
-  const handleResurface = () => {
-    if (notifications.length > 0 && !isVisible) {
-      triggerManualResurface();
-    }
-  };
-
-  const handleAction = (action: string) => {
-    devLog(`Action: ${action} for ${currentNotification?.title}`);
-
-    // Action taken - remove from queue and next wave
-    const remaining = notifications.filter((_, i) => i !== currentIndex);
-    setNotifications(remaining);
-
-    if (remaining.length > 0) {
-      setIsExpanded(false);
-      setIsVisible(false);
-      setCurrentIndex(Math.min(currentIndex, remaining.length - 1));
-      setTimeout(() => triggerManualResurface(), 400);
-    } else {
-      setIsExpanded(false);
-      setIsVisible(false);
-      setPhase('idle');
-    }
-  };
-
-  const handleReplyMode = () => {
-    setIsReplying(true);
-    // Wave washes in via AnimatePresence, then focus input
-    setTimeout(() => {
-      replyInputRef.current?.focus();
-    }, 500);
-  };
-
-  const [isSending, setIsSending] = useState(false);
-  const [isVoiceMode, setIsVoiceMode] = useState(false);
-  const [countdown, setCountdown] = useState<number | null>(null);
-  const [isRecording, setIsRecording] = useState(false);
-  const [waveformLevels, setWaveformLevels] = useState<number[]>([0.3, 0.3, 0.3, 0.3, 0.3]);
-  const [transcript, setTranscript] = useState('');
+  // Voice recording resources
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const animationRef = useRef<number | null>(null);
+  // SpeechRecognition isn't reliably typed cross-browser; keep loose to avoid
+  // surface-area lib changes pulling in optional polyfill types.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const recognitionRef = useRef<any>(null);
 
-  const startRecording = async () => {
+  // ── Phase timer helpers ────────────────────────────────────────────
+  const clearPhaseTimers = useCallback(() => {
+    phaseTimersRef.current.forEach(clearTimeout);
+    phaseTimersRef.current = [];
+  }, []);
+
+  const schedulePhase = useCallback(
+    (delayMs: number, next: Phase) => {
+      phaseTimersRef.current.push(setTimeout(() => setPhase(next), delayMs));
+    },
+    [],
+  );
+
+  // ── Lifecycle entry/exit transitions ──────────────────────────────
+  const playWaveSequence = useCallback(() => {
+    clearPhaseTimers();
+    setPhase('wave');
+    schedulePhase(TIMING.WAVE_MS, 'dark');
+    schedulePhase(TIMING.WAVE_MS + TIMING.DARK_MS, 'fading');
+  }, [clearPhaseTimers, schedulePhase]);
+
+  const playResurface = useCallback(() => {
+    clearPhaseTimers();
+    setPhase('dark');
+    schedulePhase(TIMING.DARK_MS, 'fading');
+  }, [clearPhaseTimers, schedulePhase]);
+
+  // After a fading phase, settle into 'dot' (queue still has items) or
+  // 'hidden' (nothing left). Driven off `phase === 'fading'` so it
+  // automatically follows wave/dark/manual sequences.
+  useEffect(() => {
+    if (phase !== 'fading') return;
+    const t = setTimeout(
+      () => setPhase(hasQueue ? 'dot' : 'hidden'),
+      TIMING.FADE_MS,
+    );
+    return () => clearTimeout(t);
+  }, [phase, hasQueue]);
+
+  // ── Notification buffer management ────────────────────────────────
+  const enqueue = useCallback(
+    (notif: Notification, fromDash = false) => {
+      setNotifications((prev) => {
+        // Dedup by id — replace existing if same id
+        const without = prev.filter((p) => p.id !== notif.id);
+        const next = [...without, notif];
+        // Hard cap prevents unbounded growth
+        const capped = next.length > NOTIF_CAP ? next.slice(-NOTIF_CAP) : next;
+        setCurrentIndex(capped.length - 1);
+        return capped;
+      });
+      if (fromDash) dashOriginIdsRef.current.add(notif.id);
+      playWaveSequence();
+    },
+    [playWaveSequence],
+  );
+
+  // ── Realtime ingest from useDashNotifications ─────────────────────
+  const { notifications: dashRows, markRead: markDashRead } = useDashNotifications({
+    appCode,
+    dashId,
+  });
+
+  useEffect(() => {
+    if (dashRows.length === 0) return;
+    const fresh = dashRows.filter((r) => !seenIdsRef.current.has(r.id));
+    if (fresh.length === 0) return;
+    fresh.forEach((r) => seenIdsRef.current.add(r.id));
+    // Newest-first in dashRows — reverse so newest is appended last and becomes current.
+    fresh.slice().reverse().forEach((r) => enqueue(mapDashNotification(r), true));
+  }, [dashRows, enqueue]);
+
+  // ── window.pushNotification bridge ────────────────────────────────
+  useEffect(() => {
+    window.pushNotification = (notif: Notification) => enqueue(notif);
+    return () => { delete window.pushNotification; };
+  }, [enqueue]);
+
+  // ── Dev-only demo notifications ───────────────────────────────────
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    const t1 = setTimeout(() => window.pushNotification?.({ id: 'demo-1', type: 'music',   title: 'Burna Boy', subtitle: 'Higher just dropped'        }),  1000);
+    const t2 = setTimeout(() => window.pushNotification?.({ id: 'demo-2', type: 'message', title: 'Aziz',      subtitle: 'yo come check this out'     }),  8000);
+    const t3 = setTimeout(() => window.pushNotification?.({ id: 'demo-3', type: 'system',  title: 'VOYO',      subtitle: 'notification system ready'  }), 15000);
+    return () => { [t1, t2, t3].forEach(clearTimeout); };
+  }, []);
+
+  // ── Phase pause when expanded/replying/sending ────────────────────
+  useEffect(() => {
+    if (phase === 'expanded' || phase === 'replying' || phase === 'sending') {
+      clearPhaseTimers();
+    }
+  }, [phase, clearPhaseTimers]);
+
+  // ── Dismiss helpers ───────────────────────────────────────────────
+  const removeAt = useCallback(
+    (idx: number) => {
+      setNotifications((prev) => {
+        const target = prev[idx];
+        if (target && dashOriginIdsRef.current.has(target.id)) {
+          // Mark read in the dahub so future loads don't replay it
+          try { markDashRead(target.id); } catch { /* fire-and-forget */ }
+          dashOriginIdsRef.current.delete(target.id);
+        }
+        const next = prev.filter((_, i) => i !== idx);
+        setCurrentIndex((cur) => Math.min(cur, Math.max(0, next.length - 1)));
+        return next;
+      });
+    },
+    [markDashRead],
+  );
+
+  const dismissCurrent = useCallback(() => {
+    clearPhaseTimers();
+    setPhase('fading');
+    phaseTimersRef.current.push(
+      setTimeout(() => {
+        removeAt(currentIndex);
+      }, TIMING.FADE_MS),
+    );
+  }, [clearPhaseTimers, currentIndex, removeAt]);
+
+  // ── Tap to expand ↔ collapse ──────────────────────────────────────
+  const handleTap = useCallback(() => {
+    clearPhaseTimers();
+    if (phase === 'expanded' || phase === 'replying') {
+      setPhase('dark');
+      schedulePhase(TIMING.DARK_MS, 'fading');
+    } else {
+      setPhase('expanded');
+    }
+  }, [clearPhaseTimers, phase, schedulePhase]);
+
+  // ── Manual resurface from dot ─────────────────────────────────────
+  const handleDotTap = useCallback(() => {
+    if (!hasQueue) return;
+    playResurface();
+  }, [hasQueue, playResurface]);
+
+  // ── Drag (horizontal nav + swipe-up dismiss) ───────────────────────
+  const navigate = useCallback(
+    (delta: -1 | 1, withTransition = false) => {
+      const next = currentIndex + delta;
+      if (next < 0 || next >= notifications.length) return;
+      if (withTransition) {
+        setIsTransitioning(true);
+        setTimeout(() => {
+          setCurrentIndex(next);
+          setTimeout(() => setIsTransitioning(false), TIMING.TRANSITION_MS);
+        }, TIMING.TRANSITION_MS);
+      } else {
+        setCurrentIndex(next);
+      }
+    },
+    [currentIndex, notifications.length],
+  );
+
+  const onPointerDown = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
+    dragStartRef.current = { x: e.clientX, y: e.clientY };
+    dragHandledRef.current = false;
+  }, []);
+
+  const onPointerMove = useCallback(
+    (e: ReactPointerEvent<HTMLDivElement>) => {
+      if (!dragStartRef.current || dragHandledRef.current) return;
+      const dx = e.clientX - dragStartRef.current.x;
+      const dy = e.clientY - dragStartRef.current.y;
+
+      // Swipe-up dismiss
+      if (-dy > DRAG_Y_THRESHOLD && Math.abs(dy) > Math.abs(dx)) {
+        dragHandledRef.current = true;
+        dismissCurrent();
+        return;
+      }
+
+      // Horizontal nav — wave transition only when expanded
+      if (Math.abs(dx) > DRAG_X_THRESHOLD && Math.abs(dx) > Math.abs(dy)) {
+        dragHandledRef.current = true;
+        navigate(dx > 0 ? -1 : 1, phase === 'expanded' || phase === 'replying');
+      }
+    },
+    [dismissCurrent, navigate, phase],
+  );
+
+  const onPointerUp = useCallback(() => {
+    dragStartRef.current = null;
+  }, []);
+
+  // ── Keyboard nav when expanded ─────────────────────────────────────
+  useEffect(() => {
+    if (phase !== 'expanded' && phase !== 'replying') return;
+    const onKey = (e: KeyboardEvent) => {
+      if (phase === 'replying') {
+        // Let the input handle its own keys; only Esc collapses
+        if (e.key === 'Escape') { e.preventDefault(); setPhase('expanded'); }
+        return;
+      }
+      if (e.key === 'ArrowLeft')  { e.preventDefault(); navigate(-1, true); }
+      if (e.key === 'ArrowRight') { e.preventDefault(); navigate(1, true); }
+      if (e.key === 'Escape')     { e.preventDefault(); handleTap(); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [phase, navigate, handleTap]);
+
+  // ── Action handlers ────────────────────────────────────────────────
+  const handleAction = useCallback(
+    (action: string) => {
+      devLog(`[DynamicIsland] action=${action}`, currentNotification?.title);
+      removeAt(currentIndex);
+      if (notifications.length > 1) {
+        setPhase('hidden');
+        setTimeout(() => playResurface(), TIMING.FADE_MS);
+      } else {
+        setPhase('hidden');
+      }
+    },
+    [currentIndex, currentNotification, notifications.length, playResurface, removeAt],
+  );
+
+  const handleReplyMode = useCallback(() => {
+    setPhase('replying');
+    setTimeout(() => replyInputRef.current?.focus(), TIMING.REPLY_FOCUS_MS);
+  }, []);
+
+  // ── Voice recording ────────────────────────────────────────────────
+  const stopRecording = useCallback(() => {
+    if (animationRef.current) cancelAnimationFrame(animationRef.current);
+    animationRef.current = null;
+    try { audioContextRef.current?.close(); } catch { /* already closed */ }
+    audioContextRef.current = null;
+    analyserRef.current = null;
+    try { recognitionRef.current?.stop(); } catch { /* already stopped */ }
+    recognitionRef.current = null;
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      try {
+        mediaRecorderRef.current.stop();
+        mediaRecorderRef.current.stream?.getTracks().forEach((t) => t.stop());
+      } catch { /* already stopped */ }
+    }
+    mediaRecorderRef.current = null;
+    setWaveformLevels([0.3, 0.3, 0.3, 0.3, 0.3]);
+  }, []);
+
+  const startRecording = useCallback(async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
 
-      // Setup audio context for waveform
       audioContextRef.current = new AudioContext();
       analyserRef.current = audioContextRef.current.createAnalyser();
-      const source = audioContextRef.current.createMediaStreamSource(stream);
-      source.connect(analyserRef.current);
       analyserRef.current.fftSize = 32;
+      audioContextRef.current.createMediaStreamSource(stream).connect(analyserRef.current);
 
-      // Animate waveform
       const updateWaveform = () => {
-        if (analyserRef.current) {
-          const data = new Uint8Array(analyserRef.current.frequencyBinCount);
-          analyserRef.current.getByteFrequencyData(data);
-          const levels = Array.from(data.slice(0, 5)).map(v => Math.max(0.2, v / 255));
-          setWaveformLevels(levels);
-        }
+        if (!analyserRef.current) return;
+        const data = new Uint8Array(analyserRef.current.frequencyBinCount);
+        analyserRef.current.getByteFrequencyData(data);
+        setWaveformLevels(Array.from(data.slice(0, 5)).map((v) => Math.max(0.2, v / 255)));
         animationRef.current = requestAnimationFrame(updateWaveform);
       };
       updateWaveform();
 
-      // Setup speech recognition for transcript
-      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-      if (SpeechRecognition) {
-        recognitionRef.current = new SpeechRecognition();
+      const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (SR) {
+        recognitionRef.current = new SR();
         recognitionRef.current.continuous = true;
         recognitionRef.current.interimResults = true;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         recognitionRef.current.onresult = (event: any) => {
-          const result = Array.from(event.results)
-            .map((r: any) => r[0].transcript)
+          const text = Array.from(event.results)
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            .map((r: any) => r?.[0]?.transcript ?? '')
             .join('');
-          setTranscript(result);
+          setTranscript(text);
         };
-        recognitionRef.current.start();
+        try { recognitionRef.current.start(); } catch { /* may have already started */ }
       }
 
-      // Setup media recorder
       mediaRecorderRef.current = new MediaRecorder(stream);
       mediaRecorderRef.current.start();
-
-      setIsRecording(true);
     } catch (err) {
-      devWarn('Mic access denied:', err);
-      setIsVoiceMode(false);
+      devWarn('[DynamicIsland] mic access denied:', err);
       setCountdown(null);
     }
-  };
-
-  const stopRecording = () => {
-    if (animationRef.current) cancelAnimationFrame(animationRef.current);
-    if (audioContextRef.current) audioContextRef.current.close();
-    if (recognitionRef.current) recognitionRef.current.stop();
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-      mediaRecorderRef.current.stop();
-      mediaRecorderRef.current.stream.getTracks().forEach(t => t.stop());
-    }
-    setWaveformLevels([0.3, 0.3, 0.3, 0.3, 0.3]);
-  };
-
-  // Cleanup recording resources on unmount (prevents memory leak)
-  useEffect(() => {
-    return () => {
-      if (animationRef.current) cancelAnimationFrame(animationRef.current);
-      if (audioContextRef.current) {
-        try {
-          audioContextRef.current.close();
-        } catch {
-          // Ignore errors during cleanup
-        }
-      }
-      try {
-        if (recognitionRef.current) recognitionRef.current.stop();
-      } catch {
-        // Recognition may already be stopped
-      }
-      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-        try {
-          mediaRecorderRef.current.stop();
-          mediaRecorderRef.current.stream?.getTracks().forEach(t => t.stop());
-        } catch {
-          // MediaRecorder may already be stopped
-        }
-      }
-    };
   }, []);
 
-  const handleVoiceTap = () => {
-    // Tap on wavy box triggers voice mode
-    if (!isVoiceMode && !isRecording && countdown === null) {
-      setIsVoiceMode(true);
-      setTranscript('');
-      setCountdown(3);
-      setTimeout(() => setCountdown(2), 1000);
-      setTimeout(() => setCountdown(1), 2000);
-      setTimeout(() => {
-        setCountdown(null);
-        startRecording();
-      }, 3000);
-    }
-  };
-
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setReplyText(e.target.value);
-    // Typing cancels voice mode
-    if (isVoiceMode || isRecording || countdown !== null) {
-      stopRecording();
-      setIsVoiceMode(false);
-      setIsRecording(false);
+  const handleVoiceTap = useCallback(() => {
+    if (countdown !== null || mediaRecorderRef.current) return;
+    setTranscript('');
+    setCountdown(3);
+    phaseTimersRef.current.push(setTimeout(() => setCountdown(2), TIMING.COUNTDOWN_STEP_MS));
+    phaseTimersRef.current.push(setTimeout(() => setCountdown(1), TIMING.COUNTDOWN_STEP_MS * 2));
+    phaseTimersRef.current.push(setTimeout(() => {
       setCountdown(null);
-    }
-  };
+      void startRecording();
+    }, TIMING.COUNTDOWN_STEP_MS * 3));
+  }, [countdown, startRecording]);
 
-  const handleSendReply = () => {
-    if (replyText.trim() || isRecording) {
-      const replyData = {
-        type: isRecording ? 'voice' : 'text',
-        content: replyText || '[voice note]',
-        transcript: isRecording ? transcript : null, // Include transcript for voice
-      };
-      devLog(`Reply to ${currentNotification?.title}:`, replyData);
+  const handleInputChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      setReplyText(e.target.value);
+      // Typing cancels any pending voice mode
+      if (countdown !== null || mediaRecorderRef.current) {
+        stopRecording();
+        setCountdown(null);
+      }
+    },
+    [countdown, stopRecording],
+  );
 
-      stopRecording();
-      setIsSending(true);
+  const isRecording = !!mediaRecorderRef.current;
 
-      // Wave carries message away (0.8s recede animation)
+  const handleSendReply = useCallback(() => {
+    const isVoice = isRecording;
+    const content = replyText.trim() || (isVoice ? '[voice note]' : '');
+    if (!content) return;
+
+    devLog('[DynamicIsland] reply', currentNotification?.title, {
+      type: isVoice ? 'voice' : 'text',
+      content,
+      transcript: isVoice ? transcript : null,
+    });
+
+    stopRecording();
+    setPhase('sending');
+
+    phaseTimersRef.current.push(
       setTimeout(() => {
         setReplyText('');
         setTranscript('');
-        setIsReplying(false);
-        setIsSending(false);
-        setIsVoiceMode(false);
-        setIsRecording(false);
         setCountdown(null);
-
-        // Mark as read and move to next
-        const remaining = notifications.filter((_, i) => i !== currentIndex);
-        setNotifications(remaining);
-
-        if (remaining.length > 0) {
-          // Next wave arrives
-          setIsExpanded(false);
-          setIsVisible(false);
-          setCurrentIndex(Math.min(currentIndex, remaining.length - 1));
-          setTimeout(() => triggerManualResurface(), 400);
+        removeAt(currentIndex);
+        if (notifications.length > 1) {
+          setPhase('hidden');
+          setTimeout(() => playResurface(), TIMING.FADE_MS);
         } else {
-          // All done - clean exit
-          setIsExpanded(false);
-          setIsVisible(false);
-          setPhase('idle');
+          setPhase('hidden');
         }
-      }, 800);
-    }
-  };
+      }, TIMING.SEND_RAMP_MS),
+    );
+  }, [
+    isRecording,
+    replyText,
+    transcript,
+    currentNotification,
+    stopRecording,
+    removeAt,
+    currentIndex,
+    notifications.length,
+    playResurface,
+  ]);
 
-  // When not visible but has notifications
-  // Tap banner → dot appears pulsing → click dot to open → no click = fades
-  const fadeTimerForDot = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // ── Cleanup on unmount ─────────────────────────────────────────────
+  useEffect(
+    () => () => {
+      clearPhaseTimers();
+      stopRecording();
+    },
+    [clearPhaseTimers, stopRecording],
+  );
 
-  const handleBannerTap = () => {
-    if (!showTapFeedback) {
-      // First tap: show the pulsing dot
-      setShowTapFeedback(true);
-      // Auto-fade after 3 seconds if not clicked
-      if (fadeTimerForDot.current) clearTimeout(fadeTimerForDot.current);
-      fadeTimerForDot.current = setTimeout(() => {
-        setShowTapFeedback(false);
-      }, 3000);
-    }
-  };
+  // ── Derived display flags ──────────────────────────────────────────
+  const isCollapsed = phase === 'wave' || phase === 'dark' || phase === 'fading';
+  const isExpanded  = phase === 'expanded' || phase === 'replying' || phase === 'sending';
+  const isReplying  = phase === 'replying' || phase === 'sending';
+  const isSending   = phase === 'sending';
+  const isFading    = phase === 'fading';
+  const showWave    = phase === 'wave';
+  const showDot     = phase === 'dot' && hasQueue;
 
-  const handleDotClick = () => {
-    if (fadeTimerForDot.current) clearTimeout(fadeTimerForDot.current);
-    setShowTapFeedback(false);
-    handleResurface();
-  };
+  // Memoized container drag handlers — same instance so React doesn't
+  // detach/reattach event listeners between renders.
+  const dragHandlers = useMemo(
+    () => ({ onPointerDown, onPointerMove, onPointerUp, onPointerCancel: onPointerUp }),
+    [onPointerDown, onPointerMove, onPointerUp],
+  );
 
-  if (!isVisible && notifications.length > 0) {
-    // Two states: no dot visible (tap to show), dot visible (tap dot to open)
-    if (!showTapFeedback) {
-      // Empty banner - tap anywhere to show dot
-      return (
+  // ── Render ─────────────────────────────────────────────────────────
+
+  if (showDot) {
+    return (
+      <div
+        className="cursor-pointer flex-1 h-8 flex items-center justify-center"
+        onClick={handleDotTap}
+        style={{ minWidth: 120 }}
+        aria-label={`${notifications.length} notification${notifications.length === 1 ? '' : 's'} — tap to view`}
+      >
         <div
-          className="cursor-pointer flex-1 h-8 flex items-center justify-center"
-          onClick={handleBannerTap}
-          style={{ minWidth: 120 }}
+          className="w-2 h-2 rounded-full voyo-island-dot-pulse"
+          style={{ backgroundColor: dotColor(currentNotification) }}
         />
-      );
-    } else {
-      // Dot visible - tap dot to open notification
-      return (
-        <div
-          className="cursor-pointer flex-1 h-8 flex items-center justify-center"
-          style={{ minWidth: 120 }}
-          onClick={handleDotClick}
-        >
-          <div
-            className="w-3 h-3 rounded-full"
-            style={{
-              backgroundColor: notifications[0]?.type === 'music' ? '#a855f7' :
-                notifications[0]?.type === 'message' ? '#8b5cf6' : '#ef4444'
-            }}
-          />
-        </div>
-      );
-    }
+        <style>{`
+          @keyframes voyo-island-dot {
+            0%, 100% { opacity: 0.55; transform: scale(1); }
+            50%      { opacity: 1;    transform: scale(1.3); }
+          }
+          .voyo-island-dot-pulse {
+            animation: voyo-island-dot 2.4s ease-in-out infinite;
+            box-shadow: 0 0 6px currentColor;
+          }
+          @media (prefers-reduced-motion: reduce) {
+            .voyo-island-dot-pulse { animation: none; opacity: 0.7; }
+          }
+        `}</style>
+      </div>
+    );
   }
 
-  if (!isVisible || notifications.length === 0) return null;
+  if (phase === 'hidden' || !hasQueue) return null;
+
+  // Collapsed pill style (wave/dark/fading)
+  const collapsedStyle: CSSProperties = {
+    width: showWave ? 190 : 165,
+    height: showWave ? 30 : 26,
+    paddingLeft: showWave ? 16 : 14,
+    paddingRight: showWave ? 16 : 14,
+    opacity: isFading ? 0 : 1,
+    transition: 'opacity 600ms ease, width 240ms cubic-bezier(0.16, 1, 0.3, 1), height 240ms cubic-bezier(0.16, 1, 0.3, 1)',
+    touchAction: 'none',
+  };
+
+  // Expanded card style
+  const expandedStyle: CSSProperties = {
+    width: isSending ? 200 : isReplying ? 300 : 280,
+    opacity: isSending ? 0 : 1,
+    backgroundColor: isReplying ? 'rgba(0,0,0,0.8)' : 'rgba(255,255,255,0.95)',
+    borderColor: isReplying ? 'rgba(168,85,247,0.3)' : 'rgba(255,255,255,0.2)',
+    transition: 'opacity 380ms ease, width 280ms cubic-bezier(0.16, 1, 0.3, 1), background-color 380ms ease',
+    touchAction: 'none',
+  };
 
   return (
-    <div
-      className="z-20"
-    >
-      
-        {!isExpanded ? (
-          // COLLAPSED STATE - Wave (larger) → Dark (smaller)
+    <div className="z-20" {...dragHandlers}>
+      {isCollapsed ? (
+        // ── COLLAPSED ────────────────────────────────────────────────
+        <div className="cursor-pointer" onClick={handleTap}>
           <div
-            key="collapsed"
-            className="cursor-pointer"
-            onClick={handleTap}
+            className={`relative flex items-center gap-2 backdrop-blur-md border rounded-full overflow-hidden ${
+              showWave ? 'border-white/40' : 'bg-black/50 border-white/10'
+            }`}
+            style={collapsedStyle}
           >
-            <div
-              className={`relative flex items-center gap-2 backdrop-blur-md border rounded-full overflow-hidden ${
-                phase === 'wave' && isNewNotification
-                  ? 'border-white/40'
-                  : 'bg-black/50 border-white/10'
+            {/* LIQUID WAVE — only on fresh arrivals */}
+            {showWave && (
+              <div className="absolute inset-0 overflow-hidden">
+                <div className="absolute inset-0" style={{ background: 'linear-gradient(90deg, #7c3aed 0%, #8b5cf6 25%, #a78bfa 50%, #7c3aed 75%, #5b21b6 100%)', backgroundSize: '200% 100%' }} />
+                <div className="absolute inset-0 opacity-60" style={{ background: 'linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.4) 30%, rgba(139,92,246,0.6) 50%, rgba(255,255,255,0.4) 70%, transparent 100%)', backgroundSize: '150% 100%' }} />
+                <div className="absolute inset-0 opacity-40" style={{ background: 'linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.8) 45%, rgba(255,255,255,0.9) 50%, rgba(255,255,255,0.8) 55%, transparent 100%)', backgroundSize: '80% 100%' }} />
+              </div>
+            )}
+
+            {/* Dot */}
+            <span
+              className="relative z-10 w-1.5 h-1.5 rounded-full flex-shrink-0"
+              style={{ backgroundColor: showWave ? '#fff' : dotColor(currentNotification) }}
+            />
+
+            {/* Preview text */}
+            <span
+              className={`relative z-10 text-[10px] truncate lowercase ${
+                showWave ? 'text-white font-semibold' : 'text-white/70'
               }`}
-              style={{
-                width: phase === 'wave' && isNewNotification ? 190 : 165,
-                height: phase === 'wave' && isNewNotification ? 30 : 26,
-                paddingLeft: phase === 'wave' && isNewNotification ? 16 : 14,
-                paddingRight: phase === 'wave' && isNewNotification ? 16 : 14,
-              }}
             >
-              {/* LIQUID WAVE - Only for NEW notifications */}
-              {phase === 'wave' && isNewNotification && (
-                <div
-                  className="absolute inset-0 overflow-hidden"
-                >
-                  {/* Base layer - slow movement */}
-                  <div
-                    className="absolute inset-0"
-                    style={{
-                      background: 'linear-gradient(90deg, #7c3aed 0%, #8b5cf6 25%, #a78bfa 50%, #7c3aed 75%, #5b21b6 100%)',
-                      backgroundSize: '200% 100%',
-                    }}
-                  />
-                  {/* Middle layer - medium movement */}
-                  <div
-                    className="absolute inset-0 opacity-60"
-                    style={{
-                      background: 'linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.4) 30%, rgba(139,92,246,0.6) 50%, rgba(255,255,255,0.4) 70%, transparent 100%)',
-                      backgroundSize: '150% 100%',
-                    }}
-                  />
-                  {/* Top shimmer - fast highlights */}
-                  <div
-                    className="absolute inset-0 opacity-40"
-                    style={{
-                      background: 'linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.8) 45%, rgba(255,255,255,0.9) 50%, rgba(255,255,255,0.8) 55%, transparent 100%)',
-                      backgroundSize: '80% 100%',
-                    }}
-                  />
-                </div>
-              )}
+              {currentNotification?.subtitle}
+            </span>
 
-              {/* Dot - color based on notification type */}
+            {/* Queue badge */}
+            {unreadCount > 1 && (
               <span
-                className="relative z-10 w-1.5 h-1.5 rounded-full flex-shrink-0"
-                style={{
-                  backgroundColor: (phase === 'wave' && isNewNotification) ? '#fff' :
-                    currentNotification?.color ? currentNotification.color :
-                    currentNotification?.type === 'music' ? '#a855f7' :
-                    currentNotification?.type === 'message' ? '#8b5cf6' :
-                    '#ef4444'
-                }}
-              />
-
-              {/* Preview text */}
-              <span className={`relative z-10 text-[10px] truncate lowercase ${
-                (phase === 'wave' && isNewNotification) ? 'text-white font-semibold' : 'text-white/70'
-              }`}>
-                {currentNotification?.subtitle}
+                className={`relative z-10 text-[9px] flex-shrink-0 ${
+                  showWave ? 'text-white/90' : 'text-white/30'
+                }`}
+              >
+                +{unreadCount - 1}
               </span>
-
-              {/* Unread indicator */}
-              {unreadCount > 1 && (
-                <span className={`relative z-10 text-[9px] flex-shrink-0 ${
-                  (phase === 'wave' && isNewNotification) ? 'text-white/90' : 'text-white/30'
-                }`}>
-                  +{unreadCount - 1}
-                </span>
-              )}
-            </div>
+            )}
           </div>
-        ) : (
-          // EXPANDED STATE - Larger white pill, smooth entrance
+        </div>
+      ) : (
+        // ── EXPANDED ─────────────────────────────────────────────────
+        <div className="cursor-pointer" onClick={handleTap}>
           <div
-            key="expanded"
-            className="cursor-pointer"
+            className="relative backdrop-blur-md rounded-2xl shadow-xl border overflow-hidden"
+            style={expandedStyle}
           >
-            <div
-              className="relative backdrop-blur-md rounded-2xl shadow-xl border overflow-hidden"
-              style={{
-                width: isSending ? 200 : (isReplying ? 300 : 280),
-                opacity: isSending ? 0 : 1,
-                backgroundColor: isReplying ? 'rgba(0,0,0,0.8)' : 'rgba(255,255,255,0.95)',
-                borderColor: isReplying ? 'rgba(168,85,247,0.3)' : 'rgba(255,255,255,0.2)',
-              }}
-            >
-              {/* Wave overlay for transitions & reply mode */}
-              
-                {(isReplying || isTransitioning) && (
+            {/* Wave overlay during reply or transition */}
+            {(isReplying || isTransitioning) && (
+              <div className="absolute inset-0 overflow-hidden">
+                <div className="absolute inset-0" style={{ background: 'linear-gradient(90deg, #4c1d95 0%, #7c3aed 25%, #8b5cf6 50%, #a78bfa 75%, #4c1d95 100%)', backgroundSize: '200% 100%' }} />
+                <div className="absolute inset-0 opacity-50" style={{ background: 'linear-gradient(90deg, transparent 0%, rgba(240,171,252,0.5) 30%, rgba(255,255,255,0.4) 50%, rgba(240,171,252,0.5) 70%, transparent 100%)', backgroundSize: '150% 100%' }} />
+                <div className="absolute inset-0 opacity-30" style={{ background: 'linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.9) 48%, rgba(255,255,255,1) 50%, rgba(255,255,255,0.9) 52%, transparent 100%)', backgroundSize: '60% 100%' }} />
+              </div>
+            )}
+
+            {/* Nav dots — only when there's >1 notification AND not replying */}
+            {notifications.length > 1 && !isReplying && (
+              <div className="flex justify-center gap-1 pt-2">
+                {notifications.map((_, i) => (
                   <div
-                    className="absolute inset-0 overflow-hidden"
-                  >
-                    {/* Deep water base */}
-                    <div
-                      className="absolute inset-0"
-                      style={{
-                        background: 'linear-gradient(90deg, #4c1d95 0%, #7c3aed 25%, #8b5cf6 50%, #a78bfa 75%, #4c1d95 100%)',
-                        backgroundSize: '200% 100%',
-                      }}
-                    />
-                    {/* Flowing light */}
-                    <div
-                      className="absolute inset-0 opacity-50"
-                      style={{
-                        background: 'linear-gradient(90deg, transparent 0%, rgba(240,171,252,0.5) 30%, rgba(255,255,255,0.4) 50%, rgba(240,171,252,0.5) 70%, transparent 100%)',
-                        backgroundSize: '150% 100%',
-                      }}
-                    />
-                    {/* Surface shimmer */}
-                    <div
-                      className="absolute inset-0 opacity-30"
-                      style={{
-                        background: 'linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.9) 48%, rgba(255,255,255,1) 50%, rgba(255,255,255,0.9) 52%, transparent 100%)',
-                        backgroundSize: '60% 100%',
-                      }}
-                    />
+                    key={i}
+                    className={`w-1 h-1 rounded-full ${i === currentIndex ? 'bg-black/60' : 'bg-black/20'}`}
+                  />
+                ))}
+              </div>
+            )}
+
+            {/* Content */}
+            <div className="relative z-10 p-3">
+              {!isReplying ? (
+                // Normal expanded — actions
+                <div className="flex items-center gap-3">
+                  <div className="flex-1 min-w-0 text-left">
+                    <p className="text-xs font-semibold text-black truncate">
+                      {currentNotification?.title}
+                    </p>
+                    <p className="text-[10px] text-black/60 truncate">
+                      {currentNotification?.subtitle}
+                    </p>
                   </div>
-                )}
-              
 
-              {/* Navigation dots */}
-              {notifications.length > 1 && !isReplying && (
-                <div className="flex justify-center gap-1 pt-2">
-                  {notifications.map((_, i) => (
-                    <div
-                      key={i}
-                      className={`w-1 h-1 rounded-full ${i === currentIndex ? 'bg-black/60' : 'bg-black/20'}`}
-                    />
-                  ))}
-                </div>
-              )}
-
-              {/* Content */}
-              <div className="relative z-10 p-3">
-                {!isReplying ? (
-                  // Normal expanded view
-                  <div className="flex items-center gap-3">
-                    <div className="flex-1 min-w-0 text-left">
-                      <p className="text-xs font-semibold text-black truncate">
-                        {currentNotification?.title}
-                      </p>
-                      <p className="text-[10px] text-black/60 truncate">
-                        {currentNotification?.subtitle}
-                      </p>
-                    </div>
-
-                    {currentNotification?.type === 'music' ? (
-                      <div className="flex gap-1.5">
-                        <button
-                          className="px-2.5 py-1 rounded-full bg-black/10 text-[10px] font-medium text-black/70"
-                          onClick={(e) => { e.stopPropagation(); handleAction('queue'); }}
-                        >
-                          +Bucket
-                        </button>
-                        <button
-                          className="px-2 py-1 rounded-full bg-black/10 text-[10px] font-medium text-black/70"
-                          onClick={(e) => { e.stopPropagation(); handleAction('like'); }}
-                        >
-                          ♡
-                        </button>
-                      </div>
-                    ) : currentNotification?.type === 'message' ? (
-                      <button
-                        className="px-2.5 py-1 rounded-full bg-purple-500/20 text-[10px] font-medium text-purple-700"
-                        onClick={(e) => { e.stopPropagation(); handleReplyMode(); }}
-                      >
-                        Reply
-                      </button>
-                    ) : (
+                  {currentNotification?.type === 'music' ? (
+                    <div className="flex gap-1.5">
                       <button
                         className="px-2.5 py-1 rounded-full bg-black/10 text-[10px] font-medium text-black/70"
-                        onClick={(e) => { e.stopPropagation(); handleAction('view'); }}
+                        onClick={(e) => { e.stopPropagation(); handleAction('queue'); }}
                       >
-                        View
+                        +Bucket
                       </button>
-                    )}
-                  </div>
-                ) : (
-                  // Reply mode - Type or Tap to Speak
-                  <div
-                    className="space-y-2"
-                    style={{ opacity: isSending ? 0 : 1 }}
-                    onClick={handleVoiceTap}
-                  >
-                    <p className="text-[10px] text-white/80 font-medium">→ {currentNotification?.title}</p>
-
-                    {/* Countdown */}
-                    {countdown !== null ? (
-                      <div
-                        className="flex items-center justify-center py-2"
-                        key={countdown}
+                      <button
+                        className="px-2 py-1 rounded-full bg-black/10 text-[10px] font-medium text-black/70"
+                        onClick={(e) => { e.stopPropagation(); handleAction('like'); }}
                       >
-                        <span className="text-2xl font-bold text-white">{countdown}</span>
-                      </div>
-                    ) : isRecording ? (
-                      /* Recording with waveform */
-                      <div className="space-y-2" onClick={(e) => e.stopPropagation()}>
-                        <div className="flex items-center justify-center gap-1 py-2">
-                          {waveformLevels.map((level, i) => (
-                            <div
-                              key={i}
-                              className="w-1 bg-purple-400 rounded-full"
-                            />
-                          ))}
-                        </div>
-                        {transcript && (
-                          <p className="text-[10px] text-white/50 text-center truncate px-2">{transcript}</p>
-                        )}
-                        <button
-                          className="w-full py-2 rounded-full bg-purple-500 flex items-center justify-center gap-2"
-                          onClick={handleSendReply}
-                        >
-                          <span className="text-white text-xs">Send</span>
-                          <span className="text-white text-sm">↑</span>
-                        </button>
-                      </div>
-                    ) : (
-                      /* Type or Tap to Speak */
-                      <div className="space-y-2">
-                        <div className="flex gap-2 items-center" onClick={(e) => e.stopPropagation()}>
-                          <input
-                            ref={replyInputRef}
-                            type="text"
-                            value={replyText}
-                            onChange={handleInputChange}
-                            onKeyDown={(e) => e.key === 'Enter' && handleSendReply()}
-                            placeholder="Type..."
-                            className="flex-1 px-4 py-2 rounded-full bg-white/10 border-0 text-white text-[12px] placeholder:text-white/40 focus:outline-none"
-                            style={{ caretColor: '#f0abfc' }}
-                          />
-                          {replyText.trim() && (
-                            <button
-                              className="w-8 h-8 rounded-full bg-purple-500 flex items-center justify-center"
-                              onClick={handleSendReply}
-                            >
-                              <span className="text-white text-sm">↑</span>
-                            </button>
-                          )}
-                        </div>
-                        {!replyText.trim() && (
-                          <p className="text-[10px] text-white/40 text-center">Tap to Speak</p>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
+                        ♡
+                      </button>
+                    </div>
+                  ) : currentNotification?.type === 'message' ? (
+                    <button
+                      className="px-2.5 py-1 rounded-full bg-purple-500/20 text-[10px] font-medium text-purple-700"
+                      onClick={(e) => { e.stopPropagation(); handleReplyMode(); }}
+                    >
+                      Reply
+                    </button>
+                  ) : (
+                    <button
+                      className="px-2.5 py-1 rounded-full bg-black/10 text-[10px] font-medium text-black/70"
+                      onClick={(e) => { e.stopPropagation(); handleAction('view'); }}
+                    >
+                      View
+                    </button>
+                  )}
+                </div>
+              ) : (
+                // Reply mode — type or tap to speak
+                <div
+                  className="space-y-2"
+                  style={{ opacity: isSending ? 0 : 1 }}
+                  onClick={handleVoiceTap}
+                >
+                  <p className="text-[10px] text-white/80 font-medium">
+                    → {currentNotification?.title}
+                  </p>
 
-              {/* Swipe hint */}
-              {!isReplying && (
-                <div className="pb-2 flex justify-center">
-                  <div className="w-8 h-0.5 bg-black/20 rounded-full" />
+                  {countdown !== null ? (
+                    <div className="flex items-center justify-center py-2" key={countdown}>
+                      <span className="text-2xl font-bold text-white">{countdown}</span>
+                    </div>
+                  ) : isRecording ? (
+                    <div className="space-y-2" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex items-center justify-center gap-1 py-2">
+                        {waveformLevels.map((level, i) => (
+                          <div
+                            key={i}
+                            className="w-1 bg-purple-400 rounded-full"
+                            style={{ height: `${Math.round(8 + level * 24)}px`, transition: 'height 80ms linear' }}
+                          />
+                        ))}
+                      </div>
+                      {transcript && (
+                        <p className="text-[10px] text-white/50 text-center truncate px-2">{transcript}</p>
+                      )}
+                      <button
+                        className="w-full py-2 rounded-full bg-purple-500 flex items-center justify-center gap-2"
+                        onClick={handleSendReply}
+                      >
+                        <span className="text-white text-xs">Send</span>
+                        <span className="text-white text-sm">↑</span>
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <div className="flex gap-2 items-center" onClick={(e) => e.stopPropagation()}>
+                        <input
+                          ref={replyInputRef}
+                          type="text"
+                          value={replyText}
+                          onChange={handleInputChange}
+                          onKeyDown={(e) => e.key === 'Enter' && handleSendReply()}
+                          placeholder="Type..."
+                          className="flex-1 px-4 py-2 rounded-full bg-white/10 border-0 text-white text-[12px] placeholder:text-white/40 focus:outline-none"
+                          style={{ caretColor: '#f0abfc' }}
+                        />
+                        {replyText.trim() && (
+                          <button
+                            className="w-8 h-8 rounded-full bg-purple-500 flex items-center justify-center"
+                            onClick={handleSendReply}
+                          >
+                            <span className="text-white text-sm">↑</span>
+                          </button>
+                        )}
+                      </div>
+                      {!replyText.trim() && (
+                        <p className="text-[10px] text-white/40 text-center">Tap to Speak</p>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
+
+            {/* Swipe hint */}
+            {!isReplying && (
+              <div className="pb-2 flex justify-center">
+                <div className="w-8 h-0.5 bg-black/20 rounded-full" />
+              </div>
+            )}
           </div>
-        )}
-      
+        </div>
+      )}
     </div>
   );
 };
+
+export default DynamicIsland;
