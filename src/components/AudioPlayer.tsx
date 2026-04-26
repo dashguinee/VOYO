@@ -31,6 +31,7 @@ import type { BoostPreset } from '../audio/graph/boostPresets';
 // r2Probe is the shared probe — useHotSwap imports the same function,
 // so one fix = both paths. R2_AUDIO stays here for the src-assignment URL.
 import { r2HasTrack, R2_AUDIO_BASE as R2_AUDIO } from '../player/r2Probe';
+import { useHotSwap } from '../player/useHotSwap';
 import { useR2KnownStore } from '../store/r2KnownStore';
 import { getYouTubeId } from '../utils/voyoId';
 export type { BoostPreset };
@@ -162,6 +163,17 @@ export const AudioPlayer = () => {
     syntheticEndedBypassRef,
     lastEndedTrackIdRef,
   });
+  // Hot-swap watcher — activates whenever playbackSource flips to 'iframe'
+  // (R2 missed the probe at click time). Subscribes to Supabase Realtime
+  // for the queue row + polls R2 every 2s; whichever fires first wins.
+  // On R2 landing it position-matches the iframe currentTime, preloads R2
+  // silently, then 2s equal-power crossfade. Per the VOYO ritual:
+  // tracks pulled into Disco arrive ~11s after click — patience IS the
+  // contribution. Hot swap is the bridge for users who tap Play Now on
+  // the cusp (~1s before R2 lands) so they don't eat iframe quality for
+  // the rest of the song. Creating our own experience, true to our feels.
+  useHotSwap(currentTrack, playbackSource, audioRef);
+
   // Request screen wake-lock while playing so the device doesn't deep-sleep.
   useWakeLock(isPlaying);
   // Silence unused-ref warnings — consumers are the useBgEngine API and
