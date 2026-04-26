@@ -470,9 +470,16 @@ const NeonBillboardCard = memo(({
         onClick?.();
       }}
       style={{
-        background: 'linear-gradient(135deg, rgba(8,8,12,0.98) 0%, rgba(3,3,5,0.99) 100%)',
-        opacity: isInView ? (isStarving ? 0.5 : 1) : 0.3,
+        // (per Dash) Subtle neon-tinted base instead of pure black so each
+        // board carries its mood color into the surface itself, not just
+        // the glow. Active boards push more saturation; idle ones stay
+        // calm. Outer opacity drops slightly at rest so the rail reads as
+        // a calm cluster — boards "wake" when engaged rather than all
+        // shouting at once.
+        background: `linear-gradient(135deg, ${neon}14 0%, rgba(8,8,12,0.96) 45%, rgba(3,3,5,0.99) 100%)`,
+        opacity: isInView ? (isStarving ? 0.5 : (isActive ? 1 : 0.88)) : 0.3,
         filter: isStarving ? 'grayscale(60%) brightness(0.6)' : 'grayscale(0%) brightness(1)',
+        transition: 'opacity 600ms cubic-bezier(0.16, 1, 0.3, 1), background 800ms cubic-bezier(0.16, 1, 0.3, 1)',
       }}
     >
       {/* 5-Layer Neon Glow - Intensity based on bars (research: Z2, Z10) */}
@@ -3903,26 +3910,6 @@ export const VoyoPortraitPlayer = ({
   const lateNightPunches = useMemo(() => getCommunityPunches('late-night'), [getCommunityPunches]);
   const workoutPunches = useMemo(() => getCommunityPunches('workout'), [getCommunityPunches]);
 
-  // Flat community feed for the Layer C extended view — all mood categories
-  // interleaved with mood tags + colors. Current track's punches float to top.
-  // Same shape will feed Lives / Events streams when those land.
-  const communityFeed = useMemo(() => {
-    const tag = (list: CommunityPunch[], mood: string, neon: string, glow: string) =>
-      list.map(p => ({ punch: p, mood, neon, glow }));
-    const all = [
-      ...tag(afroHeatPunches,   'afro heat',   '#D4A053', 'rgba(212,160,83,0.35)'),
-      ...tag(chillVibesPunches, 'chill vibes', '#a78bfa', 'rgba(167,139,250,0.35)'),
-      ...tag(partyModePunches,  'party mode',  '#f472b6', 'rgba(244,114,182,0.35)'),
-      ...tag(lateNightPunches,  'late night',  '#818cf8', 'rgba(129,140,248,0.35)'),
-      ...tag(workoutPunches,    'workout',     '#fb923c', 'rgba(251,146,60,0.35)'),
-    ];
-    const nowId = currentTrack?.trackId;
-    if (!nowId) return all;
-    const here = all.filter(x => x.punch.trackId === nowId);
-    const rest = all.filter(x => x.punch.trackId !== nowId);
-    return [...here, ...rest];
-  }, [afroHeatPunches, chillVibesPunches, partyModePunches, lateNightPunches, workoutPunches, currentTrack?.trackId]);
-
   // Handle punch click - navigate to track's expand view
   const handlePunchClick = useCallback((punch: CommunityPunch) => {
     devLog(`[Punch] Navigate to track: ${punch.trackTitle} (${punch.trackId})`);
@@ -6142,272 +6129,7 @@ export const VoyoPortraitPlayer = ({
         }}
       />
 
-      {/* ╔═════════════════════════════════════════════════════════════╗
-          ║ LAYER C — COMMUNITY LAYER (the reactions/comments surface)  ║
-          ║                                                              ║
-          ║ Scroll-down port from the player. Same shell will host      ║
-          ║ Lives and Events — only the stream content swaps. The       ║
-          ║ 5-control rail (Video, Heart, Oye★, Next Up, Share) stays   ║
-          ║ pinned at the bottom so the current track is always         ║
-          ║ actionable while you read the community.                    ║
-          ║                                                              ║
-          ║ Height expands to full viewport past portalProgress 0.55    ║
-          ║ so the community IS the view — anchor layer below.          ║
-          ╚═════════════════════════════════════════════════════════════╝ */}
-      <div
-        className="absolute left-0 right-0 px-4 pt-4 pb-6 overflow-y-auto scrollbar-hide z-50"
-        style={{
-          // Anchored to bottom; expands to full screen past the portal crossing
-          // so the community takes over the entire viewport.
-          bottom: 0,
-          height: portalProgress > 0.55
-            ? '100vh'
-            : (cubeDockOpen ? '480px' : '360px'),
-          opacity: portalProgress < 0.55 ? 0 : Math.min(1, (portalProgress - 0.55) / 0.35),
-          pointerEvents: portalProgress > 0.6 ? 'auto' : 'none',
-          transform: `translateY(${Math.max(0, (1 - portalProgress) * 24)}px)`,
-          transition: 'opacity 0.22s ease-out, transform 0.22s ease-out, height 0.5s cubic-bezier(0.16, 1, 0.3, 1)',
-          background: 'linear-gradient(180deg, rgba(8,8,12,0.35) 0%, rgba(15,12,24,0.88) 18%, rgba(10,10,15,0.97) 100%)',
-          backdropFilter: 'blur(16px) saturate(140%)',
-          WebkitBackdropFilter: 'blur(16px) saturate(140%)',
-        }}
-      >
-        {/* Header — track context (thumb + title). Small, grounding the
-            feed in the currently-playing track. Same slot will hold the
-            Live session / Event banner when those modes ship. */}
-        <div className="flex items-center gap-3 mb-4 pt-1">
-          {currentTrack && (
-            <img
-              src={getTrackThumbnailUrl(currentTrack, 'high')}
-              alt=""
-              className="w-11 h-11 rounded-xl object-cover flex-shrink-0"
-              style={{ boxShadow: '0 0 16px rgba(139,92,246,0.25)' }}
-            />
-          )}
-          <div className="flex-1 min-w-0">
-            <div className="text-[9px] tracking-[0.3em] uppercase text-white/40">community · vibes</div>
-            <div className="text-[13px] text-white/90 truncate font-medium">
-              {currentTrack ? currentTrack.title : 'pick a track to see the room'}
-            </div>
-          </div>
-          <div
-            className="text-[10px] px-2 py-1 rounded-full"
-            style={{
-              color: '#D4A053',
-              background: 'rgba(212,160,83,0.10)',
-              border: '1px solid rgba(212,160,83,0.22)',
-            }}
-          >
-            {communityFeed.length}
-          </div>
-        </div>
 
-        {/* Community feed — punches stream as comment cards. Current track's
-            punches float to the top. Empty state invites the user to start. */}
-        <div className="flex flex-col gap-2 pb-28">
-          {communityFeed.length === 0 ? (
-            <div className="text-center py-16 text-white/40 text-[12px]">
-              <div className="text-2xl mb-2 opacity-60">🎉</div>
-              no vibes yet<br/>
-              <span className="text-[10px] text-white/30">hit OYÉ to start the conversation</span>
-            </div>
-          ) : (
-            communityFeed.map(({ punch, mood, neon, glow }) => {
-              const isCurrent = currentTrack?.trackId === punch.trackId;
-              return (
-                <button
-                  key={punch.id}
-                  onClick={() => handlePunchClick(punch)}
-                  className="flex items-start gap-3 p-3 rounded-2xl text-left active:scale-[0.98] transition-transform"
-                  style={{
-                    background: isCurrent
-                      ? `linear-gradient(135deg, ${glow.replace(/0\.[0-9]+/, '0.10')} 0%, rgba(15,12,24,0.65) 100%)`
-                      : 'rgba(255,255,255,0.03)',
-                    border: `1px solid ${isCurrent ? glow.replace(/0\.[0-9]+/, '0.25') : 'rgba(255,255,255,0.06)'}`,
-                  }}
-                >
-                  <div
-                    className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 text-lg"
-                    style={{
-                      background: `radial-gradient(circle, ${glow.replace(/0\.[0-9]+/, '0.25')} 0%, rgba(15,12,24,0.8) 70%)`,
-                      boxShadow: `0 0 10px ${glow.replace(/0\.[0-9]+/, '0.20')}`,
-                    }}
-                  >
-                    {punch.emoji}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-0.5">
-                      <span className="text-[11px] font-semibold text-white/80 truncate">@{punch.username}</span>
-                      <span
-                        className="text-[8px] px-1.5 py-0.5 rounded-full flex-shrink-0 uppercase tracking-wider font-bold"
-                        style={{ color: neon, background: glow.replace(/0\.[0-9]+/, '0.10') }}
-                      >
-                        {mood}
-                      </span>
-                    </div>
-                    <div className="text-[13px] text-white/90 leading-snug">{punch.text}</div>
-                    {!isCurrent && (
-                      <div className="text-[9px] text-white/35 mt-1 truncate">on "{punch.trackTitle}"</div>
-                    )}
-                  </div>
-                </button>
-              );
-            })
-          )}
-        </div>
-
-        {/* ═══════════════════════════════════════════════════════════════
-            5-CONTROL RAIL — Video · Heart · Oye★ · Next Up · Share
-            Sticky inside Layer C so it stays visible as the user scrolls
-            through comments. Oye★ is centered + oversized with the
-            gateway halo (pulsing purple ring) that identifies it as the
-            reaction entry point. This is the SAME rail shape Lives and
-            Events will use — only the handlers change.
-            ═══════════════════════════════════════════════════════════════ */}
-        <div
-          className="sticky bottom-0 -mx-4 px-4 pt-4 pb-3 z-10"
-          style={{
-            background: 'linear-gradient(180deg, rgba(10,10,15,0) 0%, rgba(10,10,15,0.85) 30%, rgba(10,10,15,0.98) 100%)',
-          }}
-        >
-          <div className="flex items-center justify-around gap-2">
-            {/* Video */}
-            <button
-              onClick={async () => {
-                const ok = await pipService.enter();
-                if (!ok) setVideoTarget('portrait');
-                haptics.light();
-              }}
-              className="w-11 h-11 rounded-full flex items-center justify-center active:scale-90 transition-transform"
-              style={{
-                background: 'rgba(28,28,35,0.65)',
-                border: '1px solid rgba(255,255,255,0.08)',
-                backdropFilter: 'blur(8px)',
-              }}
-              aria-label="Expand video"
-              title="Video"
-            >
-              <Film size={16} className="text-white/75" />
-            </button>
-
-            {/* Heart / Like */}
-            <button
-              onClick={() => {
-                if (!currentTrack?.trackId) return;
-                const liked = trackPreferences[currentTrack.trackId]?.explicitLike === true;
-                setExplicitLike(currentTrack.trackId, !liked);
-                haptics.success();
-              }}
-              className="w-11 h-11 rounded-full flex items-center justify-center active:scale-90 transition-transform"
-              style={{
-                background: currentTrack?.trackId && trackPreferences[currentTrack.trackId]?.explicitLike
-                  ? 'rgba(139,92,246,0.25)'
-                  : 'rgba(28,28,35,0.65)',
-                border: currentTrack?.trackId && trackPreferences[currentTrack.trackId]?.explicitLike
-                  ? '1px solid rgba(139,92,246,0.55)'
-                  : '1px solid rgba(255,255,255,0.08)',
-                backdropFilter: 'blur(8px)',
-              }}
-              aria-label="Like"
-              title="Heart"
-            >
-              <Heart
-                size={16}
-                className={
-                  currentTrack?.trackId && trackPreferences[currentTrack.trackId]?.explicitLike
-                    ? 'text-purple-400 fill-purple-400'
-                    : 'text-white/75'
-                }
-              />
-            </button>
-
-            {/* OYÉ★ — Gateway button, centered + oversized with pulsing halo */}
-            <button
-              onClick={() => {
-                if (currentTrack) {
-                  handleReaction('oye' as ReactionType, '🎉', 'OYÉ', 1);
-                  haptics.medium();
-                }
-              }}
-              className="relative w-14 h-14 rounded-full flex items-center justify-center active:scale-95 transition-transform"
-              style={{
-                background: 'linear-gradient(135deg, rgba(212,160,83,0.30) 0%, rgba(139,92,246,0.20) 100%)',
-                border: '1px solid rgba(212,160,83,0.55)',
-                boxShadow: '0 0 20px rgba(212,160,83,0.35), inset 0 1px 0 rgba(255,255,255,0.10)',
-              }}
-              aria-label="OYÉ — react"
-              title="OYÉ"
-            >
-              {/* Gateway halo — pulsing ring identifies the unified Oye entry */}
-              <div
-                className="absolute inset-0 rounded-full border-2 border-purple-400/50 pointer-events-none"
-                style={{ animation: 'voyo-oye-halo 1.6s ease-in-out infinite' }}
-              />
-              <span
-                className="text-[11px] font-black tracking-tight"
-                style={{ color: '#D4A053', textShadow: '0 0 8px rgba(212,160,83,0.6)' }}
-              >
-                OYÉ
-              </span>
-            </button>
-
-            {/* Next Up — skip to next track */}
-            <button
-              onClick={() => { handleNextTrack(); haptics.light(); }}
-              className="w-11 h-11 rounded-full flex items-center justify-center active:scale-90 transition-transform"
-              style={{
-                background: 'rgba(28,28,35,0.65)',
-                border: '1px solid rgba(255,255,255,0.08)',
-                backdropFilter: 'blur(8px)',
-              }}
-              aria-label="Next up"
-              title="Next Up"
-            >
-              <SkipForward size={16} className="text-white/75" />
-            </button>
-
-            {/* Share */}
-            <button
-              onClick={() => {
-                if (currentTrack && navigator.share) {
-                  navigator.share({
-                    title: currentTrack.title,
-                    text: `Listen to ${currentTrack.title} by ${currentTrack.artist} on VOYO`,
-                    url: window.location.href,
-                  }).catch(() => {});
-                }
-                haptics.light();
-              }}
-              className="w-11 h-11 rounded-full flex items-center justify-center active:scale-90 transition-transform"
-              style={{
-                background: 'rgba(28,28,35,0.65)',
-                border: '1px solid rgba(255,255,255,0.08)',
-                backdropFilter: 'blur(8px)',
-              }}
-              aria-label="Share"
-              title="Share"
-            >
-              <Share2 size={16} className="text-white/75" />
-            </button>
-          </div>
-        </div>
-
-        <style>{`
-          @keyframes voyo-oye-halo {
-            0%, 100% { transform: scale(1); opacity: 0.5; }
-            50%      { transform: scale(1.12); opacity: 0.9; }
-          }
-        `}</style>
-
-      </div>
-
-      {/* Scroll runway — Apple-Watch-list scroll feel.
-          Long enough that the user can scroll past everything in Layer C
-          and reach a fully cleared state where only the central player
-          controls (play/pause + next/prev, both inside the sticky anchor)
-          remain. Layer C scrolls internally too but the outer runway is
-          what drives the two-step + clearing transition. */}
-      <div className="flex-shrink-0 w-full" style={{ height: '1200px' }} />
 
       {/* BOOST SETTINGS PANEL */}
       <div data-no-canvas-swipe="true">
