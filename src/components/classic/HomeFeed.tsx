@@ -2336,17 +2336,18 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onNavVisibilityChange, onSwitc
   const [playlistModalTrack, setPlaylistModalTrack] = useState<Track | null>(null);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
 
-  // OYÉ section header rotates through African capitals + countries
-  // every 40s, so the title quietly shifts: "OYÉ My People" → "OYÉ
-  // Conakry" → "OYÉ Mali" → ... Each name carries the section's pride
-  // without shouting. Index lives in state; rotation pauses while the
-  // tab is hidden so we don't burn cycles on backgrounded tabs.
+  // OYÉ section header rotation. Stays as "OYÉ My People" (index 0)
+  // for the first 5 minutes of the session — that's the user's
+  // settling-in window. After that, every 40s the suffix shifts
+  // through capitals + diaspora cities. Pauses while tab is hidden.
   const [oyeTitleIndex, setOyeTitleIndex] = useState(0);
   useEffect(() => {
     if (typeof document === 'undefined') return;
     let interval: ReturnType<typeof setInterval> | null = null;
+    let startTimer: ReturnType<typeof setTimeout> | null = null;
+    let started = false;
     const start = () => {
-      if (interval) return;
+      if (interval || !started) return;
       interval = setInterval(() => {
         setOyeTitleIndex(i => (i + 1) % OYE_TITLES.length);
       }, 40_000);
@@ -2354,10 +2355,14 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onNavVisibilityChange, onSwitc
     const stop = () => {
       if (interval) { clearInterval(interval); interval = null; }
     };
-    if (!document.hidden) start();
+    startTimer = setTimeout(() => {
+      started = true;
+      if (!document.hidden) start();
+    }, 5 * 60_000);
     const onVis = () => { document.hidden ? stop() : start(); };
     document.addEventListener('visibilitychange', onVis);
     return () => {
+      if (startTimer) clearTimeout(startTimer);
       document.removeEventListener('visibilitychange', onVis);
       stop();
     };
