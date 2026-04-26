@@ -52,7 +52,7 @@ import { trace } from '../../services/telemetry';
 import { getBatteryState } from '../../services/battery';
 import { devLog, devWarn } from '../../utils/logger';
 import { playbackState } from '../playback/playbackState';
-import { teardownAudioChain } from '../../services/audioEngine';
+import { teardownAudioChain, subscribeAudioCtxState } from '../../services/audioEngine';
 
 interface UseBgEngineParams {
   audioRef: RefObject<HTMLAudioElement | null>;
@@ -223,27 +223,27 @@ export function useBgEngine(params: UseBgEngineParams): BgEngineApi {
 
   // ── iOS AudioContext 'interrupted' listener ───────────────────────────
   // iOS transitions AudioContext to state='interrupted' on screen lock
-  // (not 'suspended'). This statechange fires BEFORE the element's pause
-  // event — if we resume fast enough, the element may never pause at all.
-  // Android Chrome uses 'suspended'; both are handled here.
+  // (not 'suspended'). audioEngine's _audioCtx.onstatechange fires the
+  // moment OS audio thread interrupts; we subscribe via the audioEngine
+  // fan-out (audit-2 P1-AUD-2/3). Previous version captured
+  // audioContextRef.current at first render — null because ctx is created
+  // lazily — and the stable RefObject deps prevented re-run, leaving the
+  // entire path dead. The subscriber pattern survives ctx swaps too
+  // (long-BG iOS close → rebuild → subs preserved).
   useEffect(() => {
-    const ctx = audioContextRef.current;
-    if (!ctx) return;
-    const handleCtxState = () => {
-      if (
-        (ctx.state === 'suspended' || (ctx.state as string) === 'interrupted') &&
-        usePlayerStore.getState().isPlaying
-      ) {
-        ctx.resume().then(() => {
-          const el = audioRef.current;
-          if (el && el.paused && !el.ended && usePlayerStore.getState().isPlaying) {
-            el.play().catch(() => {});
-          }
-        }).catch(() => {});
-      }
-    };
-    ctx.addEventListener('statechange', handleCtxState);
-    return () => ctx.removeEventListener('statechange', handleCtxState);
+    const unsub = subscribeAudioCtxState((state) => {
+      if (state !== 'suspended' && state !== 'interrupted') return;
+      if (!usePlayerStore.getState().isPlaying) return;
+      const ctx = audioContextRef.current;
+      if (!ctx) return;
+      ctx.resume().then(() => {
+        const el = audioRef.current;
+        if (el && el.paused && !el.ended && usePlayerStore.getState().isPlaying) {
+          el.play().catch(() => {});
+        }
+      }).catch(() => {});
+    });
+    return unsub;
   }, [audioRef, audioContextRef]);
 
   // ── BATTERY-SUSPEND TIMER ────────────────────────────────────────────

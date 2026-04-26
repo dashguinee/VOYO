@@ -38,6 +38,21 @@ let _chainWired = false;
 // Set by the document-block below so connectAudioChain's onstatechange can trigger it
 let _installGestureListener: (() => void) | null = null;
 
+// (audit-2 P1-AUD-2/3) Subscribers that want to react to ctx state changes.
+// Previously bgEngine.tsx tried to attach its own statechange listener, but
+// it captured `audioContextRef.current` (null at first render) and the deps
+// were stable RefObjects → never re-run → listener never attached. AND when
+// long-BG iOS/Safari closes the ctx and we rebuild it, the listener was
+// bound to the dead ctx. Fix: bgEngine subscribes here, audioEngine fans
+// out to all subs whenever the OWNED ctx changes state. Survives ctx swaps
+// (a new ctx is created but the subscribers list is preserved).
+type CtxStateSub = (state: AudioContextState | 'interrupted') => void;
+const _ctxStateSubs = new Set<CtxStateSub>();
+export function subscribeAudioCtxState(sub: CtxStateSub): () => void {
+  _ctxStateSubs.add(sub);
+  return () => { _ctxStateSubs.delete(sub); };
+}
+
 export interface AudioChainResult {
   ctx: AudioContext;
   source: MediaElementAudioSourceNode;
@@ -167,7 +182,7 @@ export function connectAudioChain(audio: HTMLAudioElement): AudioChainResult | n
       _audioCtx.onstatechange = () => {
         const ctx = _audioCtx;
         if (!ctx) return;
-        const state = ctx.state as string;
+        const state = ctx.state as AudioContextState | 'interrupted';
         if (state === 'suspended' || state === 'interrupted') {
           if (usePlayerStore.getState().isPlaying) {
             // Try immediate resume (works if Chrome hasn't fully gated it)
@@ -175,6 +190,11 @@ export function connectAudioChain(audio: HTMLAudioElement): AudioChainResult | n
             // Also install touch/click gesture listener in case resume needs user gesture
             _installGestureListener?.();
           }
+        }
+        // Fan out to subscribers (bgEngine, etc.) — they may want to
+        // do additional recovery work like kicking the audio element.
+        for (const sub of _ctxStateSubs) {
+          try { sub(state); } catch {}
         }
       };
     }

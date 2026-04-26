@@ -240,10 +240,15 @@ async function performHotSwap(
     // buffering in background post-swap. [AUDIT-2 #3]
     iframeBridge.stop();
     iframeBridge.resetVolume();
-    // Re-read volume at the final assignment — user may have moved the
-    // slider during the 2s fade, and storeVol captured at the top of
-    // performHotSwap is now stale. Normalize 0-100 → 0-1 for el.volume.
-    el.volume = usePlayerStore.getState().volume / 100;
+    // (audit-2 P1-AUD-1) Chain-enhanced contract: HTML element volume
+    // stays at 1.0, masterGain owns ALL attenuation. The previous code
+    // wrote storeVol (e.g. 0.7) here, leaving HTML at 0.7 while
+    // masterGain ramped to its full target assuming HTML=1.0 → audio
+    // played multiplicatively quieter (~30% drop) until the user
+    // touched the slider. The volume-sync effect at useAudioChain.ts:768
+    // only re-fires on Zustand `volume` change, NOT on playbackSource
+    // change, so it didn't self-heal.
+    el.volume = 1.0;
     usePlayerStore.getState().setPlaybackSource('r2');
 
     logPlaybackEvent({
