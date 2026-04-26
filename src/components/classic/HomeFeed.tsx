@@ -2268,20 +2268,24 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onNavVisibilityChange, onSwitc
   // jolts into content 2-3s later.
   const [stations, setStations] = useState<Station[]>([]);
   const [stationsLoading, setStationsLoading] = useState(true);
-  // A/B kill-switch for diagnosing scroll glitches. Set
-  // `?nostations=1` in the URL OR run `localStorage.setItem(
-  // 'voyo-stations-off', '1')` in DevTools, then refresh. Stations rail
-  // skips rendering entirely (no iframes, no observers, no styling).
-  // Default ON; toggle via either signal.
+  // STATIONS DISABLED 2026-04-26 — relaunching as weekend special.
+  // The rail itself works (Supabase fetch, hero cards, autoplay-on-dwell)
+  // but is held back from default Home so it lands as a moment, not as
+  // a permanent shelf. Re-enable: flip STATIONS_LIVE to true.
+  // Override for testing: `?stations=1` in URL OR
+  // `localStorage.setItem('voyo-stations-on', '1')`.
+  const STATIONS_LIVE = false;
   const stationsEnabled = useMemo(() => {
-    if (typeof window === 'undefined') return true;
+    if (STATIONS_LIVE) return true;
+    if (typeof window === 'undefined') return false;
     try {
-      if (new URLSearchParams(window.location.search).has('nostations')) return false;
-      if (localStorage.getItem('voyo-stations-off') === '1') return false;
+      if (new URLSearchParams(window.location.search).has('stations')) return true;
+      if (localStorage.getItem('voyo-stations-on') === '1') return true;
     } catch { /* private mode — fall through */ }
-    return true;
+    return false;
   }, []);
   useEffect(() => {
+    if (!stationsEnabled) { setStationsLoading(false); return; }
     if (!supabase) { setStationsLoading(false); return; }
     let cancelled = false;
     (async () => {
@@ -2296,7 +2300,7 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onNavVisibilityChange, onSwitc
       setStationsLoading(false);
     })();
     return () => { cancelled = true; };
-  }, []);
+  }, [stationsEnabled]);
 
   // ── Vibes on Vibes — live friend presence ──────────────────────────────────
   const { isLoggedIn, dashId } = useAuth();
