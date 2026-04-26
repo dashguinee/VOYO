@@ -92,6 +92,39 @@ const getTrendingTracks = (hotPool: PooledTrack[], limit: number = 15): Track[] 
     .slice(0, limit) as Track[];
 };
 
+// OYÉ section header rotation. African capitals + diaspora-heavy
+// places where the music lives. Order is loosely curated as a tour:
+// West Africa → Central/East/South → Caribbean → North Africa →
+// global diaspora cities → Indian Ocean islands → Brazil → Americas
+// → back to smaller West African names. 'My People' anchors every
+// few entries so the section's identity reasserts.
+const OYE_TITLES = [
+  'My People',
+  // West Africa
+  'Conakry', 'Lagos', 'Bamako', 'Dakar', 'Accra', 'Abidjan', 'Freetown',
+  'My People',
+  // Central + East + Southern
+  'Kinshasa', 'Yaoundé', 'Joburg', 'Nairobi', 'Addis', 'Kigali',
+  // Caribbean
+  'Kingston', 'Guadeloupe', 'Port-au-Prince', 'Trinidad', 'Martinique',
+  'My People',
+  // North Africa
+  'Casablanca', 'Algiers', 'Cairo', 'Tunis',
+  // Diaspora cities
+  'Brixton', 'Harlem', 'Brooklyn', 'Paris', 'Brussels', 'Lisbon',
+  'My People',
+  // Indian Ocean
+  'Seychelles', 'Mauritius', 'Antananarivo',
+  // Brazil
+  'Bahia', 'Salvador',
+  // Americas
+  'Atlanta', 'New Orleans', 'Houston', 'Toronto',
+  // Smaller West African
+  'Cotonou', 'Lomé', 'Monrovia', 'Niamey', 'Ouaga',
+  // Southern + East
+  'Maputo', 'Luanda', 'Harare', 'Kampala',
+] as const;
+
 // Section-filtered helpers (use curator tags from poolCurator)
 const getWestAfricanTracks = (hotPool: PooledTrack[], limit: number = 15): Track[] => {
   return [...hotPool]
@@ -2302,6 +2335,34 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onNavVisibilityChange, onSwitc
   const setExplicitLike = usePreferenceStore(s => s.setExplicitLike);
   const [playlistModalTrack, setPlaylistModalTrack] = useState<Track | null>(null);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
+
+  // OYÉ section header rotates through African capitals + countries
+  // every 40s, so the title quietly shifts: "OYÉ My People" → "OYÉ
+  // Conakry" → "OYÉ Mali" → ... Each name carries the section's pride
+  // without shouting. Index lives in state; rotation pauses while the
+  // tab is hidden so we don't burn cycles on backgrounded tabs.
+  const [oyeTitleIndex, setOyeTitleIndex] = useState(0);
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    let interval: ReturnType<typeof setInterval> | null = null;
+    const start = () => {
+      if (interval) return;
+      interval = setInterval(() => {
+        setOyeTitleIndex(i => (i + 1) % OYE_TITLES.length);
+      }, 40_000);
+    };
+    const stop = () => {
+      if (interval) { clearInterval(interval); interval = null; }
+    };
+    if (!document.hidden) start();
+    const onVis = () => { document.hidden ? stop() : start(); };
+    document.addEventListener('visibilitychange', onVis);
+    return () => {
+      document.removeEventListener('visibilitychange', onVis);
+      stop();
+    };
+  }, []);
+  const oyeTitleSuffix = OYE_TITLES[oyeTitleIndex];
   const [boostSettingsOpen, setBoostSettingsOpen] = useState(false);
   // Session seed drives shelf rotation — every reload / pull-to-refresh gets
   // a fresh number, so shelves surface different tracks from the big pool
@@ -3230,7 +3291,19 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onNavVisibilityChange, onSwitc
               className="text-white text-[22px] leading-none"
               style={{ fontWeight: 800, letterSpacing: '-0.01em' }}
             >
-              OYÉ My People
+              OYÉ{' '}
+              {/* Suffix crossfades on each rotation — `key` change
+                  remounts the span so the fade-in animation re-runs.
+                  Subtle: 600ms ease-out, no scale/translate. */}
+              <span
+                key={oyeTitleSuffix}
+                style={{
+                  display: 'inline-block',
+                  animation: 'voyo-oye-suffix-fade 600ms cubic-bezier(0.16, 1, 0.3, 1)',
+                }}
+              >
+                {oyeTitleSuffix}
+              </span>
             </h2>
             <p
               className="text-[9px] font-medium tracking-wider uppercase mt-1.5"

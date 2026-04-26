@@ -736,6 +736,14 @@ input[type="range"]:focus::-moz-range-thumb {
   to { opacity: 1; }
 }
 
+/* OYÉ section header suffix crossfade — fires every 40s as the
+   section title rotates through African capitals. Quick fade with
+   a hair of upward drift; restraint is the point. */
+@keyframes voyo-oye-suffix-fade {
+  0%   { opacity: 0; transform: translateY(2px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
 /* Toast pop — scale from 0.82 with overshoot spring. Used by the DJ
    Wake Toast so it feels like it lands into view instead of blinking. */
 @keyframes voyo-toast-pop {
