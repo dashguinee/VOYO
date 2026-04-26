@@ -2517,23 +2517,24 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onNavVisibilityChange, onSwitc
 
   // Audio-reactive ambient glow — reads CSS vars written by freqPump (10fps),
   // drives a soft radial pulse behind the feed. Zero React re-renders.
-  // Gated by isPlaying via getState (no subscribe — avoids re-rendering
-  // HomeFeed when isPlaying flips). rAF only fires while music is playing
-  // so we're not burning frames into a static glow during paused/idle.
+  // (audit-3) Subscribe to isPlaying so the rAF starts/stops at the
+  // playing transition instead of running forever and early-returning
+  // 60×/sec when paused. Mirrors freqPump's pattern. Cost when paused
+  // = 0 frames; previous version burned 60 wakeups/sec into the
+  // early-return path.
+  const isPlayingForGlow = usePlayerStore(s => s.isPlaying);
   useEffect(() => {
     const glow = audioGlowRef.current;
     if (!glow) return;
+    if (!isPlayingForGlow) {
+      if (glow.style.opacity !== '0') glow.style.opacity = '0';
+      return;
+    }
     let rafId = 0;
     let frame = 0;
     const pump = () => {
       rafId = requestAnimationFrame(pump);
       if (++frame % 6 !== 0) return; // ~10fps, matches freqPump cadence
-      // Skip writes if music isn't playing — glow stays at its last
-      // value (or 0 from initial). No CSS var read, no style write.
-      if (!usePlayerStore.getState().isPlaying) {
-        if (glow.style.opacity !== '0') glow.style.opacity = '0';
-        return;
-      }
       const root = document.documentElement;
       const bass = parseFloat(root.style.getPropertyValue('--voyo-bass') || '0');
       const energy = parseFloat(root.style.getPropertyValue('--voyo-energy') || '0');
@@ -2542,7 +2543,7 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onNavVisibilityChange, onSwitc
     };
     rafId = requestAnimationFrame(pump);
     return () => cancelAnimationFrame(rafId);
-  }, []);
+  }, [isPlayingForGlow]);
 
   // Track scroll position for gesture overscroll detection. Throttled
   // via rAF so the layout-forcing reads (scrollTop/scrollHeight/clientHeight)

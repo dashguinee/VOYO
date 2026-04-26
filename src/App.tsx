@@ -418,7 +418,16 @@ function UpdateButton() {
     }
 
     checkVersion();
-    const interval = setInterval(() => { if (active) checkVersion(); }, 2 * 60 * 1000);
+    // (audit-3) Bumped 2min → 5min + document.hidden gate. The SW poll
+    // at main.tsx:30 fires every 60min and translates SW_UPDATED into
+    // the 'voyo-update-available' window event we listen for here, so
+    // this interval is the secondary safety net — 5min is plenty.
+    // Background-tab firings just burn the cache-busted version.json
+    // fetch for nothing.
+    const interval = setInterval(() => {
+      if (!active || document.hidden) return;
+      checkVersion();
+    }, 5 * 60 * 1000);
     return () => {
       active = false;
       clearInterval(interval);

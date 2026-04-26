@@ -658,6 +658,12 @@ export const YouTubeIframe = memo(() => {
   // Only kicks in if drift exceeds threshold - YouTube rarely buffers
   useEffect(() => {
     if ((playbackSource !== 'cached' && playbackSource !== 'r2') || !isPlaying) return;
+    // (audit-3) Gate on videoTarget — when hidden the iframe has no
+    // visible video to drift-correct. The previous version mounted
+    // this 1.5s interval for every R2 track regardless of whether the
+    // video was on screen, burning ~40 seekTo polls/min for nothing
+    // on the dominant pure-audio flow.
+    if (videoTarget === 'hidden') return;
 
     // Tightened 2026-04-25 (Issue #4): old 5s/2s window allowed up to ~7s
     // of visible A/V offset before correction — brutal on music videos
@@ -693,7 +699,7 @@ export const YouTubeIframe = memo(() => {
     }, CHECK_INTERVAL);
 
     return () => clearInterval(syncInterval);
-  }, [playbackSource, isPlaying]);
+  }, [playbackSource, isPlaying, videoTarget]);
 
   // Time update interval (only when streaming from iframe).
   //

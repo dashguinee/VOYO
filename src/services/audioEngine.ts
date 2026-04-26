@@ -403,60 +403,11 @@ class AudioEngine {
     };
   }
 
-  // Active buffer monitoring state
-  private bufferMonitorInterval: ReturnType<typeof setInterval> | null = null;
-  private monitoredElement: HTMLMediaElement | null = null;
-  private onBufferEmergency: ((health: BufferHealth) => void) | null = null;
-  private onBufferWarning: ((health: BufferHealth) => void) | null = null;
-
-  /**
-   * Start active buffer health monitoring during playback.
-   * Checks every 2 seconds and triggers callbacks on emergency/warning.
-   *
-   * @param audioElement - The audio element to monitor
-   * @param onEmergency - Called when buffer < 3s (emergency)
-   * @param onWarning - Called when buffer < 8s (warning)
-   * @returns cleanup function to stop monitoring
-   */
-  startBufferMonitoring(
-    audioElement: HTMLMediaElement,
-    onEmergency: (health: BufferHealth) => void,
-    onWarning: (health: BufferHealth) => void
-  ): () => void {
-    // Stop any existing monitoring first
-    this.stopBufferMonitoring();
-
-    this.monitoredElement = audioElement;
-    this.onBufferEmergency = onEmergency;
-    this.onBufferWarning = onWarning;
-
-    this.bufferMonitorInterval = setInterval(() => {
-      if (!this.monitoredElement || this.monitoredElement.paused) return;
-
-      const health = this.getBufferHealth(this.monitoredElement);
-
-      if (health.status === 'emergency' && this.onBufferEmergency) {
-        this.onBufferEmergency(health);
-      } else if (health.status === 'warning' && this.onBufferWarning) {
-        this.onBufferWarning(health);
-      }
-    }, 5000); // Check every 5 seconds — was 2s, reduced to lower wasted CPU during steady playback
-
-    return () => this.stopBufferMonitoring();
-  }
-
-  /**
-   * Stop active buffer monitoring
-   */
-  stopBufferMonitoring(): void {
-    if (this.bufferMonitorInterval) {
-      clearInterval(this.bufferMonitorInterval);
-      this.bufferMonitorInterval = null;
-    }
-    this.monitoredElement = null;
-    this.onBufferEmergency = null;
-    this.onBufferWarning = null;
-  }
+  // (audit-3) Removed startBufferMonitoring/stopBufferMonitoring +
+  // related state. ~80 lines of dead 5s-interval scaffolding with zero
+  // external callers (only self-references). getBufferHealth() is still
+  // exposed below for synchronous one-off checks, which is the only
+  // pattern actually in use.
 
   /**
    * Record a download measurement for network speed estimation
