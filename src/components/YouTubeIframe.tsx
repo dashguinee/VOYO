@@ -17,6 +17,7 @@ import { iframeBridge } from '../player/iframeBridge';
 import { markTrackAsFailed } from '../services/trackVerifier';
 import { logPlaybackEvent } from '../services/telemetry';
 import { devLog } from '../utils/logger';
+import { pipService } from '../services/pipService';
 
 const YT_STATES = {
   UNSTARTED: -1,
@@ -853,6 +854,20 @@ export const YouTubeIframe = memo(() => {
   const [portraitPos, setPortraitPos] = useState(DEFAULT_PORTRAIT_POS);
   const portraitDraggedRef = useRef(false);
 
+  // Right-edge "portal" — drag the mini player into it to Take Out (PiP).
+  // Glow ramps from 0 (iframe far) → 1 (iframe right edge ≤ 20px from
+  // viewport edge). When glow ≥ 0.85 the portal is "armed" and a
+  // pointerUp triggers pipService.enter() instead of the tap-to-close.
+  const [portalGlow, setPortalGlow] = useState(0);
+  const portalGlowRef = useRef(0);
+  const PORTAL_ARM = 0.85;
+  const computePortalGlow = (posX: number) => {
+    const vw = window.innerWidth;
+    const iframeRightEdge = vw / 2 + posX + 108; // half of 216
+    const distance = vw - iframeRightEdge;
+    return Math.max(0, Math.min(1, (120 - distance) / 100));
+  };
+
   return (
     <div
       style={getContainerStyle()}
@@ -920,25 +935,113 @@ export const YouTubeIframe = memo(() => {
             if (Math.abs(dx) > 4 || Math.abs(dy) > 4) {
               portraitDraggedRef.current = true;
             }
+            const nextX = dragStartRef.current.ox + dx;
             setPortraitPos({
-              x: dragStartRef.current.ox + dx,
+              x: nextX,
               y: dragStartRef.current.oy + dy,
             });
+            const g = computePortalGlow(nextX);
+            portalGlowRef.current = g;
+            setPortalGlow(g);
           }}
           onPointerUp={() => {
             dragStartRef.current = null;
             setIsDragging(false);
-            // If no meaningful drag happened, it's a tap → close
+            // Portal armed → drop = Take Out (PiP). Hide the floating
+            // mini, fade portal back to 0, fire pipService.
+            if (portalGlowRef.current >= PORTAL_ARM) {
+              void pipService.enter();
+              setVideoTarget('hidden');
+              setPortraitPos(DEFAULT_PORTRAIT_POS);
+              portalGlowRef.current = 0;
+              setPortalGlow(0);
+              portraitDraggedRef.current = false;
+              return;
+            }
+            // No portal drop. If no meaningful drag happened, it's a tap → close.
             if (!portraitDraggedRef.current) {
               setVideoTarget('hidden');
-              setPortraitPos(DEFAULT_PORTRAIT_POS); // reset for next open
+              setPortraitPos(DEFAULT_PORTRAIT_POS);
             }
+            // Fade the portal back out either way.
+            portalGlowRef.current = 0;
+            setPortalGlow(0);
           }}
           onPointerCancel={() => {
             dragStartRef.current = null;
             setIsDragging(false);
+            portalGlowRef.current = 0;
+            setPortalGlow(0);
           }}
         />
+      )}
+
+      {/* RIGHT-EDGE PORTAL — glowing vertical strip that brightens as the
+          mini player is dragged toward it. Drop iframe into the portal to
+          trigger Take Out (PiP). Fixed-positioned so it overlays the
+          viewport regardless of where the iframe container lives. */}
+      {isPortraitMode && (
+        <>
+          {/* Soft outer halo — wide gradient that bleeds inward */}
+          <div
+            style={{
+              position: 'fixed',
+              top: 0,
+              right: 0,
+              bottom: 0,
+              width: '120px',
+              pointerEvents: 'none',
+              zIndex: 65,
+              opacity: portalGlow,
+              background: 'linear-gradient(to left, rgba(244,162,62,0.42) 0%, rgba(244,162,62,0.16) 35%, transparent 100%)',
+              transition: 'opacity 180ms ease-out',
+              willChange: 'opacity',
+            }}
+          />
+          {/* Bright vertical line — the actual portal seam */}
+          <div
+            style={{
+              position: 'fixed',
+              top: 0,
+              right: 0,
+              bottom: 0,
+              width: portalGlow >= PORTAL_ARM ? '6px' : '3px',
+              pointerEvents: 'none',
+              zIndex: 66,
+              opacity: Math.min(1, portalGlow * 1.4),
+              background: portalGlow >= PORTAL_ARM
+                ? 'linear-gradient(to left, #FBBF77 0%, #F4A23E 100%)'
+                : 'linear-gradient(to left, rgba(251,191,119,0.9) 0%, rgba(244,162,62,0.6) 100%)',
+              boxShadow: portalGlow >= PORTAL_ARM
+                ? '0 0 24px rgba(244,162,62,0.85), 0 0 48px rgba(244,162,62,0.55), -8px 0 32px rgba(244,162,62,0.45)'
+                : '0 0 16px rgba(244,162,62,0.55), 0 0 28px rgba(244,162,62,0.25)',
+              transition: 'width 180ms ease-out, box-shadow 180ms ease-out, background 180ms ease-out, opacity 180ms ease-out',
+              willChange: 'opacity, box-shadow',
+            }}
+          />
+          {/* "TAKE OUT" label — appears when armed, drops a hint */}
+          <div
+            style={{
+              position: 'fixed',
+              top: '50%',
+              right: '20px',
+              transform: `translateY(-50%) translateX(${portalGlow >= PORTAL_ARM ? '0' : '12px'})`,
+              pointerEvents: 'none',
+              zIndex: 67,
+              opacity: portalGlow >= PORTAL_ARM ? 1 : 0,
+              color: '#FBBF77',
+              fontSize: 10,
+              fontWeight: 700,
+              letterSpacing: '0.18em',
+              textShadow: '0 0 8px rgba(244,162,62,0.85), 0 0 16px rgba(244,162,62,0.45)',
+              writingMode: 'vertical-rl',
+              transition: 'opacity 180ms ease-out, transform 220ms cubic-bezier(0.16, 1, 0.3, 1)',
+            }}
+            aria-hidden="true"
+          >
+            TAKE OUT
+          </div>
+        </>
       )}
 
       {/* Purple overlays */}
