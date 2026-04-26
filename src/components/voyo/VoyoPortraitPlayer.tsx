@@ -1056,60 +1056,137 @@ const BackdropLibrary = ({
 // Any tap / reveal resets both timers — the button breathes with the
 // rest of the UI instead of running on its own mount-time clock.
 // ============================================
-const ExpandVideoButton = memo(({ onClick, isIframeAudio, controlsActive }: { onClick: () => void; isIframeAudio: boolean; controlsActive: boolean }) => {
+const ExpandVideoButton = memo(({ onClick, isIframeAudio, isMiniPlayerActive, controlsActive }: { onClick: () => void; isIframeAudio: boolean; isMiniPlayerActive: boolean; controlsActive: boolean }) => {
   const [mode, setMode] = useState<'active' | 'dimmed'>('active');
   const [extraFaded, setExtraFaded] = useState(false);
+  // Phase machine: 'mini' = default (purple, "Mini Player"), 'morphing'
+  // = single purple pulse during text crossfade, 'takeout' = settled
+  // orange ("Take Out", taps go to PiP). Triggered by isMiniPlayerActive
+  // flipping true with a brief gap to let the user see the mini player
+  // engage first.
+  const [phase, setPhase] = useState<'mini' | 'morphing' | 'takeout'>('mini');
   useEffect(() => {
     if (controlsActive) {
-      // Anything the user's doing wakes the button + clears timers.
       setMode('active');
       setExtraFaded(false);
       return;
     }
-    // Controls just went ambient — start decay clocks.
     const t1 = setTimeout(() => setMode('dimmed'), 5000);
     const t2 = setTimeout(() => setExtraFaded(true), 30000);
     return () => { clearTimeout(t1); clearTimeout(t2); };
   }, [controlsActive]);
 
+  // Mini Player → Take Out morph. 1.5s gap after mini engages, 0.9s
+  // morph window (text fade + single purple pulse), then settle to
+  // orange Take Out. Reverses cleanly if user closes the mini player.
+  useEffect(() => {
+    if (!isMiniPlayerActive) {
+      setPhase('mini');
+      return;
+    }
+    const t1 = setTimeout(() => setPhase('morphing'), 1500);
+    const t2 = setTimeout(() => setPhase('takeout'), 1500 + 900);
+    return () => { clearTimeout(t1); clearTimeout(t2); };
+  }, [isMiniPlayerActive]);
+
   const isDimmed = mode === 'dimmed';
+  const isTakeout = phase === 'takeout' || phase === 'morphing';
+  const isOrange = phase === 'takeout';
+
+  const handleClick = () => {
+    if (phase === 'takeout') {
+      void pipService.enter();
+    } else {
+      onClick();
+    }
+  };
+
+  // Color palette swaps for the orange Take Out state. Border + glow
+  // + dot + text all move from purple → orange. Text crossfades via
+  // the labelOpacity below.
+  const borderClass = isOrange ? 'border-orange-400/60 hover:border-orange-400/80' : 'border-purple-400/60 hover:border-purple-400/80';
+  const borderClassDim = isOrange ? 'border-orange-400/40' : 'border-purple-400/40';
 
   return (
-    <button
-      onClick={onClick}
-      className={`absolute top-3 right-3 z-30 rounded-full backdrop-blur-sm border text-white font-medium flex items-center active:scale-95 ${
-        isDimmed
-          ? 'px-2 py-1 gap-1 text-[10px] min-h-[36px] border-purple-400/40'
-          : 'px-3 py-1.5 gap-1.5 text-xs min-h-[44px] border-purple-400/60 hover:border-purple-400/80'
-      }`}
-      style={{
-        background: isDimmed ? 'rgba(139,92,246,0.14)' : 'rgba(139,92,246,0.22)',
-        boxShadow: isDimmed
-          ? '0 0 9px rgba(139,92,246,0.28), 0 0 16px rgba(139,92,246,0.14)'
-          : '0 0 16px rgba(139,92,246,0.5), 0 0 28px rgba(139,92,246,0.25)',
-        animation: isIframeAudio && !isDimmed ? 'voyo-iframe-pulse 1.6s ease-in-out infinite' : 'none',
-        opacity: extraFaded ? 0.8 : 1,
-        transition: [
-          'padding 700ms cubic-bezier(0.16, 1, 0.3, 1)',
-          'background 900ms cubic-bezier(0.16, 1, 0.3, 1)',
-          'box-shadow 900ms cubic-bezier(0.16, 1, 0.3, 1)',
-          'border-color 900ms cubic-bezier(0.16, 1, 0.3, 1)',
-          'font-size 700ms cubic-bezier(0.16, 1, 0.3, 1)',
-          'opacity 1.4s cubic-bezier(0.16, 1, 0.3, 1)',
-        ].join(', '),
-      }}
-      aria-label="Open mini player"
-    >
-      <span
-        className={`rounded-full bg-purple-300 ${isDimmed ? 'w-1 h-1' : 'w-1.5 h-1.5'}`}
+    <>
+      <style>{`
+        @keyframes voyo-takeout-morph-pulse {
+          0%   { box-shadow: 0 0 16px rgba(139,92,246,0.5), 0 0 28px rgba(139,92,246,0.25); }
+          50%  { box-shadow: 0 0 26px rgba(196,181,253,0.95), 0 0 48px rgba(196,181,253,0.55); }
+          100% { box-shadow: 0 0 14px rgba(244,162,62,0.45), 0 0 24px rgba(244,162,62,0.25); }
+        }
+      `}</style>
+      <button
+        onClick={handleClick}
+        className={`absolute top-3 right-3 z-30 rounded-full backdrop-blur-sm border text-white font-medium flex items-center active:scale-95 ${
+          isDimmed
+            ? `px-2 py-1 gap-1 text-[10px] min-h-[36px] ${borderClassDim}`
+            : `px-3 py-1.5 gap-1.5 text-xs min-h-[44px] ${borderClass}`
+        }`}
         style={{
-          boxShadow: isDimmed ? '0 0 4px rgba(196,181,253,0.65)' : '0 0 6px rgba(196,181,253,0.9)',
-          transition: 'box-shadow 900ms cubic-bezier(0.16, 1, 0.3, 1)',
+          background: isOrange
+            ? (isDimmed ? 'rgba(244,162,62,0.14)' : 'rgba(244,162,62,0.20)')
+            : (isDimmed ? 'rgba(139,92,246,0.14)' : 'rgba(139,92,246,0.22)'),
+          boxShadow:
+            phase === 'morphing'
+              ? undefined  // owned by the keyframe
+              : isOrange
+                ? (isDimmed
+                    ? '0 0 8px rgba(244,162,62,0.25), 0 0 14px rgba(244,162,62,0.12)'
+                    : '0 0 14px rgba(244,162,62,0.45), 0 0 24px rgba(244,162,62,0.22)')
+                : (isDimmed
+                    ? '0 0 9px rgba(139,92,246,0.28), 0 0 16px rgba(139,92,246,0.14)'
+                    : '0 0 16px rgba(139,92,246,0.5), 0 0 28px rgba(139,92,246,0.25)'),
+          animation:
+            phase === 'morphing'
+              ? 'voyo-takeout-morph-pulse 0.9s cubic-bezier(0.16, 1, 0.3, 1) forwards'
+              : (isIframeAudio && !isDimmed && phase === 'mini'
+                  ? 'voyo-iframe-pulse 1.6s ease-in-out infinite'
+                  : 'none'),
+          opacity: extraFaded ? 0.8 : 1,
+          transition: [
+            'padding 700ms cubic-bezier(0.16, 1, 0.3, 1)',
+            'background 900ms cubic-bezier(0.16, 1, 0.3, 1)',
+            'box-shadow 900ms cubic-bezier(0.16, 1, 0.3, 1)',
+            'border-color 900ms cubic-bezier(0.16, 1, 0.3, 1)',
+            'font-size 700ms cubic-bezier(0.16, 1, 0.3, 1)',
+            'opacity 1.4s cubic-bezier(0.16, 1, 0.3, 1)',
+            'color 700ms cubic-bezier(0.16, 1, 0.3, 1)',
+          ].join(', '),
+          color: isOrange ? '#F4A23E' : '#fff',
         }}
-      />
-      <Play size={isDimmed ? 10 : 12} fill="currentColor" />
-      <span>Mini Player</span>
-    </button>
+        aria-label={isTakeout ? 'Take Out — Picture-in-Picture' : 'Open mini player'}
+      >
+        <span
+          className={`rounded-full ${isDimmed ? 'w-1 h-1' : 'w-1.5 h-1.5'} ${isOrange ? 'bg-orange-300' : 'bg-purple-300'}`}
+          style={{
+            boxShadow: isOrange
+              ? (isDimmed ? '0 0 4px rgba(244,162,62,0.65)' : '0 0 6px rgba(244,162,62,0.9)')
+              : (isDimmed ? '0 0 4px rgba(196,181,253,0.65)' : '0 0 6px rgba(196,181,253,0.9)'),
+            transition: 'box-shadow 900ms cubic-bezier(0.16, 1, 0.3, 1), background-color 900ms cubic-bezier(0.16, 1, 0.3, 1)',
+          }}
+        />
+        <Play size={isDimmed ? 10 : 12} fill="currentColor" />
+        {/* Text crossfade — both labels stacked, opacity swaps. */}
+        <span style={{ position: 'relative', display: 'inline-block', minWidth: isDimmed ? 56 : 64 }}>
+          <span
+            style={{
+              position: 'absolute', inset: 0,
+              opacity: isTakeout ? 0 : 1,
+              transition: 'opacity 700ms cubic-bezier(0.16, 1, 0.3, 1)',
+            }}
+          >Mini Player</span>
+          <span
+            style={{
+              position: 'absolute', inset: 0,
+              opacity: isTakeout ? 1 : 0,
+              transition: 'opacity 700ms cubic-bezier(0.16, 1, 0.3, 1)',
+            }}
+          >Take Out</span>
+          <span style={{ visibility: 'hidden' }}>Mini Player</span>
+        </span>
+      </button>
+    </>
   );
 });
 
@@ -1748,12 +1825,15 @@ StreamCard.displayName = 'StreamCard';
 // BIG CENTER CARD (NOW PLAYING - Canva-style purple fade with premium typography)
 // TAP ALBUM ART FOR LYRICS VIEW | VIDEO HANDLED BY GLOBAL IFRAME
 // ============================================
-const BigCenterCard = memo(({ track, onExpandVideo, onShowLyrics, hideThumb, isIframeAudio, controlsActive = false }: {
+const BigCenterCard = memo(({ track, onExpandVideo, onShowLyrics, hideThumb, isIframeAudio, isMiniPlayerActive = false, controlsActive = false }: {
   track: Track;
   onExpandVideo?: () => void;
   onShowLyrics?: () => void;
   hideThumb?: boolean;
   isIframeAudio?: boolean;
+  /** True when the floating Mini Player is up (videoTarget==='portrait').
+   *  Drives the Mini Player → Take Out button morph. */
+  isMiniPlayerActive?: boolean;
   /** Driven by isControlsRevealed upstream — while true, the Mini Player
    *  toggle stays fully active; when false, dim decay timers start. */
   controlsActive?: boolean;
@@ -1895,7 +1975,7 @@ const BigCenterCard = memo(({ track, onExpandVideo, onShowLyrics, hideThumb, isI
         playbackSource === 'iframe' (audio is flowing through the iframe,
         tap to open the mini player and see the video). */}
     {onExpandVideo && (
-      <ExpandVideoButton onClick={onExpandVideo} isIframeAudio={!!isIframeAudio} controlsActive={controlsActive} />
+      <ExpandVideoButton onClick={onExpandVideo} isIframeAudio={!!isIframeAudio} isMiniPlayerActive={isMiniPlayerActive} controlsActive={controlsActive} />
     )}
 
     {/* ── EDGE HIGHLIGHT ─────────────────────────────────────────────
@@ -5131,22 +5211,16 @@ export const VoyoPortraitPlayer = ({
           {currentTrack ? (
             <BigCenterCard
               track={currentTrack}
-              onExpandVideo={async () => {
-                // Try PiP first; fall back to YouTube iframe in portrait card.
-                // The Oye escape gesture lives on the unified Oye button
-                // (MiniPlayer + cards), not here — this chip stays neutral.
-                const ok = await pipService.enter();
-                if (!ok) setVideoTarget('portrait');
-              }}
+              // Stage 1: tap = expand to mini player (floating iframe).
+              // The button morphs to "Take Out" 1.5s after mini engages
+              // and the takeout tap goes through pipService directly.
+              onExpandVideo={() => setVideoTarget('portrait')}
               onShowLyrics={() => setShowLyricsOverlay(true)}
               hideThumb={videoTarget === 'portrait'}
-              // Signal "audio flowing through the iframe right now" so the
-              // Mini Player button pulses, telling the user: tap here to see
-              // the video for foreground playback until hot-swap completes.
               isIframeAudio={playbackSource === 'iframe'}
-              // Couple dim decay to the app's controls visibility signal.
-              // Button breathes with the rest of the UI — active when
-              // controls reveal, dims 5s after they hide.
+              // True when the floating mini player is up. Drives the
+              // Mini Player → Take Out morph inside ExpandVideoButton.
+              isMiniPlayerActive={videoTarget === 'portrait'}
               controlsActive={isControlsRevealed}
             />
           ) : (
