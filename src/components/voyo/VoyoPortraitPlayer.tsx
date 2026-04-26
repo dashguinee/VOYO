@@ -54,7 +54,6 @@ import { app } from '../../services/oyo';
 
 // OYO Island - DJ Voice Search & Chat
 import { OyoIsland } from './OyoIsland';
-import { OyoSays } from './OyoSays';
 import { VoyoLoadOrb } from './VoyoLoadOrb';
 
 // YouTube Iframe - Unified streaming + video display
@@ -1099,8 +1098,9 @@ const ExpandVideoButton = memo(({ onClick, isIframeAudio, isMiniPlayerActive, co
   }, [isMiniPlayerActive]);
 
   // When Take Out becomes ready (chip settles to orange), Oyo drops an
-  // ambient one-liner in the dynamic island. Random pick from a small
-  // bag, fires once per mini-player session (gated on the mount).
+  // ambient one-liner in the Dynamic Island. Random pick from a small
+  // bag, fires once per mini-player session (gated by the phase machine
+  // which itself resets on isMiniPlayerActive flip).
   useEffect(() => {
     if (phase !== 'takeout') return;
     const lines = [
@@ -1113,11 +1113,13 @@ const ExpandVideoButton = memo(({ onClick, isIframeAudio, isMiniPlayerActive, co
     ];
     const text = lines[Math.floor(Math.random() * lines.length)];
     try {
-      window.dispatchEvent(new CustomEvent('voyo:oyo-says', { detail: { text } }));
+      window.pushNotification?.({
+        id: `takeout-ready-${Date.now()}`,
+        type: 'system',
+        title: 'Oyo',
+        subtitle: text,
+      });
     } catch { /* never break */ }
-    // Only fire on the first transition into takeout for this session;
-    // phase machine is gated by isMiniPlayerActive so a session reset
-    // (mini close → reopen) re-arms it naturally.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase === 'takeout']);
 
@@ -4331,9 +4333,9 @@ export const VoyoPortraitPlayer = ({
   }, []);
 
   // Per-track-change tick: while PiP is the active mode, every 5th song
-  // change drops an Oyo pill with the next track. Reads upcomingTrack
-  // from the live queue at fire time so the message reflects the queue
-  // as it stands, not a stale closure capture.
+  // change drops a Dynamic Island pill with the next track. Reads
+  // upcomingTrack from the live queue at fire time so the message
+  // reflects the queue as it stands, not a stale closure capture.
   const currentTrackIdForPip = currentTrack?.trackId ?? null;
   useEffect(() => {
     if (!currentTrackIdForPip || !isPipActiveRef.current) return;
@@ -4341,16 +4343,13 @@ export const VoyoPortraitPlayer = ({
     if (pipSongCountRef.current % 5 !== 0) return;
     const next = usePlayerStore.getState().queue[0]?.track;
     if (!next?.title) return;
-    const phrasings = [
-      `Next up · ${next.title}`,
-      `${next.title} coming next`,
-      `Coming up · ${next.title}`,
-      `Up next · ${next.title}`,
-      `${next.title} on deck`,
-    ];
-    const text = phrasings[Math.floor(Math.random() * phrasings.length)];
     try {
-      window.dispatchEvent(new CustomEvent('voyo:oyo-says', { detail: { text } }));
+      window.pushNotification?.({
+        id: `pip-nextup-${Date.now()}`,
+        type: 'music',
+        title: next.artist || 'Up next',
+        subtitle: next.title,
+      });
     } catch { /* never break */ }
   }, [currentTrackIdForPip]);
   const lastScrollY = useRef(0);
@@ -6337,11 +6336,6 @@ export const VoyoPortraitPlayer = ({
         <BottomTakeOutChip portalProgress={portalProgress} />
       )}
 
-      {/* OYO SAYS — ambient one-line pill at the top of the viewport.
-          Listens for window 'voyo:oyo-says' events. Currently fires
-          when Take Out is ready; future moments can tap the same
-          channel via window.dispatchEvent(...). */}
-      <OyoSays />
 
       {/* LYRICS OVERLAY - Tap album art to show */}
       {showLyricsOverlay && currentTrack && (
