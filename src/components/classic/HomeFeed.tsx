@@ -1764,6 +1764,13 @@ const VibesLiveFriendsSheet = ({ friends, loading, onClose, onFriendTap }: Vibes
 // re-rendered every 2.4s during the auto-scroll countdown.
 // ============================================
 
+// Stable module-level style for Top10's vinyl artwork. Was inline at the
+// SmartImage call site → new object reference every render → SmartImage's
+// React.memo defeated → re-render cascaded into the IMG element → during
+// box-shadow animation on the parent, the browser briefly invalidated
+// the composited layer. Hoisting kills the re-render at the source.
+const TOP10_ART_STYLE = { transform: 'scale(1.3)', objectPosition: 'center 35%' as const } as const;
+
 interface Top10SectionProps {
   tracks: Track[];
   onTrackPlay: (track: Track, opts?: { openFull?: boolean }) => void;
@@ -1866,8 +1873,30 @@ const Top10Section = memo(({ tracks, onTrackPlay }: Top10SectionProps) => {
       <div className="absolute bottom-0 left-0 right-0 h-10 pointer-events-none z-10" style={{ background: 'linear-gradient(to bottom, transparent, rgba(139,92,246,0.15))' }} />
       <div className="absolute inset-0 pointer-events-none top10-bg-glow" aria-hidden style={{ zIndex: 0 }} />
       <div className="relative px-4 mb-6" style={{ zIndex: 1 }}>
-        <div className="overflow-hidden">
+        <div className="overflow-hidden flex items-center gap-2">
           <h2 className="top10-header-scroll text-white font-semibold text-base whitespace-nowrap inline-block">VOYO Top 10</h2>
+          {/* Live dot — appears ONLY when the gold #1 card is the active
+              countdown card. Mimics the "OYÉ Live" orange dot to signal
+              "this is happening right now". Fades in/out gently in sync
+              with the gold treatment, blinks softly while present.
+              Restraint: scarce moment, not constant chrome. */}
+          <span
+            aria-hidden="true"
+            className="inline-block rounded-full"
+            style={{
+              width: 6,
+              height: 6,
+              background: '#F4A23E',
+              boxShadow: '0 0 8px rgba(244,162,62,0.7), 0 0 16px rgba(244,162,62,0.35)',
+              opacity: countdownActive && activeIdx === 0 ? 1 : 0,
+              animation: countdownActive && activeIdx === 0
+                ? 'voyo-top10-live-blink 2.4s ease-in-out infinite'
+                : 'none',
+              // Gold-sync: matches the 0.8s box-shadow transition on the
+              // #1 card so the dot's fade tracks the same rhythm.
+              transition: 'opacity 0.8s ease-in-out',
+            }}
+          />
         </div>
         <p
           key={subtitleKey}
@@ -1910,6 +1939,15 @@ const Top10Section = memo(({ tracks, onTrackPlay }: Top10SectionProps) => {
         .top10-subtitle-flash {
           animation: top10-subtitle-flash 4.2s ease forwards;
           color: rgba(212,160,83,0.75);
+        }
+        /* Live dot — soft 2.4s blink. Range 0.55→1 (not 0→1) so it never
+           fully disappears mid-cycle; reads as a steady heartbeat, not a
+           flash. Apple easing keeps the in/out gentle. The dot's MOUNT
+           visibility is gated by countdownActive && activeIdx === 0
+           (gold moment only). */
+        @keyframes voyo-top10-live-blink {
+          0%, 100% { opacity: 1; }
+          50%      { opacity: 0.55; }
         }
         @keyframes top10-marquee {
           0% { transform: translateX(0); }
@@ -2005,7 +2043,7 @@ const Top10Section = memo(({ tracks, onTrackPlay }: Top10SectionProps) => {
                     src={getThumb(track.trackId)}
                     alt={track.title}
                     className="w-full h-full object-cover"
-                    style={{ transform: 'scale(1.3)', objectPosition: 'center 35%' }}
+                    style={TOP10_ART_STYLE}
                     trackId={track.trackId}
                     artist={track.artist}
                     title={track.title}
@@ -2846,6 +2884,12 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onNavVisibilityChange, onSwitc
       return [];
     }
   }, [hotPool, oyosPicks, discoverMoreTracks, africanVibes, sessionSeed]);
+  // Stable 10-card slice so Top10Section's memo holds across HomeFeed
+  // re-renders. Without this, `trending.slice(0, 10)` inline at the JSX
+  // returned a new array reference every render → memo defeated → all 10
+  // Top10 cards re-rendered → the brief artwork "reload" Dash flagged
+  // (memo defeat ripples down through SmartImage's inline style props).
+  const trendingTop10 = useMemo(() => trending.slice(0, 10), [trending]);
 
   const handleVibeSelect = (vibe: Vibe) => {
     // Central orchestrator picks the pool, plays the top, enqueues the rest.
@@ -3256,7 +3300,7 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onNavVisibilityChange, onSwitc
           Stations below during the countdown sequence. */}
       {hasTrending && (
         <div style={{ contain: 'paint' }}>
-          <Top10Section tracks={trending.slice(0, 10)} onTrackPlay={onTrackPlay} />
+          <Top10Section tracks={trendingTop10} onTrackPlay={onTrackPlay} />
         </div>
       )}
 
