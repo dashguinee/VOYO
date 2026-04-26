@@ -5480,10 +5480,14 @@ export const VoyoPortraitPlayer = ({
           opacity: portalProgress < 0.55
             ? 1 - portalProgress * 0.7  // step 1: 1.0 → 0.6
             : Math.max(0, 0.6 - (portalProgress - 0.55) * 1.5), // step 2: 0.6 → 0
-          filter: `blur(${portalProgress * 8}px)`,
+          // Filter:blur dropped (was blur(${portalProgress * 8}px)) —
+          // mobile Safari briefly re-rasterized this layer during the
+          // ramp, flashing a white intermediate frame. Opacity carries
+          // the fade alone now; adequate visual recede without the
+          // compositor cost.
           pointerEvents: portalProgress > 0.55 ? 'none' : 'auto',
-          transform: `translateY(${portalProgress * -10}px)`,
-          transition: 'opacity 0.18s ease-out, filter 0.18s ease-out, transform 0.18s ease-out',
+          transform: `translateY(${portalProgress * -10}px) translateZ(0)`,
+          transition: 'opacity 0.18s ease-out, transform 0.18s ease-out',
           background: 'linear-gradient(180deg, rgba(15,15,22,0.92) 0%, rgba(8,8,10,0.97) 28%, rgba(8,8,10,0.99) 100%)',
           // Elliptical top curve — wider in the middle than the corners
           // (the cube sits at the deepest part of the shallow dish).
