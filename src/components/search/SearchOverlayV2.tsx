@@ -291,9 +291,14 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap, onEnterVideoMode
       scrollRafRef.current = null;
       const el = scrollContainerRef.current;
       if (!el) return;
-      const max = Math.max(1, el.scrollHeight - el.clientHeight);
-      const raw = Math.min(1, Math.max(0, el.scrollTop / max));
-      // Round to 2% bins to avoid state updates on sub-pixel jitter.
+      // Positional, not percentage. "Two scrolls worth" = 2× viewport
+      // height in scrollTop. Normalize to 0-1 so existing consumers
+      // still read scrollPct the same way; 1.0 == dock threshold.
+      // Per Dash 2026-04-26: "after 2 scrolls worth it drops" — feels
+      // consistent regardless of result-list length, no surprise dock
+      // on short result sets.
+      const TWO_SCREENS = el.clientHeight * 2;
+      const raw = Math.min(1, Math.max(0, el.scrollTop / TWO_SCREENS));
       const binned = Math.round(raw * 50) / 50;
       if (Math.abs(binned - scrollPctRef.current) < 0.0001) return;
       scrollPctRef.current = binned;
@@ -303,8 +308,10 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap, onEnterVideoMode
   useEffect(() => () => {
     if (scrollRafRef.current != null) cancelAnimationFrame(scrollRafRef.current);
   }, []);
-  const sectionHeaderOpacity = Math.max(0, 1 - Math.max(0, (scrollPct - 0.28)) / 0.14);
-  const searchAtBottom = scrollPct >= 0.65;
+  // Header chrome: section labels start fading at ~1.2 viewports,
+  // fully gone by ~1.8. Search bar docks to bottom at 2 viewports.
+  const sectionHeaderOpacity = Math.max(0, 1 - Math.max(0, (scrollPct - 0.6)) / 0.3);
+  const searchAtBottom = scrollPct >= 1.0;
 
   // R2 cache awareness — for each result, async batch-check the edge
   // worker /exists/ endpoint. Tracks already in R2 get a "✦ DISCO" badge
