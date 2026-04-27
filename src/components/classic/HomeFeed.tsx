@@ -1040,11 +1040,54 @@ const AfricanVibesVideoCard = memo(({
     );
   }, [isActive, isLoaded]);
 
-  // 500ms ready gate — thumbnail stays visible until YT paints first frame.
+  // Subscribe to YT player events so we can detect actual PLAYING state
+  // (used by the ready-gate effect below). Without this `listening` message,
+  // some YT iframe versions don't broadcast `infoDelivery` events — the
+  // ready-gate would then always fall through to the 1200ms timer.
+  useEffect(() => {
+    if (!iframeRef.current || !isLoaded) return;
+    iframeRef.current.contentWindow?.postMessage(
+      `{"event":"listening","id":"${track.trackId}"}`, '*'
+    );
+  }, [isLoaded, track.trackId]);
+
+  // Ready gate — keeps the thumbnail backdrop visible until YT has actually
+  // painted a video frame, otherwise we cross-fade out too early and the
+  // user sees YT's bootstrap (poster + branding) flicker through. Listens
+  // for the YT IFrame API's `infoDelivery` postMessage with playerState=1
+  // (PLAYING) — that's the signal a real frame is being decoded. Falls back
+  // to a 1200ms timer if YT messages don't arrive (network issue or YT API
+  // disabled). Cards 0-1 used to look smooth at 500ms because their iframes
+  // were already warm by the time the user scrolled; cards 3+ were cold-
+  // booting and 500ms wasn't long enough to mask YT startup.
   useEffect(() => {
     if (!isLoaded || !isActive) { setIsReady(false); return; }
-    const t = setTimeout(() => setIsReady(true), 500);
-    return () => clearTimeout(t);
+    const targetWindow = iframeRef.current?.contentWindow;
+    let armed = true;
+    const onMsg = (ev: MessageEvent) => {
+      if (!armed) return;
+      if (ev.source !== targetWindow) return;
+      try {
+        const data = typeof ev.data === 'string' ? JSON.parse(ev.data) : ev.data;
+        // YT broadcasts { event: 'infoDelivery', info: { playerState, ... } }
+        // playerState 1 = PLAYING (means a frame has been decoded).
+        if (data?.event === 'infoDelivery' && data.info?.playerState === 1) {
+          armed = false;
+          setIsReady(true);
+        }
+      } catch { /* not a YT message */ }
+    };
+    window.addEventListener('message', onMsg);
+    // Fallback — if no PLAYING message arrives in 1.2s, fire anyway so the
+    // thumbnail doesn't sit there forever on flaky networks.
+    const fallback = window.setTimeout(() => {
+      if (armed) { armed = false; setIsReady(true); }
+    }, 1200);
+    return () => {
+      armed = false;
+      window.removeEventListener('message', onMsg);
+      window.clearTimeout(fallback);
+    };
   }, [isLoaded, isActive]);
 
   // Mount when in the 3-window (active + 2 neighbors). 800ms grace
