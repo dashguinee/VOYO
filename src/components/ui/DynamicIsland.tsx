@@ -233,6 +233,11 @@ export const DynamicIsland = ({
     if (dashRows.length === 0) return;
     const fresh = dashRows.filter((r) => !seenIdsRef.current.has(r.id));
     if (fresh.length === 0) return;
+    // (O6) Bound the seen set — otherwise it grows unbounded over a long-lived
+    // PWA session. 500 is well above any realistic in-session notification
+    // volume; on overflow we just reset (worst case = a single re-enqueue of
+    // an already-dismissed notification, harmless given dedup-by-id below).
+    if (seenIdsRef.current.size > 500) seenIdsRef.current.clear();
     fresh.forEach((r) => seenIdsRef.current.add(r.id));
     // Newest-first in dashRows — reverse so newest is appended last and becomes current.
     fresh.slice().reverse().forEach((r) => enqueue(mapDashNotification(r), true));

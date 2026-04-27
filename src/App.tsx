@@ -359,11 +359,12 @@ function UpdateButton() {
 
     let active = true;
     let endedListenerAttached = false;
+    // (O5) Track el + handler so the effect cleanup can remove the listener
+    // even if the component unmounts (HMR, future route move) while the
+    // listener is still armed.
+    let attachedAudioEl: HTMLAudioElement | null = null;
+    let attachedOnEnded: (() => void) | null = null;
 
-    // One-shot 'ended' listener on the global <audio> element. Fires when the
-    // current track finishes naturally, at which point we perform the deferred
-    // force-reload. Kept alive across track boundaries only if the reload is
-    // still pending.
     const attachEndedListener = () => {
       if (endedListenerAttached) return;
       const audioEl = document.querySelector('audio');
@@ -372,10 +373,14 @@ function UpdateButton() {
       const onEnded = () => {
         audioEl.removeEventListener('ended', onEnded);
         endedListenerAttached = false;
+        attachedAudioEl = null;
+        attachedOnEnded = null;
         if (sessionStorage.getItem(PENDING_FORCE_RELOAD_KEY) === '1') {
           void performForceReload();
         }
       };
+      attachedAudioEl = audioEl;
+      attachedOnEnded = onEnded;
       audioEl.addEventListener('ended', onEnded);
     };
 
@@ -432,6 +437,12 @@ function UpdateButton() {
       active = false;
       clearInterval(interval);
       window.removeEventListener('voyo-update-available', swHandler);
+      if (attachedAudioEl && attachedOnEnded) {
+        attachedAudioEl.removeEventListener('ended', attachedOnEnded);
+        attachedAudioEl = null;
+        attachedOnEnded = null;
+        endedListenerAttached = false;
+      }
     };
   }, []);
 

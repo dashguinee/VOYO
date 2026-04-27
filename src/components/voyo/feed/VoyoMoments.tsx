@@ -1237,6 +1237,16 @@ export const VoyoMoments: React.FC<VoyoMomentsProps> = ({ onPlayFullTrack, onArt
     if (transitionTimer.current) clearTimeout(transitionTimer.current);
   }, []);
 
+  // (O9) Unmount-only stageTimers cleanup. The per-effect cleanup above only
+  // runs when [uiPhase, pingWidgets] change — it doesn't fire when pingWidgets
+  // is invoked from wakeHeaderOnTap or the [mKey] effect. Without this guard,
+  // a component unmounted mid-fade leaves up to 3 setTimeouts pending that
+  // setState on a dead tree (React 18 swallows, but it's still real waste).
+  useEffect(() => () => {
+    stageTimers.current.forEach(t => clearTimeout(t));
+    stageTimers.current = [];
+  }, []);
+
   // Backward-compat: code below still references hasInteracted
   const hasInteracted = uiPhase === 'immersive';
   // Visibility flags derived from the staged fade.

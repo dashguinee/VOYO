@@ -433,7 +433,16 @@ export const useUniverseStore = create<UniverseStore>((set, get) => ({
   viewUniverse: async (username: string) => {
     set({ isLoading: true });
 
-    const { currentUsername } = get();
+    const { currentUsername, portalSubscription: prevSubscription } = get();
+
+    // (O8) Drop any prior portal subscription before acquiring a new one.
+    // Previously a user hopping A → B → C accumulated stale channels, each
+    // still receiving postgres_changes that wrote the wrong now_playing into
+    // the visible profile.
+    if (prevSubscription) {
+      try { universeAPI.unsubscribe(prevSubscription); } catch { /* swallow */ }
+      set({ portalSubscription: null });
+    }
 
     // If viewing own universe, just return
     if (username.toLowerCase() === currentUsername?.toLowerCase()) {
