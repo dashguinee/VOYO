@@ -5217,10 +5217,17 @@ export const VoyoPortraitPlayer = ({
           ║ Height = viewport minus the music shelf (Layer B) so Layer  ║
           ║ B is visible AT REST in the bottom slice of the screen, and ║
           ║ the anchor stays put as user scrolls deeper into Layer C.   ║
+          ║                                                             ║
+          ║ v763+: reservation tracks Layer B's actual min-h state      ║
+          ║ (line ~5620). Was a flat 264px which broke on iPhone SE     ║
+          ║ when cubeDockOpen pushed Layer B to 480px+28 translate —    ║
+          ║ Anchor stayed too tall, hero was cropped under Layer B.     ║
           ╚═════════════════════════════════════════════════════════════╝ */}
       <div
         className="sticky top-0 z-20 flex flex-col flex-shrink-0"
-        style={{ height: 'calc(100% - 264px)' }}
+        style={{
+          height: `calc(100% - ${cubeDockOpen ? 508 : oyeBarBehavior === 'fade' ? 388 : 264}px)`,
+        }}
       >
 
       {/* JAM CHIP — shown when visitor is locked to a host's verse.

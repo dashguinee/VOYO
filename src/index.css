@@ -110,12 +110,13 @@
   }
 
   /* iOS zooms the viewport on focus when a form-control's font-size is
-     < 16px. Force the floor on input/textarea/select only — visual font
-     sizing on non-input elements stays controlled by Tailwind text-*
-     classes. Surfaces that intentionally render small input text
-     (Search 15px, Library 14px, Moments 13px, DynamicIsland 12px) still
-     show their visual size; only the *computed* font-size on the input
-     is clamped to 16px so iOS no longer zooms. */
+     < 16px. Floor the computed font-size at 16px on every input/textarea/
+     select. NOTE: Tailwind utilities (text-[15px], text-[14px], etc.)
+     have higher specificity than this base-layer rule — surfaces that
+     want a sub-16px input must NOT use a smaller text-* utility on the
+     <input> itself, or iOS will still zoom. Inputs across VOYO have
+     been migrated to text-[16px] / text-base; this rule is the safety
+     net for any new input added without that knowledge. */
   input,
   textarea,
   select {

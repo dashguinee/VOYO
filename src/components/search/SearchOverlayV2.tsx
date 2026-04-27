@@ -844,7 +844,7 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap, onEnterVideoMode
                         if (target) handleSelectTrack(target);
                       }
                     }}
-                    className="flex-1 bg-transparent text-white placeholder:text-white/30 focus:outline-none text-[15px]"
+                    className="flex-1 bg-transparent text-white placeholder:text-white/30 focus:outline-none text-[16px]"
                   />
                   {isSearching && <VinylLoader size={14} opacity={0.35} colorClass="text-white/70" className="flex-shrink-0" />}
                   {query && !isSearching && (
