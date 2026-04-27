@@ -905,7 +905,7 @@ const CommentsDrawer = memo(({ moment, onClose }: { moment: Moment; onClose: () 
               onClick={onClose}
               aria-label="Close comments"
               className="flex items-center justify-center rounded-full bg-white/8 hover:bg-white/15 active:scale-90 transition-all"
-              style={{ width: 36, height: 36, minWidth: 36, minHeight: 36 }}
+              style={{ width: 44, height: 44, minWidth: 44, minHeight: 44 }}
             >
               <X size={16} style={{ color: 'rgba(255,255,255,0.75)' }} />
             </button>
