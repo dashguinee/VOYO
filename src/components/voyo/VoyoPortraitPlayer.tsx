@@ -1977,6 +1977,12 @@ const BigCenterCard = memo(({ track, onExpandVideo, onShowLyrics, hideThumb, isI
   <div
     className="relative w-56 h-56 md:w-64 md:h-64 rounded-[2rem] overflow-hidden z-20 group"
     style={{
+      // Solid dark backing — without this, any transient moment where
+      // SmartImage is loading or the card transform exposes a sub-pixel
+      // gap shows the page bg/whatever is behind, which manifested as a
+      // black-then-white flash on scroll in poster mode. Backing matches
+      // SmartImage's default placeholder so the transition is silent.
+      backgroundColor: '#1a1a1a',
       // ── 3D DEPTH SYSTEM (Silicon Valley 2050, not 2015 flip card) ──
       //
       // Three audio-reactive layers, all within Dash's 7% max visual
@@ -5393,7 +5399,7 @@ export const VoyoPortraitPlayer = ({
               controlsActive={isControlsRevealed}
             />
           ) : (
-            <div className="w-48 h-48 rounded-[2rem] bg-white/5 border border-white/10 flex items-center justify-center">
+            <div className="w-48 h-48 rounded-[2rem] bg-black/30 border border-white/5 flex items-center justify-center">
               <Play size={32} className="text-white/20" />
             </div>
           )}
