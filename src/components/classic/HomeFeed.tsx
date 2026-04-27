@@ -2174,6 +2174,7 @@ const Top10Section = memo(({ tracks, onTrackPlay }: Top10SectionProps) => {
         {tracks.map((track, index) => {
           const maxChars = 12;
           const titleNeedsScroll = track.title.length > maxChars;
+          const artistNeedsScroll = track.artist.length > maxChars;
           const isOne = index === 0;
           const isPodium = index < 3;
           const isCentered = centeredIdx === index;
@@ -2276,22 +2277,31 @@ const Top10Section = memo(({ tracks, onTrackPlay }: Top10SectionProps) => {
                   <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#0a0a0c]" style={{ width: '10px', height: '10px', boxShadow: '0 0 5px rgba(0,0,0,0.8)' }} />
                 </div>
               </div>
-              <div className="absolute text-center" style={{ width: '110px', left: '50%', transform: 'translateX(-50%)', bottom: '-52px' }}>
-                <div className="overflow-hidden mx-auto" style={{ width: '100px' }}>
+              <div className="absolute" style={{ width: '110px', left: '50%', transform: 'translateX(-50%)', bottom: '-52px' }}>
+                <div className="overflow-hidden mx-auto text-center" style={{ width: '100px' }}>
                   <p className={`text-white text-[10px] font-semibold whitespace-nowrap ${titleNeedsScroll ? 'top10-scroll-title' : ''}`}>
                     {titleNeedsScroll ? <>{track.title}<span className="mx-3">•</span>{track.title}<span className="mx-3">•</span></> : track.title}
                   </p>
                 </div>
-                <div className="flex items-center justify-center gap-0.5 mt-0.5">
+                <div className="overflow-hidden mx-auto text-center" style={{ width: '100px' }}>
+                  <p className={`whitespace-nowrap ${artistNeedsScroll ? 'top10-scroll-title' : ''}`}
+                     style={{ animationDelay: '1.4s', fontSize: '9px', color: 'rgba(255,255,255,0.45)', letterSpacing: '0.02em' }}>
+                    {artistNeedsScroll ? <>{track.artist}<span className="mx-3">·</span>{track.artist}<span className="mx-3">·</span></> : track.artist}
+                  </p>
+                </div>
+                {/* OYE count — smaller (was 8px, now 7px) and aligned
+                    LEFT instead of centered. Less front-and-center,
+                    reads as a quiet stat under the artist line. */}
+                <div className="flex items-center gap-0.5 mt-0.5 pl-1">
                   {index < 3 ? (
                     <>
-                      <Zap className="w-2.5 h-2.5" style={{ color: '#D4A053', fill: '#D4A053', filter: 'drop-shadow(0 0 3px rgba(212,160,83,0.5))' }} />
-                      <span className="text-[8px] font-bold" style={{ color: '#D4A053' }}>
+                      <Zap className="w-2 h-2" style={{ color: '#D4A053', fill: '#D4A053', filter: 'drop-shadow(0 0 3px rgba(212,160,83,0.5))' }} />
+                      <span className="text-[7px] font-bold" style={{ color: '#D4A053' }}>
                         {track.oyeScore ? (track.oyeScore / 1000).toFixed(0) + 'K' : Math.round((10 - index) * 1.2) + 'K'}
                       </span>
                     </>
                   ) : (
-                    <span className="text-[8px] font-bold" style={{ color: '#D4A053' }}>
+                    <span className="text-[7px] font-bold" style={{ color: '#D4A053' }}>
                       OYE {track.oyeScore ? (track.oyeScore / 1000).toFixed(0) + 'K' : Math.round((10 - index) * 1.2) + 'K'}
                     </span>
                   )}
