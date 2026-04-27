@@ -1076,17 +1076,19 @@ const AfricanVibesVideoCard = memo(({
   }, [youtubeId]);
 
   // ── Play zone (mount gate) ─────────────────────────────────────────
-  // Viewport + 200px buffer ≈ 1 card-width past either edge. Only the
-  // visible cards + the immediate next-up on each side are mounted.
-  // The "next" card pre-warms while the user is scrolling toward it so
-  // by the time the scroll settles, video is already showing.
+  // Viewport + 100px buffer (≈ 1 card-width). The visible cards mount,
+  // and the next-up on each side mounts only as it gets close to entering
+  // view. As the leftmost visible card starts leaving, the next-up on
+  // the right is already crossing into the play zone — that's when its
+  // bootstrap begins. Anything further than 1 card-width away is static
+  // (no iframe at all).
   useEffect(() => {
     const card = cardRef.current;
     const root = containerRef.current;
     if (!card || !root) return;
     const obs = new IntersectionObserver(
       ([entry]) => setIsInPlayZone(entry.isIntersecting),
-      { root, rootMargin: '0px 200px 0px 200px' }
+      { root, rootMargin: '0px 100px 0px 100px' }
     );
     obs.observe(card);
     return () => obs.disconnect();
@@ -1108,19 +1110,19 @@ const AfricanVibesVideoCard = memo(({
     return () => obs.disconnect();
   }, [containerRef]);
 
-  // ── Mount lifecycle: focused viewport with 800ms grace ─────────────
-  // Mount when in play zone (visible + 1-card buffer). Unmount when out
-  // of zone, with 800ms grace to absorb scroll inertia and quick
-  // back-and-forth without re-bootstrapping. Tight focus: only the
-  // cards the user is currently looking at + the immediate next-ups
-  // hold iframes. Off-screen cards drop their iframe entirely.
+  // ── Mount lifecycle: focused viewport with 500ms grace ─────────────
+  // Mount when in play zone (visible + 1-card buffer). Unmount on
+  // leaving with 500ms grace — just enough to absorb scroll inertia
+  // bounce without re-bootstrapping if the user immediately scrolls back.
+  // Beyond grace, off-screen cards drop their iframe entirely (back to
+  // static cover only).
   const [shouldMountIframe, setShouldMountIframe] = useState(false);
   useEffect(() => {
     if (isInPlayZone) {
       setShouldMountIframe(true);
       return;
     }
-    const t = setTimeout(() => setShouldMountIframe(false), 800);
+    const t = setTimeout(() => setShouldMountIframe(false), 500);
     return () => clearTimeout(t);
   }, [isInPlayZone]);
 
