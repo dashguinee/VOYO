@@ -13,7 +13,7 @@ import { useShallow } from 'zustand/shallow';
 import { devWarn } from '../../utils/logger';
 import { Search, Play, Zap } from 'lucide-react';
 import { AfricaIcon } from '../ui/AfricaIcon';
-import { getThumb } from '../../utils/thumbnail';
+import { getThumb, generatePlaceholder } from '../../utils/thumbnail';
 import { SmartImage } from '../ui/SmartImage';
 import { Safe } from '../ui/Safe';
 import { TrackCardGestures } from '../ui/TrackCardGestures';
@@ -957,28 +957,32 @@ const decodeVoyoId = (trackId: string): string => {
   }
 };
 
-// Plain <img> with a one-shot maxres → hqdefault fallback. Replaces
-// SmartImage in the AfricanVibes rail because SmartImage's animated
-// `voyo-skeleton-shimmer` band was visible on cards still fetching their
-// thumbnail when the user scrolled into them — read as a flicker. This
-// keeps the same maxres-with-hqdefault-fallback behaviour but uses
-// browser-native loading: no skeleton, no JS-level fade-in, image
-// appears in one frame when decoded.
+// Album-art backdrop — shown until the YT iframe is ready, then cross-
+// faded out to reveal the playing video. Deliberately rendered at native
+// object-cover (no scale transform) so it reads as an ALBUM COVER, not
+// a "frozen zoomed video frame." When the iframe takes over, the user
+// sees a clean "cover-to-music-video" transition (Apple-Music-style)
+// rather than a fight between two slightly-mismatched crops of the same
+// image. Plain <img> instead of SmartImage to skip the animated
+// `voyo-skeleton-shimmer` overlay, which on cards still loading was
+// visible as a flicker. Browser-native loading: stays transparent until
+// decoded, then paints in one frame. hqdefault (480×360) is sharp enough
+// at this size with no upscale; falls back to a lightweight DASH
+// placeholder if YT 404s.
 const ThumbWithFallback = memo(({ trackId, alt }: { trackId: string; alt: string }) => {
-  const [src, setSrc] = useState(() => getThumb(trackId, 'max'));
+  const [src, setSrc] = useState(() => getThumb(trackId, 'high'));
   const triedFallback = useRef(false);
   const handleError = useCallback(() => {
     if (triedFallback.current) return;
     triedFallback.current = true;
-    setSrc(getThumb(trackId, 'high'));
-  }, [trackId]);
+    setSrc(generatePlaceholder(alt, 400));
+  }, [alt]);
   return (
     <img
       src={src}
       alt={alt}
       onError={handleError}
       className="absolute inset-0 w-full h-full object-cover"
-      style={{ transform: 'scale(3)' }}
       loading="eager"
       decoding="async"
       draggable={false}
@@ -1205,12 +1209,16 @@ const AfricanVibesVideoCard = memo(({
       )}
 
       <div className="relative w-full h-full rounded-xl overflow-hidden bg-black">
-        {/* Thumbnail backdrop — always rendered, but cross-faded out once
-            the iframe is ready so the two images don't double up at
-            different crops. Scale matches the iframe's effective video
-            crop (300%) so during the 600ms fade, the visible content stays
-            in place — no "poster morph" glitch. `max` quality keeps the
-            3× zoom sharp; SmartImage falls back to hqdefault if max 404s. */}
+        {/* Album-art backdrop — shows the track's cover at native scale
+            until the YT iframe broadcasts PLAYING, then cross-fades out.
+            This is intentionally a different visual from the iframe's
+            300%-zoomed video crop: the user sees a clean ALBUM COVER
+            during the ~1s YT bootstrap, then a clean handoff to the
+            music video. Same model as Apple Music's cover→video
+            transition. Earlier attempts (v707-v711) tried to match the
+            thumbnail's crop to the iframe's so the swap was invisible —
+            that fought the user's expectation; album-cover-then-video
+            is the natural mental model. */}
         <div
           className="absolute inset-0"
           style={{
