@@ -2071,7 +2071,11 @@ const Top10Section = memo(({ tracks, onTrackPlay }: Top10SectionProps) => {
   return (
     <div ref={sectionRef} className={`mb-8 py-8 relative ${isVisible ? '' : 'top10-paused'}`} style={{ background: 'linear-gradient(180deg, rgba(6,6,9,1) 0%, rgba(139,92,246,0.08) 15%, rgba(139,92,246,0.06) 50%, rgba(139,92,246,0.12) 85%, rgba(6,6,9,0.95) 100%)' }}>
       <div className="absolute top-0 left-0 right-0 h-8 bg-gradient-to-b from-[#060609] to-transparent pointer-events-none z-10" />
-      <div className="absolute bottom-0 left-0 right-0 h-10 pointer-events-none z-10" style={{ background: 'linear-gradient(to bottom, transparent, rgba(139,92,246,0.15))' }} />
+      {/* Mirror the top fade at the bottom — dark gradient that blends
+          back into the page background so the section ends smoothly
+          instead of cutting hard. Was a purple wash at 0.15 opacity
+          that left a hard band where the section ended. */}
+      <div className="absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-[#060609] to-transparent pointer-events-none z-10" />
       <div className="absolute inset-0 pointer-events-none top10-bg-glow" aria-hidden style={{ zIndex: 0 }} />
       <div className="relative px-4 mb-6" style={{ zIndex: 1 }}>
         <div className="overflow-hidden flex items-center gap-2">
