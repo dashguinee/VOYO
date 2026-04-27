@@ -180,7 +180,13 @@ const SmartImageInner: React.FC<SmartImageProps> = ({
     return () => {
       cancelled = true;
     };
-  }, [src, fallbackSrc, trackId, alt, isInView, currentSrc]);
+    // currentSrc deliberately NOT in deps: the early-return guard above
+    // (hasLoadedRef + prevSrcRef) already prevents duplicate loads, and
+    // including currentSrc made the effect re-fire on every internal
+    // setCurrentSrc — ~100 wasted commits per scroll session in dense
+    // image surfaces (Library, Vibes carousel).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [src, fallbackSrc, trackId, alt, isInView]);
 
   return (
     <div ref={containerRef} className={`relative overflow-hidden ${className}`}>

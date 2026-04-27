@@ -574,22 +574,22 @@ const MomentCard = memo(({ moment, isOyed, onOye, isActive, isMuted, onToggleMut
 
   const videoUrl = `${VOYO_API}/r2/feed/${moment.source_id}`;
 
-  // Check if video exists in R2 on mount
+  // Check if video exists in R2 on mount. AbortController so rapid
+  // swipes don't pile up in-flight /check fetches behind the active
+  // moment's <video> request — was blocking the 6-conn cap and
+  // delaying first-frame paint on the next moment.
   useEffect(() => {
-    let cancelled = false;
+    const ctl = new AbortController();
     setVideoAvailable(null);
     setVideoError(false);
-
-    fetch(`${videoUrl}/check`)
+    fetch(`${videoUrl}/check`, { signal: ctl.signal })
       .then(r => r.json())
-      .then(data => {
-        if (!cancelled) setVideoAvailable(data.exists === true);
-      })
-      .catch(() => {
-        if (!cancelled) setVideoAvailable(false);
+      .then(data => setVideoAvailable(data.exists === true))
+      .catch((e) => {
+        if (e?.name === 'AbortError') return;
+        setVideoAvailable(false);
       });
-
-    return () => { cancelled = true; };
+    return () => ctl.abort();
   }, [moment.source_id, videoUrl]);
 
   // Resolve presentation format based on priority:

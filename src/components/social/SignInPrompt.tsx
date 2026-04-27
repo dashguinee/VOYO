@@ -112,18 +112,13 @@ export const VoyoLiveCard = ({ onSwitchToVOYO }: VoyoLiveCardProps = {}) => {
   // so the swap reads as atmospheric, not a page-element change.
   const ABSORB_MS = 700;
 
-  // Fetch real friends data
+  // Fetch real friends + activity. Deps are stable: [dashId, isLoggedIn].
+  // currentTrack is consumed by a separate derive-only effect below — was
+  // in this dep list before, causing 2 wasted Supabase fetches per skip
+  // and tearing down the 30s presence interval before its first tick.
   useEffect(() => {
     if (!dashId || !isLoggedIn) return;
-
-    // (audit-2 P1-RT-5) cancelled flag so stale fetches don't write
-    // into state after the effect re-runs (currentTrack flip, sign-out
-    // mid-fetch). Without this, an in-flight Promise resolved against
-    // the OLD dashId closure and overrode whatever the new effect
-    // just wrote — visible glitch on every track change + auth flash
-    // (friend ring repopulating after sign-out).
     let cancelled = false;
-
     const loadData = async () => {
       try {
         const [friendsList, activity] = await Promise.all([
@@ -133,40 +128,10 @@ export const VoyoLiveCard = ({ onSwitchToVOYO }: VoyoLiveCardProps = {}) => {
         if (cancelled) return;
         setFriends(friendsList);
         setFriendsActivity(activity);
-
-        // Build real friends listening list
-        const realList: ListeningFriend[] = [];
-
-        // Add yourself if playing
-        if (currentTrack) {
-          realList.push({
-            id: 'me',
-            name: 'You',
-            avatar: DEFAULT_AVATARS[0],
-            track: { title: currentTrack.title, thumbnail: currentTrack.coverUrl },
-          });
-        }
-
-        // Add friends who are listening
-        activity.filter(a => a.now_playing).forEach(a => {
-          const friend = friendsList.find(f => f.dash_id === a.dash_id);
-          realList.push({
-            id: a.dash_id,
-            name: friend?.name || `V${a.dash_id.slice(0, 4)}`,
-            avatar: friend?.avatar || DEFAULT_AVATARS[realList.length % DEFAULT_AVATARS.length],
-            track: { title: a.now_playing!.title, thumbnail: a.now_playing!.thumbnail },
-          });
-        });
-
-        // Only update if we have real data, otherwise keep mock
-        if (realList.length > 0) {
-          setFriendsListening(realList);
-        }
       } catch (err) {
         devWarn('[VoyoLiveCard] Failed to load:', err);
       }
     };
-
     loadData();
     // Visibility-gate: skip BG ticks (browser throttles intervals on
     // hidden tabs anyway, and no point firing while the user can't see).
@@ -175,7 +140,34 @@ export const VoyoLiveCard = ({ onSwitchToVOYO }: VoyoLiveCardProps = {}) => {
       loadData();
     }, 30000);
     return () => { cancelled = true; clearInterval(interval); };
-  }, [dashId, isLoggedIn, currentTrack]);
+  }, [dashId, isLoggedIn]);
+
+  // Derive the rendered listening list when friends, activity, OR current
+  // track change. No I/O — pure transform — so a track skip rebuilds the
+  // list from already-loaded state instead of re-fetching everything.
+  useEffect(() => {
+    const realList: ListeningFriend[] = [];
+    if (currentTrack) {
+      realList.push({
+        id: 'me',
+        name: 'You',
+        avatar: DEFAULT_AVATARS[0],
+        track: { title: currentTrack.title, thumbnail: currentTrack.coverUrl },
+      });
+    }
+    friendsActivity.filter(a => a.now_playing).forEach(a => {
+      const friend = friends.find(f => f.dash_id === a.dash_id);
+      realList.push({
+        id: a.dash_id,
+        name: friend?.name || `V${a.dash_id.slice(0, 4)}`,
+        avatar: friend?.avatar || DEFAULT_AVATARS[realList.length % DEFAULT_AVATARS.length],
+        track: { title: a.now_playing!.title, thumbnail: a.now_playing!.thumbnail },
+      });
+    });
+    if (realList.length > 0) {
+      setFriendsListening(realList);
+    }
+  }, [friends, friendsActivity, currentTrack]);
 
   // Build avatars from real friends or defaults
   const avatars = friends.length > 0
@@ -267,7 +259,15 @@ export const VoyoLiveCard = ({ onSwitchToVOYO }: VoyoLiveCardProps = {}) => {
     document.addEventListener('visibilitychange', handleVisibility);
 
     return () => {
-      if (animationRef.current) cancelAnimationFrame(animationRef.current);
+      if (animationRef.current) {
+        // animationRef holds either a rAF handle (visible tab) or a
+        // setTimeout id (hidden tab path above). Cancel both — one
+        // no-ops silently, the other lands. Without this, unmounting
+        // while the tab is hidden left a 1s timer firing rAFs against
+        // the dead component for the lifetime of the page.
+        cancelAnimationFrame(animationRef.current);
+        clearTimeout(animationRef.current);
+      }
       document.removeEventListener('visibilitychange', handleVisibility);
       if (tapTimerRef.current) clearTimeout(tapTimerRef.current);
     };
