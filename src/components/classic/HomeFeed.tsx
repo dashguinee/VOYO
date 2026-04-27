@@ -1044,13 +1044,15 @@ const AfricanVibesVideoCard = memo(({
   // Lifecycle state — see header comment.
   const [isInPlayZone, setIsInPlayZone] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
-  // Sticky-true once the card has been fully visible (intersectionRatio
-  // ≈ 1.0) at least once in this mount cycle. Drives the cover→video
-  // swap: video paints only AFTER the card has fully entered view, so
-  // the rightmost-visible card (still partially in view, just entered)
-  // shows the album cover as a buffer state. Once it shifts inward to
-  // full visibility, sticky flips and the video paints — and stays
-  // painted for the rest of this mount.
+  // Distinct from isVisible: ratio ≥ 0.95. Drives the 1s anticipation
+  // gate below.
+  const [isFullyVisible, setIsFullyVisible] = useState(false);
+  // Sticky-true after the card has been continuously fully-visible
+  // (ratio ≥ 0.95) AND iframe-ready for 1s. The 1s wait is the
+  // anticipation buffer: the card has to settle in view AND have a
+  // playing video before we commit to painting it. Fast scrolls don't
+  // satisfy the timer, so cards passing through quickly stay as static
+  // covers (no flicker). Once true, sticky for the rest of this mount.
   const [hasBeenFullyVisible, setHasBeenFullyVisible] = useState(false);
   // Register with parent on mount so it can observe + pick activeIdx.
   useEffect(() => {
@@ -1107,12 +1109,8 @@ const AfricanVibesVideoCard = memo(({
   }, [containerRef]);
 
   // ── Visibility + fully-visible (drives buffer/dim states) ──────────
-  // Multi-threshold IO so we can tell the difference between:
-  //   - partially visible (just entered or about to leave) → cover
-  //     stays as the "buffer" visual.
-  //   - fully visible (intersectionRatio ≥ 0.95) → flip the sticky
-  //     hasBeenFullyVisible flag so video paints from now on.
-  // Off-viewport drops the card opacity to 90% (snap, no transition).
+  // Multi-threshold IO. isVisible drives the 90% dim. isFullyVisible
+  // (ratio ≥ 0.95) feeds the 1s anticipation gate below.
   useEffect(() => {
     const card = cardRef.current;
     const root = containerRef.current;
@@ -1120,15 +1118,27 @@ const AfricanVibesVideoCard = memo(({
     const obs = new IntersectionObserver(
       ([entry]) => {
         setIsVisible(entry.isIntersecting);
-        if (entry.intersectionRatio >= 0.95) {
-          setHasBeenFullyVisible(true);
-        }
+        setIsFullyVisible(entry.intersectionRatio >= 0.95);
       },
       { root, threshold: [0, 0.5, 0.95, 1] }
     );
     obs.observe(card);
     return () => obs.disconnect();
   }, [containerRef]);
+
+  // ── 1s anticipation gate ───────────────────────────────────────────
+  // Card must be (a) fully visible AND (b) iframe ready, both
+  // continuously for 1s, before we commit to painting the video. If
+  // either flips false during that 1s, the timer cancels — fast scrolls
+  // never satisfy it, so cards passing through quickly stay as static
+  // covers (no flicker, no late video appearing). Once flipped sticky-
+  // true, video paints for the rest of this mount cycle.
+  useEffect(() => {
+    if (hasBeenFullyVisible) return;
+    if (!isFullyVisible || !isReady) return;
+    const t = setTimeout(() => setHasBeenFullyVisible(true), 1000);
+    return () => clearTimeout(t);
+  }, [isFullyVisible, isReady, hasBeenFullyVisible]);
 
   // ── Mount lifecycle: tight focus, 300ms grace ──────────────────────
   // Mount when in play zone (strictly visible + 50px buffer). Unmount
