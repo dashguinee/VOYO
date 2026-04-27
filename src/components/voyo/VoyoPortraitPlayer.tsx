@@ -1248,11 +1248,13 @@ const ExpandVideoButton = memo(({ onClick, isIframeAudio, isMiniPlayerActive, co
 
 // ============================================
 // BOTTOM TAKE OUT CHIP — rises from bottom-right when user scrolls
-// to the mix-board area. After 5s settled, decays to 7% opacity (still
-// tappable, just out of the way). Only mounts when mini player is up.
+// to the mix-board area. After 5s settled, morphs into a compact 44×44
+// circular pill (dot + play glyph) — still visible, still tappable, just
+// less chrome. Was a 7%-opacity ghost which read as broken AND was a
+// silent tap trap. Pill state replaces decay state.
 // ============================================
 const BottomTakeOutChip = memo(({ portalProgress }: { portalProgress: number }) => {
-  const [decayed, setDecayed] = useState(false);
+  const [compact, setCompact] = useState(false);
   // riseProgress: 0 below 0.2, 1 by 0.45 — rises in tandem with the
   // mix-board layer climbing into view.
   const riseProgress = Math.max(0, Math.min(1, (portalProgress - 0.2) / 0.25));
@@ -1260,10 +1262,10 @@ const BottomTakeOutChip = memo(({ portalProgress }: { portalProgress: number }) 
 
   useEffect(() => {
     if (!risen) {
-      setDecayed(false);
+      setCompact(false);
       return;
     }
-    const t = setTimeout(() => setDecayed(true), 5000);
+    const t = setTimeout(() => setCompact(true), 5000);
     return () => clearTimeout(t);
   }, [risen]);
 
@@ -1272,31 +1274,36 @@ const BottomTakeOutChip = memo(({ portalProgress }: { portalProgress: number }) 
       type="button"
       onClick={(e) => { e.stopPropagation(); void pipService.enter(); }}
       aria-label="Take Out — Picture-in-Picture"
-      className="rounded-full backdrop-blur-sm border flex items-center voyo-tap-scale"
+      className="rounded-full backdrop-blur-sm border flex items-center justify-center voyo-tap-scale"
       style={{
         position: 'fixed',
         bottom: 'calc(env(safe-area-inset-bottom, 0px) + 16px)',
         right: 'calc(env(safe-area-inset-right, 0px) + 14px)',
-        padding: '6px 12px',
-        gap: 6,
+        padding: compact ? 0 : '6px 12px',
         background: 'rgba(244,162,62,0.20)',
         border: '1.5px solid rgba(244,162,62,0.55)',
         color: '#F4A23E',
         fontSize: 12,
         fontWeight: 600,
         letterSpacing: '0.04em',
-        boxShadow: '0 0 14px rgba(244,162,62,0.45), 0 0 24px rgba(244,162,62,0.20)',
+        boxShadow: compact
+          ? '0 0 8px rgba(244,162,62,0.30)'
+          : '0 0 14px rgba(244,162,62,0.45), 0 0 24px rgba(244,162,62,0.20)',
         minHeight: 44,
+        width: compact ? 44 : 'auto',
         zIndex: 70,
-        opacity: decayed ? 0.07 : riseProgress,
+        opacity: compact ? 0.82 : riseProgress,
         transform: `translateY(${(1 - riseProgress) * 36}px)`,
-        // Once decayed, the chip is a 7%-opacity ghost — accidental tap
-        // would silently launch PiP. Gate pointerEvents on BOTH risen
-        // AND not-decayed so the ghost is non-interactive.
-        pointerEvents: riseProgress > 0.5 && !decayed ? 'auto' : 'none',
-        transition: decayed
-          ? 'opacity 1.6s cubic-bezier(0.16, 1, 0.3, 1)'
-          : 'opacity 220ms ease-out, transform 360ms cubic-bezier(0.16, 1, 0.3, 1)',
+        pointerEvents: riseProgress > 0.5 ? 'auto' : 'none',
+        transition: [
+          'opacity 320ms ease',
+          'transform 360ms cubic-bezier(0.16, 1, 0.3, 1)',
+          'width 420ms cubic-bezier(0.16, 1, 0.3, 1)',
+          'padding 420ms cubic-bezier(0.16, 1, 0.3, 1)',
+          'box-shadow 320ms ease',
+        ].join(', '),
+        overflow: 'hidden',
+        whiteSpace: 'nowrap',
       }}
     >
       <span
@@ -1305,10 +1312,24 @@ const BottomTakeOutChip = memo(({ portalProgress }: { portalProgress: number }) 
           width: 6, height: 6, borderRadius: '50%',
           background: '#FBBF77',
           boxShadow: '0 0 6px rgba(251,191,119,0.9)',
+          marginRight: compact ? 0 : 6,
+          maxWidth: compact ? 0 : 6,
+          opacity: compact ? 0 : 1,
+          transition: 'margin 380ms cubic-bezier(0.16, 1, 0.3, 1), max-width 380ms cubic-bezier(0.16, 1, 0.3, 1), opacity 240ms ease',
         }}
       />
-      <Play size={12} fill="currentColor" />
-      <span>Take Out</span>
+      <Play size={compact ? 14 : 12} fill="currentColor" style={{ flexShrink: 0, transition: 'width 320ms ease, height 320ms ease' }} />
+      <span
+        style={{
+          opacity: compact ? 0 : 1,
+          maxWidth: compact ? 0 : 80,
+          marginLeft: compact ? 0 : 6,
+          overflow: 'hidden',
+          transition: 'opacity 240ms ease, max-width 380ms cubic-bezier(0.16, 1, 0.3, 1), margin 380ms cubic-bezier(0.16, 1, 0.3, 1)',
+        }}
+      >
+        Take Out
+      </span>
     </button>
   );
 });
