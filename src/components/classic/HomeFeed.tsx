@@ -957,6 +957,36 @@ const decodeVoyoId = (trackId: string): string => {
   }
 };
 
+// Plain <img> with a one-shot maxres → hqdefault fallback. Replaces
+// SmartImage in the AfricanVibes rail because SmartImage's animated
+// `voyo-skeleton-shimmer` band was visible on cards still fetching their
+// thumbnail when the user scrolled into them — read as a flicker. This
+// keeps the same maxres-with-hqdefault-fallback behaviour but uses
+// browser-native loading: no skeleton, no JS-level fade-in, image
+// appears in one frame when decoded.
+const ThumbWithFallback = memo(({ trackId, alt }: { trackId: string; alt: string }) => {
+  const [src, setSrc] = useState(() => getThumb(trackId, 'max'));
+  const triedFallback = useRef(false);
+  const handleError = useCallback(() => {
+    if (triedFallback.current) return;
+    triedFallback.current = true;
+    setSrc(getThumb(trackId, 'high'));
+  }, [trackId]);
+  return (
+    <img
+      src={src}
+      alt={alt}
+      onError={handleError}
+      className="absolute inset-0 w-full h-full object-cover"
+      style={{ transform: 'scale(3)' }}
+      loading="eager"
+      decoding="async"
+      draggable={false}
+    />
+  );
+});
+ThumbWithFallback.displayName = 'ThumbWithFallback';
+
 // AfricanVibesVideoCard — v628 (3-mount window).
 //
 // At most 3 iframes mounted across the rail at any time:
@@ -1167,16 +1197,22 @@ const AfricanVibesVideoCard = memo(({
             transition: 'opacity 600ms cubic-bezier(0.16, 1, 0.3, 1)',
           }}
         >
-          <SmartImage
-            src={getThumb(track.trackId, 'max')}
-            fallbackSrc={getThumb(track.trackId, 'high')}
+          {/* Plain <img> instead of SmartImage — kills the moving
+              `voyo-skeleton-shimmer` band that ran while thumbnails were
+              still fetching. Cards 0-1 finished loading before the user
+              scrolled, so they never showed the band; cards 3+ caught
+              the user mid-load and the moving highlight read as a
+              flicker. The browser's native loading is silent: the <img>
+              stays transparent (showing the bg-black wrapper underneath)
+              until decoded, then paints in one frame — no animated
+              skeleton, no JS-level cross-fade.
+
+              Fallback chain still works: maxres 404s → onError → swap to
+              hqdefault. Nothing else needs SmartImage here (no track-id
+              cache hit-rate to worry about, no artist/title overlay). */}
+          <ThumbWithFallback
             trackId={track.trackId}
             alt={track.title}
-            artist={track.artist}
-            title={track.title}
-            className="absolute inset-0 w-full h-full object-cover"
-            style={{ transform: 'scale(3)' }}
-            lazy={false}
           />
         </div>
 
