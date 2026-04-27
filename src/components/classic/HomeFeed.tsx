@@ -957,19 +957,28 @@ const decodeVoyoId = (trackId: string): string => {
   }
 };
 
-// Thumbnail base layer — YT thumbnail at native object-cover. Looks
-// like a paused video frame (which is exactly what YT thumbnails are).
-// Plain <img> with native lazy-loading so off-viewport thumbnails
-// defer network fetch. onError swaps to a generated DASH placeholder
-// if YT 404s, so cards never end up blank.
-const ThumbWithFallback = memo(({ trackId, alt }: { trackId: string; alt: string }) => {
-  const [src, setSrc] = useState(() => getThumb(trackId, 'high'));
-  const triedFallback = useRef(false);
+// Motion preview — YT serves auto-generated 6-second animated WebP
+// previews at i.ytimg.com/an_webp/{id}/mqdefault_6s.webp for popular
+// videos. Renders as a plain <img>, animated by the browser, looped
+// natively. Zero JS, zero iframe overhead, zero bootstrap delay, no
+// transitional UI. If the WebP 404s (less popular video), falls back
+// to the static hqdefault thumbnail. Final fallback is the DASH
+// placeholder. Three layers of certainty, all native <img>.
+const MotionPreview = memo(({ trackId, alt }: { trackId: string; alt: string }) => {
+  const youtubeId = useMemo(() => decodeVoyoId(trackId), [trackId]);
+  const motion = `https://i.ytimg.com/an_webp/${youtubeId}/mqdefault_6s.webp`;
+  const stillHigh = getThumb(trackId, 'high');
+  const [src, setSrc] = useState(motion);
+  const stage = useRef<'motion' | 'still' | 'placeholder'>('motion');
   const handleError = useCallback(() => {
-    if (triedFallback.current) return;
-    triedFallback.current = true;
-    setSrc(generatePlaceholder(alt, 400));
-  }, [alt]);
+    if (stage.current === 'motion') {
+      stage.current = 'still';
+      setSrc(stillHigh);
+    } else if (stage.current === 'still') {
+      stage.current = 'placeholder';
+      setSrc(generatePlaceholder(alt, 400));
+    }
+  }, [stillHigh, alt]);
   return (
     <img
       src={src}
@@ -982,9 +991,9 @@ const ThumbWithFallback = memo(({ trackId, alt }: { trackId: string; alt: string
     />
   );
 });
-ThumbWithFallback.displayName = 'ThumbWithFallback';
+MotionPreview.displayName = 'MotionPreview';
 
-// AfricanVibesVideoCard — v730 (2-mount: active + edge).
+// AfricanVibesVideoCard — v736 (motion thumbnails, no iframes).
 //
 // Only the active card (idx === activeIdx) mounts a YT iframe. 800ms
 // grace before unmount so quick scroll-back doesn't trigger a reboot.
@@ -1013,11 +1022,7 @@ const AfricanVibesVideoCard = memo(({
   track,
   idx,
   activeIdx,
-  isEdge,
   sectionInView,
-  containerRef,
-  wasSeenBefore,
-  markSeen,
   registerRef,
   onTrackPlay,
 }: {
@@ -1026,26 +1031,12 @@ const AfricanVibesVideoCard = memo(({
   activeIdx: number;
   /** Carousel-level visibility — the OYÉ Africa section is in viewport. */
   sectionInView: boolean;
-  /** Carousel scroll container — used as IO root for the per-card
-   *  play-zone (mount) observer below. */
-  containerRef: React.RefObject<HTMLDivElement | null>;
-  /** True if the parent has seen this trackId fully ready before. */
-  wasSeenBefore: boolean;
-  /** Tells the parent this card has reached the painted-video state. */
-  markSeen: (trackId: string) => void;
-  /** True when this card is the pre-warm slot in the user's current
-   *  scroll direction. Mounts its iframe alongside the central card
-   *  so by the time the user reaches it, bootstrap has progressed. */
-  isEdge: boolean;
   /** Parent's ref-collector — card registers itself on mount so the
    *  rail-level observer can compute the most-centered active card. */
   registerRef: (idx: number, el: HTMLButtonElement | null) => void;
   onTrackPlay: (track: Track) => void;
 }) => {
-  const iframeRef = useRef<HTMLIFrameElement>(null);
-  const [isLoaded, setIsLoaded] = useState(false);
   const cardRef = useRef<HTMLButtonElement>(null);
-  const [isReady, setIsReady] = useState(false);
   // Register with parent on mount so it can observe + pick activeIdx.
   useEffect(() => {
     registerRef(idx, cardRef.current);
@@ -1054,116 +1045,6 @@ const AfricanVibesVideoCard = memo(({
 
   // Active = the centered card, drives bronze glow only.
   const isActive = sectionInView && idx === activeIdx;
-
-  // Decode VOYO ID to real YouTube ID
-  const youtubeId = useMemo(() => decodeVoyoId(track.trackId), [track.trackId]);
-
-  const embedUrl = useMemo(() => {
-    const params = new URLSearchParams({
-      autoplay: '1',
-      mute: '1',
-      controls: '0',
-      disablekb: '1',
-      fs: '0',
-      iv_load_policy: '3',
-      modestbranding: '1',
-      playsinline: '1',
-      rel: '0',
-      showinfo: '0',
-      enablejsapi: '1',
-      origin: window.location.origin,
-      // YT single-video loop requires BOTH loop=1 AND playlist=<id>
-      // (the playlist param needs to reference the same video id).
-      // Without playlist, loop=1 is silently ignored and the video ends.
-      loop: '1',
-      playlist: youtubeId,
-    });
-    return `https://www.youtube.com/embed/${youtubeId}?${params.toString()}`;
-  }, [youtubeId]);
-
-  // ── Mount lifecycle: central OR direction-edge, 300ms grace ────────
-  // Mount when this card is the active (central) OR the pre-warm edge
-  // (the next card in the user's scroll direction). 300ms grace on
-  // leaving so quick scroll-back doesn't trigger re-bootstrap.
-  const shouldHoldMounted = isActive || isEdge;
-  const [shouldMountIframe, setShouldMountIframe] = useState(false);
-  useEffect(() => {
-    if (shouldHoldMounted) {
-      setShouldMountIframe(true);
-      return;
-    }
-    const t = setTimeout(() => setShouldMountIframe(false), 300);
-    return () => clearTimeout(t);
-  }, [shouldHoldMounted]);
-
-  // On isReady: persist seen status at the carousel level (kept dormant
-  // for now but available to skip work on revisits).
-  useEffect(() => {
-    if (!isReady) return;
-    markSeen(track.trackId);
-  }, [isReady, track.trackId, markSeen]);
-
-  // Reset per-mount state when the iframe unmounts so the next mount
-  // cycle starts clean.
-  useEffect(() => {
-    if (!shouldMountIframe) {
-      setIsLoaded(false);
-      setIsReady(false);
-    }
-  }, [shouldMountIframe]);
-
-  // ── Subscribe to YT player events ──────────────────────────────────
-  // Some YT versions don't broadcast `infoDelivery` without an explicit
-  // `listening` postMessage. Sent after iframe `onLoad` fires.
-  useEffect(() => {
-    if (!iframeRef.current || !isLoaded) return;
-    iframeRef.current.contentWindow?.postMessage(
-      `{"event":"listening","id":"${track.trackId}"}`, '*'
-    );
-  }, [isLoaded, track.trackId]);
-
-  // ── PLAYING-state listener: flips isReady (drives cover→video) ─────
-  // YT broadcasts `infoDelivery` with playerState=1 (PLAYING) once a
-  // frame is being decoded. Sticky once flipped — re-entering the
-  // viewport doesn't replay the swap. 800ms fallback timer if YT goes
-  // silent.
-  useEffect(() => {
-    if (!isLoaded || isReady) return;
-    const targetWindow = iframeRef.current?.contentWindow;
-    let armed = true;
-    const onMsg = (ev: MessageEvent) => {
-      if (!armed) return;
-      if (ev.source !== targetWindow) return;
-      try {
-        const data = typeof ev.data === 'string' ? JSON.parse(ev.data) : ev.data;
-        if (data?.event === 'infoDelivery' && data.info?.playerState === 1) {
-          armed = false;
-          setIsReady(true);
-        }
-      } catch { /* not a YT message */ }
-    };
-    window.addEventListener('message', onMsg);
-    const fallback = window.setTimeout(() => {
-      if (armed) { armed = false; setIsReady(true); }
-    }, 500);
-    return () => {
-      armed = false;
-      window.removeEventListener('message', onMsg);
-      window.clearTimeout(fallback);
-    };
-  }, [isLoaded, isReady]);
-
-  // ── One-shot playVideo on iframe load ──────────────────────────────
-  // Just play once when iframe loads. No pauseVideo on visibility flips
-  // — pausing made YT show its paused-state UI (the play/pause button)
-  // when the user scrolled back. Once mounted, cards play forever until
-  // the 5s grace runs out and they unmount entirely.
-  useEffect(() => {
-    if (!iframeRef.current || !isLoaded) return;
-    iframeRef.current.contentWindow?.postMessage(
-      `{"event":"command","func":"playVideo","args":""}`, '*'
-    );
-  }, [isLoaded]);
 
   return (
     <button
@@ -1175,9 +1056,7 @@ const AfricanVibesVideoCard = memo(({
       }}
       onClick={() => onTrackPlay(track)}
     >
-      {/* Bronze glow — only on the active (centered) card. No opacity
-          transition; mount/unmount is the visual change. Animations
-          across multiple cards were a flicker source. */}
+      {/* Bronze glow — only on the active (centered) card. */}
       {isActive && (
         <div
           className="absolute -inset-1 rounded-xl pointer-events-none"
@@ -1191,51 +1070,14 @@ const AfricanVibesVideoCard = memo(({
       )}
 
       <div className="relative w-full h-full rounded-xl overflow-hidden bg-black">
-        {/* Thumbnail base layer — always rendered. YT thumbnails are
-            video posters (first frame), so a static thumbnail looks
-            like a paused video. The whole rail visually feels like a
-            row of music videos even when only 1 iframe is actually
-            playing. Plain <img> with native loading="lazy" so off-
-            viewport thumbnails defer fetching. */}
-        <ThumbWithFallback
+        {/* Motion preview — animated WebP from YT, native browser
+            playback, no JS, no iframe, no orchestration. Falls back
+            to static thumbnail if motion isn't available, then to a
+            DASH placeholder if both 404. */}
+        <MotionPreview
           trackId={track.trackId}
           alt={track.title}
         />
-
-        {/* Video iframe — opacity 0 until isReady, then a 600ms
-            crossfade brings it in over the thumbnail. The slow fade is
-            the loader-mask: any transitional YT UI between the PLAYING
-            postMessage and a stable video frame is hidden inside the
-            fade, because the thumbnail covers it during the visible
-            ramp. By the time iframe is fully opaque, YT has settled
-            into clean video. No timers, no buffers — the crossfade
-            itself is the mask. */}
-        {shouldMountIframe && (
-          <div
-            className="absolute inset-0"
-            style={{
-              opacity: isReady ? 1 : 0,
-              transition: 'opacity 600ms cubic-bezier(0.16, 1, 0.3, 1)',
-            }}
-          >
-            <iframe
-              ref={iframeRef}
-              src={embedUrl}
-              className="pointer-events-none"
-              style={{
-                border: 'none',
-                position: 'absolute',
-                top: '50%',
-                left: '50%',
-                transform: 'translate(-50%, -50%)',
-                width: '300%',
-                height: '300%',
-              }}
-              allow="accelerometer; autoplay; encrypted-media"
-              onLoad={() => setIsLoaded(true)}
-            />
-          </div>
-        )}
 
         {/* Purple overlay */}
         <div
@@ -1299,19 +1141,6 @@ const AfricanVibesCarousel = ({
   const cardRefsMap = useRef<Map<number, HTMLButtonElement>>(new Map());
   const ratiosRef = useRef<Map<number, number>>(new Map());
   const cardObserverRef = useRef<IntersectionObserver | null>(null);
-  // Set of track IDs that have ever been fully-ready in this session.
-  const seenTracksRef = useRef<Set<string>>(new Set());
-  const markTrackSeen = useCallback((trackId: string) => {
-    seenTracksRef.current.add(trackId);
-  }, []);
-
-  // Scroll direction — drives which neighbor of the central card gets
-  // pre-warmed. Default 'right' since most carousel scrolls go forward.
-  // Updates from the scroll handler (a few px hysteresis to avoid
-  // flicker on micro-movements).
-  const [scrollDirection, setScrollDirection] = useState<'right' | 'left'>('right');
-  const lastScrollLeftRef = useRef(0);
-
   // Card-registration callback — each card calls on mount/unmount so
   // the rail's observer can track all current card elements.
   const registerCardRef = useCallback((idx: number, el: HTMLButtonElement | null) => {
@@ -1391,18 +1220,12 @@ const AfricanVibesCarousel = ({
     return () => observer.disconnect();
   }, []);
 
-  // End-of-scroll detector + scroll-direction tracker. The sentinel
-  // CTA reveals at 48px from end. Direction tracking has 4px hysteresis
-  // so micro-jitters during settle don't flap the pre-warm slot.
+  // End-of-scroll detector — reveal the sentinel once the user has
+  // scrolled past the last real card.
   const handleScroll = useCallback(() => {
     const el = containerRef.current;
     if (!el) return;
-    const current = el.scrollLeft;
-    const last = lastScrollLeftRef.current;
-    if (current > last + 4) setScrollDirection('right');
-    else if (current < last - 4) setScrollDirection('left');
-    lastScrollLeftRef.current = current;
-    const atEnd = current + el.clientWidth >= el.scrollWidth - 48;
+    const atEnd = el.scrollLeft + el.clientWidth >= el.scrollWidth - 48;
     if (atEnd && sentinelState === 'hidden') {
       setSentinelState('cta');
     }
@@ -1433,28 +1256,17 @@ const AfricanVibesCarousel = ({
       style={{ paddingLeft: '28px' }}
       onScroll={handleScroll}
     >
-      {tracks.slice(0, 12).map((track, idx) => {
-        // Pre-warm slot: the neighbor of the central card in the
-        // direction the user is scrolling. By the time they reach it,
-        // its iframe has been bootstrapping; on slow scrolls it'll be
-        // ready when promoted to central.
-        const edgeIdx = scrollDirection === 'left' ? activeIdx - 1 : activeIdx + 1;
-        return (
-          <AfricanVibesVideoCard
-            key={track.id}
-            track={track}
-            idx={idx}
-            activeIdx={activeIdx}
-            isEdge={idx === edgeIdx}
-            sectionInView={isInView}
-            containerRef={containerRef}
-            wasSeenBefore={seenTracksRef.current.has(track.trackId)}
-            markSeen={markTrackSeen}
-            registerRef={registerCardRef}
-            onTrackPlay={(t) => { lastWatchedRef.current = t; onTrackPlay(t); }}
-          />
-        );
-      })}
+      {tracks.slice(0, 12).map((track, idx) => (
+        <AfricanVibesVideoCard
+          key={track.id}
+          track={track}
+          idx={idx}
+          activeIdx={activeIdx}
+          sectionInView={isInView}
+          registerRef={registerCardRef}
+          onTrackPlay={(t) => { lastWatchedRef.current = t; onTrackPlay(t); }}
+        />
+      ))}
 
       {/* END-SCROLL SENTINEL — only visible after the user reaches the end */}
       {sentinelState !== 'hidden' && (
