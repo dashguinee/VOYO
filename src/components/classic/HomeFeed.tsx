@@ -1333,24 +1333,31 @@ const AfricanVibesCarousel = ({
     seenTracksRef.current.add(trackId);
   }, []);
 
-  // Support role: when activeIdx changes, the OLD active becomes
-  // "support" — its iframe stays mounted and keeps playing, providing
-  // visual continuity while the NEW active is mounting/bootstrapping.
-  // Once the new active broadcasts isReady (its video is playing),
-  // support drops and the old card unmounts. There's always a video
-  // playing somewhere in the rail during scroll — no "everything is
-  // thumbnail" gap.
+  // Support role: when activeIdx changes, the most-recent PAINTED card
+  // becomes "support" — its iframe stays mounted and keeps playing,
+  // providing continuity while the new active bootstraps. Tracking
+  // "last painted" (not just "previous active") handles fast-scroll:
+  // if the user blasts through multiple cards before any new one
+  // becomes ready, the original painted card stays as support
+  // throughout. Otherwise the second scroll would replace support with
+  // a not-yet-ready card → no video visible at all.
   const [supportIdx, setSupportIdx] = useState<number | null>(null);
   const prevActiveIdxRef = useRef(0);
+  const lastPaintedIdxRef = useRef<number | null>(null);
   useEffect(() => {
-    if (activeIdx !== prevActiveIdxRef.current) {
-      setSupportIdx(prevActiveIdxRef.current);
-      prevActiveIdxRef.current = activeIdx;
-    }
+    if (activeIdx === prevActiveIdxRef.current) return;
+    prevActiveIdxRef.current = activeIdx;
+    const candidate = lastPaintedIdxRef.current;
+    // No support if no card has painted yet, or if the last-painted
+    // card IS the new active (no gap to bridge).
+    setSupportIdx(candidate !== null && candidate !== activeIdx ? candidate : null);
   }, [activeIdx]);
-  // When the new active card's iframe is ready, support can drop.
+  // When the new active card's iframe is ready: record the paint and
+  // drop support (the gap is bridged).
   const handleCardReady = useCallback((idx: number) => {
-    if (idx === activeIdx) setSupportIdx(null);
+    if (idx !== activeIdx) return;
+    lastPaintedIdxRef.current = idx;
+    setSupportIdx(null);
   }, [activeIdx]);
 
   // Card-registration callback — each card calls on mount/unmount so
