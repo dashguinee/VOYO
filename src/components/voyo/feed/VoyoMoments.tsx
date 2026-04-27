@@ -1848,6 +1848,42 @@ export const VoyoMoments: React.FC<VoyoMomentsProps> = ({ onPlayFullTrack, onArt
               showBioBody={showBioBody}
             />
           </FadeWrapper>
+
+          {/* Hidden preload — keeps the next moment's <video> mounted with
+              preload="metadata" so the swipe-forward play() hits a warm
+              http cache instead of cold-fetching. Combined with prev (during
+              the 700ms fade) + current, total <video> elements caps at 3.
+              Pause not unmount — `isActive={false}` already gates play()
+              inside MomentCard. position:absolute + opacity:0 keeps it in
+              the layout tree (visibility:hidden would deprioritise loading
+              in some browsers, defeating the warm-up). */}
+          {nextMoment && nextMoment.id !== currentMoment.id && (
+            <div
+              key={`next-${nextMoment.id}`}
+              aria-hidden="true"
+              style={{
+                position: 'absolute',
+                inset: 0,
+                opacity: 0,
+                pointerEvents: 'none',
+                zIndex: -1,
+              }}
+            >
+              <MomentCard
+                moment={nextMoment}
+                isOyed={oyedMoments.has(nextMoment.id)}
+                onOye={() => {}}
+                isActive={false}
+                isMuted={true}
+                onToggleMute={() => {}}
+                onArtistTap={onArtistTap}
+                showOrb={false}
+                showName={false}
+                showTitle={false}
+                showBioBody={false}
+              />
+            </div>
+          )}
         </>
       ) : (
         <div key="empty" style={S.empty} className="animate-[voyo-fade-in_0.3s_ease]">
