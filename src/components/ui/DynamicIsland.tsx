@@ -30,6 +30,7 @@ import {
 import { useDashNotifications, type DashNotification } from '../../hooks/useDashNotifications';
 import { useAuth } from '../../hooks/useAuth';
 import { devLog, devWarn } from '../../utils/logger';
+import { trace } from '../../services/telemetry';
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -127,6 +128,9 @@ export const DynamicIsland = ({
   const [waveformLevels, setWaveformLevels] = useState<number[]>([0.3, 0.3, 0.3, 0.3, 0.3]);
   const [countdown, setCountdown] = useState<number | null>(null);
   const [isTransitioning, setIsTransitioning] = useState(false);
+  // mediaRecorderRef can't drive renders — mirror its truthy/falsy state
+  // here so the reply UI knows when to show the recording surface.
+  const [isRecording, setIsRecording] = useState(false);
 
   const currentNotification = notifications[currentIndex];
   const hasQueue = notifications.length > 0;
@@ -194,6 +198,7 @@ export const DynamicIsland = ({
   // ── Notification buffer management ────────────────────────────────
   const enqueue = useCallback(
     (notif: Notification, fromDash = false) => {
+      trace('dn_enqueue', null, { id: notif.id, type: notif.type, src: fromDash ? 'dash' : 'push' });
       setNotifications((prev) => {
         // Dedup by id — replace existing if same id
         const without = prev.filter((p) => p.id !== notif.id);
@@ -209,6 +214,14 @@ export const DynamicIsland = ({
     [playWaveSequence],
   );
 
+  // Diagnostic — fires once on mount so we can confirm the component
+  // is actually rendering in this view + which appCode/dashId it's
+  // listening for. Pair with `dn_dash_rows` and `dn_enqueue` traces
+  // to follow the notification chain.
+  useEffect(() => {
+    trace('dn_mount', null, { appCode, dashId: dashId ? dashId.slice(-8) : null });
+  }, [appCode, dashId]);
+
   // ── Realtime ingest from useDashNotifications ─────────────────────
   const { notifications: dashRows, markRead: markDashRead } = useDashNotifications({
     appCode,
@@ -216,6 +229,7 @@ export const DynamicIsland = ({
   });
 
   useEffect(() => {
+    trace('dn_dash_rows', null, { total: dashRows.length, seen: seenIdsRef.current.size });
     if (dashRows.length === 0) return;
     const fresh = dashRows.filter((r) => !seenIdsRef.current.has(r.id));
     if (fresh.length === 0) return;
@@ -393,6 +407,7 @@ export const DynamicIsland = ({
       } catch { /* already stopped */ }
     }
     mediaRecorderRef.current = null;
+    setIsRecording(false);
     setWaveformLevels([0.3, 0.3, 0.3, 0.3, 0.3]);
   }, []);
 
@@ -432,9 +447,11 @@ export const DynamicIsland = ({
 
       mediaRecorderRef.current = new MediaRecorder(stream);
       mediaRecorderRef.current.start();
+      setIsRecording(true);
     } catch (err) {
       devWarn('[DynamicIsland] mic access denied:', err);
       setCountdown(null);
+      setIsRecording(false);
     }
   }, []);
 
@@ -461,8 +478,6 @@ export const DynamicIsland = ({
     },
     [countdown, stopRecording],
   );
-
-  const isRecording = !!mediaRecorderRef.current;
 
   const handleSendReply = useCallback(() => {
     const isVoice = isRecording;
@@ -515,7 +530,6 @@ export const DynamicIsland = ({
 
   // ── Derived display flags ──────────────────────────────────────────
   const isCollapsed = phase === 'wave' || phase === 'dark' || phase === 'fading';
-  const isExpanded  = phase === 'expanded' || phase === 'replying' || phase === 'sending';
   const isReplying  = phase === 'replying' || phase === 'sending';
   const isSending   = phase === 'sending';
   const isFading    = phase === 'fading';
@@ -562,9 +576,11 @@ export const DynamicIsland = ({
 
   if (phase === 'hidden' || !hasQueue) return null;
 
-  // Collapsed pill style (wave/dark/fading)
+  // Collapsed pill style (wave/dark/fading). Width clamped via min() so the
+  // pill never eats more than ~50vw on iPhone SE (375) where the header's
+  // gap-2 siblings + profile + search would otherwise wrap or clip.
   const collapsedStyle: CSSProperties = {
-    width: showWave ? 190 : 165,
+    width: showWave ? 'min(190px, 50vw)' : 'min(165px, 50vw)',
     height: showWave ? 30 : 26,
     paddingLeft: showWave ? 16 : 14,
     paddingRight: showWave ? 16 : 14,
@@ -573,13 +589,16 @@ export const DynamicIsland = ({
     touchAction: 'none',
   };
 
-  // Expanded card style
+  // Expanded card style. Background is animated via two STACKED panels
+  // (light + dark) cross-faded by opacity rather than animating
+  // `background-color` directly — Safari can interpolate the alpha through
+  // ~0 and flash a transparent gap mid-transition (research §2F). Same
+  // visual outcome, no flash.
   const expandedStyle: CSSProperties = {
     width: isSending ? 200 : isReplying ? 300 : 280,
     opacity: isSending ? 0 : 1,
-    backgroundColor: isReplying ? 'rgba(0,0,0,0.8)' : 'rgba(255,255,255,0.95)',
     borderColor: isReplying ? 'rgba(168,85,247,0.3)' : 'rgba(255,255,255,0.2)',
-    transition: 'opacity 380ms ease, width 280ms cubic-bezier(0.16, 1, 0.3, 1), background-color 380ms ease',
+    transition: 'opacity 380ms ease, width 280ms cubic-bezier(0.16, 1, 0.3, 1), border-color 380ms ease',
     touchAction: 'none',
   };
 
@@ -637,6 +656,27 @@ export const DynamicIsland = ({
             className="relative backdrop-blur-md rounded-2xl shadow-xl border overflow-hidden"
             style={expandedStyle}
           >
+            {/* Stacked background panels — cross-fade by opacity instead of
+                animating background-color, which on Safari interpolates the
+                alpha through ~0 and flashes a transparent gap. Both panels
+                are mounted always; only their opacity transitions. */}
+            <div
+              className="absolute inset-0 pointer-events-none"
+              style={{
+                backgroundColor: 'rgba(255,255,255,0.95)',
+                opacity: isReplying ? 0 : 1,
+                transition: 'opacity 380ms ease',
+              }}
+            />
+            <div
+              className="absolute inset-0 pointer-events-none"
+              style={{
+                backgroundColor: 'rgba(0,0,0,0.8)',
+                opacity: isReplying ? 1 : 0,
+                transition: 'opacity 380ms ease',
+              }}
+            />
+
             {/* Wave overlay during reply or transition */}
             {(isReplying || isTransitioning) && (
               <div className="absolute inset-0 overflow-hidden">
@@ -750,13 +790,19 @@ export const DynamicIsland = ({
                           onChange={handleInputChange}
                           onKeyDown={(e) => e.key === 'Enter' && handleSendReply()}
                           placeholder="Type..."
-                          className="flex-1 px-4 py-2 rounded-full bg-white/10 border-0 text-white text-[12px] placeholder:text-white/40 focus:outline-none"
-                          style={{ caretColor: '#f0abfc' }}
+                          // 16px font-size prevents iOS focus-zoom (research §1
+                          // #8). Visual weight unchanged — the island reads the
+                          // same, the keyboard just doesn't punch the page.
+                          className="flex-1 px-4 py-2 rounded-full bg-white/10 border-0 text-white text-base placeholder:text-white/40 focus:outline-none"
+                          style={{ caretColor: '#f0abfc', fontSize: 16 }}
                         />
                         {replyText.trim() && (
                           <button
-                            className="w-8 h-8 rounded-full bg-purple-500 flex items-center justify-center"
+                            // 44×44 hit zone, the 32px disc visual lives inside.
+                            // Was w-8 h-8 (32×32) — below the 44px touch floor.
+                            className="w-11 h-11 rounded-full bg-purple-500 flex items-center justify-center flex-shrink-0"
                             onClick={handleSendReply}
+                            aria-label="Send reply"
                           >
                             <span className="text-white text-sm">↑</span>
                           </button>

@@ -19,6 +19,7 @@ import { AnimatedArtCard } from './AnimatedArtCard';
 import { DynamicVignette } from './DynamicVignette';
 import { devWarn } from '../../../utils/logger';
 import { usePlayerStore } from '../../../store/playerStore';
+import { useMessagingViewport } from '../../../hooks/useMessagingViewport';
 
 // ============================================
 // CONSTANTS & HELPERS
@@ -144,12 +145,19 @@ const S = {
   thumb: css({ position: 'absolute', inset: 0, objectFit: 'cover', width: '100%', height: '100%', display: 'block', margin: 0, padding: 0, borderRadius: 0 }),
   // Bottom fade — softened, warm-tinted. Was 78% black/35% black; now 55%/15%
   // with the cozy amber base. Card text still readable, video breathes.
-  grad: css({ position: 'absolute', bottom: 0, left: 0, right: 0, height: '55%', background: 'linear-gradient(to top, rgba(20,12,6,0.62) 0%, rgba(20,12,6,0.22) 45%, transparent 100%)', zIndex: 2, pointerEvents: 'none' }),
+  // Bottom fade — softened, warm-tinted, with a max-height cap so the dim
+  // doesn't eat the lower HALF of every video on tall portraits (iPhone Pro
+  // Max ≈ 915 tall → 55% was ~503px wash). Cap at 360px so the gradient
+  // reads as a footer halo, not a curtain.
+  grad: css({ position: 'absolute', bottom: 0, left: 0, right: 0, height: '55%', maxHeight: 360, background: 'linear-gradient(to top, rgba(20,12,6,0.62) 0%, rgba(20,12,6,0.22) 45%, transparent 100%)', zIndex: 2, pointerEvents: 'none' }),
   // CREATOR BLOCK — single container positioned on the LEFT side, vertically
   // aligned with the middle of the right-side action bar. Stacks the orb +
   // name on top, with a compact glass bio card below. Bio is collapsed by
   // default (~2 lines with fade at bottom), tap to expand and scroll the rest.
-  creatorBlock: css({ position: 'absolute', left: 18, bottom: 140, zIndex: 10, maxWidth: 'calc(62% - 30px)', display: 'flex', flexDirection: 'column', gap: 10, transition: 'opacity 0.55s cubic-bezier(0.16, 1, 0.3, 1), transform 0.55s cubic-bezier(0.16, 1, 0.3, 1)' }),
+  // Bio max-width tightened from 62% to 56%. ActBar (right side) stacks
+  // four 48px chips ≈ 184px tall and ~64px wide — 62% was overlapping on
+  // <375px screens. 56% gives the bio room to breathe without intruding.
+  creatorBlock: css({ position: 'absolute', left: 18, bottom: 140, zIndex: 10, maxWidth: 'calc(56% - 30px)', display: 'flex', flexDirection: 'column', gap: 10, transition: 'opacity 0.55s cubic-bezier(0.16, 1, 0.3, 1), transform 0.55s cubic-bezier(0.16, 1, 0.3, 1)' }),
   creatorOrbWrap: css({ display: 'flex', alignItems: 'center', gap: 10 }),
   creatorOrb: css({ width: 48, height: 48, borderRadius: '50%', background: 'linear-gradient(135deg, rgba(139,92,246,0.5), rgba(139,92,246,0.18))', border: '1.5px solid rgba(167,139,250,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17, fontWeight: 700, color: '#fff', boxShadow: '0 6px 20px rgba(0,0,0,0.55), 0 0 14px rgba(139,92,246,0.25)', animation: 'voyo-creator-drift 6s ease-in-out infinite', flexShrink: 0 }),
   creatorOrbName: css({ fontSize: 14, fontWeight: 700, color: '#fff', letterSpacing: 0.2, textShadow: '0 1px 4px rgba(0,0,0,0.7)' }),
@@ -279,11 +287,14 @@ const S = {
     background: 'rgba(10,10,15,0.4)',
   }),
   commentInput: css({
-    flex: 1, height: 36, padding: '0 14px',
-    borderRadius: 18,
+    // 44px height meets touch-target floor; 16px font-size prevents
+    // iOS focus-zoom (research §1 #8). Visual weight matches the other
+    // glass chips in the drawer — proud but not shouted.
+    flex: 1, height: 44, padding: '0 14px',
+    borderRadius: 22,
     background: 'rgba(255,255,255,0.06)',
     border: '1px solid rgba(255,255,255,0.08)',
-    color: '#fff', fontSize: 13, outline: 'none',
+    color: '#fff', fontSize: 16, outline: 'none',
   }),
   commentSendBtn: css({
     width: 44, height: 44, borderRadius: '50%',
@@ -361,14 +372,15 @@ const CompassArc = memo(({ categories, currentIndex, displayName, onJumpTo, sele
     const scale = 1 - absOffset * 0.12; // 1.0 → 0.88 → 0.76 → 0.64
     const opacity = absOffset === 0 ? 1 : absOffset === 1 ? 0.6 : absOffset === 2 ? 0.35 : 0.18;
     const yShift = absOffset * absOffset * 2.5; // quadratic: 0, 2.5, 10, 22.5 — creates arc
-    const blur = absOffset <= 1 ? 0 : absOffset * 0.5;
+    // No filter:blur — Safari/iOS re-rasterizes per-frame during the 0.3s
+    // axis-swap transition (research §2F). Opacity ramp already carries the
+    // depth read; blur was redundant chrome on a P1 jank vector.
     const fontSize = absOffset === 0 ? 14 : absOffset === 1 ? 12 : 10;
     const letterSpacing = absOffset === 0 ? 2 : absOffset === 1 ? 1 : 0.5;
 
     return {
       transform: `scale(${scale}) translateY(${yShift}px)`,
       opacity,
-      filter: blur > 0 ? `blur(${blur}px)` : 'none',
       fontSize,
       fontWeight: absOffset === 0 ? 800 : absOffset === 1 ? 600 : 400,
       color: isSelected ? '#A855F7' : absOffset === 0 ? '#fff' : 'rgba(255,255,255,0.8)',
@@ -408,7 +420,13 @@ const CompassArc = memo(({ categories, currentIndex, displayName, onJumpTo, sele
           const isSelected = selectedCategories.has(index);
           return (
             <div
-              key={`${category}-${index}`}
+              // Key by positional offset (slot), NOT (category-index). When
+              // currentIndex shifts the same offset slot would otherwise carry
+              // a different category — React unmounts/remounts and the slot
+              // animates from mount-time = fade-from-zero on every category
+              // step. Treating children as positional slots keeps the same
+              // DOM node and lets the CSS transition interpolate smoothly.
+              key={offset}
               style={{
                 ...getItemStyle(offset, isSelected),
                 transition: 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
@@ -827,6 +845,16 @@ const MOCK_COMMENTS: CommentItem[] = [
 const CommentsDrawer = memo(({ moment, onClose }: { moment: Moment; onClose: () => void }) => {
   const [comments, setComments] = useState<CommentItem[]>(MOCK_COMMENTS);
   const [draft, setDraft] = useState('');
+  // Subscribe to visualViewport so the drawer shrinks when the soft keyboard
+  // opens. Without this, maxHeight is computed before the keyboard arrives
+  // and the input ends up partially obscured. `vh` is the effective viewport
+  // height; we cap drawer height to ~70% of it (keyboard-aware).
+  const { vh, keyboardOpen } = useMessagingViewport();
+  const drawerStyle: React.CSSProperties = {
+    ...S.commentsDrawer,
+    maxHeight: vh > 0 ? Math.round(vh * 0.7) : '70%',
+    minHeight: keyboardOpen ? Math.min(280, vh > 0 ? Math.round(vh * 0.6) : 280) : '50%',
+  };
 
   const handleReact = useCallback((id: string) => {
     setComments(prev => prev.map(c =>
@@ -860,7 +888,7 @@ const CommentsDrawer = memo(({ moment, onClose }: { moment: Moment; onClose: () 
       />
       {/* Drawer */}
       <div
-        style={S.commentsDrawer}
+        style={drawerStyle}
         className="animate-voyo-spring-in-bottom"
         data-no-tap-wake="true"
         onClick={(e) => e.stopPropagation()}
@@ -1728,7 +1756,10 @@ export const VoyoMoments: React.FC<VoyoMomentsProps> = ({ onPlayFullTrack, onArt
           className="animate-[voyo-fade-in_0.25s_ease]"
           style={{
             position: 'absolute',
-            top: 100,
+            // Anchor under the topBar+axisTabs+CompassArc, clearing the notch
+            // safe-area. Magic `top:100` was colliding with the axis tabs on
+            // notched devices.
+            top: 'calc(env(safe-area-inset-top, 0px) + 88px)',
             left: '50%',
             transform: 'translateX(-50%)',
             zIndex: 35,
