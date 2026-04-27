@@ -263,10 +263,11 @@ export const VoyoBottomNav = ({ onDahub, onHome, oyoSurface = 'home', playerMode
     <div
       className="fixed bottom-0 left-0 w-full z-50 px-3 pt-2 pointer-events-none"
       style={{
-        // Lift the nav higher off the bottom edge in player mode so
-        // it floats above the safe-area instead of hugging it.
+        // Tightened by a few px so the nav sits a touch lower in player
+        // mode — was floating slightly too high. Still above safe-area
+        // on notched devices via the env() max().
         paddingBottom: playerMode
-          ? 'max(28px, calc(env(safe-area-inset-bottom) + 20px))'
+          ? 'max(18px, calc(env(safe-area-inset-bottom) + 12px))'
           : 'max(12px, env(safe-area-inset-bottom))',
         transform: 'translateZ(0)',
         opacity: opacityValue,

@@ -5502,10 +5502,9 @@ export const VoyoPortraitPlayer = ({
         {/* MINIMAL PROGRESS - Fades when idle, only current time + red dot */}
         {/* Uses isolated components to prevent full re-renders */}
         <div
-          // 180px was cramped on Pixel-7 (412px = 43% of width). Clamp
-          // up to 220 / 60vw — reads better on wider phones, still
-          // tight on iPhone SE (375 × 60% = 225, capped at 220).
-          className="w-full mt-2 mb-4 px-2 z-30"
+          // mt bumped 2 → 4 (≈8px lower) so the seek row sits a touch
+          // further down — was a tiny bit close to the artwork above.
+          className="w-full mt-4 mb-4 px-2 z-30"
           style={{ maxWidth: 'min(220px, 60vw)' }}
         >
           <div className="flex items-center gap-2">
