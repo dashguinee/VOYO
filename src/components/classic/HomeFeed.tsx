@@ -2200,6 +2200,27 @@ const Top10Section = memo(({ tracks, onTrackPlay }: Top10SectionProps) => {
               onClick={() => onTrackPlay(track, { openFull: true })}
               style={{ scrollSnapAlign: 'start' }}
             >
+              {/* Light beam — anchored to the LEFT of the card (over
+                  the giant number) so it tracks the card itself, not
+                  the disc that drifts to the right. Stays locked when
+                  the layout shifts during scroll. */}
+              {showLight && (
+                <div
+                  className="absolute pointer-events-none rounded-full"
+                  style={{
+                    left: 0,
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    width: '120px',
+                    height: '120px',
+                    opacity: lightOpacity,
+                    background: 'radial-gradient(circle, rgba(212,160,83,0.85) 0%, rgba(212,160,83,0.32) 40%, transparent 70%)',
+                    filter: 'blur(12px)',
+                    transition: 'opacity 600ms ease-in-out',
+                    zIndex: 0,
+                  }}
+                />
+              )}
               <div
                 className="font-black select-none self-center"
                 style={{
@@ -2216,17 +2237,6 @@ const Top10Section = memo(({ tracks, onTrackPlay }: Top10SectionProps) => {
                 {index + 1}
               </div>
               <div className="relative" style={{ zIndex: 2 }}>
-                {/* Light beam halo — VOYO golden. Always on for #1,
-                    fades in for any other card when it scrolls to
-                    center of viewport. */}
-                {showLight && (
-                  <div className="absolute -inset-2 rounded-full" style={{
-                    opacity: lightOpacity,
-                    background: 'radial-gradient(circle, rgba(212,160,83,0.85) 0%, rgba(212,160,83,0.32) 40%, transparent 70%)',
-                    filter: 'blur(12px)',
-                    transition: 'opacity 600ms ease-in-out',
-                  }} />
-                )}
                 <div className="relative rounded-full overflow-hidden" style={{
                   width: '85px',
                   height: '85px',
