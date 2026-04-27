@@ -5350,14 +5350,15 @@ export const VoyoPortraitPlayer = ({
           oyeBarBehavior === 'fade' ? 'pt-12' : 'pt-10'
         }`}
         style={{
-          // pan-y: browser handles vertical scroll (portal reveal), JS handles
-          // horizontal (card drag). The pointer handlers LIVE HERE on the center
-          // section, not on the outer container (which has 'manipulation').
-          // (Was translateY(28px) — pushed artwork below visual center on
-          // short viewports like iPhone SE. justify-end already places the
-          // hero at the bottom of Layer A; the extra 28 served no purpose
-          // on tall viewports either.)
+          // pan-y: browser handles vertical scroll (portal reveal), JS
+          // handles horizontal (card drag). Pointer handlers live here.
+          // 6px translateY: tiny nudge down so the artwork + seek +
+          // controls all sit a touch lower in the layer. Small enough
+          // that video mode (where the iframe is a floating overlay,
+          // not tied to this layout) isn't visually affected. The old
+          // 28px translateY broke iPhone SE — 6px is well within safe.
           touchAction: 'pan-y',
+          transform: 'translateY(6px)',
         }}
         onPointerDown={handleCanvasPointerDown}
         onPointerMove={handleCanvasPointerMove}
