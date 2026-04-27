@@ -2169,20 +2169,27 @@ const Top10Section = memo(({ tracks, onTrackPlay }: Top10SectionProps) => {
           const titleNeedsScroll = track.title.length > maxChars;
           const artistNeedsScroll = track.artist.length > maxChars;
           const isOne = index === 0;
+          const isPodium = index < 3;
           const isCentered = centeredIdx === index;
-          // Only #1 gets the gold treatment. Voyo golden — the warm
-          // bronze-gold the rest of the app uses (#D4A053), not the
-          // bright canary yellow (#FFD700) that read as cliché.
+          // Only #1 gets the gold number fill (the throne). #2/#3 stay
+          // purple-stroke like the rest — Dash agreed silver/bronze
+          // would be too much; podium distinction lives in the BEAM
+          // intensity, not the number colour.
           const numberFill = isOne ? '#D4A053' : 'transparent';
           const numberStroke = isOne ? '#A87B33' : '#9D4EDD';
           const strokeWidth = isOne ? '2px' : '3px';
           const numberGlow = isOne
             ? '0 0 30px rgba(212, 160, 83, 0.5)'
             : '0 0 25px rgba(157, 78, 221, 0.5), 3px 3px 0 rgba(0,0,0,0.6)';
-          // Light beam: always-on (subtle) for #1, fades in only when
-          // a non-#1 card is centered in the viewport.
-          const showLight = isOne || isCentered;
-          const lightOpacity = isOne ? 0.45 : (isCentered ? 0.85 : 0);
+          // Light beam intensity:
+          //   · #1 baseline 0.45 (always lit — the throne)
+          //   · #2 baseline 0.32 (always lit — softer)
+          //   · #3 baseline 0.22 (always lit — softest of the podium)
+          //   · #4-10 baseline 0 (dark unless centered)
+          //   · Any card when centered: boost to 0.85 (the spotlight)
+          const podiumBase = index === 0 ? 0.45 : index === 1 ? 0.32 : index === 2 ? 0.22 : 0;
+          const lightOpacity = isCentered ? 0.85 : podiumBase;
+          const showLight = lightOpacity > 0;
           return (
             <button
               key={track.id}
@@ -2221,11 +2228,17 @@ const Top10Section = memo(({ tracks, onTrackPlay }: Top10SectionProps) => {
                 <div className="relative rounded-full overflow-hidden" style={{
                   width: '85px',
                   height: '85px',
-                  boxShadow: isOne
+                  // Box-shadow mirrors the beam tier:
+                  //   · Centered (any card): full spotlight glow.
+                  //   · Podium baseline (#1/#2/#3): descending halo.
+                  //   · #4-10 not centered: just the drop shadow.
+                  boxShadow: isCentered
                     ? '0 4px 18px rgba(0,0,0,0.5), 0 0 32px rgba(212,160,83,0.55), 0 0 64px rgba(212,160,83,0.22)'
-                    : isCentered
-                      ? '0 4px 18px rgba(0,0,0,0.5), 0 0 28px rgba(212,160,83,0.45), 0 0 56px rgba(212,160,83,0.18)'
-                      : '0 4px 18px rgba(0,0,0,0.45)',
+                    : isOne
+                      ? '0 4px 18px rgba(0,0,0,0.5), 0 0 24px rgba(212,160,83,0.42), 0 0 48px rgba(212,160,83,0.16)'
+                      : isPodium
+                        ? `0 4px 18px rgba(0,0,0,0.5), 0 0 18px rgba(212,160,83,${index === 1 ? 0.30 : 0.20}), 0 0 36px rgba(212,160,83,${index === 1 ? 0.12 : 0.08})`
+                        : '0 4px 18px rgba(0,0,0,0.45)',
                   transition: 'box-shadow 600ms ease-in-out',
                 }}>
                   <SmartImage
