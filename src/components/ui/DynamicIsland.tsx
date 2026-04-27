@@ -599,8 +599,13 @@ export const DynamicIsland = ({
   // `background-color` directly — Safari can interpolate the alpha through
   // ~0 and flash a transparent gap mid-transition (research §2F). Same
   // visual outcome, no flash.
+  // Width clamped against viewport (minus VOYO logo + search + profile +
+  // PushBell sibling ≈ 120px reserve) so the card never pushes header
+  // siblings off-screen on iPhone SE (375). The flex-justify-center parent
+  // in App.tsx handles visual centering relative to PushBell.
+  const expandedTargetPx = isSending ? 200 : isReplying ? 300 : 280;
   const expandedStyle: CSSProperties = {
-    width: isSending ? 200 : isReplying ? 300 : 280,
+    width: `min(${expandedTargetPx}px, calc(100vw - 120px))`,
     opacity: isSending ? 0 : 1,
     borderColor: isReplying ? 'rgba(168,85,247,0.3)' : 'rgba(255,255,255,0.2)',
     transition: 'opacity 380ms ease, width 280ms cubic-bezier(0.16, 1, 0.3, 1), border-color 380ms ease',
