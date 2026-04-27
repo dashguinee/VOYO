@@ -1022,6 +1022,8 @@ const AfricanVibesVideoCard = memo(({
   activeIdx,
   sectionInView,
   containerRef,
+  wasSeenBefore,
+  markSeen,
   registerRef,
   onTrackPlay,
 }: {
@@ -1033,6 +1035,12 @@ const AfricanVibesVideoCard = memo(({
   /** Carousel scroll container — used as IO root for the per-card
    *  play-zone (mount) and visibility (play/pause) observers below. */
   containerRef: React.RefObject<HTMLDivElement | null>;
+  /** True if the parent has seen this trackId fully ready before in
+   *  this session — drives the scroll-back fast path (skip anticipation). */
+  wasSeenBefore: boolean;
+  /** Tells the parent this card has reached the painted-video state so
+   *  future remounts (scroll-back) can skip the 1s anticipation. */
+  markSeen: (trackId: string) => void;
   /** Parent's ref-collector — card registers itself on mount so the
    *  rail-level observer can compute the most-centered active card. */
   registerRef: (idx: number, el: HTMLButtonElement | null) => void;
@@ -1126,19 +1134,34 @@ const AfricanVibesVideoCard = memo(({
     return () => obs.disconnect();
   }, [containerRef]);
 
-  // ── 1s anticipation gate ───────────────────────────────────────────
+  // ── Anticipation gate (adaptive duration) ──────────────────────────
   // Card must be (a) fully visible AND (b) iframe ready, both
-  // continuously for 1s, before we commit to painting the video. If
-  // either flips false during that 1s, the timer cancels — fast scrolls
-  // never satisfy it, so cards passing through quickly stay as static
-  // covers (no flicker, no late video appearing). Once flipped sticky-
-  // true, video paints for the rest of this mount cycle.
+  // continuously for the anticipation duration before we paint video.
+  // Three regimes:
+  //   ·    0ms (immediate snap) — card was seen-before in this session
+  //        (parent's seenTracksRef has its trackId). Scroll-back fast
+  //        path; revisited cards don't pay the 1s wait again.
+  //   ·  500ms — card is in the initial-visible set on first paint
+  //        (idx 0..2). Half the wait so the rail comes alive faster on
+  //        page load.
+  //   · 1000ms — every other case (cards entering during scroll). Full
+  //        anticipation so fast scrolls don't satisfy the timer and
+  //        cards passing through quickly stay as static covers.
+  // If isFullyVisible or isReady flips false during the wait, the timer
+  // cancels.
   useEffect(() => {
     if (hasBeenFullyVisible) return;
     if (!isFullyVisible || !isReady) return;
-    const t = setTimeout(() => setHasBeenFullyVisible(true), 1000);
+    const wait = wasSeenBefore ? 0 : (idx < 3 ? 500 : 1000);
+    const t = setTimeout(() => setHasBeenFullyVisible(true), wait);
     return () => clearTimeout(t);
-  }, [isFullyVisible, isReady, hasBeenFullyVisible]);
+  }, [isFullyVisible, isReady, hasBeenFullyVisible, wasSeenBefore, idx]);
+
+  // Persist "seen" status at the carousel level so future remounts of
+  // this trackId skip the anticipation gate.
+  useEffect(() => {
+    if (hasBeenFullyVisible) markSeen(track.trackId);
+  }, [hasBeenFullyVisible, track.trackId, markSeen]);
 
   // ── Mount lifecycle: tight focus, 300ms grace ──────────────────────
   // Mount when in play zone (strictly visible + 50px buffer). Unmount
@@ -1349,14 +1372,22 @@ const AfricanVibesCarousel = ({
   const [isInView, setIsInView] = useState(false);
   const [sentinelState, setSentinelState] = useState<EndSentinelState>('hidden');
   const lastWatchedRef = useRef<Track | null>(null);
-  // activeIdx — drives the 3-mount window. Computed via a single
-  // IntersectionObserver across all card refs (most-intersecting wins,
-  // with hysteresis to prevent flicker mid-scroll between two adjacent
-  // cards).
+  // activeIdx — computed via a single IntersectionObserver across all
+  // card refs (most-intersecting wins, with hysteresis to prevent
+  // flicker mid-scroll between two adjacent cards). Drives bronze glow.
   const [activeIdx, setActiveIdx] = useState(0);
   const cardRefsMap = useRef<Map<number, HTMLButtonElement>>(new Map());
   const ratiosRef = useRef<Map<number, number>>(new Map());
   const cardObserverRef = useRef<IntersectionObserver | null>(null);
+  // Set of track IDs that have ever been fully-ready in this session.
+  // Cards that come back from a seen track skip the 1s anticipation
+  // gate and snap to video the instant their iframe is ready (~1s vs
+  // ~2s for fresh cards). Makes the rail feel like cards remember
+  // they've been seen — no double-wait on revisit.
+  const seenTracksRef = useRef<Set<string>>(new Set());
+  const markTrackSeen = useCallback((trackId: string) => {
+    seenTracksRef.current.add(trackId);
+  }, []);
 
   // Card-registration callback — each card calls on mount/unmount so
   // the rail's observer can track all current card elements.
@@ -1482,6 +1513,8 @@ const AfricanVibesCarousel = ({
           activeIdx={activeIdx}
           sectionInView={isInView}
           containerRef={containerRef}
+          wasSeenBefore={seenTracksRef.current.has(track.trackId)}
+          markSeen={markTrackSeen}
           registerRef={registerCardRef}
           onTrackPlay={(t) => { lastWatchedRef.current = t; onTrackPlay(t); }}
         />
