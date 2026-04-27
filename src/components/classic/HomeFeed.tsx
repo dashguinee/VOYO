@@ -1083,18 +1083,25 @@ const AfricanVibesVideoCard = memo(({
       loop: '1',
       playlist: youtubeId,
     });
-    return `https://www.youtube.com/embed/${youtubeId}?${params.toString()}`;
+    // Privacy-enhanced embed (youtube-nocookie.com) — same params, but
+    // some browser/region combos serve a slightly less aggressive UI
+    // (less branding chrome on transitional states). Cheap to switch,
+    // could marginally help with the center-overlay residue.
+    return `https://www.youtube-nocookie.com/embed/${youtubeId}?${params.toString()}`;
   }, [youtubeId]);
 
   // ── Mount lifecycle: central OR direction-edge, 300ms grace ────────
-  // Mount when this card is the active (central) OR the pre-warm edge
-  // (the next card in the user's scroll direction).
-  // Two-stage exit so the video → cover handoff is smooth in both
-  // directions: shouldShow flips false immediately on leave (iframe
-  // begins its 600ms opacity fade-out, mirroring the fade-in), then
-  // shouldMountIframe flips false 700ms later (after fade is complete).
-  // The thumbnail base layer is always there underneath, so as the
-  // iframe fades out, the cover smoothly takes over.
+  // Mount when this card is the active (central), the pre-warm edge,
+  // or the off-screen idle anchor.
+  // Three-stage exit so the video → cover handoff has overlap:
+  //   1. Card leaves the zone → 100ms head-start: shouldShow stays true
+  //      (iframe still at full opacity). The NEW active card gets a
+  //      head start to become visible before this one starts fading.
+  //   2. After 100ms → shouldShow flips false → 600ms opacity fade-out.
+  //   3. After fade completes (~800ms after leave) → shouldMountIframe
+  //      flips false → iframe unmounts cleanly.
+  // The 100ms head-start closes the brief gap where both old and new
+  // cards were mid-fade and thumbnail was peeking through.
   const shouldHoldMounted = isActive || isEdge || idleAnchor;
   const [shouldShow, setShouldShow] = useState(false);
   const [shouldMountIframe, setShouldMountIframe] = useState(false);
@@ -1104,9 +1111,12 @@ const AfricanVibesVideoCard = memo(({
       setShouldMountIframe(true);
       return;
     }
-    setShouldShow(false);
-    const t = setTimeout(() => setShouldMountIframe(false), 700);
-    return () => clearTimeout(t);
+    const showTimer = setTimeout(() => setShouldShow(false), 100);
+    const mountTimer = setTimeout(() => setShouldMountIframe(false), 800);
+    return () => {
+      clearTimeout(showTimer);
+      clearTimeout(mountTimer);
+    };
   }, [shouldHoldMounted]);
 
   // On isReady: persist seen status at the carousel level (kept dormant
