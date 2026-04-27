@@ -2142,7 +2142,9 @@ const Top10Section = memo(({ tracks, onTrackPlay }: Top10SectionProps) => {
         }
         .top10-scroll-title {
           display: inline-block;
-          animation: top10-marquee 10s linear infinite;
+          /* 10s → 16s — slower scroll reads as smoother / more
+             intentional. Was a touch frantic at 10s. */
+          animation: top10-marquee 16s linear infinite;
           /* Promote to its own layer only while the marquee is mounted
              (class is conditionally applied based on overflow). Avoids
              scroll-jank on Android mid-tier from translating a non-
@@ -2170,7 +2172,6 @@ const Top10Section = memo(({ tracks, onTrackPlay }: Top10SectionProps) => {
         {tracks.map((track, index) => {
           const maxChars = 12;
           const titleNeedsScroll = track.title.length > maxChars;
-          const artistNeedsScroll = track.artist.length > maxChars;
           const isOne = index === 0;
           const isPodium = index < 3;
           const isCentered = centeredIdx === index;
@@ -2277,12 +2278,6 @@ const Top10Section = memo(({ tracks, onTrackPlay }: Top10SectionProps) => {
                 <div className="overflow-hidden mx-auto text-center" style={{ width: '100px' }}>
                   <p className={`text-white text-[10px] font-semibold whitespace-nowrap ${titleNeedsScroll ? 'top10-scroll-title' : ''}`}>
                     {titleNeedsScroll ? <>{track.title}<span className="mx-3">•</span>{track.title}<span className="mx-3">•</span></> : track.title}
-                  </p>
-                </div>
-                <div className="overflow-hidden mx-auto text-center" style={{ width: '100px' }}>
-                  <p className={`whitespace-nowrap ${artistNeedsScroll ? 'top10-scroll-title' : ''}`}
-                     style={{ animationDelay: '1.4s', fontSize: '9px', color: 'rgba(255,255,255,0.45)', letterSpacing: '0.02em' }}>
-                    {artistNeedsScroll ? <>{track.artist}<span className="mx-3">·</span>{track.artist}<span className="mx-3">·</span></> : track.artist}
                   </p>
                 </div>
                 {/* OYE count — smaller (was 8px, now 7px) and aligned
