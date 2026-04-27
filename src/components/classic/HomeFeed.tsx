@@ -1088,10 +1088,15 @@ const AfricanVibesVideoCard = memo(({
       }}
       onClick={() => onTrackPlay(track)}
     >
-      {/* Bronze glow — only on the active card. Three simultaneous
+      {/* Bronze glow — fades on the active card. Three simultaneous
           filter:blur layers on adjacent iframe boxes is a known Android
-          paint stall; restraint also keeps focus on the hero. */}
-      {isActive && (
+          paint stall; restraint also keeps focus on the hero. Always
+          mounted with opacity-driven visibility so the glow eases in/out
+          alongside the card's 0.8↔1 opacity ramp instead of snapping —
+          a hard mount/unmount here read as a flicker as activeIdx flipped
+          mid-scroll. inWindow gates the DOM (only neighbors render the
+          glow at all), so we don't pay for it on far-edge cards. */}
+      {inWindow && (
         <div
           className="absolute -inset-1 rounded-xl pointer-events-none"
           style={{
@@ -1099,6 +1104,8 @@ const AfricanVibesVideoCard = memo(({
               ? 'linear-gradient(135deg, rgba(212, 160, 83, 0.4) 0%, rgba(212, 160, 83, 0.15) 20%, transparent 50%)'
               : 'linear-gradient(135deg, rgba(212, 160, 83, 0.2) 0%, rgba(212, 160, 83, 0.08) 15%, transparent 40%)',
             filter: 'blur(8px)',
+            opacity: isActive ? 1 : 0,
+            transition: 'opacity 700ms cubic-bezier(0.16, 1, 0.3, 1)',
           }}
         />
       )}
