@@ -1104,17 +1104,31 @@ const AfricanVibesVideoCard = memo(({
       )}
 
       <div className="relative w-full h-full rounded-xl overflow-hidden bg-black">
-        {/* Thumbnail backdrop — always rendered. */}
-        <SmartImage
-          src={getThumb(track.trackId, 'high')}
-          trackId={track.trackId}
-          alt={track.title}
-          artist={track.artist}
-          title={track.title}
-          className="absolute inset-0 w-full h-full object-cover"
-          style={{ transform: 'scale(1.8)' }}
-          lazy={false}
-        />
+        {/* Thumbnail backdrop — always rendered, but cross-faded out once
+            the iframe is ready so the two images don't double up at
+            different crops. Scale matches the iframe's effective video
+            crop (300%) so during the 600ms fade, the visible content stays
+            in place — no "poster morph" glitch. `max` quality keeps the
+            3× zoom sharp; SmartImage falls back to hqdefault if max 404s. */}
+        <div
+          className="absolute inset-0"
+          style={{
+            opacity: isReady ? 0 : 1,
+            transition: 'opacity 600ms cubic-bezier(0.16, 1, 0.3, 1)',
+          }}
+        >
+          <SmartImage
+            src={getThumb(track.trackId, 'max')}
+            fallbackSrc={getThumb(track.trackId, 'high')}
+            trackId={track.trackId}
+            alt={track.title}
+            artist={track.artist}
+            title={track.title}
+            className="absolute inset-0 w-full h-full object-cover"
+            style={{ transform: 'scale(3)' }}
+            lazy={false}
+          />
+        </div>
 
         {/* Video iframe — mounted only when active or recently active. */}
         {shouldMountIframe && (
