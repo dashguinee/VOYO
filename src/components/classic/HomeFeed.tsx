@@ -13,7 +13,7 @@ import { useShallow } from 'zustand/shallow';
 import { devWarn } from '../../utils/logger';
 import { Search, Play, Zap } from 'lucide-react';
 import { AfricaIcon } from '../ui/AfricaIcon';
-import { getThumb } from '../../utils/thumbnail';
+import { getThumb, generatePlaceholder } from '../../utils/thumbnail';
 import { SmartImage } from '../ui/SmartImage';
 import { Safe } from '../ui/Safe';
 import { TrackCardGestures } from '../ui/TrackCardGestures';
@@ -957,7 +957,34 @@ const decodeVoyoId = (trackId: string): string => {
   }
 };
 
-// AfricanVibesVideoCard — v712 (1-mount, thumbnail-masked bootstrap).
+// Thumbnail base layer — YT thumbnail at native object-cover. Looks
+// like a paused video frame (which is exactly what YT thumbnails are).
+// Plain <img> with native lazy-loading so off-viewport thumbnails
+// defer network fetch. onError swaps to a generated DASH placeholder
+// if YT 404s, so cards never end up blank.
+const ThumbWithFallback = memo(({ trackId, alt }: { trackId: string; alt: string }) => {
+  const [src, setSrc] = useState(() => getThumb(trackId, 'high'));
+  const triedFallback = useRef(false);
+  const handleError = useCallback(() => {
+    if (triedFallback.current) return;
+    triedFallback.current = true;
+    setSrc(generatePlaceholder(alt, 400));
+  }, [alt]);
+  return (
+    <img
+      src={src}
+      alt={alt}
+      onError={handleError}
+      className="absolute inset-0 w-full h-full object-cover"
+      loading="lazy"
+      decoding="async"
+      draggable={false}
+    />
+  );
+});
+ThumbWithFallback.displayName = 'ThumbWithFallback';
+
+// AfricanVibesVideoCard — v730 (2-mount: active + edge).
 //
 // Only the active card (idx === activeIdx) mounts a YT iframe. 800ms
 // grace before unmount so quick scroll-back doesn't trigger a reboot.
@@ -1015,27 +1042,30 @@ const AfricanVibesVideoCard = memo(({
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [isLoaded, setIsLoaded] = useState(false);
   const cardRef = useRef<HTMLButtonElement>(null);
-  // Single stable signal: card is in viewport ± 100px buffer.
-  // Drops the v724-727 multi-threshold ratio approach (isVisible /
-  // isFullyVisible / hasBeenFullyVisible) — those had edge-jitter at
-  // threshold boundaries from subpixel rounding mid-scroll. Now there's
-  // one boolean: in zone or not. Cleaner, stabler, no threshold races.
-  const [isInPlayZone, setIsInPlayZone] = useState(false);
-  // Sticky-true 1s after iframe mount — the anticipation gate. Doesn't
-  // care about viewport ratio, just elapsed time from mount. By the
-  // time a card is visible, some/all of its 1s has elapsed because it
-  // mounted in the play-zone buffer (off-screen). Buffer-at-position-3
-  // effect emerges naturally without explicit ratio detection.
+  const [isReady, setIsReady] = useState(false);
+  // Sticky-true 1s after iframe mount — anticipation gate.
   const [timerExpired, setTimerExpired] = useState(false);
+  // Sticky-true 300ms after isReady. The "pause-button-gone" buffer:
+  // YT broadcasts PLAYING the moment a frame is decoded, but its
+  // transitional UI (pause button overlay) can linger a beat. 300ms
+  // after PLAYING gives YT time to settle past any UI before we paint.
+  const [isStablyReady, setIsStablyReady] = useState(false);
   // Register with parent on mount so it can observe + pick activeIdx.
   useEffect(() => {
     registerRef(idx, cardRef.current);
     return () => registerRef(idx, null);
   }, [idx, registerRef]);
 
-  // Active = the centered card, drives bronze glow only.
+  // ── Active vs edge ─────────────────────────────────────────────────
+  // Active = the centered card (with bronze glow, plays video to user).
+  // Edge = the next card to the right of active. Pre-warms its iframe
+  // playing-but-hidden behind its thumbnail so when the user scrolls
+  // and it becomes the new active, iframe snap-paints instantly.
+  // Everyone else (cards on the left, far off-screen) stays as a static
+  // YT thumbnail (looks like a paused video frame).
   const isActive = sectionInView && idx === activeIdx;
-  const [isReady, setIsReady] = useState(false);
+  const isEdge = sectionInView && idx === activeIdx + 1;
+  const isInPlayZone = isActive || isEdge;
 
   // Decode VOYO ID to real YouTube ID
   const youtubeId = useMemo(() => decodeVoyoId(track.trackId), [track.trackId]);
@@ -1063,47 +1093,14 @@ const AfricanVibesVideoCard = memo(({
     return `https://www.youtube.com/embed/${youtubeId}?${params.toString()}`;
   }, [youtubeId]);
 
-  // ── Single stable IO (mount gate + dim driver) ─────────────────────
-  // Viewport + 100px buffer. One threshold (0 — intersecting/not), one
-  // boolean output. No ratio computations, no multi-threshold spam, no
-  // jitter at the 0.95 boundary. This is the only viewport signal the
-  // card uses.
-  useEffect(() => {
-    const card = cardRef.current;
-    const root = containerRef.current;
-    if (!card || !root) return;
-    const obs = new IntersectionObserver(
-      ([entry]) => setIsInPlayZone(entry.isIntersecting),
-      { root, rootMargin: '0px 100px 0px 100px' }
-    );
-    obs.observe(card);
-    return () => obs.disconnect();
-  }, [containerRef]);
-
-  // ── 1s anticipation gate (mount-based, no viewport detection) ──────
-  // Timer starts the moment the iframe mounts (`shouldMountIframe`
-  // flips true). Cards mount when they enter the play zone, which is
-  // viewport + 100px buffer — so by the time a card is fully visible,
-  // some of the 1s has typically elapsed already (depending on scroll
-  // speed). The "buffer at position 3" effect emerges naturally: a
-  // card just entering view has used less of its 1s timer, a card
-  // settling into the middle has used more. No ratio detection needed.
-  useEffect(() => {
-    if (!shouldMountIframe) return;
-    const t = setTimeout(() => setTimerExpired(true), 1000);
-    return () => clearTimeout(t);
-  }, [shouldMountIframe]);
-
-  // Persist "seen" status at the carousel level — kept for potential
-  // future use even though the anticipation gate above ignores it now.
-  useEffect(() => {
-    if (timerExpired && isReady) markSeen(track.trackId);
-  }, [timerExpired, isReady, track.trackId, markSeen]);
-
-  // ── Mount lifecycle: tight focus, 300ms grace ──────────────────────
-  // Mount when in play zone (strictly visible + 50px buffer). Unmount
-  // on leaving with 300ms grace — just enough to absorb scroll inertia
-  // bounce. Beyond that, off-screen cards drop their iframe entirely.
+  // ── Mount lifecycle: active OR edge only ───────────────────────────
+  // Only 2 iframes mounted at any time across the whole rail: the
+  // active card (centered, painting video to the user) and its
+  // immediate right-edge neighbor (warming muted behind its thumbnail).
+  // Drives off the activeIdx the parent already computes — no per-card
+  // IntersectionObserver needed for mount, fully stable signal.
+  // 300ms grace before unmount when a card moves out so scroll inertia
+  // bounce doesn't cause re-bootstrap.
   const [shouldMountIframe, setShouldMountIframe] = useState(false);
   useEffect(() => {
     if (isInPlayZone) {
@@ -1114,6 +1111,34 @@ const AfricanVibesVideoCard = memo(({
     return () => clearTimeout(t);
   }, [isInPlayZone]);
 
+  // ── 1s anticipation gate (mount-relative) ──────────────────────────
+  // Timer starts the moment the iframe mounts. Doesn't watch viewport
+  // — pure elapsed time from mount. The edge card's 1s typically
+  // expires before it becomes active, so the active-promotion is
+  // instant-paint.
+  useEffect(() => {
+    if (!shouldMountIframe) return;
+    const t = setTimeout(() => setTimerExpired(true), 1000);
+    return () => clearTimeout(t);
+  }, [shouldMountIframe]);
+
+  // ── Pause-button-gone buffer ───────────────────────────────────────
+  // YT broadcasts PLAYING the moment a frame is decoded, but its
+  // transitional UI (pause button overlay) can linger a beat after
+  // that signal. 300ms hold after isReady ensures we never paint while
+  // the pause button is still visible.
+  useEffect(() => {
+    if (!isReady) { setIsStablyReady(false); return; }
+    const t = setTimeout(() => setIsStablyReady(true), 300);
+    return () => clearTimeout(t);
+  }, [isReady]);
+
+  // Persist "seen" status at the carousel level — kept for potential
+  // future use.
+  useEffect(() => {
+    if (timerExpired && isStablyReady) markSeen(track.trackId);
+  }, [timerExpired, isStablyReady, track.trackId, markSeen]);
+
   // Reset all per-mount state when the iframe unmounts so the next
   // mount cycle starts clean.
   useEffect(() => {
@@ -1121,6 +1146,7 @@ const AfricanVibesVideoCard = memo(({
       setIsLoaded(false);
       setIsReady(false);
       setTimerExpired(false);
+      setIsStablyReady(false);
     }
   }, [shouldMountIframe]);
 
@@ -1206,22 +1232,33 @@ const AfricanVibesVideoCard = memo(({
       )}
 
       <div className="relative w-full h-full rounded-xl overflow-hidden bg-black">
+        {/* Thumbnail base layer — always rendered. YT thumbnails are
+            video posters (first frame), so a static thumbnail looks
+            like a paused video. The whole rail visually feels like a
+            row of music videos even when only 1 iframe is actually
+            playing. Plain <img> with native loading="lazy" so off-
+            viewport thumbnails defer fetching. */}
+        <ThumbWithFallback
+          trackId={track.trackId}
+          alt={track.title}
+        />
 
-        {/* Video iframe — mounts when the card enters the play zone.
-            Opacity stays 0 (not display:none — that would unload the
-            iframe in some browsers) until BOTH:
-              · isReady (YT broadcast PLAYING — frame is decoded), AND
-              · timerExpired (1s has elapsed since iframe mount).
-            The 1s timer is mount-relative, not viewport-relative. By
-            the time a card is fully visible, some of the timer has
-            already burned (since cards mount in the off-screen play-
-            zone buffer). The "buffer at position 3" effect emerges
-            naturally without any ratio detection. */}
+        {/* Video iframe — mounts only on active OR edge cards (max 2
+            simultaneous in the rail). Painted (opacity 1) only when:
+              · isActive (this is THE card playing, not just warming),
+              · timerExpired (1s has elapsed since iframe mount),
+              · isStablyReady (300ms after YT broadcast PLAYING — past
+                any transitional pause-button overlay).
+            Edge cards mount their iframe but keep opacity 0. Their
+            iframes play muted behind the thumbnail so when the user
+            scrolls and they become active, the iframe is already warm
+            and snap-paints instantly — no bootstrap visible, no
+            pause-button visible. */}
         {shouldMountIframe && (
           <div
             className="absolute inset-0"
             style={{
-              opacity: (isReady && timerExpired) ? 1 : 0,
+              opacity: (isActive && timerExpired && isStablyReady) ? 1 : 0,
             }}
           >
             <iframe
