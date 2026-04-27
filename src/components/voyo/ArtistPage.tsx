@@ -121,8 +121,11 @@ const S = {
   }),
 
   headerBtn: css({
-    width: 40,
-    height: 40,
+    // 44×44 hit floor — back button is the most-tapped affordance on
+    // the artist page, was 40×40 (under iOS HIG/MD3 touch target floor).
+    // Visual glyph stays at size={20} so the chrome doesn't get heavier.
+    width: 44,
+    height: 44,
     borderRadius: '50%',
     background: 'rgba(255,255,255,0.08)',
     border: 'none',
@@ -278,14 +281,22 @@ const S = {
   }),
 
   momentCard: css({
-    width: 120,
+    // Card width matches the 9:16 thumbnail beneath. Was 120 — produced
+    // letterboxed black bars top/bottom on real moment thumbs (real
+    // aspect = 9:16). 90px keeps the same vertical reach (160px tall)
+    // with no letterboxing.
+    width: 90,
     flexShrink: 0,
     cursor: 'pointer',
   }),
 
   momentThumb: css({
-    width: 120,
+    // 9:16 aspect to match real moment captures (was 120×160 = 4:5.3
+    // which forced black bars). aspectRatio is the explicit lock for
+    // browsers that decode the image with its native ratio.
+    width: 90,
     height: 160,
+    aspectRatio: '9 / 16',
     borderRadius: 10,
     objectFit: 'cover',
     backgroundColor: 'rgba(255,255,255,0.08)',
@@ -293,8 +304,9 @@ const S = {
   }),
 
   momentThumbPlaceholder: css({
-    width: 120,
+    width: 90,
     height: 160,
+    aspectRatio: '9 / 16',
     borderRadius: 10,
     backgroundColor: 'rgba(255,255,255,0.08)',
     display: 'flex',
@@ -758,8 +770,11 @@ export const ArtistPage: React.FC<ArtistPageProps> = ({
           </>
         )}
 
-        {/* Bottom safe area spacer */}
-        <div style={{ height: 'env(safe-area-inset-bottom, 0px)' }} />
+        {/* Bottom safe area spacer — was bare env() with no minimum, so on
+            non-notched phones the last button butted against the viewport
+            edge with 0 px breathing room. 24px floor keeps a calm gap on
+            all devices, then absorbs the home-indicator inset on top. */}
+        <div style={{ height: 'max(24px, env(safe-area-inset-bottom, 0px))' }} />
       </div>
     </>
   );

@@ -723,6 +723,24 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap, onEnterVideoMode
               35%  { opacity: 1; transform: translateX(-50%) scale(1.05); box-shadow: 0 0 30px rgba(212,175,110,0.55), 0 8px 28px rgba(0,0,0,0.55); }
               100% { opacity: 1; transform: translateX(-50%) scale(1.00); box-shadow: 0 0 14px rgba(212,175,110,0.18), 0 6px 20px rgba(0,0,0,0.45); }
             }
+            /* Search header dock — translateY for bottom dock.
+               Modern browsers (iOS 16+, Chrome 108+) use dvh which excludes
+               browser chrome. iOS Safari ≤15 lacks dvh and would leave the
+               dock 60-90px off-viewport. The @supports pair below ships
+               vh as the fallback (slightly imprecise but always visible)
+               and dvh as the primary. Inline style was the wrong host for
+               a feature query — moved here so both browsers land. */
+            .voyo-search-header-top {
+              transform: translateY(0);
+            }
+            .voyo-search-header-bottom {
+              transform: translateY(calc(100vh - 100% - max(16px, env(safe-area-inset-top, 16px)) - max(16px, env(safe-area-inset-bottom, 16px))));
+            }
+            @supports (height: 100dvh) {
+              .voyo-search-header-bottom {
+                transform: translateY(calc(100dvh - 100% - max(16px, env(safe-area-inset-top, 16px)) - max(16px, env(safe-area-inset-bottom, 16px))));
+              }
+            }
           `}</style>
           {/* Backdrop — solid 90% black scrim. Was blur(16px) full-screen
               backdrop-filter; that repainted across the whole viewport on
@@ -742,7 +760,7 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap, onEnterVideoMode
                 Position is absolute so the slide doesn't reflow the results.
                 We compensate the results container with conditional padding. */}
             <div
-              className="mb-3"
+              className={`mb-3 ${searchAtBottom ? 'voyo-search-header-bottom' : 'voyo-search-header-top'}`}
               style={{
                 position: 'absolute',
                 left: 16, right: 16,
@@ -752,11 +770,18 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap, onEnterVideoMode
                 // browsers can't smoothly interpolate → the "glittery"
                 // jump Dash felt. transform: translateY is GPU-accelerated
                 // and animates cleanly between two concrete values.
-                top: 'max(16px, env(safe-area-inset-top, 16px))',
+                //
+                // top: 0 — parent absorbs safe-area-inset-top via paddingTop
+                // (line ~739). Absolute children sit on the padding box, so
+                // top: 0 already lands below the inset. Previously this also
+                // had `top: max(16px, env(safe-area-inset-top))` which DOUBLED
+                // the top inset on notched devices.
+                //
+                // Transform now lives in CSS classes voyo-search-header-{top,
+                // bottom} (declared in <style> above) so we can ship a
+                // 100vh fallback for iOS Safari ≤15 via @supports.
+                top: 0,
                 zIndex: 51,
-                transform: searchAtBottom
-                  ? 'translateY(calc(100dvh - 100% - max(16px, env(safe-area-inset-top, 16px)) - max(16px, env(safe-area-inset-bottom, 16px))))'
-                  : 'translateY(0)',
                 // Transform-only transition. Previously animated background +
                 // padding + margin together, which forced layout reflow on
                 // every frame of the 260ms slide → the "glitchy" feel.
@@ -822,7 +847,10 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap, onEnterVideoMode
                   {query && !isSearching && (
                     <button
                       onClick={() => { setQuery(''); setResults([]); }}
-                      className="text-white/15 hover:text-white/40 p-1 active:scale-90 transition-all"
+                      // 44×44 hit zone (was 22×22 with p-1). Visual glyph
+                      // stays at 14×14; only the tap area grows. Negative
+                      // margin keeps the input row visually compact.
+                      className="text-white/15 hover:text-white/40 active:scale-90 transition-all flex items-center justify-center w-11 h-11 -my-2 -mr-2"
                       aria-label="Clear search"
                     >
                       <X className="w-[14px] h-[14px]" strokeWidth={2} />
@@ -876,7 +904,11 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap, onEnterVideoMode
                 paddingBottom: searchAtBottom
                   ? 'calc(140px + max(16px, env(safe-area-inset-bottom, 16px)))'
                   : 'max(16px, env(safe-area-inset-bottom, 16px))',
-                transition: 'padding-top 320ms ease, padding-bottom 320ms ease',
+                // Padding snaps instantly on threshold cross. Was a 320ms
+                // transition which made the first result row vanish behind
+                // the sliding header mid-animation. The header slides via
+                // GPU transform; this container just flips its reserved
+                // padding. Cleaner UX, no layout interpolation cost.
               }}>
               {/* Artist Section */}
               {activeTab === 'artists' && (
@@ -1106,8 +1138,16 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap, onEnterVideoMode
             {toast && (
               <div
                 key={toast.type}
-                className="fixed bottom-24 left-1/2 z-[60] -translate-x-1/2"
+                className="fixed left-1/2 z-[60] -translate-x-1/2"
                 style={{
+                  // When the dock is at top: toast sits at bottom-24 (96px).
+                  // When the dock has slid down, the input lives in the
+                  // bottom ~140px of the viewport — toast needs to clear
+                  // it. Lift to ~180px above safe-area-bottom so the gold
+                  // burst fires ABOVE the keyboard/dock, not behind it.
+                  bottom: searchAtBottom
+                    ? 'calc(max(16px, env(safe-area-inset-bottom, 16px)) + 180px)'
+                    : 96,
                   // 'in_disco' is the ritual-completion moment — give it
                   // its own one-shot golden burst keyframe instead of
                   // the calm fade everyone else uses. (Wave D)
