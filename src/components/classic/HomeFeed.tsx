@@ -1052,17 +1052,6 @@ const AfricanVibesVideoCard = memo(({
 
   // Active = the centered card, drives bronze glow only.
   const isActive = sectionInView && idx === activeIdx;
-  // `inWindow` (active + ±1 neighbors) only gates the bronze-glow
-  // opacity ramp — neighbors render the glow at opacity 0 so the fade
-  // has something to animate when activeIdx flips. Iframe mounting was
-  // also using this gate (3-mount window) but that meant 3 simultaneous
-  // YT bootstraps + 3 huge `width:300%/height:300%` composited textures
-  // even when the user wasn't looking at neighbors — real paint pressure
-  // on mid-tier Android. Dropped to 1-mount (active-only with 800ms
-  // grace) below — the thumbnail backdrop with matching crop covers the
-  // ~1s YT bootstrap on each new active flip, which feels like a paused
-  // video frame, not a delay.
-  const inWindow = sectionInView && Math.abs(idx - activeIdx) <= 1;
   const [isReady, setIsReady] = useState(false);
 
   // Decode VOYO ID to real YouTube ID
@@ -1086,36 +1075,32 @@ const AfricanVibesVideoCard = memo(({
     return `https://www.youtube.com/embed/${youtubeId}?${params.toString()}`;
   }, [youtubeId]);
 
-  // ── Observer 1: PLAY ZONE (mount gate) ─────────────────────────────
-  // Viewport + 250px buffer. When a card enters this zone it's still
-  // off-screen by up to 250px, so YT bootstrap runs OUT OF VIEW. By the
-  // time the user scrolls the card into the visible viewport, the
-  // cover→video crossfade has already happened and the user only ever
-  // sees real video frames. This is the heart of the redesign — late-
-  // binding mount-on-active was the source of cards-3+ flicker.
+  // ── Play zone (mount gate) ─────────────────────────────────────────
+  // Viewport + 500px buffer. Cards mount when entering this zone so YT
+  // bootstrap completes before they're scrolled into view.
   useEffect(() => {
     const card = cardRef.current;
     const root = containerRef.current;
     if (!card || !root) return;
     const obs = new IntersectionObserver(
       ([entry]) => setIsInPlayZone(entry.isIntersecting),
-      { root, rootMargin: '0px 250px 0px 250px' }
+      { root, rootMargin: '0px 500px 0px 500px' }
     );
     obs.observe(card);
     return () => obs.disconnect();
   }, [containerRef]);
 
-  // ── Observer 2: VISIBILITY (play/pause gate) ───────────────────────
-  // Strict viewport, no buffer. Multiple visible cards play at the same
-  // time (continuous-tuning feel). Off-screen mounted cards stay paused
-  // on their last decoded frame.
+  // ── Visibility (drives the 10% dim only) ───────────────────────────
+  // Strict viewport intersection — cards out of viewport drop to 90%
+  // opacity, in-viewport cards stay full. Decoupled from play/pause
+  // (which we no longer do — see one-shot playVideo below).
   useEffect(() => {
     const card = cardRef.current;
     const root = containerRef.current;
     if (!card || !root) return;
     const obs = new IntersectionObserver(
-      ([entry]) => setIsVisible(entry.intersectionRatio > 0),
-      { root, threshold: [0, 0.1] }
+      ([entry]) => setIsVisible(entry.isIntersecting),
+      { root, threshold: 0 }
     );
     obs.observe(card);
     return () => obs.disconnect();
@@ -1156,10 +1141,10 @@ const AfricanVibesVideoCard = memo(({
   }, [isLoaded, track.trackId]);
 
   // ── PLAYING-state listener: flips isReady (drives cover→video) ─────
-  // Listens for YT's `infoDelivery` postMessage with playerState=1
-  // (PLAYING) — that's the signal a real frame has been decoded. Once
-  // flipped, stays true until iframe unmounts; re-entering the viewport
-  // doesn't replay the cover→video crossfade.
+  // YT broadcasts `infoDelivery` with playerState=1 (PLAYING) once a
+  // frame is being decoded. Sticky once flipped — re-entering the
+  // viewport doesn't replay the swap. 800ms fallback timer if YT goes
+  // silent.
   useEffect(() => {
     if (!isLoaded || isReady) return;
     const targetWindow = iframeRef.current?.contentWindow;
@@ -1178,7 +1163,7 @@ const AfricanVibesVideoCard = memo(({
     window.addEventListener('message', onMsg);
     const fallback = window.setTimeout(() => {
       if (armed) { armed = false; setIsReady(true); }
-    }, 1200);
+    }, 800);
     return () => {
       armed = false;
       window.removeEventListener('message', onMsg);
@@ -1186,42 +1171,36 @@ const AfricanVibesVideoCard = memo(({
     };
   }, [isLoaded, isReady]);
 
-  // ── Play/pause via postMessage based on viewport visibility ────────
-  // Multiple in-view cards play simultaneously. Off-screen mounted cards
-  // hold their last frame paused.
+  // ── One-shot playVideo on iframe load ──────────────────────────────
+  // Just play once when iframe loads. No pauseVideo on visibility flips
+  // — pausing made YT show its paused-state UI (the play/pause button)
+  // when the user scrolled back. Once mounted, cards play forever until
+  // the 5s grace runs out and they unmount entirely.
   useEffect(() => {
     if (!iframeRef.current || !isLoaded) return;
-    const cmd = isVisible ? 'playVideo' : 'pauseVideo';
     iframeRef.current.contentWindow?.postMessage(
-      `{"event":"command","func":"${cmd}","args":""}`, '*'
+      `{"event":"command","func":"playVideo","args":""}`, '*'
     );
-  }, [isVisible, isLoaded]);
+  }, [isLoaded]);
 
   return (
     <button
       ref={cardRef}
       className="flex-shrink-0 relative rounded-xl"
       style={{
-        // Clamp width to viewport — narrow phones (375px) get a bit smaller,
-        // tablets get a touch larger. Height follows the original ~3:2 ratio.
         width: 'clamp(86px, 25vw, 110px)',
         aspectRatio: '95 / 142',
-        // Guided presence — active card at full opacity, passed cards
-        // recede to 0.8. 700ms Apple ease leads the eye through the rail.
-        opacity: isActive ? 1 : 0.8,
-        transition: 'opacity 700ms cubic-bezier(0.16, 1, 0.3, 1)',
+        // Off-viewport cards dim to 90%. In-viewport cards stay at 100%.
+        // No transition — clean snap, no animation across multiple cards
+        // during scroll (which used to read as flicker).
+        opacity: isVisible ? 1 : 0.9,
       }}
       onClick={() => onTrackPlay(track)}
     >
-      {/* Bronze glow — fades on the active card. Three simultaneous
-          filter:blur layers on adjacent iframe boxes is a known Android
-          paint stall; restraint also keeps focus on the hero. Always
-          mounted with opacity-driven visibility so the glow eases in/out
-          alongside the card's 0.8↔1 opacity ramp instead of snapping —
-          a hard mount/unmount here read as a flicker as activeIdx flipped
-          mid-scroll. inWindow gates the DOM (only neighbors render the
-          glow at all), so we don't pay for it on far-edge cards. */}
-      {inWindow && (
+      {/* Bronze glow — only on the active (centered) card. No opacity
+          transition; mount/unmount is the visual change. Animations
+          across multiple cards were a flicker source. */}
+      {isActive && (
         <div
           className="absolute -inset-1 rounded-xl pointer-events-none"
           style={{
@@ -1229,56 +1208,32 @@ const AfricanVibesVideoCard = memo(({
               ? 'linear-gradient(135deg, rgba(212, 160, 83, 0.4) 0%, rgba(212, 160, 83, 0.15) 20%, transparent 50%)'
               : 'linear-gradient(135deg, rgba(212, 160, 83, 0.2) 0%, rgba(212, 160, 83, 0.08) 15%, transparent 40%)',
             filter: 'blur(8px)',
-            opacity: isActive ? 1 : 0,
-            transition: 'opacity 700ms cubic-bezier(0.16, 1, 0.3, 1)',
           }}
         />
       )}
 
       <div className="relative w-full h-full rounded-xl overflow-hidden bg-black">
-        {/* Album-art backdrop — shows the track's cover at native scale
-            until the YT iframe broadcasts PLAYING, then cross-fades out.
-            This is intentionally a different visual from the iframe's
-            300%-zoomed video crop: the user sees a clean ALBUM COVER
-            during the ~1s YT bootstrap, then a clean handoff to the
-            music video. Same model as Apple Music's cover→video
-            transition. Earlier attempts (v707-v711) tried to match the
-            thumbnail's crop to the iframe's so the swap was invisible —
-            that fought the user's expectation; album-cover-then-video
-            is the natural mental model. */}
-        <div
-          className="absolute inset-0"
-          style={{
-            opacity: isReady ? 0 : 1,
-            transition: 'opacity 400ms cubic-bezier(0.16, 1, 0.3, 1)',
-          }}
-        >
-          {/* Plain <img> instead of SmartImage — kills the moving
-              `voyo-skeleton-shimmer` band that ran while thumbnails were
-              still fetching. Cards 0-1 finished loading before the user
-              scrolled, so they never showed the band; cards 3+ caught
-              the user mid-load and the moving highlight read as a
-              flicker. The browser's native loading is silent: the <img>
-              stays transparent (showing the bg-black wrapper underneath)
-              until decoded, then paints in one frame — no animated
-              skeleton, no JS-level cross-fade.
+        {/* Album cover — always rendered as the base layer. When the
+            iframe's video starts playing (isReady from YT PLAYING
+            postMessage), the iframe paints on top and visually replaces
+            the cover. No crossfade: just clean snap. */}
+        <ThumbWithFallback
+          trackId={track.trackId}
+          alt={track.title}
+        />
 
-              Fallback chain still works: maxres 404s → onError → swap to
-              hqdefault. Nothing else needs SmartImage here (no track-id
-              cache hit-rate to worry about, no artist/title overlay). */}
-          <ThumbWithFallback
-            trackId={track.trackId}
-            alt={track.title}
-          />
-        </div>
-
-        {/* Video iframe — mounted only when active or recently active. */}
+        {/* Video iframe — mounts when the card enters the play zone
+            (viewport + 500px buffer) so YT bootstrap completes off-
+            screen. opacity 0 (not display:none — that would unload the
+            iframe in some browsers) hides YT's bootstrap UI (spinner,
+            branding, play button) until a real frame is being decoded.
+            When isReady fires, iframe snaps to opacity 1 over the cover.
+            No transition — clean snap. */}
         {shouldMountIframe && (
           <div
             className="absolute inset-0"
             style={{
               opacity: isReady ? 1 : 0,
-              transition: 'opacity 400ms cubic-bezier(0.16, 1, 0.3, 1)',
             }}
           >
             <iframe
