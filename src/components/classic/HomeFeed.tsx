@@ -13,7 +13,7 @@ import { useShallow } from 'zustand/shallow';
 import { devWarn } from '../../utils/logger';
 import { Search, Play, Zap } from 'lucide-react';
 import { AfricaIcon } from '../ui/AfricaIcon';
-import { getThumb, generatePlaceholder } from '../../utils/thumbnail';
+import { getThumb } from '../../utils/thumbnail';
 import { SmartImage } from '../ui/SmartImage';
 import { Safe } from '../ui/Safe';
 import { TrackCardGestures } from '../ui/TrackCardGestures';
@@ -957,40 +957,6 @@ const decodeVoyoId = (trackId: string): string => {
   }
 };
 
-// Album-art backdrop — shown until the YT iframe is ready, then cross-
-// faded out to reveal the playing video. Deliberately rendered at native
-// object-cover (no scale transform) so it reads as an ALBUM COVER, not
-// a "frozen zoomed video frame." When the iframe takes over, the user
-// sees a clean "cover-to-music-video" transition (Apple-Music-style)
-// rather than a fight between two slightly-mismatched crops of the same
-// image. Plain <img> instead of SmartImage to skip the animated
-// `voyo-skeleton-shimmer` overlay, which on cards still loading was
-// visible as a flicker. Browser-native loading: stays transparent until
-// decoded, then paints in one frame. hqdefault (480×360) is sharp enough
-// at this size with no upscale; falls back to a lightweight DASH
-// placeholder if YT 404s.
-const ThumbWithFallback = memo(({ trackId, alt }: { trackId: string; alt: string }) => {
-  const [src, setSrc] = useState(() => getThumb(trackId, 'high'));
-  const triedFallback = useRef(false);
-  const handleError = useCallback(() => {
-    if (triedFallback.current) return;
-    triedFallback.current = true;
-    setSrc(generatePlaceholder(alt, 400));
-  }, [alt]);
-  return (
-    <img
-      src={src}
-      alt={alt}
-      onError={handleError}
-      className="absolute inset-0 w-full h-full object-cover"
-      loading="eager"
-      decoding="async"
-      draggable={false}
-    />
-  );
-});
-ThumbWithFallback.displayName = 'ThumbWithFallback';
-
 // AfricanVibesVideoCard — v712 (1-mount, thumbnail-masked bootstrap).
 //
 // Only the active card (idx === activeIdx) mounts a YT iframe. 800ms
@@ -1134,25 +1100,25 @@ const AfricanVibesVideoCard = memo(({
     return () => obs.disconnect();
   }, [containerRef]);
 
-  // ── 1s anticipation gate ───────────────────────────────────────────
-  // Flat 1s for every card, every time. v726 tried adaptive durations
-  // (0ms snap for revisits / 500ms initial-load priming / 1000ms
-  // scroll) — Dash flagged it as less smooth than v725's flat 1s. The
-  // deep reason: smoothness on a peer-rail comes from RHYTHM, not from
-  // optimizing individual moments. With three different timings, cards
-  // visible at the same moment came alive at different beats. The
-  // user's eye picks up on cadence mismatches even when each card in
-  // isolation is faster. One tempo, every card, every time.
+  // ── 1s anticipation gate (decoupled from isReady) ──────────────────
+  // Timer runs from the moment the card is fully visible. Doesn't wait
+  // for `isReady` to start counting — that lets the anticipation OVERLAP
+  // with YT bootstrap instead of stacking after it. Net effect: a card
+  // with a fast bootstrap (e.g. 300ms) used to wait 300ms + 1000ms =
+  // 1.3s; now it just waits 1s. A card with a slow bootstrap (e.g.
+  // 1500ms) used to wait 1500ms + 1000ms = 2.5s; now it waits 1.5s
+  // (capped by `isReady` in the paint condition below). Every card
+  // shows the bg-black wrapper for at LEAST 1s, paints whenever both
+  // conditions are met. Tighter, more consistent visual rhythm.
   //
-  // wasSeenBefore + markSeen plumbing is kept (parent's seenTracksRef
-  // is still threaded through) for potential future use, but not read
-  // by the timer — every card pays the 1s anticipation regardless.
+  // wasSeenBefore + markSeen plumbing is kept dormant (see v727) — not
+  // read here so cards visible at the same moment all hit the same beat.
   useEffect(() => {
     if (hasBeenFullyVisible) return;
-    if (!isFullyVisible || !isReady) return;
+    if (!isFullyVisible) return;
     const t = setTimeout(() => setHasBeenFullyVisible(true), 1000);
     return () => clearTimeout(t);
-  }, [isFullyVisible, isReady, hasBeenFullyVisible]);
+  }, [isFullyVisible, hasBeenFullyVisible]);
 
   // Persist "seen" status at the carousel level — kept for potential
   // future use even though the anticipation gate above ignores it now.
@@ -1268,14 +1234,6 @@ const AfricanVibesVideoCard = memo(({
       )}
 
       <div className="relative w-full h-full rounded-xl overflow-hidden bg-black">
-        {/* Album cover — always rendered as the base layer. When the
-            iframe's video starts playing (isReady from YT PLAYING
-            postMessage), the iframe paints on top and visually replaces
-            the cover. No crossfade: just clean snap. */}
-        <ThumbWithFallback
-          trackId={track.trackId}
-          alt={track.title}
-        />
 
         {/* Video iframe — mounts when the card enters the play zone
             (off-screen warming slot). Opacity stays 0 (not display:none
