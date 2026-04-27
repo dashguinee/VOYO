@@ -219,10 +219,20 @@ export async function getHotTracks(limit: number = 30): Promise<Track[]> {
   // If the cached pool is thin, we return whatever we have and kick off a
   // background prefetch (RPC picks vibe-matched uncached candidates, pushes
   // them to voyo_upload_queue so they join the cached set next refresh).
-  const cached = await getCachedTracks(limit, 'heat_score');
+  //
+  // Bug fix (v765): exclude already-played IDs so the hot pool actually
+  // rotates as the user listens. Previously this called getCachedTracks
+  // with no excludeIds, so refresh returned the SAME top-30 every call —
+  // playerStore's history-exclusion then filtered all 30 out, the
+  // available pool collapsed, and the user heard the same handful of
+  // tracks on loop ("feels like session was empty and falling back to
+  // seed"). Discovery already passed playedIds (line 281); hot was the
+  // asymmetric exception.
+  const playedIds = getPlayedTrackIds();
+  const cached = await getCachedTracks(limit, 'heat_score', playedIds);
   const cachedMusic = filterMusicOnly(cached);
   void curateUncachedForPrefetch('hot', Math.max(limit, 20));
-  devLog(`[Discovery] HOT cached-only: ${cachedMusic.length}/${limit}`);
+  devLog(`[Discovery] HOT cached-only: ${cachedMusic.length}/${limit} (excluded ${playedIds.length} played)`);
   return cachedMusic.map(toTrack);
 }
 

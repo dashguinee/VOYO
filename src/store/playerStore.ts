@@ -240,6 +240,34 @@ function getPersistedHistory(): HistoryItem[] {
     });
 }
 
+/**
+ * Merge discover + hot pools into one deduped candidate set. Used by
+ * nextTrack, predictNextTrack, and predictUpcoming so all three surfaces
+ * pick from the same pool — divergence silently breaks preload caching.
+ *
+ * Bug fix (v765): the previous OR-cascade (`discover IF non-empty ELSE
+ * hot ELSE seed`) meant that when discover was non-empty, hot was never
+ * used, even after history-exclusion drained the discover pool to 0.
+ * The user heard the same handful of tracks on loop. Merging both pools
+ * lets hot tracks fill the gap as discover thins out.
+ *
+ * Falls back to TRACKS seed only when BOTH pools are empty (cold start
+ * before refreshRecommendations resolves, or full DB outage).
+ */
+function getCandidatePool(state: { discoverTracks: Track[]; hotTracks: Track[] }): Track[] {
+  if (state.discoverTracks.length + state.hotTracks.length === 0) return TRACKS;
+  const seen = new Set<string>();
+  const out: Track[] = [];
+  for (const t of [...state.discoverTracks, ...state.hotTracks]) {
+    const id = t.id || t.trackId;
+    if (id && !seen.has(id)) {
+      seen.add(id);
+      out.push(t);
+    }
+  }
+  return out;
+}
+
 interface PlayerStore {
   // Current Track State
   currentTrack: Track | null;
@@ -986,12 +1014,9 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       recentHistoryIds.add(state.currentTrack.trackId);
     }
 
-    // Filter available tracks to exclude recently played
-    const allAvailable = state.discoverTracks.length > 0
-      ? state.discoverTracks
-      : state.hotTracks.length > 0
-      ? state.hotTracks
-      : TRACKS;
+    // Merge discover + hot into the candidate pool. See getCandidatePool
+    // helper at top of file for the bug context (v765).
+    const allAvailable = getCandidatePool(state);
 
     // Remove recently played + collective-blocklist tracks.
     // The discover/hot fallback must apply the same blocklist filter as the
@@ -1230,12 +1255,8 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     if (currentTrackId) recentHistoryIds.add(currentTrackId);
     if (state.currentTrack?.trackId) recentHistoryIds.add(state.currentTrack.trackId);
 
-    // Get available tracks (same priority as nextTrack)
-    const allAvailable = state.discoverTracks.length > 0
-      ? state.discoverTracks
-      : state.hotTracks.length > 0
-      ? state.hotTracks
-      : TRACKS;
+    // Get available tracks (same priority as nextTrack — see getCandidatePool).
+    const allAvailable = getCandidatePool(state);
 
     // filter must MATCH nextTrack's filter exactly, otherwise predictNextTrack[0]
     // and nextTrack[0] diverge and preload caches the wrong track. Previously
@@ -1299,10 +1320,9 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     }
     if (results.length >= n) return results;
 
-    // Fill from discover/hot pool with same filter as nextTrack/predictNextTrack.
-    const allAvailable = state.discoverTracks.length > 0 ? state.discoverTracks
-      : state.hotTracks.length > 0 ? state.hotTracks
-      : TRACKS;
+    // Fill from discover/hot pool with same filter as nextTrack/predictNextTrack
+    // (see getCandidatePool helper — all three surfaces must stay in sync).
+    const allAvailable = getCandidatePool(state);
     for (const t of allAvailable) {
       if (results.length >= n) break;
       if (!t.trackId) continue;
