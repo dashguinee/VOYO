@@ -1013,12 +1013,11 @@ const AfricanVibesVideoCard = memo(({
   track,
   idx,
   activeIdx,
-  isSupport,
+  isEdge,
   sectionInView,
   containerRef,
   wasSeenBefore,
   markSeen,
-  onCardReady,
   registerRef,
   onTrackPlay,
 }: {
@@ -1028,20 +1027,16 @@ const AfricanVibesVideoCard = memo(({
   /** Carousel-level visibility — the OYÉ Africa section is in viewport. */
   sectionInView: boolean;
   /** Carousel scroll container — used as IO root for the per-card
-   *  play-zone (mount) and visibility (play/pause) observers below. */
+   *  play-zone (mount) observer below. */
   containerRef: React.RefObject<HTMLDivElement | null>;
-  /** True if the parent has seen this trackId fully ready before in
-   *  this session — drives the scroll-back fast path (skip anticipation). */
+  /** True if the parent has seen this trackId fully ready before. */
   wasSeenBefore: boolean;
   /** Tells the parent this card has reached the painted-video state. */
   markSeen: (trackId: string) => void;
-  /** True when this card is the SUPPORT card — kept playing during a
-   *  scroll transition while the new active card bootstraps. Drops
-   *  back to false once the new active broadcasts isReady. */
-  isSupport: boolean;
-  /** Called when this card's isReady flips true. Parent uses it to
-   *  drop the support role once the new active is ready. */
-  onCardReady: () => void;
+  /** True when this card is the pre-warm slot in the user's current
+   *  scroll direction. Mounts its iframe alongside the central card
+   *  so by the time the user reaches it, bootstrap has progressed. */
+  isEdge: boolean;
   /** Parent's ref-collector — card registers itself on mount so the
    *  rail-level observer can compute the most-centered active card. */
   registerRef: (idx: number, el: HTMLButtonElement | null) => void;
@@ -1051,7 +1046,6 @@ const AfricanVibesVideoCard = memo(({
   const [isLoaded, setIsLoaded] = useState(false);
   const cardRef = useRef<HTMLButtonElement>(null);
   const [isReady, setIsReady] = useState(false);
-  const [isInPlayZone, setIsInPlayZone] = useState(false);
   // Register with parent on mount so it can observe + pick activeIdx.
   useEffect(() => {
     registerRef(idx, cardRef.current);
@@ -1087,32 +1081,11 @@ const AfricanVibesVideoCard = memo(({
     return `https://www.youtube.com/embed/${youtubeId}?${params.toString()}`;
   }, [youtubeId]);
 
-  // ── Per-card play-zone observer (mount gate) ───────────────────────
-  // Single-threshold IO with rootMargin — visible cards plus a small
-  // buffer ahead. Let cards mount independently. No active+edge
-  // forcing: each card bootstraps on its own and paints whenever its
-  // OWN isReady signal arrives. Out of ~4 visible cards, the 2 with
-  // completed bootstraps will be video at any moment; the rest stay
-  // as thumbnails until theirs finishes. The queue rotates naturally
-  // as cards enter/leave — no orchestration, just per-card readiness.
-  useEffect(() => {
-    const card = cardRef.current;
-    const root = containerRef.current;
-    if (!card || !root) return;
-    const obs = new IntersectionObserver(
-      ([entry]) => setIsInPlayZone(entry.isIntersecting),
-      { root, rootMargin: '0px 100px 0px 100px' }
-    );
-    obs.observe(card);
-    return () => obs.disconnect();
-  }, [containerRef]);
-
-  // ── Mount lifecycle: in-zone OR support, 300ms grace ───────────────
-  // Mount when in zone (visible + 100px buffer) OR when this card is
-  // currently acting as support (parent kept us mounted because we
-  // were the previous active and the new active isn't ready yet).
-  // 300ms grace before unmount when neither condition holds.
-  const shouldHoldMounted = isInPlayZone || isSupport;
+  // ── Mount lifecycle: central OR direction-edge, 300ms grace ────────
+  // Mount when this card is the active (central) OR the pre-warm edge
+  // (the next card in the user's scroll direction). 300ms grace on
+  // leaving so quick scroll-back doesn't trigger re-bootstrap.
+  const shouldHoldMounted = isActive || isEdge;
   const [shouldMountIframe, setShouldMountIframe] = useState(false);
   useEffect(() => {
     if (shouldHoldMounted) {
@@ -1123,13 +1096,12 @@ const AfricanVibesVideoCard = memo(({
     return () => clearTimeout(t);
   }, [shouldHoldMounted]);
 
-  // On isReady: persist seen status + tell parent (so support can drop
-  // when the new active is ready).
+  // On isReady: persist seen status at the carousel level (kept dormant
+  // for now but available to skip work on revisits).
   useEffect(() => {
     if (!isReady) return;
     markSeen(track.trackId);
-    onCardReady();
-  }, [isReady, track.trackId, markSeen, onCardReady]);
+  }, [isReady, track.trackId, markSeen]);
 
   // Reset per-mount state when the iframe unmounts so the next mount
   // cycle starts clean.
@@ -1200,8 +1172,6 @@ const AfricanVibesVideoCard = memo(({
       style={{
         width: 'clamp(86px, 25vw, 110px)',
         aspectRatio: '95 / 142',
-        // In-zone: 100%. Far off-screen: 90%. No transition — clean snap.
-        opacity: isInPlayZone ? 1 : 0.9,
       }}
       onClick={() => onTrackPlay(track)}
     >
@@ -1232,18 +1202,20 @@ const AfricanVibesVideoCard = memo(({
           alt={track.title}
         />
 
-        {/* Video iframe — mounts when card is in play zone. Paints
-            (opacity 1) the moment YT broadcasts PLAYING (isReady).
-            No anticipation timer, no stability buffer — just react to
-            the per-card readiness signal. The cap of "~2 videos at a
-            time in viewport" emerges naturally because cards bootstrap
-            at different speeds; they paint as they're ready, in
-            whatever order their isReady fires. */}
+        {/* Video iframe — opacity 0 until isReady, then a 600ms
+            crossfade brings it in over the thumbnail. The slow fade is
+            the loader-mask: any transitional YT UI between the PLAYING
+            postMessage and a stable video frame is hidden inside the
+            fade, because the thumbnail covers it during the visible
+            ramp. By the time iframe is fully opaque, YT has settled
+            into clean video. No timers, no buffers — the crossfade
+            itself is the mask. */}
         {shouldMountIframe && (
           <div
             className="absolute inset-0"
             style={{
               opacity: isReady ? 1 : 0,
+              transition: 'opacity 600ms cubic-bezier(0.16, 1, 0.3, 1)',
             }}
           >
             <iframe
@@ -1333,32 +1305,12 @@ const AfricanVibesCarousel = ({
     seenTracksRef.current.add(trackId);
   }, []);
 
-  // Support role: when activeIdx changes, the most-recent PAINTED card
-  // becomes "support" — its iframe stays mounted and keeps playing,
-  // providing continuity while the new active bootstraps. Tracking
-  // "last painted" (not just "previous active") handles fast-scroll:
-  // if the user blasts through multiple cards before any new one
-  // becomes ready, the original painted card stays as support
-  // throughout. Otherwise the second scroll would replace support with
-  // a not-yet-ready card → no video visible at all.
-  const [supportIdx, setSupportIdx] = useState<number | null>(null);
-  const prevActiveIdxRef = useRef(0);
-  const lastPaintedIdxRef = useRef<number | null>(null);
-  useEffect(() => {
-    if (activeIdx === prevActiveIdxRef.current) return;
-    prevActiveIdxRef.current = activeIdx;
-    const candidate = lastPaintedIdxRef.current;
-    // No support if no card has painted yet, or if the last-painted
-    // card IS the new active (no gap to bridge).
-    setSupportIdx(candidate !== null && candidate !== activeIdx ? candidate : null);
-  }, [activeIdx]);
-  // When the new active card's iframe is ready: record the paint and
-  // drop support (the gap is bridged).
-  const handleCardReady = useCallback((idx: number) => {
-    if (idx !== activeIdx) return;
-    lastPaintedIdxRef.current = idx;
-    setSupportIdx(null);
-  }, [activeIdx]);
+  // Scroll direction — drives which neighbor of the central card gets
+  // pre-warmed. Default 'right' since most carousel scrolls go forward.
+  // Updates from the scroll handler (a few px hysteresis to avoid
+  // flicker on micro-movements).
+  const [scrollDirection, setScrollDirection] = useState<'right' | 'left'>('right');
+  const lastScrollLeftRef = useRef(0);
 
   // Card-registration callback — each card calls on mount/unmount so
   // the rail's observer can track all current card elements.
@@ -1439,13 +1391,18 @@ const AfricanVibesCarousel = ({
     return () => observer.disconnect();
   }, []);
 
-  // End-of-scroll detector — reveal the sentinel once the user has scrolled
-  // past the last real card. Threshold of 48px = "almost at the end", which
-  // feels natural (the CTA is already coming into view as you approach).
+  // End-of-scroll detector + scroll-direction tracker. The sentinel
+  // CTA reveals at 48px from end. Direction tracking has 4px hysteresis
+  // so micro-jitters during settle don't flap the pre-warm slot.
   const handleScroll = useCallback(() => {
     const el = containerRef.current;
     if (!el) return;
-    const atEnd = el.scrollLeft + el.clientWidth >= el.scrollWidth - 48;
+    const current = el.scrollLeft;
+    const last = lastScrollLeftRef.current;
+    if (current > last + 4) setScrollDirection('right');
+    else if (current < last - 4) setScrollDirection('left');
+    lastScrollLeftRef.current = current;
+    const atEnd = current + el.clientWidth >= el.scrollWidth - 48;
     if (atEnd && sentinelState === 'hidden') {
       setSentinelState('cta');
     }
@@ -1476,22 +1433,28 @@ const AfricanVibesCarousel = ({
       style={{ paddingLeft: '28px' }}
       onScroll={handleScroll}
     >
-      {tracks.slice(0, 12).map((track, idx) => (
-        <AfricanVibesVideoCard
-          key={track.id}
-          track={track}
-          idx={idx}
-          activeIdx={activeIdx}
-          isSupport={supportIdx === idx}
-          sectionInView={isInView}
-          containerRef={containerRef}
-          wasSeenBefore={seenTracksRef.current.has(track.trackId)}
-          markSeen={markTrackSeen}
-          onCardReady={() => handleCardReady(idx)}
-          registerRef={registerCardRef}
-          onTrackPlay={(t) => { lastWatchedRef.current = t; onTrackPlay(t); }}
-        />
-      ))}
+      {tracks.slice(0, 12).map((track, idx) => {
+        // Pre-warm slot: the neighbor of the central card in the
+        // direction the user is scrolling. By the time they reach it,
+        // its iframe has been bootstrapping; on slow scrolls it'll be
+        // ready when promoted to central.
+        const edgeIdx = scrollDirection === 'left' ? activeIdx - 1 : activeIdx + 1;
+        return (
+          <AfricanVibesVideoCard
+            key={track.id}
+            track={track}
+            idx={idx}
+            activeIdx={activeIdx}
+            isEdge={idx === edgeIdx}
+            sectionInView={isInView}
+            containerRef={containerRef}
+            wasSeenBefore={seenTracksRef.current.has(track.trackId)}
+            markSeen={markTrackSeen}
+            registerRef={registerCardRef}
+            onTrackPlay={(t) => { lastWatchedRef.current = t; onTrackPlay(t); }}
+          />
+        );
+      })}
 
       {/* END-SCROLL SENTINEL — only visible after the user reaches the end */}
       {sentinelState !== 'hidden' && (
