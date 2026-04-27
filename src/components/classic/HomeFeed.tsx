@@ -1093,14 +1093,13 @@ const AfricanVibesVideoCard = memo(({
   // ── Mount lifecycle: central OR direction-edge, 300ms grace ────────
   // Mount when this card is the active (central), the pre-warm edge,
   // or the off-screen idle anchor.
-  // Smoother three-stage exit (tuned up from the v742 100/600/700ms):
-  //   1. Card leaves the zone → 250ms head-start: shouldShow stays
-  //      true. The NEW active card gets a longer overlap window to
-  //      take visual focus before this one starts fading.
-  //   2. After 250ms → shouldShow flips false → 800ms opacity fade-out
-  //      (slightly slower for a more deliberate hand-off, less abrupt).
-  //   3. After fade completes (~1050ms after leave) → shouldMountIframe
-  //      flips false → iframe unmounts cleanly.
+  // Three-stage exit (Dash's preferred tuning — feels intentional):
+  //   1. Card leaves the zone → 100ms head-start: shouldShow stays
+  //      true so the new active card gets a small overlap window
+  //      before this one fades.
+  //   2. After 100ms → shouldShow flips false → 600ms opacity fade-out.
+  //   3. After fade completes (~800ms total) → shouldMountIframe flips
+  //      false → iframe unmounts cleanly.
   const shouldHoldMounted = isActive || isEdge || idleAnchor;
   const [shouldShow, setShouldShow] = useState(false);
   const [shouldMountIframe, setShouldMountIframe] = useState(false);
@@ -1110,8 +1109,8 @@ const AfricanVibesVideoCard = memo(({
       setShouldMountIframe(true);
       return;
     }
-    const showTimer = setTimeout(() => setShouldShow(false), 250);
-    const mountTimer = setTimeout(() => setShouldMountIframe(false), 1100);
+    const showTimer = setTimeout(() => setShouldShow(false), 100);
+    const mountTimer = setTimeout(() => setShouldMountIframe(false), 800);
     return () => {
       clearTimeout(showTimer);
       clearTimeout(mountTimer);
@@ -1224,16 +1223,16 @@ const AfricanVibesVideoCard = memo(({
           alt={track.title}
         />
 
-        {/* Video iframe — 800ms crossfade in BOTH directions. Opacity
+        {/* Video iframe — 600ms crossfade in BOTH directions. Opacity
             gated on isReady (paint signal) AND shouldShow (exit gate).
-            The slow ramp masks YT's transitional UI on the way in and
-            gives a deliberate hand-off to the cover on the way out. */}
+            The ramp masks YT's transitional UI on the way in and gives
+            a hand-off to the cover on the way out. */}
         {shouldMountIframe && (
           <div
             className="absolute inset-0"
             style={{
               opacity: (isReady && shouldShow) ? 1 : 0,
-              transition: 'opacity 800ms cubic-bezier(0.16, 1, 0.3, 1)',
+              transition: 'opacity 600ms cubic-bezier(0.16, 1, 0.3, 1)',
             }}
           >
             <iframe
