@@ -676,7 +676,7 @@ const MomentCard = memo(({ moment, isOyed, onOye, isActive, isMuted, onToggleMut
               style={{
                 ...S.thumb,
                 opacity: videoFramePainted ? 0 : 1,
-                transition: 'opacity 600ms cubic-bezier(0.16, 1, 0.3, 1)',
+                transition: 'opacity 400ms cubic-bezier(0.16, 1, 0.3, 1)',
               }}
               loading="lazy"
               decoding="async"
@@ -696,7 +696,7 @@ const MomentCard = memo(({ moment, isOyed, onOye, isActive, isMuted, onToggleMut
             onError={handleVideoError}
             style={{
               opacity: videoFramePainted ? 1 : 0,
-              transition: 'opacity 600ms cubic-bezier(0.16, 1, 0.3, 1)',
+              transition: 'opacity 400ms cubic-bezier(0.16, 1, 0.3, 1)',
             }}
           />
         </>

@@ -93,7 +93,7 @@ const NextUpVideoCard = ({ trackId, title, coverUrl }: NextUpVideoCardProps) => 
     window.addEventListener('message', onMsg);
     const fallback = window.setTimeout(() => {
       if (armed) { armed = false; setIsReady(true); }
-    }, 1500);
+    }, 1000);
     return () => {
       armed = false;
       window.removeEventListener('message', onMsg);
@@ -114,7 +114,7 @@ const NextUpVideoCard = ({ trackId, title, coverUrl }: NextUpVideoCardProps) => 
         className="absolute inset-0"
         style={{
           opacity: isReady ? 0 : 1,
-          transition: 'opacity 600ms cubic-bezier(0.16, 1, 0.3, 1)',
+          transition: 'opacity 400ms cubic-bezier(0.16, 1, 0.3, 1)',
         }}
       >
         <TrackThumbnail
@@ -134,7 +134,7 @@ const NextUpVideoCard = ({ trackId, title, coverUrl }: NextUpVideoCardProps) => 
         onLoad={dispatchListening}
         style={{
           opacity: isReady ? 1 : 0,
-          transition: 'opacity 600ms cubic-bezier(0.16, 1, 0.3, 1)',
+          transition: 'opacity 400ms cubic-bezier(0.16, 1, 0.3, 1)',
         }}
       />
     </>

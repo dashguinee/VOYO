@@ -163,7 +163,7 @@ export const StationHero = memo(({ station }: StationHeroProps) => {
     window.addEventListener('message', onMsg);
     const fallback = window.setTimeout(() => {
       if (armed) { armed = false; setIframeReady(true); }
-    }, 1500);
+    }, 1000);
     return () => {
       armed = false;
       window.removeEventListener('message', onMsg);
@@ -220,9 +220,13 @@ export const StationHero = memo(({ station }: StationHeroProps) => {
         boxShadow: `inset 0 0 32px rgba(212,175,110,0.08), 0 8px 32px ${accentPrimary}22`,
       }}
     >
-      {/* Poster — always mounted as backdrop. Carries the station
-          visually while iframe boots; stays underneath the iframe so
-          there's never a black flash on mount/unmount transitions. */}
+      {/* Album-art backdrop — shown until YT broadcasts PLAYING, then
+          cross-faded out. Native object-cover (no scale/translate) so
+          this reads as a clean station cover, not a "frozen zoomed
+          video frame." The iframe below still scales to 1.62 to crop
+          out YT's letterbox bands; the cover→video transition is
+          intentionally a handoff, not a pixel-match. Same model as
+          Apple Music's cover→video. */}
       <img
         src={getThumb(station.hero_video_id)}
         alt=""
@@ -232,7 +236,8 @@ export const StationHero = memo(({ station }: StationHeroProps) => {
         className="absolute inset-0 w-full h-full object-cover"
         style={{
           filter: 'brightness(0.52) blur(0.4px)',
-          transform: 'scale(1.62) translateY(5%)',
+          opacity: iframeReady ? 0 : 1,
+          transition: 'opacity 400ms cubic-bezier(0.16, 1, 0.3, 1)',
           pointerEvents: 'none',
         }}
       />
@@ -250,7 +255,7 @@ export const StationHero = memo(({ station }: StationHeroProps) => {
             transform: 'scale(1.62) translateY(5%)',
             pointerEvents: 'none',
             opacity: iframeReady ? 1 : 0,
-            transition: 'opacity 600ms cubic-bezier(0.16, 1, 0.3, 1)',
+            transition: 'opacity 400ms cubic-bezier(0.16, 1, 0.3, 1)',
           }}
           allow="autoplay; encrypted-media; picture-in-picture"
           title={station.title}

@@ -1127,11 +1127,14 @@ const AfricanVibesVideoCard = memo(({
       } catch { /* not a YT message */ }
     };
     window.addEventListener('message', onMsg);
-    // Fallback — if no PLAYING message arrives in 1.2s, fire anyway so the
-    // thumbnail doesn't sit there forever on flaky networks.
+    // Fallback — if no PLAYING message arrives, fire anyway so the
+    // thumbnail doesn't sit there forever on flaky networks. 900ms is
+    // tight but YT typically broadcasts PLAYING well before that on
+    // healthy connections; the gate just lets us hold the album cover
+    // a tiny bit longer when YT is genuinely slow.
     const fallback = window.setTimeout(() => {
       if (armed) { armed = false; setIsReady(true); }
-    }, 1200);
+    }, 900);
     return () => {
       armed = false;
       window.removeEventListener('message', onMsg);
@@ -1223,7 +1226,7 @@ const AfricanVibesVideoCard = memo(({
           className="absolute inset-0"
           style={{
             opacity: isReady ? 0 : 1,
-            transition: 'opacity 600ms cubic-bezier(0.16, 1, 0.3, 1)',
+            transition: 'opacity 400ms cubic-bezier(0.16, 1, 0.3, 1)',
           }}
         >
           {/* Plain <img> instead of SmartImage — kills the moving
@@ -1251,7 +1254,7 @@ const AfricanVibesVideoCard = memo(({
             className="absolute inset-0"
             style={{
               opacity: isReady ? 1 : 0,
-              transition: 'opacity 600ms cubic-bezier(0.16, 1, 0.3, 1)',
+              transition: 'opacity 400ms cubic-bezier(0.16, 1, 0.3, 1)',
             }}
           >
             <iframe
