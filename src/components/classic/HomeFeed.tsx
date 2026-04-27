@@ -904,11 +904,10 @@ ClassicsDiskCard.displayName = 'ClassicsDiskCard';
 
 interface ArtistCardProps {
   artist: { name: string; tracks: Track[]; playCount: number };
-  rank: number;
   onPlay: (track: Track) => void;
 }
 
-const ArtistCard = memo(({ artist, rank, onPlay }: ArtistCardProps) => {
+const ArtistCard = memo(({ artist, onPlay }: ArtistCardProps) => {
   const firstTrack = artist.tracks[0];
 
   return (
@@ -935,9 +934,6 @@ const ArtistCard = memo(({ artist, rank, onPlay }: ArtistCardProps) => {
         </div>
       </div>
       <p className="text-white text-xs font-medium truncate text-center">{artist.name}</p>
-      {/* Rank indicator (1, 2, 3 ...) instead of "X tracks" — cleaner
-          signal of position in the radar list. */}
-      <p className="text-white/40 text-[10px] truncate text-center">{rank}</p>
     </button>
   );
 });
@@ -2493,13 +2489,27 @@ interface ArtistRadarShelfProps {
 }
 
 const ArtistRadarShelf = memo(({ artists, onPlay }: ArtistRadarShelfProps) => (
-  <div className="mb-10">
-    <div className="px-4 mb-5">
+  <div className="relative mb-10 py-6">
+    {/* Subtle purple overlay — radial wash at the top, soft horizontal
+        sweep, blends back to bg at the edges. Matches the "Keep the
+        Energy" shelf treatment so the bottom of the page has a quiet
+        unified atmosphere. */}
+    <div
+      className="absolute inset-0 pointer-events-none"
+      style={{
+        background: `
+          radial-gradient(ellipse 80% 72% at 50% 55%, rgba(139,92,246,0.06) 0%, rgba(139,92,246,0.02) 55%, transparent 88%),
+          linear-gradient(to right, rgba(139,92,246,0.10) 0%, rgba(139,92,246,0.02) 14%, transparent 30%, transparent 70%, rgba(139,92,246,0.02) 86%, rgba(139,92,246,0.10) 100%)
+        `,
+      }}
+      aria-hidden
+    />
+    <div className="relative px-4 mb-5">
       <h2 className="text-white font-semibold text-base">Your Artist Radar</h2>
     </div>
-    <div className="flex gap-6 px-4 overflow-x-auto scrollbar-hide">
-      {artists.map((artist, idx) => (
-        <ArtistCard key={artist.name} artist={artist} rank={idx + 1} onPlay={onPlay} />
+    <div className="relative flex gap-6 px-4 overflow-x-auto scrollbar-hide">
+      {artists.map((artist) => (
+        <ArtistCard key={artist.name} artist={artist} onPlay={onPlay} />
       ))}
     </div>
   </div>
