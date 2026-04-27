@@ -571,6 +571,13 @@ const MomentCard = memo(({ moment, isOyed, onOye, isActive, isMuted, onToggleMut
   const videoRef = useRef<HTMLVideoElement>(null);
   const [videoAvailable, setVideoAvailable] = useState<boolean | null>(null);
   const [videoError, setVideoError] = useState(false);
+  // Gates the cross-fade from thumbnail to video — only flips true once
+  // the <video> element fires its `playing` event (i.e. real frames are
+  // being decoded). Without this gate, the video element rendered at
+  // full opacity above the thumbnail; if the first decoded frame wasn't
+  // identical to moment.thumbnail_url, you'd see a flash as the swap
+  // happened. Fired per format/active flip.
+  const [videoFramePainted, setVideoFramePainted] = useState(false);
 
   const videoUrl = `${VOYO_API}/r2/feed/${moment.source_id}`;
 
@@ -611,10 +618,14 @@ const MomentCard = memo(({ moment, isOyed, onOye, isActive, isMuted, onToggleMut
     if (!vid || format !== 'r2_video') return;
 
     if (isActive && !document.hidden) {
+      // Reset paint-gate so the cross-fade re-runs from the thumbnail
+      // each time we re-activate (e.g. user swipes back to this moment).
+      setVideoFramePainted(false);
       vid.currentTime = 0;
       vid.play().catch(() => {});
     } else {
       vid.pause();
+      setVideoFramePainted(false);
     }
 
     // Pause moment video when app backgrounds — prevents audio focus theft
@@ -624,6 +635,18 @@ const MomentCard = memo(({ moment, isOyed, onOye, isActive, isMuted, onToggleMut
     document.addEventListener('visibilitychange', onVis);
     return () => document.removeEventListener('visibilitychange', onVis);
   }, [isActive, format]);
+
+  // Listen for the `playing` event — fires when the video element
+  // actually starts decoding frames. That's when it's safe to cross-fade
+  // the thumbnail out: any earlier and the user sees a black/empty
+  // <video> over the thumbnail mid-fade.
+  useEffect(() => {
+    const vid = videoRef.current;
+    if (!vid || format !== 'r2_video') return;
+    const onPlaying = () => setVideoFramePainted(true);
+    vid.addEventListener('playing', onPlaying);
+    return () => vid.removeEventListener('playing', onPlaying);
+  }, [format]);
 
   // Sync muted state
   useEffect(() => {
@@ -641,8 +664,25 @@ const MomentCard = memo(({ moment, isOyed, onOye, isActive, isMuted, onToggleMut
       {/* === FORMAT: R2 VIDEO === */}
       {format === 'r2_video' && (
         <>
-          {/* Thumbnail as background fallback behind video */}
-          {moment.thumbnail_url && <img src={moment.thumbnail_url} alt="" style={S.thumb} loading="lazy" decoding="async" draggable={false} />}
+          {/* Thumbnail backdrop — cross-fades out once the <video> element
+              fires `playing` (real frames being decoded). Without the
+              gate, video rendered at full opacity above the thumbnail
+              before any frame was decoded — if the first frame differed
+              from the thumbnail, the swap was visible as a flash. */}
+          {moment.thumbnail_url && (
+            <img
+              src={moment.thumbnail_url}
+              alt=""
+              style={{
+                ...S.thumb,
+                opacity: videoFramePainted ? 0 : 1,
+                transition: 'opacity 600ms cubic-bezier(0.16, 1, 0.3, 1)',
+              }}
+              loading="lazy"
+              decoding="async"
+              draggable={false}
+            />
+          )}
           <video
             ref={videoRef}
             src={videoUrl}
@@ -654,6 +694,10 @@ const MomentCard = memo(({ moment, isOyed, onOye, isActive, isMuted, onToggleMut
             // the full clip — active flip is instant, no poster blink on first play().
             preload={isActive ? 'auto' : 'metadata'}
             onError={handleVideoError}
+            style={{
+              opacity: videoFramePainted ? 1 : 0,
+              transition: 'opacity 600ms cubic-bezier(0.16, 1, 0.3, 1)',
+            }}
           />
         </>
       )}

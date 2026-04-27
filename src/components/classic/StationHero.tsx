@@ -137,6 +137,48 @@ export const StationHero = memo(({ station }: StationHeroProps) => {
     win.postMessage(`{"event":"command","func":"${cmd}","args":""}`, '*');
   }, [isInView, iframeReady]);
 
+  // Ready gate — listen for YT's `infoDelivery` postMessage with
+  // playerState=1 (PLAYING) before fading the iframe in over the poster.
+  // The previous `onLoad`-only gate fired the moment the iframe HTML
+  // resource loaded, but YT's JS bootstrap + first-frame decode takes
+  // another 500ms-1s after that — during which YT shows its own poster
+  // and branding flash. Now we wait for the actual PLAYING signal.
+  // Falls back to a 1500ms timer (longer than AfricanVibes since the
+  // poster underneath stays mounted, so a longer wait is harmless).
+  useEffect(() => {
+    if (!shouldMount) return;
+    const targetWindow = iframeRef.current?.contentWindow;
+    let armed = true;
+    const onMsg = (ev: MessageEvent) => {
+      if (!armed) return;
+      if (ev.source !== targetWindow) return;
+      try {
+        const data = typeof ev.data === 'string' ? JSON.parse(ev.data) : ev.data;
+        if (data?.event === 'infoDelivery' && data.info?.playerState === 1) {
+          armed = false;
+          setIframeReady(true);
+        }
+      } catch { /* not a YT message */ }
+    };
+    window.addEventListener('message', onMsg);
+    const fallback = window.setTimeout(() => {
+      if (armed) { armed = false; setIframeReady(true); }
+    }, 1500);
+    return () => {
+      armed = false;
+      window.removeEventListener('message', onMsg);
+      window.clearTimeout(fallback);
+    };
+  }, [shouldMount]);
+
+  // Subscribe iframe to YT player events so `infoDelivery` messages flow
+  // to the parent. Some YT versions stay silent without this.
+  const dispatchListening = useCallback(() => {
+    iframeRef.current?.contentWindow?.postMessage(
+      `{"event":"listening","id":"${station.hero_video_id}"}`, '*'
+    );
+  }, [station.hero_video_id]);
+
   const commit = useCallback(async () => {
     if (supabase && !subscribed) {
       const { error } = await supabase
@@ -212,7 +254,7 @@ export const StationHero = memo(({ station }: StationHeroProps) => {
           }}
           allow="autoplay; encrypted-media; picture-in-picture"
           title={station.title}
-          onLoad={() => setIframeReady(true)}
+          onLoad={dispatchListening}
         />
       )}
 

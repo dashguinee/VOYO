@@ -59,6 +59,88 @@ interface ListeningFriend {
   track: { title: string; thumbnail: string; communityFallback?: string };
 }
 
+// Small Next-Up iframe card with thumbnail backdrop + YT-PLAYING ready
+// gate. Without the backdrop, YT's bootstrap (poster + branding flash)
+// was raw-visible while the player initialised — read as a flicker
+// against the gold-rimmed card. Same pattern as AfricanVibesVideoCard
+// (HomeFeed v709): TrackThumbnail underneath, iframe fades in only
+// after YT broadcasts playerState=1 (PLAYING), 1500ms fallback timer
+// for the flaky-network case.
+interface NextUpVideoCardProps {
+  trackId: string;
+  title: string;
+  coverUrl?: string;
+}
+const NextUpVideoCard = ({ trackId, title, coverUrl }: NextUpVideoCardProps) => {
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const [isReady, setIsReady] = useState(false);
+
+  // YT IFrame API listening + PLAYING-state ready-gate.
+  useEffect(() => {
+    const targetWindow = iframeRef.current?.contentWindow;
+    let armed = true;
+    const onMsg = (ev: MessageEvent) => {
+      if (!armed) return;
+      if (ev.source !== targetWindow) return;
+      try {
+        const data = typeof ev.data === 'string' ? JSON.parse(ev.data) : ev.data;
+        if (data?.event === 'infoDelivery' && data.info?.playerState === 1) {
+          armed = false;
+          setIsReady(true);
+        }
+      } catch { /* not a YT message */ }
+    };
+    window.addEventListener('message', onMsg);
+    const fallback = window.setTimeout(() => {
+      if (armed) { armed = false; setIsReady(true); }
+    }, 1500);
+    return () => {
+      armed = false;
+      window.removeEventListener('message', onMsg);
+      window.clearTimeout(fallback);
+    };
+  }, [trackId]);
+
+  const dispatchListening = () => {
+    iframeRef.current?.contentWindow?.postMessage(
+      `{"event":"listening","id":"${trackId}"}`, '*'
+    );
+  };
+
+  return (
+    <>
+      {/* Thumbnail backdrop — visible until YT confirms PLAYING. */}
+      <div
+        className="absolute inset-0"
+        style={{
+          opacity: isReady ? 0 : 1,
+          transition: 'opacity 600ms cubic-bezier(0.16, 1, 0.3, 1)',
+        }}
+      >
+        <TrackThumbnail
+          youtubeId={trackId}
+          communityUrl={coverUrl}
+          title={title}
+          className="w-full h-full object-cover"
+        />
+      </div>
+      <iframe
+        ref={iframeRef}
+        src={`https://www.youtube.com/embed/${trackId}?autoplay=1&mute=1&controls=0&playsinline=1&loop=1&playlist=${trackId}&start=30&enablejsapi=1`}
+        allow="autoplay; encrypted-media"
+        allowFullScreen={false}
+        className="absolute inset-0 w-full h-full border-0 scale-[1.4] pointer-events-none"
+        title={title}
+        onLoad={dispatchListening}
+        style={{
+          opacity: isReady ? 1 : 0,
+          transition: 'opacity 600ms cubic-bezier(0.16, 1, 0.3, 1)',
+        }}
+      />
+    </>
+  );
+};
+
 interface VoyoLiveCardProps {
   onSwitchToVOYO?: () => void;
 }
@@ -589,12 +671,10 @@ export const VoyoLiveCard = ({ onSwitchToVOYO }: VoyoLiveCardProps = {}) => {
                   }}
                 >
                   {nextTrack ? (
-                    <iframe
-                      src={`https://www.youtube.com/embed/${nextTrack.track.trackId}?autoplay=1&mute=1&controls=0&playsinline=1&loop=1&playlist=${nextTrack.track.trackId}&start=30`}
-                      allow="autoplay; encrypted-media"
-                      allowFullScreen={false}
-                      className="w-full h-full border-0 scale-[1.4] pointer-events-none"
+                    <NextUpVideoCard
+                      trackId={nextTrack.track.trackId}
                       title={nextTrack.track.title}
+                      coverUrl={nextTrack.track.coverUrl}
                     />
                   ) : currentTrack ? (
                     <TrackThumbnail
