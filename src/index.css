@@ -847,22 +847,26 @@ input[type="range"]:focus::-moz-range-thumb {
 
 /* Iframe-audio pulse — runs on the Mini Player button when audio is
    flowing through the YouTube iframe (during the iframe → hot-swap
-   window). Signals to the user: "tap me to see the video + keep app
-   foreground for background play until the audio element takes over". */
+   window). Signals: "tap me to see the video".
+   v762: box-shadow keyframe stripped — animating box-shadow paints
+   per-frame (research §2F, audit §7 P1). The consumer's static inline
+   boxShadow stays painted at full strength; this keyframe now only
+   pulses scale, which is composited (transform layer). Visible
+   feedback is preserved via the subtle 2.5% breath. */
 @keyframes voyo-iframe-pulse {
-  0%   { box-shadow: 0 0 14px rgba(139,92,246,0.45), 0 0 24px rgba(139,92,246,0.20); }
-  50%  { box-shadow: 0 0 22px rgba(139,92,246,0.80), 0 0 40px rgba(139,92,246,0.40); }
-  100% { box-shadow: 0 0 14px rgba(139,92,246,0.45), 0 0 24px rgba(139,92,246,0.20); }
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.025); }
 }
 
-/* Oye bubbling — combined scale pulse + glow pulse for the "alive, cooking
-   right now" state. The scale component (1.0 → 1.04 → 1.0) makes the
-   button feel like it's breathing, on top of the glow which keeps from
-   voyo-iframe-pulse. 1.6s loop matches the pulse for a synced feel. */
+/* Oye bubbling — scale pulse for "alive, cooking right now" state.
+   v762: box-shadow keyframe stripped (audit §7 P1). Consumer
+   (OyeButton 'bubbling' state) carries the inline glow as a static
+   box-shadow; the keyframe only animates scale now. The rotating
+   conic-gradient ring overlay is what carries the energetic feel —
+   the box-shadow pulse was redundant chrome on a paint vector. */
 @keyframes voyo-oye-bubble {
-  0%   { transform: scale(1);    box-shadow: 0 0 14px rgba(139,92,246,0.45), 0 0 24px rgba(139,92,246,0.20); }
-  50%  { transform: scale(1.04); box-shadow: 0 0 22px rgba(139,92,246,0.80), 0 0 40px rgba(139,92,246,0.40); }
-  100% { transform: scale(1);    box-shadow: 0 0 14px rgba(139,92,246,0.45), 0 0 24px rgba(139,92,246,0.20); }
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.04); }
 }
 
 /* Oye lightning ring — the rotating conic-gradient arc that lives behind
@@ -998,18 +1002,17 @@ input[type="range"]:focus::-moz-range-thumb {
   50%      { box-shadow: 0 0 26px rgba(212, 160, 83, 0.40), 0 4px 18px rgba(0,0,0,0.4); }
 }
 
-/* Next-up Apple ring glow — double-sided pulse on the first queue
-   card so the eye knows what's coming next. Most of the cycle is
-   quiet; the ring brightens for a beat then settles. */
+/* Next-up Apple ring glow — pulse on the first queue card so the eye
+   knows what's coming next. Most of the cycle is quiet; the ring
+   brightens for a beat then settles.
+   v762: box-shadow keyframe stripped (audit §7 P1, paired-shadow
+   paint was the worst per-frame cost). border-color animation
+   retained — single-property paint, modest cost. Consumer's
+   static inline boxShadow keeps the steady bronze ring; the
+   border-color sweep carries the "next up" arrival cue. */
 @keyframes voyo-nextup-pulse {
-  0%, 100% {
-    box-shadow: 0 0 12px rgba(212,160,83,0.30), inset 0 0 8px rgba(212,160,83,0.12);
-    border-color: rgba(212,160,83,0.45);
-  }
-  45% {
-    box-shadow: 0 0 22px rgba(212,160,83,0.65), 0 0 36px rgba(139,92,246,0.25), inset 0 0 14px rgba(212,160,83,0.25);
-    border-color: rgba(230,184,101,0.85);
-  }
+  0%, 100% { border-color: rgba(212,160,83,0.45); }
+  45%      { border-color: rgba(230,184,101,0.85); }
 }
 
 /* === SPRING-LIKE MOTION (Bounce easing via CSS) === */
