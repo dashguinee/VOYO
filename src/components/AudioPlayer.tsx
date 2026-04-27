@@ -597,26 +597,39 @@ export const AudioPlayer = () => {
     // BG transition: bgEngine fires capture-phase visibilitychange BEFORE this
     // pause event, setting isTransitioningToBackgroundRef. The browser forcibly
     // pauses the element on screen-lock — don't let that kill isPlaying or we
-    // wake up to a dead player. Try to restore immediately; heartbeat (4s) is
-    // the fallback if the play() call is refused.
+    // wake up to a dead player.
+    //
+    // v766: defer recovery 150ms instead of firing synchronously.
+    // bgEngine's ctx-state listener (subscribeAudioCtxState in
+    // useBgEngine) already recovers fast on the iOS 'interrupted' path,
+    // resuming ctx + replaying within ~50ms. Firing our own recovery
+    // synchronously here raced the ctx-state path: both called
+    // ctx.resume() + el.play(), producing the audible "hiccup" Dash
+    // reported on manual screen-off. Now we wait 150ms — by then the
+    // ctx-state path has resumed playback and `el.paused` is false, so
+    // this branch becomes a no-op. We only run our own recovery if
+    // ctx-state didn't catch it (Android edge case where element pauses
+    // without a ctx state change).
     if (isTransitioningToBackgroundRef.current) {
       if (usePlayerStore.getState().isPlaying) {
         const el = audioRef.current;
         if (el && !el.ended) {
-          // iOS requires AudioContext.resume() first — play() is rejected if
-          // the context is suspended, regardless of MediaSession state.
-          const ctx = audioContextRef.current;
-          const doPlay = () => el.play().catch((e: unknown) => {
-            // OS still transitioning — one retry after 100ms.
-            if ((e as { name?: string })?.name === 'NotAllowedError') {
-              setTimeout(() => { if (el.paused && !el.ended) el.play().catch(() => {}); }, 100);
+          setTimeout(() => {
+            // ctx-state listener already recovered? skip.
+            if (!el.paused || el.ended) return;
+            if (!usePlayerStore.getState().isPlaying) return;
+            const ctx = audioContextRef.current;
+            const doPlay = () => el.play().catch((e: unknown) => {
+              if ((e as { name?: string })?.name === 'NotAllowedError') {
+                setTimeout(() => { if (el.paused && !el.ended) el.play().catch(() => {}); }, 100);
+              }
+            });
+            if (ctx && ctx.state !== 'running') {
+              ctx.resume().then(doPlay).catch(doPlay);
+            } else {
+              doPlay();
             }
-          });
-          if (ctx && ctx.state !== 'running') {
-            ctx.resume().then(doPlay).catch(doPlay);
-          } else {
-            doPlay();
-          }
+          }, 150);
         }
       }
       return;

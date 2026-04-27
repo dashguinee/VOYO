@@ -1983,3 +1983,61 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     set({ jammingWith: null });
   },
 }));
+
+// ─────────────────────────────────────────────────────────────
+// Synchronous flush on tab hide / page unload (v766)
+// ─────────────────────────────────────────────────────────────
+// All persistence writes inside actions are deferred to requestIdleCallback
+// or setTimeout — both stop firing when the tab goes hidden or the page is
+// navigating away. That meant the user's last 5–30s of session state
+// (currentTime, the latest queue mutation, the latest history entry) could
+// be missing on reload.
+//
+// Bug context (v766): Dash reported "maybe just maybe session doesn't
+// persist beyond a few tracks" — manifestation of this gap. Closing the
+// app mid-track left localStorage with stale state from a few tracks ago.
+//
+// Fix: synchronous final flush on every transition that signals "we may
+// not get another chance to write". `pagehide` is the modern unload
+// event; `visibilitychange → hidden` is the iOS-Safari-reliable cousin
+// (pagehide is unreliable on iOS for tab switches and home-button
+// navigation).
+if (typeof window !== 'undefined') {
+  const flushPersistedState = (): void => {
+    try {
+      const state = usePlayerStore.getState();
+      const current = loadPersistedState();
+      const trk = state.currentTrack;
+      savePersistedState({
+        ...current,
+        currentTrackId: trk ? (trk.id || trk.trackId) : current.currentTrackId,
+        currentTrackTitle: trk?.title ?? current.currentTrackTitle,
+        currentTrackArtist: trk?.artist ?? current.currentTrackArtist,
+        currentTrackCoverUrl: trk?.coverUrl ?? current.currentTrackCoverUrl,
+        currentTime: state.currentTime,
+        wasPlaying: state.isPlaying,
+        queue: state.queue.filter(q => q.track).map(q => ({
+          trackId: q.track.id,
+          title: q.track.title,
+          artist: q.track.artist,
+          coverUrl: q.track.coverUrl,
+          addedAt: q.addedAt,
+          source: q.source,
+        })),
+        history: state.history.slice(-50).filter(h => h.track).map(h => ({
+          trackId: h.track.trackId || h.track.id,
+          title: h.track.title,
+          artist: h.track.artist,
+          coverUrl: h.track.coverUrl,
+          playedAt: h.playedAt,
+          duration: h.duration,
+          oyeReactions: h.oyeReactions,
+        })),
+      });
+    } catch { /* storage blocked / quota — ignore */ }
+  };
+  window.addEventListener('pagehide', flushPersistedState);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') flushPersistedState();
+  });
+}
