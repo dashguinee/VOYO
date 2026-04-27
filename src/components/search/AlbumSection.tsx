@@ -174,13 +174,13 @@ export const AlbumSection = ({ query, isVisible }: AlbumSectionProps) => {
                   {[...Array(5)].map((_, i) => (
                     <div
                       key={i}
-                      className="flex items-center gap-3 p-2 rounded-lg animate-pulse"
+                      className="flex items-center gap-3 p-2 rounded-lg"
                       style={{ background: 'rgba(255,255,255,0.03)' }}
                     >
-                      <div className="w-8 h-8 rounded bg-white/5" />
+                      <div className="w-8 h-8 rounded bg-white/5 voyo-skeleton-shimmer" />
                       <div className="flex-1">
-                        <div className="h-3 w-3/4 bg-white/5 rounded mb-1" />
-                        <div className="h-2 w-1/2 bg-white/5 rounded" />
+                        <div className="h-3 w-3/4 bg-white/5 rounded mb-1 voyo-skeleton-shimmer" />
+                        <div className="h-2 w-1/2 bg-white/5 rounded voyo-skeleton-shimmer" />
                       </div>
                     </div>
                   ))}

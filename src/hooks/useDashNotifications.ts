@@ -16,6 +16,7 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { ccSupabase } from '../lib/dahub/dahub-api';
 import { devLog, devWarn } from '../utils/logger';
+import { trace } from '../services/telemetry';
 
 export interface DashNotification {
   id: string;
@@ -74,7 +75,10 @@ export function useDashNotifications({ appCode, dashId, limit = 20 }: Options): 
   // target_user filter client-side since `(null OR =dashId)` needs an OR which
   // is verbose in PostgREST.
   useEffect(() => {
-    if (!ccSupabase) return;
+    if (!ccSupabase) {
+      trace('dn_fetch', null, { ok: false, reason: 'no_cc_client' });
+      return;
+    }
     let cancelled = false;
     (async () => {
       try {
@@ -86,13 +90,19 @@ export function useDashNotifications({ appCode, dashId, limit = 20 }: Options): 
           .order('sent_at', { ascending: false })
           .limit(limit);
         if (cancelled) return;
-        if (error) { devWarn('[DashNotifications] fetch error:', error.message); return; }
+        if (error) {
+          devWarn('[DashNotifications] fetch error:', error.message);
+          trace('dn_fetch', null, { ok: false, reason: 'error', msg: error.message?.slice(0, 80) });
+          return;
+        }
         const rows = (data || [])
           .filter((r: DashNotification) => matchesAudience(r, appCode, dashId))
           .map((r: DashNotification) => ({ ...r, read: isReadLocally(r.id) }));
+        trace('dn_fetch', null, { ok: true, raw: data?.length ?? 0, kept: rows.length });
         setNotifications(rows);
-      } catch (e) {
+      } catch (e: any) {
         devWarn('[DashNotifications] fetch exception:', e);
+        trace('dn_fetch', null, { ok: false, reason: 'exception', msg: String(e?.message || '').slice(0, 80) });
       }
     })();
     return () => { cancelled = true; };
@@ -113,6 +123,7 @@ export function useDashNotifications({ appCode, dashId, limit = 20 }: Options): 
         (payload: { new?: DashNotification }) => {
           const row = payload.new;
           if (!row) return;
+          trace('dn_realtime_recv', null, { matched: matchesAudience(row, appCode, dashId), app: row.app });
           if (!matchesAudience(row, appCode, dashId)) return;
           devLog('[DashNotifications] realtime:', row.title);
           setNotifications(prev => {
@@ -121,7 +132,14 @@ export function useDashNotifications({ appCode, dashId, limit = 20 }: Options): 
           });
         },
       )
-      .subscribe();
+      .subscribe((status: string) => {
+        // Supabase channel callback fires on lifecycle transitions:
+        // SUBSCRIBED, TIMED_OUT, CLOSED, CHANNEL_ERROR. If the table
+        // isn't in the realtime publication, channel still SUBSCRIBES
+        // but never receives postgres_changes events — that's the
+        // "channel up but silent" failure mode this trace catches.
+        trace('dn_channel_status', null, { status });
+      });
     return () => {
       try { client.removeChannel(channel); } catch { /* noop */ }
     };

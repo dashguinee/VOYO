@@ -753,8 +753,11 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap, onEnterVideoMode
 
           {/* Main Container - Full width, no portal zones */}
           <div
-            className="fixed inset-x-0 top-0 bottom-0 z-50 flex flex-col px-4 pb-0"
-            style={{ paddingTop: 'max(16px, env(safe-area-inset-top, 16px))' }}
+            className="fixed inset-x-0 top-0 bottom-0 z-50 flex flex-col pb-0"
+            style={{
+              paddingTop: 'max(16px, env(safe-area-inset-top, 16px))',
+              paddingInline: 'max(1rem, var(--safe-x))',
+            }}
           >
             {/* Search Header — slides to bottom (thumb zone) past 45% scroll.
                 Position is absolute so the slide doesn't reflow the results.

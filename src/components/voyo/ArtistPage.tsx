@@ -110,6 +110,7 @@ const S = {
     overflowY: 'auto',
     overflowX: 'hidden',
     WebkitOverflowScrolling: 'touch',
+    paddingInline: 'var(--safe-x)',
   }),
 
   header: css({
@@ -629,7 +630,7 @@ export const ArtistPage: React.FC<ArtistPageProps> = ({
             <div
               style={{ ...S.stats, animation: 'voyo-fade-in 0.3s ease both' }}
             >
-              <div className="h-3 w-32 rounded bg-white/5 animate-pulse" />
+              <div className="h-3 w-32 rounded bg-white/5 voyo-skeleton-shimmer" />
             </div>
           )}
         </div>

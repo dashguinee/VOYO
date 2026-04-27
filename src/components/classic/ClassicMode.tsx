@@ -509,7 +509,10 @@ export const ClassicMode = ({ onSwitchToVOYO, onSearch }: ClassicModeProps) => {
   }, [setShowNowPlaying]);
 
   return (
-    <div className="relative h-full bg-[#0a0a0c]">
+    <div
+      className="relative h-full bg-[#0a0a0c]"
+      style={{ paddingInline: 'var(--safe-x)' }}
+    >
       {/* Tab Content */}
       
         <div

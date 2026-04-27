@@ -1055,7 +1055,7 @@ function App() {
                 flex-row goes with it. Both moves run on the same easing so the
                 retract reads as one motion. */}
             <header
-              className="relative flex items-center justify-between px-4 bg-transparent"
+              className="relative flex items-center justify-between bg-transparent"
               style={{
                 // z-50 so this stays above the fixed feed layer (z-10) for
                 // the 7s pre-retract window — header overlays the video
@@ -1063,6 +1063,7 @@ function App() {
                 zIndex: 50,
                 paddingTop: feedHeaderHidden ? 0 : 'max(0.75rem, env(safe-area-inset-top))',
                 paddingBottom: feedHeaderHidden ? 0 : '0.75rem',
+                paddingInline: 'max(1rem, var(--safe-x))',
                 maxHeight: feedHeaderHidden ? 0 : '120px',
                 overflow: 'hidden',
                 opacity: feedHeaderHidden ? 0 : 1,

@@ -3639,22 +3639,15 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onNavVisibilityChange, onSwitc
             {[0, 1].map((i) => (
               <div
                 key={i}
-                className="snap-center flex-shrink-0 w-[82vw] max-w-[420px] rounded-2xl"
+                className="snap-center flex-shrink-0 w-[82vw] max-w-[420px] rounded-2xl voyo-skeleton-shimmer"
                 style={{
                   aspectRatio: '4 / 5',
                   background: 'linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.02) 100%)',
                   border: '1px solid rgba(255,255,255,0.04)',
-                  animation: 'voyo-skeleton-pulse 1.8s ease-in-out infinite',
                 }}
               />
             ))}
           </div>
-          <style>{`
-            @keyframes voyo-skeleton-pulse {
-              0%, 100% { opacity: 0.55; }
-              50%      { opacity: 0.85; }
-            }
-          `}</style>
         </div>
       ) : stations.length > 0 && (
         <Safe name="StationsRail">
