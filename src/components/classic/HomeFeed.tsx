@@ -1044,6 +1044,14 @@ const AfricanVibesVideoCard = memo(({
   // Lifecycle state — see header comment.
   const [isInPlayZone, setIsInPlayZone] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
+  // Sticky-true once the card has been fully visible (intersectionRatio
+  // ≈ 1.0) at least once in this mount cycle. Drives the cover→video
+  // swap: video paints only AFTER the card has fully entered view, so
+  // the rightmost-visible card (still partially in view, just entered)
+  // shows the album cover as a buffer state. Once it shifts inward to
+  // full visibility, sticky flips and the video paints — and stays
+  // painted for the rest of this mount.
+  const [hasBeenFullyVisible, setHasBeenFullyVisible] = useState(false);
   // Register with parent on mount so it can observe + pick activeIdx.
   useEffect(() => {
     registerRef(idx, cardRef.current);
@@ -1081,32 +1089,42 @@ const AfricanVibesVideoCard = memo(({
   }, [youtubeId]);
 
   // ── Play zone (mount gate) ─────────────────────────────────────────
-  // Viewport + 50px buffer. Tight focus — only strictly-visible cards
-  // and the immediate next-up (about to cross the edge) hold iframes.
-  // Any card more than ~half a card-width off-screen is fully unmounted.
+  // Viewport + 100px buffer ≈ 1 card-width. The off-screen "warming
+  // slot" — when a card is roughly 1 card-width away from view, its
+  // iframe mounts and starts bootstrapping. By the time it scrolls
+  // into the rightmost-visible position, it's been bootstrapping for
+  // a beat already.
   useEffect(() => {
     const card = cardRef.current;
     const root = containerRef.current;
     if (!card || !root) return;
     const obs = new IntersectionObserver(
       ([entry]) => setIsInPlayZone(entry.isIntersecting),
-      { root, rootMargin: '0px 50px 0px 50px' }
+      { root, rootMargin: '0px 100px 0px 100px' }
     );
     obs.observe(card);
     return () => obs.disconnect();
   }, [containerRef]);
 
-  // ── Visibility (drives the 10% dim only) ───────────────────────────
-  // Strict viewport intersection — cards out of viewport drop to 90%
-  // opacity, in-viewport cards stay full. Decoupled from play/pause
-  // (which we no longer do — see one-shot playVideo below).
+  // ── Visibility + fully-visible (drives buffer/dim states) ──────────
+  // Multi-threshold IO so we can tell the difference between:
+  //   - partially visible (just entered or about to leave) → cover
+  //     stays as the "buffer" visual.
+  //   - fully visible (intersectionRatio ≥ 0.95) → flip the sticky
+  //     hasBeenFullyVisible flag so video paints from now on.
+  // Off-viewport drops the card opacity to 90% (snap, no transition).
   useEffect(() => {
     const card = cardRef.current;
     const root = containerRef.current;
     if (!card || !root) return;
     const obs = new IntersectionObserver(
-      ([entry]) => setIsVisible(entry.isIntersecting),
-      { root, threshold: 0 }
+      ([entry]) => {
+        setIsVisible(entry.isIntersecting);
+        if (entry.intersectionRatio >= 0.95) {
+          setHasBeenFullyVisible(true);
+        }
+      },
+      { root, threshold: [0, 0.5, 0.95, 1] }
     );
     obs.observe(card);
     return () => obs.disconnect();
@@ -1126,12 +1144,14 @@ const AfricanVibesVideoCard = memo(({
     return () => clearTimeout(t);
   }, [isInPlayZone]);
 
-  // Reset load + ready flags on unmount so the next mount cycle fires
-  // bootstrap detection cleanly.
+  // Reset load + ready + fully-visible flags on unmount so the next
+  // mount cycle starts clean (cover-first, then snap to video once the
+  // card has been fully visible AND iframe is ready).
   useEffect(() => {
     if (!shouldMountIframe) {
       setIsLoaded(false);
       setIsReady(false);
+      setHasBeenFullyVisible(false);
     }
   }, [shouldMountIframe]);
 
@@ -1228,17 +1248,21 @@ const AfricanVibesVideoCard = memo(({
         />
 
         {/* Video iframe — mounts when the card enters the play zone
-            (viewport + 500px buffer) so YT bootstrap completes off-
-            screen. opacity 0 (not display:none — that would unload the
-            iframe in some browsers) hides YT's bootstrap UI (spinner,
-            branding, play button) until a real frame is being decoded.
-            When isReady fires, iframe snaps to opacity 1 over the cover.
-            No transition — clean snap. */}
+            (off-screen warming slot). Opacity stays 0 (not display:none
+            — that would unload the iframe in some browsers) until BOTH:
+              · isReady (YT broadcast PLAYING) AND
+              · hasBeenFullyVisible (card has been fully in viewport at
+                least once).
+            That second gate creates the buffer effect: while the card
+            is at the rightmost-visible position (just entered, partially
+            visible), the cover stays. Once it shifts inward to full
+            visibility, snap to video — and stay video for the rest of
+            this mount, even when scrolling back out the right side. */}
         {shouldMountIframe && (
           <div
             className="absolute inset-0"
             style={{
-              opacity: isReady ? 1 : 0,
+              opacity: (isReady && hasBeenFullyVisible) ? 1 : 0,
             }}
           >
             <iframe
