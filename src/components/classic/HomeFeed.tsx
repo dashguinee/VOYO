@@ -1134,31 +1134,28 @@ const AfricanVibesVideoCard = memo(({
     return () => obs.disconnect();
   }, [containerRef]);
 
-  // ── Anticipation gate (adaptive duration) ──────────────────────────
-  // Card must be (a) fully visible AND (b) iframe ready, both
-  // continuously for the anticipation duration before we paint video.
-  // Three regimes:
-  //   ·    0ms (immediate snap) — card was seen-before in this session
-  //        (parent's seenTracksRef has its trackId). Scroll-back fast
-  //        path; revisited cards don't pay the 1s wait again.
-  //   ·  500ms — card is in the initial-visible set on first paint
-  //        (idx 0..2). Half the wait so the rail comes alive faster on
-  //        page load.
-  //   · 1000ms — every other case (cards entering during scroll). Full
-  //        anticipation so fast scrolls don't satisfy the timer and
-  //        cards passing through quickly stay as static covers.
-  // If isFullyVisible or isReady flips false during the wait, the timer
-  // cancels.
+  // ── 1s anticipation gate ───────────────────────────────────────────
+  // Flat 1s for every card, every time. v726 tried adaptive durations
+  // (0ms snap for revisits / 500ms initial-load priming / 1000ms
+  // scroll) — Dash flagged it as less smooth than v725's flat 1s. The
+  // deep reason: smoothness on a peer-rail comes from RHYTHM, not from
+  // optimizing individual moments. With three different timings, cards
+  // visible at the same moment came alive at different beats. The
+  // user's eye picks up on cadence mismatches even when each card in
+  // isolation is faster. One tempo, every card, every time.
+  //
+  // wasSeenBefore + markSeen plumbing is kept (parent's seenTracksRef
+  // is still threaded through) for potential future use, but not read
+  // by the timer — every card pays the 1s anticipation regardless.
   useEffect(() => {
     if (hasBeenFullyVisible) return;
     if (!isFullyVisible || !isReady) return;
-    const wait = wasSeenBefore ? 0 : (idx < 3 ? 500 : 1000);
-    const t = setTimeout(() => setHasBeenFullyVisible(true), wait);
+    const t = setTimeout(() => setHasBeenFullyVisible(true), 1000);
     return () => clearTimeout(t);
-  }, [isFullyVisible, isReady, hasBeenFullyVisible, wasSeenBefore, idx]);
+  }, [isFullyVisible, isReady, hasBeenFullyVisible]);
 
-  // Persist "seen" status at the carousel level so future remounts of
-  // this trackId skip the anticipation gate.
+  // Persist "seen" status at the carousel level — kept for potential
+  // future use even though the anticipation gate above ignores it now.
   useEffect(() => {
     if (hasBeenFullyVisible) markSeen(track.trackId);
   }, [hasBeenFullyVisible, track.trackId, markSeen]);
