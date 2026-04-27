@@ -1045,9 +1045,9 @@ const AfricanVibesVideoCard = memo(({
   const [isReady, setIsReady] = useState(false);
   // Sticky-true 1s after iframe mount — anticipation gate.
   const [timerExpired, setTimerExpired] = useState(false);
-  // Sticky-true 300ms after isReady. The "pause-button-gone" buffer:
+  // Sticky-true 500ms after isReady. The "pause-button-gone" buffer:
   // YT broadcasts PLAYING the moment a frame is decoded, but its
-  // transitional UI (pause button overlay) can linger a beat. 300ms
+  // transitional UI (pause button overlay) can linger a beat. 500ms
   // after PLAYING gives YT time to settle past any UI before we paint.
   const [isStablyReady, setIsStablyReady] = useState(false);
   // Register with parent on mount so it can observe + pick activeIdx.
@@ -1125,11 +1125,11 @@ const AfricanVibesVideoCard = memo(({
   // ── Pause-button-gone buffer ───────────────────────────────────────
   // YT broadcasts PLAYING the moment a frame is decoded, but its
   // transitional UI (pause button overlay) can linger a beat after
-  // that signal. 300ms hold after isReady ensures we never paint while
+  // that signal. 500ms hold after isReady ensures we never paint while
   // the pause button is still visible.
   useEffect(() => {
     if (!isReady) { setIsStablyReady(false); return; }
-    const t = setTimeout(() => setIsStablyReady(true), 300);
+    const t = setTimeout(() => setIsStablyReady(true), 500);
     return () => clearTimeout(t);
   }, [isReady]);
 
