@@ -221,8 +221,10 @@ body {
   transition: filter 0.3s ease;
 }
 
-.blur-card:hover {
-  filter: blur(0) brightness(1);
+@media (hover: hover) and (pointer: fine) {
+  .blur-card:hover {
+    filter: blur(0) brightness(1);
+  }
 }
 
 /* Smooth Transitions */
@@ -1109,16 +1111,18 @@ input[type="range"]:focus::-moz-range-thumb {
   transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.voyo-hover-scale:hover {
-  transform: scale(1.05);
-}
-
 .voyo-hover-lift {
   transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.voyo-hover-lift:hover {
-  transform: scale(1.15) translateY(-2px);
+@media (hover: hover) and (pointer: fine) {
+  .voyo-hover-scale:hover {
+    transform: scale(1.05);
+  }
+
+  .voyo-hover-lift:hover {
+    transform: scale(1.15) translateY(-2px);
+  }
 }
 
 /* Transition utilities */
