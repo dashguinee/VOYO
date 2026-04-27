@@ -1109,29 +1109,19 @@ const AfricanVibesVideoCard = memo(({
     return () => obs.disconnect();
   }, [containerRef]);
 
-  // ── Mount lifecycle: sticky-with-grace ─────────────────────────────
-  // Mount when in play zone. 5s grace before unmount on leaving so quick
-  // scroll-back catches still-warm cards instead of paying for a fresh
-  // YT bootstrap. Generous because staying mounted while paused is cheap;
-  // re-bootstrapping is what's expensive.
+  // ── Mount lifecycle: sticky forever ────────────────────────────────
+  // Once a card enters the play zone, it mounts and STAYS mounted for
+  // the rest of the session. No unmount, no re-bootstrap on scroll-back.
+  // This is what makes scrolling feel like the videos never stopped:
+  // every card you've ever scrolled past is still playing in the
+  // background, ready to show you a live frame the instant you return
+  // to it. Memory cost grows monotonically across the session — on a
+  // full scroll-through that's 12 iframes simultaneously, which is
+  // acceptable on modern devices and the right trade-off for the feel.
   const [shouldMountIframe, setShouldMountIframe] = useState(false);
   useEffect(() => {
-    if (isInPlayZone) {
-      setShouldMountIframe(true);
-      return;
-    }
-    const t = setTimeout(() => setShouldMountIframe(false), 5000);
-    return () => clearTimeout(t);
+    if (isInPlayZone) setShouldMountIframe(true);
   }, [isInPlayZone]);
-
-  // Reset load + play flags on unmount so the next mount cycle fires
-  // bootstrap detection cleanly.
-  useEffect(() => {
-    if (!shouldMountIframe) {
-      setIsLoaded(false);
-      setIsReady(false);
-    }
-  }, [shouldMountIframe]);
 
   // ── Subscribe to YT player events ──────────────────────────────────
   // Some YT versions don't broadcast `infoDelivery` without an explicit
