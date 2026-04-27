@@ -98,7 +98,24 @@
     <link href="https://fonts.googleapis.com/css2?family=Italianno&family=Fraunces:ital,opsz,wght@1,9..144,400;1,9..144,500&display=optional" rel="stylesheet">
   </head>
   <body class="h-full bg-[#050508]">
-    <div id="root" class="h-full"></div>
+    <!-- Pre-React fallback: DASH-branded loading state. React replaces
+         this when it mounts (root.render swaps the children). If JS
+         fails to load entirely (chunk error before any boundary can
+         catch it), this stays visible — user sees branded loader, not
+         a white screen / empty page. AppErrorBoundary handles the
+         post-mount React crash case separately. -->
+    <div id="root" class="h-full">
+      <div id="voyo-boot-fallback" style="height:100%;width:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;background:linear-gradient(180deg,#0a0a12 0%,#0a0612 50%,#0a0a0f 100%);font-family:system-ui,sans-serif;gap:24px;">
+        <div style="font-size:44px;font-weight:900;letter-spacing:0.05em;background:linear-gradient(135deg,#a78bfa,#8b5cf6);-webkit-background-clip:text;background-clip:text;color:transparent;filter:drop-shadow(0 0 18px rgba(139,92,246,0.35));animation:voyo-boot-pulse 2.5s ease-in-out infinite;">VOYO</div>
+        <div style="width:40px;height:2px;background:rgba(139,92,246,0.18);border-radius:2px;overflow:hidden;">
+          <div style="height:100%;width:100%;background:rgba(167,139,250,0.7);border-radius:2px;animation:voyo-boot-bar 1.4s ease-in-out infinite;"></div>
+        </div>
+      </div>
+      <style>
+        @keyframes voyo-boot-pulse { 0%,100% { opacity: 0.55 } 50% { opacity: 1 } }
+        @keyframes voyo-boot-bar { 0%,100% { transform: translateX(-100%) } 50% { transform: translateX(100%) } }
+      </style>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
