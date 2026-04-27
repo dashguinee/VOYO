@@ -1014,6 +1014,7 @@ const AfricanVibesVideoCard = memo(({
   idx,
   activeIdx,
   isEdge,
+  idleAnchor,
   sectionInView,
   containerRef,
   wasSeenBefore,
@@ -1037,6 +1038,10 @@ const AfricanVibesVideoCard = memo(({
    *  scroll direction. Mounts its iframe alongside the central card
    *  so by the time the user reaches it, bootstrap has progressed. */
   isEdge: boolean;
+  /** True when the rail has been off-screen for >4s and this card is
+   *  #1 (the always-warm anchor). Keeps idx 0 mounted as the OG so
+   *  if the user scrolls back to the rail's start, video is ready. */
+  idleAnchor: boolean;
   /** Parent's ref-collector — card registers itself on mount so the
    *  rail-level observer can compute the most-centered active card. */
   registerRef: (idx: number, el: HTMLButtonElement | null) => void;
@@ -1090,7 +1095,7 @@ const AfricanVibesVideoCard = memo(({
   // shouldMountIframe flips false 700ms later (after fade is complete).
   // The thumbnail base layer is always there underneath, so as the
   // iframe fades out, the cover smoothly takes over.
-  const shouldHoldMounted = isActive || isEdge;
+  const shouldHoldMounted = isActive || isEdge || idleAnchor;
   const [shouldShow, setShouldShow] = useState(false);
   const [shouldMountIframe, setShouldMountIframe] = useState(false);
   useEffect(() => {
@@ -1397,6 +1402,21 @@ const AfricanVibesCarousel = ({
     return () => observer.disconnect();
   }, []);
 
+  // Idle mode — when the rail has been off-screen for >4s, drop every
+  // mounted iframe except #1 (the anchor). On re-entry, normal
+  // active+edge mounting resumes immediately. Keeps battery cost
+  // bounded across a long session where the user scrolls past this
+  // section and stays away.
+  const [idleMode, setIdleMode] = useState(false);
+  useEffect(() => {
+    if (isInView) {
+      setIdleMode(false);
+      return;
+    }
+    const t = setTimeout(() => setIdleMode(true), 4000);
+    return () => clearTimeout(t);
+  }, [isInView]);
+
   // End-of-scroll detector + scroll-direction tracker. The sentinel
   // CTA reveals at 48px from end. Direction tracking has 4px hysteresis
   // so micro-jitters during settle don't flap the pre-warm slot.
@@ -1452,6 +1472,7 @@ const AfricanVibesCarousel = ({
             idx={idx}
             activeIdx={activeIdx}
             isEdge={idx === edgeIdx}
+            idleAnchor={idleMode && idx === 0}
             sectionInView={isInView}
             containerRef={containerRef}
             wasSeenBefore={seenTracksRef.current.has(track.trackId)}
