@@ -5243,12 +5243,11 @@ export const VoyoPortraitPlayer = ({
       <div
         className="px-3 flex items-start gap-3 z-20 h-[14%]"
         style={{
-          // Pick the LARGER of (safe-area+8px) or (1.25rem + 36px), not
-          // their sum. On notched iPhones this used to stack 47+20+36 ≈
-          // 103px which pushed the bubbles below the visible card.
-          // ExpandVideoButton at top-3 still has clearance via the larger
-          // of the two values.
-          paddingTop: 'max(calc(env(safe-area-inset-top, 0px) + 8px), 56px)',
+          // Reduced from 56px / safe+8px to 36px / safe+4px (per Dash):
+          // history+queue row was overlaying the central player a touch
+          // too much; bumping it up gives the hero more breathing room.
+          // ExpandVideoButton at top-3 still has clearance.
+          paddingTop: 'max(calc(env(safe-area-inset-top, 0px) + 4px), 36px)',
           // Step 2 (portalProgress > 0.55) fades the bubbles out.
           opacity: Math.max(0, 1 - Math.max(0, (portalProgress - 0.55) / 0.35)),
           transform: `translateY(${Math.max(0, (portalProgress - 0.55) / 0.35) * -16}px)`,
