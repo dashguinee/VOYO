@@ -1076,18 +1076,17 @@ const AfricanVibesVideoCard = memo(({
   }, [youtubeId]);
 
   // ── Play zone (mount gate) ─────────────────────────────────────────
-  // Viewport + 1500px buffer (≈ 13 card-widths). Cards 4-5 cards ahead
-  // of the user's current view are already bootstrapping by the time
-  // the user starts scrolling toward them. Most YT bootstraps complete
-  // 1-2s before the card actually enters the visible viewport, so the
-  // cover→video swap happens way ahead of the user's eyes.
+  // Viewport + 200px buffer ≈ 1 card-width past either edge. Only the
+  // visible cards + the immediate next-up on each side are mounted.
+  // The "next" card pre-warms while the user is scrolling toward it so
+  // by the time the scroll settles, video is already showing.
   useEffect(() => {
     const card = cardRef.current;
     const root = containerRef.current;
     if (!card || !root) return;
     const obs = new IntersectionObserver(
       ([entry]) => setIsInPlayZone(entry.isIntersecting),
-      { root, rootMargin: '0px 1500px 0px 1500px' }
+      { root, rootMargin: '0px 200px 0px 200px' }
     );
     obs.observe(card);
     return () => obs.disconnect();
@@ -1109,19 +1108,30 @@ const AfricanVibesVideoCard = memo(({
     return () => obs.disconnect();
   }, [containerRef]);
 
-  // ── Mount lifecycle: sticky forever ────────────────────────────────
-  // Once a card enters the play zone, it mounts and STAYS mounted for
-  // the rest of the session. No unmount, no re-bootstrap on scroll-back.
-  // This is what makes scrolling feel like the videos never stopped:
-  // every card you've ever scrolled past is still playing in the
-  // background, ready to show you a live frame the instant you return
-  // to it. Memory cost grows monotonically across the session — on a
-  // full scroll-through that's 12 iframes simultaneously, which is
-  // acceptable on modern devices and the right trade-off for the feel.
+  // ── Mount lifecycle: focused viewport with 800ms grace ─────────────
+  // Mount when in play zone (visible + 1-card buffer). Unmount when out
+  // of zone, with 800ms grace to absorb scroll inertia and quick
+  // back-and-forth without re-bootstrapping. Tight focus: only the
+  // cards the user is currently looking at + the immediate next-ups
+  // hold iframes. Off-screen cards drop their iframe entirely.
   const [shouldMountIframe, setShouldMountIframe] = useState(false);
   useEffect(() => {
-    if (isInPlayZone) setShouldMountIframe(true);
+    if (isInPlayZone) {
+      setShouldMountIframe(true);
+      return;
+    }
+    const t = setTimeout(() => setShouldMountIframe(false), 800);
+    return () => clearTimeout(t);
   }, [isInPlayZone]);
+
+  // Reset load + ready flags on unmount so the next mount cycle fires
+  // bootstrap detection cleanly.
+  useEffect(() => {
+    if (!shouldMountIframe) {
+      setIsLoaded(false);
+      setIsReady(false);
+    }
+  }, [shouldMountIframe]);
 
   // ── Subscribe to YT player events ──────────────────────────────────
   // Some YT versions don't broadcast `infoDelivery` without an explicit
