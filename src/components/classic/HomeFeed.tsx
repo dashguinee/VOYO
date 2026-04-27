@@ -1013,10 +1013,12 @@ const AfricanVibesVideoCard = memo(({
   track,
   idx,
   activeIdx,
+  isSupport,
   sectionInView,
   containerRef,
   wasSeenBefore,
   markSeen,
+  onCardReady,
   registerRef,
   onTrackPlay,
 }: {
@@ -1031,9 +1033,15 @@ const AfricanVibesVideoCard = memo(({
   /** True if the parent has seen this trackId fully ready before in
    *  this session — drives the scroll-back fast path (skip anticipation). */
   wasSeenBefore: boolean;
-  /** Tells the parent this card has reached the painted-video state so
-   *  future remounts (scroll-back) can skip the 1s anticipation. */
+  /** Tells the parent this card has reached the painted-video state. */
   markSeen: (trackId: string) => void;
+  /** True when this card is the SUPPORT card — kept playing during a
+   *  scroll transition while the new active card bootstraps. Drops
+   *  back to false once the new active broadcasts isReady. */
+  isSupport: boolean;
+  /** Called when this card's isReady flips true. Parent uses it to
+   *  drop the support role once the new active is ready. */
+  onCardReady: () => void;
   /** Parent's ref-collector — card registers itself on mount so the
    *  rail-level observer can compute the most-centered active card. */
   registerRef: (idx: number, el: HTMLButtonElement | null) => void;
@@ -1099,23 +1107,29 @@ const AfricanVibesVideoCard = memo(({
     return () => obs.disconnect();
   }, [containerRef]);
 
-  // ── Mount lifecycle: in-zone with 300ms grace ──────────────────────
-  // Mount when in zone (visible + 100px buffer). Unmount with 300ms
-  // grace so quick scroll-back doesn't trigger re-bootstrap.
+  // ── Mount lifecycle: in-zone OR support, 300ms grace ───────────────
+  // Mount when in zone (visible + 100px buffer) OR when this card is
+  // currently acting as support (parent kept us mounted because we
+  // were the previous active and the new active isn't ready yet).
+  // 300ms grace before unmount when neither condition holds.
+  const shouldHoldMounted = isInPlayZone || isSupport;
   const [shouldMountIframe, setShouldMountIframe] = useState(false);
   useEffect(() => {
-    if (isInPlayZone) {
+    if (shouldHoldMounted) {
       setShouldMountIframe(true);
       return;
     }
     const t = setTimeout(() => setShouldMountIframe(false), 300);
     return () => clearTimeout(t);
-  }, [isInPlayZone]);
+  }, [shouldHoldMounted]);
 
-  // Persist "seen" status at the carousel level — kept dormant.
+  // On isReady: persist seen status + tell parent (so support can drop
+  // when the new active is ready).
   useEffect(() => {
-    if (isReady) markSeen(track.trackId);
-  }, [isReady, track.trackId, markSeen]);
+    if (!isReady) return;
+    markSeen(track.trackId);
+    onCardReady();
+  }, [isReady, track.trackId, markSeen, onCardReady]);
 
   // Reset per-mount state when the iframe unmounts so the next mount
   // cycle starts clean.
@@ -1186,8 +1200,7 @@ const AfricanVibesVideoCard = memo(({
       style={{
         width: 'clamp(86px, 25vw, 110px)',
         aspectRatio: '95 / 142',
-        // In-zone (visible + 100px buffer): 100%. Far off-screen: 90%.
-        // No transition — clean snap, no animation across cards.
+        // In-zone: 100%. Far off-screen: 90%. No transition — clean snap.
         opacity: isInPlayZone ? 1 : 0.9,
       }}
       onClick={() => onTrackPlay(track)}
@@ -1315,14 +1328,30 @@ const AfricanVibesCarousel = ({
   const ratiosRef = useRef<Map<number, number>>(new Map());
   const cardObserverRef = useRef<IntersectionObserver | null>(null);
   // Set of track IDs that have ever been fully-ready in this session.
-  // Cards that come back from a seen track skip the 1s anticipation
-  // gate and snap to video the instant their iframe is ready (~1s vs
-  // ~2s for fresh cards). Makes the rail feel like cards remember
-  // they've been seen — no double-wait on revisit.
   const seenTracksRef = useRef<Set<string>>(new Set());
   const markTrackSeen = useCallback((trackId: string) => {
     seenTracksRef.current.add(trackId);
   }, []);
+
+  // Support role: when activeIdx changes, the OLD active becomes
+  // "support" — its iframe stays mounted and keeps playing, providing
+  // visual continuity while the NEW active is mounting/bootstrapping.
+  // Once the new active broadcasts isReady (its video is playing),
+  // support drops and the old card unmounts. There's always a video
+  // playing somewhere in the rail during scroll — no "everything is
+  // thumbnail" gap.
+  const [supportIdx, setSupportIdx] = useState<number | null>(null);
+  const prevActiveIdxRef = useRef(0);
+  useEffect(() => {
+    if (activeIdx !== prevActiveIdxRef.current) {
+      setSupportIdx(prevActiveIdxRef.current);
+      prevActiveIdxRef.current = activeIdx;
+    }
+  }, [activeIdx]);
+  // When the new active card's iframe is ready, support can drop.
+  const handleCardReady = useCallback((idx: number) => {
+    if (idx === activeIdx) setSupportIdx(null);
+  }, [activeIdx]);
 
   // Card-registration callback — each card calls on mount/unmount so
   // the rail's observer can track all current card elements.
@@ -1446,10 +1475,12 @@ const AfricanVibesCarousel = ({
           track={track}
           idx={idx}
           activeIdx={activeIdx}
+          isSupport={supportIdx === idx}
           sectionInView={isInView}
           containerRef={containerRef}
           wasSeenBefore={seenTracksRef.current.has(track.trackId)}
           markSeen={markTrackSeen}
+          onCardReady={() => handleCardReady(idx)}
           registerRef={registerCardRef}
           onTrackPlay={(t) => { lastWatchedRef.current = t; onTrackPlay(t); }}
         />
