@@ -865,7 +865,17 @@ export const Library = ({ onTrackClick }: LibraryProps) => {
           the old layout, tighter execution via transform+opacity
           (cheap compositor-only) instead of the top↔bottom reposition
           jump that felt weak. ── */}
-      <div className="flex-shrink-0">
+      <div
+        className="flex-shrink-0"
+        style={{
+          // On notched iPhones the headline was sliding under the dynamic
+          // island — the only top padding was pt-5 on the inner button (20px)
+          // which doesn't clear a 47-59px notch. Push the whole sticky
+          // chrome down by env(safe-area-inset-top), with a 20px floor so
+          // non-notched devices keep the original spacing. Audit §5 [863-879].
+          paddingTop: 'max(0px, env(safe-area-inset-top))',
+        }}
+      >
         <button
           type="button"
           onClick={() => setDiscoExplainerOpen(true)}
@@ -915,7 +925,13 @@ export const Library = ({ onTrackClick }: LibraryProps) => {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search…"
-              className="w-full pl-11 pr-4 py-[11px] rounded-xl bg-white/[0.05] border border-white/10 text-white placeholder:text-white/30 focus:outline-none transition-colors text-[14px]"
+              // 16px floor on the input prevents iOS Safari from auto-zooming
+              // the viewport on focus. Visual weight stays close to the old
+              // 14px because the placeholder/text is naturally compact in
+              // Satoshi at this size — the gain (no zoom-jolt) outweighs the
+              // tiny extra heft. Cross-references global base-layer 16px
+              // floor (research §1 #8) — input is the offender, fix here.
+              className="w-full pl-11 pr-4 py-[11px] rounded-xl bg-white/[0.05] border border-white/10 text-white placeholder:text-white/30 focus:outline-none transition-colors text-[16px]"
               onFocus={(e) => { e.currentTarget.style.borderColor = 'rgba(212,175,110,0.45)'; }}
               onBlur={(e) => { e.currentTarget.style.borderColor = ''; }}
             />
@@ -929,7 +945,11 @@ export const Library = ({ onTrackClick }: LibraryProps) => {
             return (
               <button
                 key={filter.id}
-                className="px-3.5 py-1.5 rounded-full text-[13px] font-semibold whitespace-nowrap transition-all voyo-tap-scale"
+                // Bump to 44px floor on hit area without changing the visual
+                // pill weight much — most-tapped row in Library, must clear
+                // the touch-target floor (audit §5 [932-942]). py-2 + min-h
+                // gives a 40-44px tall chip; px-4 widens slightly for finger.
+                className="px-4 py-2 min-h-[44px] inline-flex items-center justify-center rounded-full text-[13px] font-semibold whitespace-nowrap transition-all voyo-tap-scale"
                 style={
                   isActive
                     ? {
@@ -1010,7 +1030,15 @@ export const Library = ({ onTrackClick }: LibraryProps) => {
         ref={scrollContainerRef}
         onScroll={onListScroll}
         className="flex-1 overflow-y-auto"
-        style={{ paddingBottom: 'calc(76px + env(safe-area-inset-bottom, 0px))' }}
+        // overscrollBehavior: 'contain' caps vertical rubber-band inside this
+        // list — without it, the bounce leaks past the parent (which has
+        // overscroll-behavior: none) and produces a visible header jolt at
+        // both edges (research §3.5 #5). Containment keeps the scroll inertia
+        // local to the Library list, which is what the user expects.
+        style={{
+          paddingBottom: 'calc(76px + env(safe-area-inset-bottom, 0px))',
+          overscrollBehavior: 'contain',
+        }}
       >
         {/* Inline count + active mode tag — no separate banner row. */}
         <div className="px-4 pt-2 pb-1 flex items-center gap-2 text-[11px] text-white/35 tracking-wide">

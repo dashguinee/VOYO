@@ -330,33 +330,132 @@ export const OyeButton = memo(({ track, size = 'md', escape = true, className = 
   // we're ACTUALLY in phase 3 (not during the charge latch).
   const buttonAnimation = runBubble ? style.animation : 'none';
 
+  // Hit-area floor: sm=28px is below the 44×44 touch-target floor (used
+  // on TrackCard and SongRow rows everywhere). Wrap the visual button in
+  // a 44×44 transparent host span so the tap zone meets the floor while
+  // the visible pill stays at the size designers chose. The host inherits
+  // pointer events to the inner button — no behaviour change.
+  // (Audit §6 [333-336])
+  const hostSize = Math.max(px, 44);
+  // Gold-faded ring colour for the static halo replacement. The previous
+  // `outline: 1px solid …; outline-offset: 2px` was rendered as a square
+  // on Android Chrome <94 (outline doesn't follow border-radius pre-94)
+  // and is not a layered painter. Replacing with a sibling span sized
+  // (px+4) gives a perfectly round halo via box-shadow / border on a
+  // fully rounded element — matches all platforms. (Audit §6 [382-383])
+  const showStaticHalo = hasRing && !isCharging && !runBubble;
+  // Parsed ring border colour from STYLE_BY_STATE.ring (e.g.
+  // "1px solid rgba(212, 160, 83, 0.18)"). Strip the prefix and reuse
+  // the colour as a hairline border on the halo span.
+  const haloColor = typeof style.ring === 'string' && style.ring !== 'none'
+    ? style.ring.replace(/^[^,]*solid\s+/, '').trim()
+    : 'transparent';
+
   return (
     <span
       className={`relative inline-flex items-center justify-center ${className}`}
-      style={{ width: px, height: px }}
+      style={{ width: hostSize, height: hostSize }}
     >
-      {showRing && (
+      {showStaticHalo && (
         <span
           aria-hidden
-          className="absolute inset-0 rounded-full pointer-events-none"
+          className="absolute rounded-full pointer-events-none"
           style={{
-            // Conic-gradient creates 4 lightning-like arcs with transparent
-            // gaps so it reads as "electricity arcing" rather than a solid
-            // ring. mask-image carves out the centre so only the outer
-            // band renders.
-            background: `conic-gradient(from 0deg, ${ringFaint} 0deg, ${ringAccent} 20deg, ${ringFaint} 50deg, ${ringAccent} 110deg, ${ringFaint} 140deg, ${ringAccent} 200deg, ${ringFaint} 230deg, ${ringAccent} 290deg, ${ringFaint} 320deg)`,
-            WebkitMask: `radial-gradient(circle, transparent calc(50% - ${ringInset + 1}px), black calc(50% - ${ringInset}px), black 50%, transparent calc(50% + 1px))`,
-            mask:       `radial-gradient(circle, transparent calc(50% - ${ringInset + 1}px), black calc(50% - ${ringInset}px), black 50%, transparent calc(50% + 1px))`,
-            opacity: ringOpacity,
-            animation: `voyo-oye-ring-spin ${ringDuration} linear infinite`,
-            // Opacity + duration changes use transitions so the idle→charge
-            // handoff doesn't snap. 200ms is fast enough to feel immediate
-            // on tap, slow enough to not flicker.
-            transition: 'opacity 200ms ease, filter 200ms ease',
-            filter: isCharging ? 'blur(0.4px) saturate(1.3)' : 'blur(0.6px)',
+            // Sized 4px larger than the visual button (2px on each side =
+            // the same offset the old `outline-offset: 2px` produced) and
+            // perfectly round on every renderer. No rotation, no animation
+            // — this is the static cold-state halo only.
+            width: px + 4,
+            height: px + 4,
+            border: `1px solid ${haloColor}`,
+            transition: 'border-color 280ms ease',
           }}
         />
       )}
+      {showRing && (
+        <>
+          {/* Conic-gradient ring — only painted when the engine supports it.
+              Modern Safari/Chrome get the lightning-arc visual; old iOS ≤14
+              and Android Chrome <88 ignore the conic span (no rule applies)
+              and fall through to the simple-stroke fallback below.
+              (Audit §6 [347-350]) */}
+          <span
+            aria-hidden
+            className="oye-ring-conic absolute rounded-full pointer-events-none"
+            style={{
+              // Sized to the visual button, not the host. The conic ring
+              // sits on top of the round button's edge regardless of how
+              // big the hit-area host is.
+              width: px,
+              height: px,
+              // Inline custom props so the @supports-scoped CSS in the
+              // <style> block below can compose them into the gradient.
+              ['--oye-ring-accent' as string]: ringAccent,
+              ['--oye-ring-faint' as string]: ringFaint,
+              ['--oye-ring-inset' as string]: `${ringInset}px`,
+              opacity: ringOpacity,
+              animation: `voyo-oye-ring-spin ${ringDuration} linear infinite`,
+              transition: 'opacity 200ms ease, filter 200ms ease',
+              filter: isCharging ? 'blur(0.4px) saturate(1.3)' : 'blur(0.6px)',
+            }}
+          />
+          {/* Fallback stroke — single faint ring rendered as a CSS border.
+              Painted on every browser, but the conic-span above sits on top
+              and fully covers it on modern engines (the conic gradient is
+              opaque-ish at the ring band thanks to the radial mask). On
+              old iOS/Android the conic span renders as a transparent box
+              and this thin border shows through, preserving a "ring is
+              there" affordance instead of a black square. */}
+          <span
+            aria-hidden
+            className="absolute rounded-full pointer-events-none"
+            style={{
+              width: px,
+              height: px,
+              border: `1.5px solid ${ringFaint}`,
+              opacity: ringOpacity * 0.55,
+              transition: 'opacity 200ms ease',
+              zIndex: 0,
+            }}
+          />
+        </>
+      )}
+      {/* Scoped CSS — paints the conic gradient + radial mask only when
+          the engine supports both. Avoids the inline-style limitation
+          and lets the @supports query gate the entire visual properly. */}
+      <style>{`
+        @supports (background: conic-gradient(red, blue)) and (mask: radial-gradient(black, transparent)) {
+          .oye-ring-conic {
+            background: conic-gradient(
+              from 0deg,
+              var(--oye-ring-faint) 0deg,
+              var(--oye-ring-accent) 20deg,
+              var(--oye-ring-faint) 50deg,
+              var(--oye-ring-accent) 110deg,
+              var(--oye-ring-faint) 140deg,
+              var(--oye-ring-accent) 200deg,
+              var(--oye-ring-faint) 230deg,
+              var(--oye-ring-accent) 290deg,
+              var(--oye-ring-faint) 320deg
+            );
+            -webkit-mask: radial-gradient(
+              circle,
+              transparent calc(50% - (var(--oye-ring-inset) + 1px)),
+              black calc(50% - var(--oye-ring-inset)),
+              black 50%,
+              transparent calc(50% + 1px)
+            );
+            mask: radial-gradient(
+              circle,
+              transparent calc(50% - (var(--oye-ring-inset) + 1px)),
+              black calc(50% - var(--oye-ring-inset)),
+              black 50%,
+              transparent calc(50% + 1px)
+            );
+            z-index: 1;
+          }
+        }
+      `}</style>
 
       <button
         onClick={handleClick}
@@ -375,12 +474,6 @@ export const OyeButton = memo(({ track, size = 'md', escape = true, className = 
           // transitions DO morph, giving phase 2 → phase 3 a smooth
           // handoff even though the gradient itself will snap.
           transition: 'background-color 280ms ease, border 280ms ease, box-shadow 280ms ease',
-          // Outer halo only on faded states AND only when the rotating
-          // ring isn't competing for the same real estate. Suppressed
-          // during bubble phase (bubble owns the motion) and during
-          // charge phase (ring owns it).
-          outline: hasRing && !isCharging && !runBubble ? style.ring : 'none',
-          outlineOffset: hasRing && !isCharging && !runBubble ? '2px' : '0',
         }}
       >
         <Zap

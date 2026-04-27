@@ -46,8 +46,13 @@ export const VoyoBottomNav = ({ onDahub, onHome, oyoSurface = 'home', playerMode
   const feedNavDim = usePlayerStore(s => s.feedNavDim);
   const sideAmbient = (voyoActiveTab === 'feed' && feedNavDim) ? 0.30 : 1;
   const orbAmbient  = (voyoActiveTab === 'feed' && feedNavDim) ? 0.50 : 1;
-  const sideOpacity = `calc(var(--hold-side, 1) * ${sideAmbient})`;
-  const orbOpacity  = `calc(var(--hold-orb, 1) * ${orbAmbient})`;
+  // Lower-bound clamp on opacity so the press-dim × ambient-dim multiplier
+  // can't drop below ~0.20 (≈ 0.084 in the worst case before — virtually
+  // invisible buttons). The orb floor is higher (0.40) since it's the
+  // primary action anchor and must always read as tappable.
+  // (Audit §6 [251-255])
+  const sideOpacity = `max(0.20, calc(var(--hold-side, 1) * ${sideAmbient}))`;
+  const orbOpacity  = `max(0.40, calc(var(--hold-orb, 1) * ${orbAmbient}))`;
   const ambientTransition = 'opacity 1s cubic-bezier(0.16, 1, 0.3, 1)';
   const setVoyoTab = usePlayerStore(s => s.setVoyoTab);
   const isPlaying = usePlayerStore(s => s.isPlaying);
@@ -297,9 +302,26 @@ export const VoyoBottomNav = ({ onDahub, onHome, oyoSurface = 'home', playerMode
           style={{ opacity: sideOpacity, transition: `${holdTransition}, ${ambientTransition}` }}
         >
           <div
+            // Chip backplate — only when in playerMode and the wrapper is
+            // transparent. Without it, the Home/Dahub icons floated invisibly
+            // over dim album art (audit §6 [271-289]). 36px round chip with a
+            // 10/10/15 wash + 1px hairline lifts the icons just enough to
+            // find without re-introducing chrome around the wrapper.
+            className="flex items-center justify-center"
             style={{
               transform: pressedBtn === 'home' ? 'scale(0.95)' : 'scale(1)',
               transition: 'transform 80ms ease-out',
+              ...(playerMode
+                ? {
+                    width: 36,
+                    height: 36,
+                    borderRadius: 999,
+                    background: 'rgba(10, 10, 15, 0.45)',
+                    border: '1px solid rgba(255, 255, 255, 0.06)',
+                    backdropFilter: 'blur(6px)',
+                    WebkitBackdropFilter: 'blur(6px)',
+                  }
+                : {}),
             }}
           >
             <House
@@ -438,9 +460,23 @@ export const VoyoBottomNav = ({ onDahub, onHome, oyoSurface = 'home', playerMode
           style={{ opacity: sideOpacity, transition: `${holdTransition}, ${ambientTransition}` }}
         >
           <div
+            // Mirror of the Home chip backplate — only painted in playerMode
+            // when the wrapper itself is transparent. Same wash, same border.
+            className="flex items-center justify-center"
             style={{
               transform: pressedBtn === 'dahub' ? 'scale(0.95)' : 'scale(1)',
               transition: 'transform 80ms ease-out',
+              ...(playerMode
+                ? {
+                    width: 36,
+                    height: 36,
+                    borderRadius: 999,
+                    background: 'rgba(10, 10, 15, 0.45)',
+                    border: '1px solid rgba(255, 255, 255, 0.06)',
+                    backdropFilter: 'blur(6px)',
+                    WebkitBackdropFilter: 'blur(6px)',
+                  }
+                : {}),
             }}
           >
             <div className="relative">

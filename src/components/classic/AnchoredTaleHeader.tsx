@@ -215,7 +215,10 @@ export const AnchoredTaleHeader = () => {
         <span
           aria-hidden={!whisperVisible}
           style={{
-            fontSize: '0.6em',                  // 60% of parent
+            // 11px floor + 0.6em scaling — Android low-DPI was rendering
+            // the whisper at ~8.4px (14 × 0.6) and falling under the
+            // readability floor (audit §6 [218-238]).
+            fontSize: 'max(11px, 0.6em)',
             lineHeight: 1.4,
             color: whisperColors.text,
             fontWeight: 600,
@@ -224,16 +227,23 @@ export const AnchoredTaleHeader = () => {
             transformOrigin: 'left center',
             transform: whisperVisible ? 'scaleX(1) translateY(0)' : 'scaleX(0) translateY(-2px)',
             opacity: whisperVisible ? 1 : 0,
-            transition: `transform ${FADE_MS}ms cubic-bezier(0.16, 1, 0.3, 1), opacity ${FADE_MS}ms ease, color ${FADE_MS}ms ease`,
+            // Asymmetric collapse: opacity fades fast (200ms) and the
+            // scaleX retraction lags 80ms behind, so the text is invisible
+            // before the box squeezes — kills the 1px Safari ghost trail
+            // at the left edge (audit §6 [225-227]). On expand both rise
+            // together with FADE_MS for a clean rise-from-the-dot read.
+            transition: whisperVisible
+              ? `transform ${FADE_MS}ms cubic-bezier(0.16, 1, 0.3, 1), opacity ${FADE_MS}ms ease, color ${FADE_MS}ms ease`
+              : `opacity 200ms ease, transform ${FADE_MS}ms cubic-bezier(0.16, 1, 0.3, 1) 80ms, color ${FADE_MS}ms ease`,
             whiteSpace: 'nowrap',
             overflow: 'hidden',
             textOverflow: 'ellipsis',
             display: 'inline-block',
             marginTop: 1,
-            // Reserve no height when collapsed so layout is stable
-            // either way — the row keeps the anchor's own height as
-            // its stable anchor.
-            maxHeight: whisperVisible ? '14px' : '0px',
+            // Reserve 14px ALWAYS so the row height is stable — visual
+            // hide is owned by opacity + transform, no layout shift on
+            // the dot's vertical anchor (audit §6 [236]).
+            maxHeight: '14px',
           }}
         >
           {whisper?.text ?? ' '}
