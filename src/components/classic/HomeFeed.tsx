@@ -1787,92 +1787,52 @@ const Top10Section = memo(({ tracks, onTrackPlay }: Top10SectionProps) => {
   const sectionRef = useRef<HTMLDivElement>(null);
   const carouselRef = useRef<HTMLDivElement>(null);
   const cardRefs = useRef<(HTMLButtonElement | null)[]>([]);
-  const [countdownActive, setCountdownActive] = useState(false);
-  const countdownActiveRef = useRef(false); // sync guard — state update is async
-  const [activeIdx, setActiveIdx] = useState<number | null>(null);
   const [isVisible, setIsVisible] = useState(false); // pauses decorative CSS animations off-screen
-  const dwellTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const countdownIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const [subtitleKey, setSubtitleKey] = useState(0);
-  const scrollCooldownRef = useRef(false);
-  const prevScrollRef = useRef<{ left: number; time: number } | null>(null);
-  const subtitleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Tracks which card is currently centered in the carousel viewport.
+  // Drives the per-card "light beam" — only the centered card lights up
+  // (except #1 which has a permanent subtle glow). Replaces the old
+  // auto-countdown that cycled cards 9→1 every 2.4s — Dash flagged it
+  // as tacky and a glitch source.
+  const [centeredIdx, setCenteredIdx] = useState<number | null>(null);
 
-  // Local-only horizontal scroll: center the target card inside the carousel
-  // using scrollTo on the inner container. Previously used scrollIntoView,
-  // which walks up through every ancestor scroller and pulls the outer feed
-  // with it — produced a "drag-back" feel every time the countdown advanced.
-  const centerCardInCarousel = useCallback((idx: number) => {
-    const carousel = carouselRef.current;
-    const card = cardRefs.current[idx];
-    if (!carousel || !card) return;
-    const left = card.offsetLeft - (carousel.clientWidth - card.offsetWidth) / 2;
-    carousel.scrollTo({ left: Math.max(0, left), behavior: 'smooth' });
-  }, []);
-
-  // IntersectionObserver — tracks visibility for (a) gating the 4s dwell
-  // countdown, (b) pausing the 22s header drift + bg pulse CSS animations
-  // when off-screen (saves GPU/CPU across the feed, kills the reload-like
-  // jank seen while scrolling away from and back to this section).
+  // ── Section visibility (pauses decorative CSS animations off-screen) ─
   useEffect(() => {
     const el = sectionRef.current;
     if (!el) return;
-    let fired = false;
-    let mounted = true;
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (!mounted) return;
-        setIsVisible(entry.isIntersecting);
-        if (entry.isIntersecting && !fired) {
-          dwellTimerRef.current = setTimeout(() => {
-            fired = true;
-            countdownActiveRef.current = true;
-            setCountdownActive(true);
-            let currentIdx = 8;
-            setActiveIdx(currentIdx);
-            centerCardInCarousel(currentIdx);
-            const interval = setInterval(() => {
-              currentIdx -= 1;
-              if (currentIdx < 0) { clearInterval(interval); return; }
-              setActiveIdx(currentIdx);
-              centerCardInCarousel(currentIdx);
-            }, 2400);
-            countdownIntervalRef.current = interval;
-          }, 4000);
-        } else if (!entry.isIntersecting) {
-          if (dwellTimerRef.current) { clearTimeout(dwellTimerRef.current); dwellTimerRef.current = null; }
-        }
-      },
+    const obs = new IntersectionObserver(
+      ([entry]) => setIsVisible(entry.isIntersecting),
       { threshold: 0.35 }
     );
-    observer.observe(el);
-    return () => {
-      mounted = false;
-      observer.disconnect();
-      if (dwellTimerRef.current) clearTimeout(dwellTimerRef.current);
-      if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
-    };
-  }, [centerCardInCarousel]);
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, []);
 
-  // Subtitle flash — fires only on fast manual scroll of the carousel
-  const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
-    if (countdownActive || countdownActiveRef.current) return;
-    const now = Date.now();
-    const currentLeft = e.currentTarget.scrollLeft;
-    const prev = prevScrollRef.current;
-    prevScrollRef.current = { left: currentLeft, time: now };
-    if (!prev || scrollCooldownRef.current) return;
-    const dt = now - prev.time;
-    const dx = Math.abs(currentLeft - prev.left);
-    if (dt > 0 && dt < 150 && dx > 80) {
-      scrollCooldownRef.current = true;
-      if (subtitleTimerRef.current) clearTimeout(subtitleTimerRef.current);
-      subtitleTimerRef.current = setTimeout(() => {
-        setSubtitleKey(k => k + 1);
-        setTimeout(() => { scrollCooldownRef.current = false; }, 4200);
-      }, 280);
-    }
-  }, [countdownActive]);
+  // ── Per-card centered detection ────────────────────────────────────
+  // Picks the card with the highest intersection ratio (must be > 0.7
+  // to qualify) as "centered." Drives the per-card light beam.
+  useEffect(() => {
+    const carousel = carouselRef.current;
+    if (!carousel) return;
+    const ratios = new Map<number, number>();
+    const obs = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          const idx = cardRefs.current.findIndex((el) => el === entry.target);
+          if (idx === -1) return;
+          ratios.set(idx, entry.intersectionRatio);
+        });
+        let bestIdx: number | null = null;
+        let bestRatio = 0.7;
+        ratios.forEach((r, i) => {
+          if (r > bestRatio) { bestRatio = r; bestIdx = i; }
+        });
+        setCenteredIdx(bestIdx);
+      },
+      { root: carousel, threshold: [0, 0.5, 0.7, 0.9, 1] }
+    );
+    cardRefs.current.forEach((el) => el && obs.observe(el));
+    return () => obs.disconnect();
+  }, [tracks.length]);
 
   return (
     <div ref={sectionRef} className={`mb-8 py-8 relative ${isVisible ? '' : 'top10-paused'}`} style={{ background: 'linear-gradient(180deg, rgba(6,6,9,1) 0%, rgba(139,92,246,0.08) 15%, rgba(139,92,246,0.06) 50%, rgba(139,92,246,0.12) 85%, rgba(6,6,9,0.95) 100%)' }}>
@@ -1901,9 +1861,8 @@ const Top10Section = memo(({ tracks, onTrackPlay }: Top10SectionProps) => {
           />
         </div>
         <p
-          key={subtitleKey}
-          className={`text-[9px] tracking-widest uppercase mt-1${subtitleKey > 0 ? ' top10-subtitle-flash' : ''}`}
-          style={{ fontFamily: 'Satoshi, system-ui, sans-serif', fontWeight: 700, opacity: subtitleKey > 0 ? undefined : 0 }}
+          className="text-[9px] tracking-widest uppercase mt-1"
+          style={{ fontFamily: 'Satoshi, system-ui, sans-serif', fontWeight: 700, color: 'rgba(212,160,83,0.55)' }}
         >
           This Week · VOYO Certified
         </p>
@@ -1931,16 +1890,6 @@ const Top10Section = memo(({ tracks, onTrackPlay }: Top10SectionProps) => {
           /* will-change dropped — modern browsers GPU-promote opacity
              animations heuristically. Explicit pin kept the layer alive
              even when section was off-screen. */
-        }
-        @keyframes top10-subtitle-flash {
-          0%   { opacity: 0; transform: translateY(4px); }
-          22%  { opacity: 0.7; transform: translateY(0); }
-          60%  { opacity: 0.55; }
-          100% { opacity: 0; }
-        }
-        .top10-subtitle-flash {
-          animation: top10-subtitle-flash 4.2s ease forwards;
-          color: rgba(212,160,83,0.75);
         }
         /* Live dot — asymmetric breath cycle. Inhale is short and gentle
            (~30% of cycle, opacity rises from deep 0.12 to soft peak 0.68),
@@ -1972,27 +1921,34 @@ const Top10Section = memo(({ tracks, onTrackPlay }: Top10SectionProps) => {
            looked like reloads/glitches in neighboring sections. */
         .top10-paused .top10-header-scroll,
         .top10-paused .top10-bg-glow,
-        .top10-paused .top10-scroll-title,
-        .top10-paused .top10-subtitle-flash {
+        .top10-paused .top10-scroll-title {
           animation-play-state: paused !important;
         }
       `}</style>
       <div
         ref={carouselRef}
         className="flex gap-6 px-4 overflow-x-auto scrollbar-hide"
-        style={{ scrollSnapType: countdownActive ? 'none' : 'x proximity', overscrollBehaviorX: 'contain', paddingBottom: '60px', position: 'relative', zIndex: 1 }}
-        onScroll={handleScroll}
+        style={{ scrollSnapType: 'x proximity', overscrollBehaviorX: 'contain', paddingBottom: '60px', position: 'relative', zIndex: 1 }}
       >
         {tracks.map((track, index) => {
           const maxChars = 12;
           const titleNeedsScroll = track.title.length > maxChars;
           const artistNeedsScroll = track.artist.length > maxChars;
-          const isPodium = index < 3;
-          const numberFill = index === 0 ? '#FFD700' : index === 1 ? '#C0C0C0' : index === 2 ? '#CD7F32' : 'transparent';
-          const numberStroke = index === 0 ? '#B8860B' : index === 1 ? '#808080' : index === 2 ? '#8B4513' : '#9D4EDD';
-          const strokeWidth = isPodium ? '2px' : '3px';
-          const numberGlow = index === 0 ? '0 0 30px rgba(255, 215, 0, 0.5)' : index === 1 ? '0 0 20px rgba(192, 192, 192, 0.4)' : index === 2 ? '0 0 20px rgba(205, 127, 50, 0.4)' : '0 0 25px rgba(157, 78, 221, 0.5), 3px 3px 0 rgba(0,0,0,0.6)';
-          const isActive = countdownActive && activeIdx === index;
+          const isOne = index === 0;
+          const isCentered = centeredIdx === index;
+          // Only #1 gets the gold treatment. Voyo golden — the warm
+          // bronze-gold the rest of the app uses (#D4A053), not the
+          // bright canary yellow (#FFD700) that read as cliché.
+          const numberFill = isOne ? '#D4A053' : 'transparent';
+          const numberStroke = isOne ? '#A87B33' : '#9D4EDD';
+          const strokeWidth = isOne ? '2px' : '3px';
+          const numberGlow = isOne
+            ? '0 0 30px rgba(212, 160, 83, 0.5)'
+            : '0 0 25px rgba(157, 78, 221, 0.5), 3px 3px 0 rgba(0,0,0,0.6)';
+          // Light beam: always-on (subtle) for #1, fades in only when
+          // a non-#1 card is centered in the viewport.
+          const showLight = isOne || isCentered;
+          const lightOpacity = isOne ? 0.45 : (isCentered ? 0.85 : 0);
           return (
             <button
               key={track.id}
@@ -2010,10 +1966,6 @@ const Top10Section = memo(({ tracks, onTrackPlay }: Top10SectionProps) => {
                   zIndex: 1,
                   color: numberFill,
                   WebkitTextStroke: `${strokeWidth} ${numberStroke}`,
-                  // Static baseline glow only — the active-state energy is
-                  // carried by the radial-blur halo + box-shadow on the disc.
-                  // Animated text-shadow is never composited and was paying
-                  // a per-frame paint cost on Android mid-tier.
                   textShadow: numberGlow,
                   fontFamily: 'Arial Black, sans-serif',
                 }}
@@ -2021,29 +1973,26 @@ const Top10Section = memo(({ tracks, onTrackPlay }: Top10SectionProps) => {
                 {index + 1}
               </div>
               <div className="relative" style={{ zIndex: 2 }}>
-                <div className="absolute -inset-2 rounded-full" style={{
-                  opacity: isActive ? 0.85 : 0.35,
-                  background: index === 0
-                    ? 'radial-gradient(circle, rgba(255,215,0,0.85) 0%, rgba(212,160,83,0.4) 40%, transparent 70%)'
-                    : index === 1
-                      ? 'radial-gradient(circle, rgba(230,230,205,0.75) 0%, rgba(255,215,0,0.38) 40%, transparent 70%)'
-                      : 'radial-gradient(circle, rgba(139,92,246,0.85) 0%, rgba(157,78,221,0.42) 40%, transparent 70%)',
-                  filter: 'blur(12px)',
-                  transition: 'opacity 0.8s ease-in-out',
-                  willChange: 'opacity',
-                }} />
+                {/* Light beam halo — VOYO golden. Always on for #1,
+                    fades in for any other card when it scrolls to
+                    center of viewport. */}
+                {showLight && (
+                  <div className="absolute -inset-2 rounded-full" style={{
+                    opacity: lightOpacity,
+                    background: 'radial-gradient(circle, rgba(212,160,83,0.85) 0%, rgba(212,160,83,0.32) 40%, transparent 70%)',
+                    filter: 'blur(12px)',
+                    transition: 'opacity 600ms ease-in-out',
+                  }} />
+                )}
                 <div className="relative rounded-full overflow-hidden" style={{
                   width: '85px',
                   height: '85px',
-                  boxShadow: isActive
-                    ? index === 0
-                      ? '0 4px 18px rgba(0,0,0,0.5), 0 0 44px rgba(255,215,0,0.8), 0 0 80px rgba(255,215,0,0.38)'
-                      : index === 1
-                        ? '0 4px 18px rgba(0,0,0,0.5), 0 0 40px rgba(220,220,200,0.75), 0 0 72px rgba(255,215,0,0.35)'
-                        : '0 4px 18px rgba(0,0,0,0.5), 0 0 36px rgba(139,92,246,0.8), 0 0 64px rgba(139,92,246,0.4)'
-                    : '0 4px 18px rgba(0,0,0,0.45), 0 0 16px rgba(157,78,221,0.18)',
-                  transition: 'box-shadow 0.8s ease-in-out',
-                  willChange: 'box-shadow',
+                  boxShadow: isOne
+                    ? '0 4px 18px rgba(0,0,0,0.5), 0 0 32px rgba(212,160,83,0.55), 0 0 64px rgba(212,160,83,0.22)'
+                    : isCentered
+                      ? '0 4px 18px rgba(0,0,0,0.5), 0 0 28px rgba(212,160,83,0.45), 0 0 56px rgba(212,160,83,0.18)'
+                      : '0 4px 18px rgba(0,0,0,0.45)',
+                  transition: 'box-shadow 600ms ease-in-out',
                 }}>
                   <SmartImage
                     src={getThumb(track.trackId)}
