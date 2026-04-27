@@ -792,7 +792,7 @@ export const YouTubeIframe = memo(() => {
         top: 0,
         left: 0,
         width: '100vw',
-        height: '100vh',
+        height: '100dvh',
         maxWidth: '100dvw',
         maxHeight: '100dvh',
         zIndex: 40,

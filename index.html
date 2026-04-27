@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
 
     <!-- Viewport -->
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no, interactive-widget=resizes-content" />
 
     <!-- PWA -->
     <link rel="manifest" href="/manifest.json" />
@@ -83,7 +83,12 @@
     <link rel="preconnect" href="https://i.ytimg.com" crossorigin>
     <!-- Satoshi (primary — Wakanda-tier geometric sans) + Space Grotesk (display) + Italianno (luxury script). -->
     <link href="https://api.fontshare.com/v2/css?f[]=satoshi@300,400,500,600,700,900&display=swap" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Italianno&family=Fraunces:ital,opsz,wght@1,9..144,400;1,9..144,500&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+    <!-- Script + serif display faces use display=optional so a slow font fetch
+         never causes a layout-shift on first paint — if the face arrives
+         within ~100ms it's used, otherwise we stay on the system fallback for
+         the session. Eliminates Italianno's 25%-wider FOUT swap. -->
+    <link href="https://fonts.googleapis.com/css2?family=Italianno&family=Fraunces:ital,opsz,wght@1,9..144,400;1,9..144,500&display=optional" rel="stylesheet">
   </head>
   <body class="h-full bg-[#050508]">
     <div id="root" class="h-full"></div>

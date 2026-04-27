@@ -52,7 +52,42 @@
   --voyo-text-hint: rgba(255, 255, 255, 0.2);      /* Borders, dividers, hints */
 
   /* === VIEWPORT FIX === */
-  --vh: 1vh; /* Updated by JS for iOS browser chrome fix */
+  --vh: 1vh; /* Updated by JS in main.tsx — visualViewport.height * 0.01px */
+
+  /* === LANDSCAPE / NOTCH SAFE-AREA HORIZONTAL ===
+   * Surface agents: apply via `padding-inline: var(--safe-x)` on the root
+   * wrapper of each top-level page (HomeFeed, Library, ArtistPage, Search,
+   * DynamicIsland). Only one site (VoyoPortraitPlayer Take-Out chip) handles
+   * landscape notch today — this var standardises the math everywhere else. */
+  --safe-x: max(env(safe-area-inset-left), env(safe-area-inset-right));
+
+  /* === Z-INDEX SCALE (Phase 2) ===
+   * Reference scale ONLY — the 27 hardcoded `z-[NN]` literals across src
+   * (research §2D) are NOT migrated yet. New surfaces should pull from this
+   * scale; migration is a follow-up task. Documented values:
+   *   base    →  0   default content
+   *   chrome  → 30   header / bottom nav / bg layers
+   *   overlay → 50   sheets, drawers, search overlay
+   *   modal   → 70   modals (account menu, install banner, friend modal)
+   *   toast   → 90   toast notifications, badges, OYE bursts
+   *   system  → 100  splash, error boundary, update prompts */
+  --z-base: 0;
+  --z-chrome: 30;
+  --z-overlay: 50;
+  --z-modal: 70;
+  --z-toast: 90;
+  --z-system: 100;
+
+  /* === BACKDROP-BLUR TIERS (Phase 2) ===
+   * Three canonical blur strengths to retire the 132 ad-hoc backdrop-filter
+   * sites (research §2F). Surface agents migrate their blur values to:
+   *   --blur-chrome  bottom nav, header, light glass
+   *   --blur-modal   modals, drawers, comments, search input
+   *   --blur-hero    full-bleed hero glass / album art glass
+   * Mobile clamp at @media (max-width: 768px) further reduces these. */
+  --blur-chrome: 8px;
+  --blur-modal: 16px;
+  --blur-hero: 28px;
 }
 
 /* === Tailwind v4 theme tokens (bridges CSS vars into utility classes) === */
@@ -68,6 +103,23 @@
     margin: 0;
     padding: 0;
     box-sizing: border-box;
+    /* Kill the iOS grey tap-flash globally. Previously only one site
+       (CardHoldActions) had this — every other tappable showed the
+       default Safari grey rectangle on touch. */
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* iOS zooms the viewport on focus when a form-control's font-size is
+     < 16px. Force the floor on input/textarea/select only — visual font
+     sizing on non-input elements stays controlled by Tailwind text-*
+     classes. Surfaces that intentionally render small input text
+     (Search 15px, Library 14px, Moments 13px, DynamicIsland 12px) still
+     show their visual size; only the *computed* font-size on the input
+     is clamped to 16px so iOS no longer zooms. */
+  input,
+  textarea,
+  select {
+    font-size: max(16px, 1rem);
   }
 }
 
@@ -626,6 +678,24 @@ input[type="range"].slider-thumb::-moz-range-thumb {
   .animate-float,
   .pulse-glow,
   .playing-indicator {
+    animation: none !important;
+  }
+
+  /* Phase-2 extension — animation-name targeted disables.
+   * The wildcard `*` rule above already collapses durations to 0.01ms,
+   * but several keyframes ALSO live inline in components (top10-marquee
+   * in HomeFeed, voyo-anchored-halo-breath in AnchoredTaleHeader) and
+   * named animations need an explicit `animation: none` so the keyframe
+   * never enters the paint queue at all. Especially important for the
+   * box-shadow / filter-blur loops which can't be cheaply collapsed. */
+  *[style*="voyo-iframe-pulse"],
+  *[style*="voyo-oye-bubble"],
+  *[style*="voyo-orb-pulse"],
+  *[style*="voyo-nextup-pulse"],
+  *[style*="voyo-charging-pulse"],
+  *[style*="top10-marquee"],
+  *[style*="voyo-anchored-halo-breath"],
+  *[style*="glow-pulse"] {
     animation: none !important;
   }
 }

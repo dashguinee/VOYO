@@ -1097,11 +1097,13 @@ function App() {
                   V00 (DashAuthBadge) removed — identity surfaces inside
                   the AccountMenu now, not as a badge. */}
               <div className="flex items-center gap-2.5 pr-1">
-                {/* Search — textured pill */}
+                {/* Search — textured pill. Visual icon stays 17px; hit-area is
+                    bumped to the 44×44 floor via min-w/min-h + flex centering
+                    so the tap zone matches Apple HIG and Android M3 minimums. */}
                 <button
                   aria-label="Search"
                   onClick={() => setIsSearchOpen(true)}
-                  className="p-2 rounded-full active:scale-95 transition-transform"
+                  className="p-2 rounded-full active:scale-95 transition-transform inline-flex items-center justify-center min-w-[44px] min-h-[44px]"
                   style={{
                     background: 'linear-gradient(135deg, rgba(180,180,200,0.10) 0%, rgba(139,92,246,0.16) 100%)',
                     border: '1px solid rgba(255,255,255,0.08)',
@@ -1115,9 +1117,10 @@ function App() {
                   <Search className="w-[17px] h-[17px] text-white/75" strokeWidth={2} />
                 </button>
 
-                {/* Profile — smaller + faded + ambient bronze-ivory dot */}
+                {/* Profile — smaller + faded + ambient bronze-ivory dot.
+                    Hit-area bumped to 44×44; visual glyph stays 15px. */}
                 <button
-                  className="relative p-1.5 rounded-full active:scale-95 transition-transform"
+                  className="relative p-1.5 rounded-full active:scale-95 transition-transform inline-flex items-center justify-center min-w-[44px] min-h-[44px]"
                   aria-label="Profile"
                   onClick={() => setIsProfileOpen(true)}
                 >

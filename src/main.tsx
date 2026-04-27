@@ -17,6 +17,23 @@ installErrorReporter();
 // written as event_type='vital'. Lets us watch p75 perf on real devices.
 installWebVitals();
 
+// ── --vh JS bridge ──
+// index.css declares `--vh: 1vh` as a viewport-fix token. iOS Safari's
+// `100vh` includes browser chrome that retracts on scroll → layout jumps.
+// Set --vh to 1% of the *real* visible height so anything using
+// `calc(var(--vh) * 100)` matches the rendered viewport. visualViewport
+// (when available) is the source of truth for keyboard / split-screen.
+{
+  const setVh = () => {
+    const h = window.visualViewport?.height ?? window.innerHeight;
+    document.documentElement.style.setProperty('--vh', `${h * 0.01}px`);
+  };
+  setVh();
+  window.addEventListener('resize', setVh, { passive: true });
+  window.addEventListener('orientationchange', setVh, { passive: true });
+  window.visualViewport?.addEventListener('resize', setVh, { passive: true });
+}
+
 // ── PWA rotation safety net ──
 // Manifest sets "orientation": "any" and no code locks orientation today,
 // but a stale WebAPK (built when the manifest was "portrait") can keep the
