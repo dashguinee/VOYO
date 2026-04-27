@@ -1165,10 +1165,10 @@ const ExpandVideoButton = memo(({ onClick, isIframeAudio, isMiniPlayerActive, co
       `}</style>
       <button
         onClick={handleClick}
-        className={`absolute top-3 right-3 z-30 rounded-full backdrop-blur-sm border text-white font-medium flex items-center active:scale-95 ${
+        className={`absolute top-3 right-3 z-30 rounded-full backdrop-blur-sm border text-white font-medium flex items-center active:scale-95 min-h-[44px] ${
           isDimmed
-            ? `px-2 py-1 gap-1 text-[10px] min-h-[36px] ${borderClassDim}`
-            : `px-3 py-1.5 gap-1.5 text-xs min-h-[44px] ${borderClass}`
+            ? `px-2 py-1 gap-1 text-[10px] ${borderClassDim}`
+            : `px-3 py-1.5 gap-1.5 text-xs ${borderClass}`
         }`}
         style={{
           background: isOrange
@@ -1192,11 +1192,19 @@ const ExpandVideoButton = memo(({ onClick, isIframeAudio, isMiniPlayerActive, co
                   : 'none'),
           opacity: parked ? 0 : (extraFaded ? 0.8 : 1),
           pointerEvents: parked ? 'none' : 'auto',
+          // Single 700ms easing for visual props so the chip morph stays
+          // coherent (no wobble between dot/text/box). Opacity fade is
+          // longer (1.4s) on purpose — the parking/extra-fade decay is a
+          // slower presence cue, separate from the morph beat.
+          // box-shadow is suppressed during 'morphing' to avoid
+          // competing with the keyframe (see voyo-takeout-morph-pulse).
           transition: [
             'padding 700ms cubic-bezier(0.16, 1, 0.3, 1)',
-            'background 900ms cubic-bezier(0.16, 1, 0.3, 1)',
-            'box-shadow 900ms cubic-bezier(0.16, 1, 0.3, 1)',
-            'border-color 900ms cubic-bezier(0.16, 1, 0.3, 1)',
+            'background 700ms cubic-bezier(0.16, 1, 0.3, 1)',
+            phase === 'morphing'
+              ? 'box-shadow 0ms linear'
+              : 'box-shadow 700ms cubic-bezier(0.16, 1, 0.3, 1)',
+            'border-color 700ms cubic-bezier(0.16, 1, 0.3, 1)',
             'font-size 700ms cubic-bezier(0.16, 1, 0.3, 1)',
             'opacity 1.4s cubic-bezier(0.16, 1, 0.3, 1)',
             'color 700ms cubic-bezier(0.16, 1, 0.3, 1)',
@@ -1282,7 +1290,10 @@ const BottomTakeOutChip = memo(({ portalProgress }: { portalProgress: number }) 
         zIndex: 70,
         opacity: decayed ? 0.07 : riseProgress,
         transform: `translateY(${(1 - riseProgress) * 36}px)`,
-        pointerEvents: riseProgress > 0.5 ? 'auto' : 'none',
+        // Once decayed, the chip is a 7%-opacity ghost — accidental tap
+        // would silently launch PiP. Gate pointerEvents on BOTH risen
+        // AND not-decayed so the ghost is non-interactive.
+        pointerEvents: riseProgress > 0.5 && !decayed ? 'auto' : 'none',
         transition: decayed
           ? 'opacity 1.6s cubic-bezier(0.16, 1, 0.3, 1)'
           : 'opacity 220ms ease-out, transform 360ms cubic-bezier(0.16, 1, 0.3, 1)',
@@ -1322,7 +1333,12 @@ const RightToolbar = memo(({ onSettingsClick }: { onSettingsClick: () => void })
 
   return (
     <div
-      className="absolute right-6 top-[42%] -translate-y-1/2 z-50 flex flex-col gap-3"
+      // Vertically centered (was top-[42%] which shifted the column up by
+      // ~8% of parent — on short viewports that landed buttons inside the
+      // BigCenterCard. top-1/2 is consistent across 667px-915px viewports.
+      // right-edge respects safe-area-inset-right for landscape notch.
+      className="absolute top-1/2 -translate-y-1/2 z-50 flex flex-col gap-3"
+      style={{ right: 'max(1.5rem, env(safe-area-inset-right, 1.5rem))' }}
     >
       {/* Like Button — purple when active */}
       <button
@@ -1334,17 +1350,15 @@ const RightToolbar = memo(({ onSettingsClick }: { onSettingsClick: () => void })
         }`}
         style={{
           background: isLiked ? 'rgba(139, 92, 246, 0.25)' : 'rgba(28, 28, 35, 0.65)',
+          // Was an absolute -z-10 inset blur child — Safari clips behind
+          // parent compositing context, often invisible. Render the glow
+          // as a box-shadow on the button itself so it's always painted.
+          boxShadow: isLiked ? '0 0 14px rgba(139,92,246,0.35)' : undefined,
         }}
         aria-label={isLiked ? 'Unlike this track' : 'Like this track'}
         title={isLiked ? 'Unlike' : 'Like'}
       >
         <Heart size={16} className={isLiked ? 'text-purple-400 fill-purple-400' : 'text-white/70'} />
-        {isLiked && (
-          <div
-            className="absolute inset-0 rounded-full blur-md -z-10"
-            style={{ background: 'rgba(139, 92, 246, 0.2)' }}
-          />
-        )}
       </button>
 
       {/* Boost Button - Lightning Power */}
@@ -5182,11 +5196,18 @@ export const VoyoPortraitPlayer = ({
         style={{ height: 'calc(100% - 264px)' }}
       >
 
-      {/* JAM CHIP — shown when visitor is locked to a host's verse */}
+      {/* JAM CHIP — shown when visitor is locked to a host's verse.
+          Fades with portalProgress (matches the bubbles row at line ~5227)
+          so the chip doesn't sit on top of Layer C content during scroll. */}
       {jammingWith && (
         <div
           className="absolute top-0 left-0 right-0 z-30 flex justify-center"
-          style={{ paddingTop: 'calc(max(0.5rem, env(safe-area-inset-top)) + 8px)' }}
+          style={{
+            paddingTop: 'calc(max(0.5rem, env(safe-area-inset-top)) + 8px)',
+            opacity: Math.max(0, 1 - Math.max(0, (portalProgress - 0.55) / 0.35)),
+            pointerEvents: portalProgress > 0.7 ? 'none' : 'auto',
+            transition: 'opacity 0.2s ease-out',
+          }}
         >
           <div
             className="flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-semibold"
@@ -5222,7 +5243,12 @@ export const VoyoPortraitPlayer = ({
       <div
         className="px-3 flex items-start gap-3 z-20 h-[14%]"
         style={{
-          paddingTop: 'calc(max(1.25rem, env(safe-area-inset-top)) + 36px)',
+          // Pick the LARGER of (safe-area+8px) or (1.25rem + 36px), not
+          // their sum. On notched iPhones this used to stack 47+20+36 ≈
+          // 103px which pushed the bubbles below the visible card.
+          // ExpandVideoButton at top-3 still has clearance via the larger
+          // of the two values.
+          paddingTop: 'max(calc(env(safe-area-inset-top, 0px) + 8px), 56px)',
           // Step 2 (portalProgress > 0.55) fades the bubbles out.
           opacity: Math.max(0, 1 - Math.max(0, (portalProgress - 0.55) / 0.35)),
           transform: `translateY(${Math.max(0, (portalProgress - 0.55) / 0.35) * -16}px)`,
@@ -5245,7 +5271,10 @@ export const VoyoPortraitPlayer = ({
           <div
             className="flex gap-3 overflow-x-auto scrollbar-hide"
             style={{
-              scrollSnapType: 'x mandatory',
+              // Proximity (not mandatory) — matches HomeFeed rails so
+              // small horizontal gestures let the user peek at the next
+              // item without forced snap.
+              scrollSnapType: 'x proximity',
               pointerEvents: topRowActive === 'queue' ? 'none' : 'auto',
             }}
             onScroll={() => activateTopRow('history')}
@@ -5279,18 +5308,20 @@ export const VoyoPortraitPlayer = ({
           <div
             className="flex gap-3 overflow-x-auto scrollbar-hide flex-row-reverse"
             style={{
-              scrollSnapType: 'x mandatory',
+              scrollSnapType: 'x proximity',
               pointerEvents: topRowActive === 'history' ? 'none' : 'auto',
             }}
             onScroll={() => activateTopRow('queue')}
           >
-            {/* Add button always visible at end */}
+            {/* Add button always visible at end. Was bg-white/5 + border
+                white/5 — nearly invisible on dark canvas. Bumped border to
+                purple/20 so empty-queue users can see the affordance. */}
             <button
               onClick={onSearch}
-              className="flex-shrink-0 w-[70px] h-[70px] rounded-2xl bg-white/5 border border-white/5 flex items-center justify-center hover:bg-white/10 transition-colors"
+              className="flex-shrink-0 w-[70px] h-[70px] rounded-2xl bg-white/10 border border-purple-500/20 flex items-center justify-center hover:bg-white/15 transition-colors"
               style={{ scrollSnapAlign: 'start' }}
             >
-              <Plus size={24} className="text-gray-500" />
+              <Plus size={24} className="text-gray-400" />
             </button>
 
             {queueTracks.length > 0 ? (
@@ -5314,10 +5345,13 @@ export const VoyoPortraitPlayer = ({
           oyeBarBehavior === 'fade' ? 'pt-12' : 'pt-10'
         }`}
         style={{
-          transform: 'translateY(28px)',
           // pan-y: browser handles vertical scroll (portal reveal), JS handles
           // horizontal (card drag). The pointer handlers LIVE HERE on the center
           // section, not on the outer container (which has 'manipulation').
+          // (Was translateY(28px) — pushed artwork below visual center on
+          // short viewports like iPhone SE. justify-end already places the
+          // hero at the bottom of Layer A; the extra 28 served no purpose
+          // on tall viewports either.)
           touchAction: 'pan-y',
         }}
         onPointerDown={handleCanvasPointerDown}
@@ -5469,7 +5503,11 @@ export const VoyoPortraitPlayer = ({
         {/* MINIMAL PROGRESS - Fades when idle, only current time + red dot */}
         {/* Uses isolated components to prevent full re-renders */}
         <div
-          className="w-full max-w-[180px] mt-2 mb-4 px-2 z-30"
+          // 180px was cramped on Pixel-7 (412px = 43% of width). Clamp
+          // up to 220 / 60vw — reads better on wider phones, still
+          // tight on iPhone SE (375 × 60% = 225, capped at 220).
+          className="w-full mt-2 mb-4 px-2 z-30"
+          style={{ maxWidth: 'min(220px, 60vw)' }}
         >
           <div className="flex items-center gap-2">
             {/* Current Time only - isolated component */}
@@ -5570,7 +5608,10 @@ export const VoyoPortraitPlayer = ({
           // ramp, flashing a white intermediate frame. Opacity carries
           // the fade alone now; adequate visual recede without the
           // compositor cost.
-          pointerEvents: portalProgress > 0.55 ? 'none' : 'auto',
+          // Gate at 0.4 (was 0.55) to match perceptual fade — by 0.4
+          // Layer B is already ~72% opacity but visually receding;
+          // taps would route THROUGH a dim layer otherwise.
+          pointerEvents: portalProgress > 0.4 ? 'none' : 'auto',
           transform: `translateY(${portalProgress * -10}px) translateZ(0)`,
           transition: 'opacity 0.18s ease-out, transform 0.18s ease-out',
           background: 'linear-gradient(180deg, rgba(15,15,22,0.92) 0%, rgba(8,8,10,0.97) 28%, rgba(8,8,10,0.99) 100%)',
@@ -5718,14 +5759,26 @@ export const VoyoPortraitPlayer = ({
                 : '0 0 8px rgba(212,160,83,0.2)'
                 }}
           >
+            {/* DISCOVER glyph + GPU-promoted halo. Was a text-shadow
+                (paints every transition tick of the parent box-shadow).
+                Replaced with a sibling div blur-glow on its own
+                composite layer (translate3d) so the parent's
+                isDiscoveryBeltActive box-shadow toggle no longer
+                invalidates the text paint cache. */}
             <span
-              className="text-[11px] font-black tracking-[0.15em] uppercase"
-              style={{
-                color: '#D4A053',
-                textShadow: '0 0 8px rgba(212,160,83,0.8), 0 0 16px rgba(212,160,83,0.5)'
-                }}
+              className="relative text-[11px] font-black tracking-[0.15em] uppercase"
+              style={{ color: '#D4A053' }}
             >
-              DISCOVER
+              <span
+                aria-hidden
+                className="absolute inset-0 pointer-events-none"
+                style={{
+                  background: 'radial-gradient(ellipse at center, rgba(212,160,83,0.55) 0%, rgba(212,160,83,0) 70%)',
+                  transform: 'translate3d(0,0,0)',
+                  filter: 'blur(6px)',
+                }}
+              />
+              <span style={{ position: 'relative' }}>DISCOVER</span>
             </span>
             {isDiscoveryBeltActive && (
               <span
@@ -5759,7 +5812,11 @@ export const VoyoPortraitPlayer = ({
               transition: 'flex-basis 0.42s cubic-bezier(0.16, 1, 0.3, 1)',
             }}
           >
-            {/* Rust Portal Line (left edge of HOT zone) — deep ember, premium */}
+            {/* Rust Portal Line (left edge of HOT zone) — deep ember, premium.
+                Hit area was 20×80 (w-5 h-20) — below the 44px floor.
+                Bumped to w-11 (44px) with the visible line + glow + arrow
+                kept inside an inner 20-wide wrapper so the visual rhythm
+                is unchanged. */}
             <button
               onClick={() => {
                 setHotScrollTrigger(prev => prev + 1);
@@ -5767,37 +5824,39 @@ export const VoyoPortraitPlayer = ({
                 setHotPortalGlow(true);
                 setTimeout(() => setHotPortalGlow(false), 800);
                 }}
-              className="flex-shrink-0 w-5 h-20 relative z-20 ml-1 touch-manipulation"
+              className="flex-shrink-0 w-11 h-20 relative z-20 touch-manipulation flex items-center justify-center"
               aria-label="Scroll HOT belt outward"
             >
-              {/* Portal line — deep rust gradient */}
-              <div
-                className="h-full w-1.5 mx-auto rounded-full"
-                style={{
-                  background: hotPortalGlow
-                    ? 'linear-gradient(180deg, #D8825A, #B54A2E, #D8825A)'
-                    : 'linear-gradient(180deg, rgba(181,74,46,0.3), rgb(181,74,46), rgba(181,74,46,0.3))',
-                  boxShadow: hotPortalGlow ? '0 0 30px #B54A2E' : '0 0 10px #B54A2E',
-                }}
-              />
-              {/* Ambient glow - always visible */}
-              <div
-                className={`absolute inset-0 blur-lg transition-opacity duration-300 ${hotPortalGlow ? 'opacity-100' : 'opacity-40'}`}
-                style={{ background: '#B54A2E' }}
-              />
-              {/* Pulse ring on glow */}
-                {hotPortalGlow && (
-                  <div
-                    className="absolute inset-0 rounded-full border-2"
-                    style={{ borderColor: '#D8825A' }}
-                  />
-                )}
-              
-              {/* Arrow hint */}
-              <div
-                className="absolute inset-0 flex items-center justify-center text-xs"
-              >
-                ‹
+              <div className="relative w-5 h-full">
+                {/* Portal line — deep rust gradient */}
+                <div
+                  className="h-full w-1.5 mx-auto rounded-full"
+                  style={{
+                    background: hotPortalGlow
+                      ? 'linear-gradient(180deg, #D8825A, #B54A2E, #D8825A)'
+                      : 'linear-gradient(180deg, rgba(181,74,46,0.3), rgb(181,74,46), rgba(181,74,46,0.3))',
+                    boxShadow: hotPortalGlow ? '0 0 30px #B54A2E' : '0 0 10px #B54A2E',
+                  }}
+                />
+                {/* Ambient glow - always visible */}
+                <div
+                  className={`absolute inset-0 blur-lg transition-opacity duration-300 ${hotPortalGlow ? 'opacity-100' : 'opacity-40'}`}
+                  style={{ background: '#B54A2E' }}
+                />
+                {/* Pulse ring on glow */}
+                  {hotPortalGlow && (
+                    <div
+                      className="absolute inset-0 rounded-full border-2"
+                      style={{ borderColor: '#D8825A' }}
+                    />
+                  )}
+
+                {/* Arrow hint */}
+                <div
+                  className="absolute inset-0 flex items-center justify-center text-xs"
+                >
+                  ‹
+                </div>
               </div>
             </button>
 
@@ -5861,13 +5920,19 @@ export const VoyoPortraitPlayer = ({
               className="relative w-14 h-14 rounded-full flex flex-col items-center justify-center"
               style={{
                 background: 'radial-gradient(circle at center, #1a1a2e 0%, #0f0f16 100%)',
+                // All four states share the SAME 4-layer shadow stack
+                // (rust-side, bronze-side, purple-halo, inset-purple) so
+                // CSS can interpolate between them without snapping. Unused
+                // layers fade via alpha=0; restraint > stacking pseudo-orbs.
+                // Was 4 different stacks of 1-3 layers — Safari snapped on
+                // the cubeDockOpen → beltActive transition.
                 boxShadow: cubeDockOpen
-                  ? '0 0 30px rgba(139,92,246,0.55), 0 0 60px rgba(212,160,83,0.25), inset 0 0 20px rgba(139,92,246,0.15)'
+                  ? '-8px 0 25px rgba(181,74,46,0), 8px 0 25px rgba(212,160,83,0.25), 0 0 30px rgba(139,92,246,0.55), inset 0 0 20px rgba(139,92,246,0.15)'
                   : cubeHolding
-                  ? '0 0 22px rgba(139,92,246,0.45), 0 0 40px rgba(212,160,83,0.18)'
+                  ? '-8px 0 25px rgba(181,74,46,0), 8px 0 25px rgba(212,160,83,0.18), 0 0 22px rgba(139,92,246,0.45), inset 0 0 20px rgba(139,92,246,0)'
                   : (isHotBeltActive || isDiscoveryBeltActive)
-                  ? '-8px 0 25px rgba(181,74,46,0.5), 8px 0 25px rgba(212,160,83,0.5), 0 0 20px rgba(139,92,246,0.3)'
-                  : '0 0 12px rgba(139,92,246,0.15)',
+                  ? '-8px 0 25px rgba(181,74,46,0.5), 8px 0 25px rgba(212,160,83,0.5), 0 0 20px rgba(139,92,246,0.3), inset 0 0 20px rgba(139,92,246,0)'
+                  : '-8px 0 25px rgba(181,74,46,0), 8px 0 25px rgba(212,160,83,0), 0 0 12px rgba(139,92,246,0.15), inset 0 0 20px rgba(139,92,246,0)',
                 transform: cubeDockOpen ? 'scale(1.08)' : cubeHolding ? 'scale(1.04)' : 'scale(1)',
                 transition: 'transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.4s ease',
               }}
@@ -5882,7 +5947,9 @@ export const VoyoPortraitPlayer = ({
                   }}
               />
 
-              {/* Active: Outer rotating ring — rust → purple → bronze */}
+              {/* Active: Outer ring — rust → purple → bronze (static).
+                  Restraint: no rotation animation; the gradient itself
+                  carries the meaning. */}
                 {(isHotBeltActive || isDiscoveryBeltActive) && (
                   <div
                     className="absolute inset-[-4px] rounded-full border-2 border-transparent pointer-events-none"
@@ -5948,7 +6015,11 @@ export const VoyoPortraitPlayer = ({
               scrollOutwardTrigger={discoveryScrollTrigger}
             />
 
-            {/* Bronze Portal Line (right edge of DISCOVERY zone) - CLICKABLE SCROLL CONTROL */}
+            {/* Bronze Portal Line (right edge of DISCOVERY zone) - CLICKABLE SCROLL CONTROL.
+                Hit area was 20×80 (w-5 h-20) — below the 44px floor.
+                Bumped to w-11 (44px) with the visible line + glow + arrow
+                kept inside an inner 20-wide wrapper so the visual rhythm
+                is unchanged. */}
             <button
               onClick={() => {
                 setDiscoveryScrollTrigger(prev => prev + 1);
@@ -5957,35 +6028,37 @@ export const VoyoPortraitPlayer = ({
                 setDiscoveryPortalGlow(true);
                 setTimeout(() => setDiscoveryPortalGlow(false), 800);
                 }}
-              className="flex-shrink-0 w-5 h-20 relative z-20 mr-1 touch-manipulation"
+              className="flex-shrink-0 w-11 h-20 relative z-20 touch-manipulation flex items-center justify-center"
               aria-label="Scroll DISCOVERY belt outward"
             >
-              {/* Portal line — African Gold Bronze */}
-              <div
-                className="h-full w-1.5 mx-auto rounded-full"
-                style={{
-                  background: discoveryPortalGlow
-                    ? 'linear-gradient(180deg, #E6B865, #D4A053, #E6B865)'
-                    : 'linear-gradient(180deg, rgba(212,160,83,0.3), rgb(212,160,83), rgba(212,160,83,0.3))',
-                  boxShadow: discoveryPortalGlow ? '0 0 30px #D4A053' : '0 0 10px #D4A053',
-                }}
-              />
-              {/* Ambient glow - always visible */}
-              <div className={`absolute inset-0 blur-lg transition-opacity duration-300 ${discoveryPortalGlow ? 'opacity-100' : 'opacity-40'}`} style={{ background: '#D4A053' }} />
-              {/* Pulse ring on glow */}
+              <div className="relative w-5 h-full">
+                {/* Portal line — African Gold Bronze */}
+                <div
+                  className="h-full w-1.5 mx-auto rounded-full"
+                  style={{
+                    background: discoveryPortalGlow
+                      ? 'linear-gradient(180deg, #E6B865, #D4A053, #E6B865)'
+                      : 'linear-gradient(180deg, rgba(212,160,83,0.3), rgb(212,160,83), rgba(212,160,83,0.3))',
+                    boxShadow: discoveryPortalGlow ? '0 0 30px #D4A053' : '0 0 10px #D4A053',
+                  }}
+                />
+                {/* Ambient glow - always visible */}
+                <div className={`absolute inset-0 blur-lg transition-opacity duration-300 ${discoveryPortalGlow ? 'opacity-100' : 'opacity-40'}`} style={{ background: '#D4A053' }} />
+                {/* Pulse ring on glow */}
 
-                {discoveryPortalGlow && (
-                  <div
-                    className="absolute inset-0 rounded-full border-2"
-                    style={{ borderColor: '#E6B865' }}
-                  />
-                )}
-              
-              {/* Arrow hint */}
-              <div
-                className="absolute inset-0 flex items-center justify-center text-xs"
-              >
-                ›
+                  {discoveryPortalGlow && (
+                    <div
+                      className="absolute inset-0 rounded-full border-2"
+                      style={{ borderColor: '#E6B865' }}
+                    />
+                  )}
+
+                {/* Arrow hint */}
+                <div
+                  className="absolute inset-0 flex items-center justify-center text-xs"
+                >
+                  ›
+                </div>
               </div>
             </button>
           </div>
