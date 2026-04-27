@@ -1015,19 +1015,18 @@ const AfricanVibesVideoCard = memo(({
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [isLoaded, setIsLoaded] = useState(false);
   const cardRef = useRef<HTMLButtonElement>(null);
-  // Lifecycle state — see header comment.
+  // Single stable signal: card is in viewport ± 100px buffer.
+  // Drops the v724-727 multi-threshold ratio approach (isVisible /
+  // isFullyVisible / hasBeenFullyVisible) — those had edge-jitter at
+  // threshold boundaries from subpixel rounding mid-scroll. Now there's
+  // one boolean: in zone or not. Cleaner, stabler, no threshold races.
   const [isInPlayZone, setIsInPlayZone] = useState(false);
-  const [isVisible, setIsVisible] = useState(false);
-  // Distinct from isVisible: ratio ≥ 0.95. Drives the 1s anticipation
-  // gate below.
-  const [isFullyVisible, setIsFullyVisible] = useState(false);
-  // Sticky-true after the card has been continuously fully-visible
-  // (ratio ≥ 0.95) AND iframe-ready for 1s. The 1s wait is the
-  // anticipation buffer: the card has to settle in view AND have a
-  // playing video before we commit to painting it. Fast scrolls don't
-  // satisfy the timer, so cards passing through quickly stay as static
-  // covers (no flicker). Once true, sticky for the rest of this mount.
-  const [hasBeenFullyVisible, setHasBeenFullyVisible] = useState(false);
+  // Sticky-true 1s after iframe mount — the anticipation gate. Doesn't
+  // care about viewport ratio, just elapsed time from mount. By the
+  // time a card is visible, some/all of its 1s has elapsed because it
+  // mounted in the play-zone buffer (off-screen). Buffer-at-position-3
+  // effect emerges naturally without explicit ratio detection.
+  const [timerExpired, setTimerExpired] = useState(false);
   // Register with parent on mount so it can observe + pick activeIdx.
   useEffect(() => {
     registerRef(idx, cardRef.current);
@@ -1064,12 +1063,11 @@ const AfricanVibesVideoCard = memo(({
     return `https://www.youtube.com/embed/${youtubeId}?${params.toString()}`;
   }, [youtubeId]);
 
-  // ── Play zone (mount gate) ─────────────────────────────────────────
-  // Viewport + 100px buffer ≈ 1 card-width. The off-screen "warming
-  // slot" — when a card is roughly 1 card-width away from view, its
-  // iframe mounts and starts bootstrapping. By the time it scrolls
-  // into the rightmost-visible position, it's been bootstrapping for
-  // a beat already.
+  // ── Single stable IO (mount gate + dim driver) ─────────────────────
+  // Viewport + 100px buffer. One threshold (0 — intersecting/not), one
+  // boolean output. No ratio computations, no multi-threshold spam, no
+  // jitter at the 0.95 boundary. This is the only viewport signal the
+  // card uses.
   useEffect(() => {
     const card = cardRef.current;
     const root = containerRef.current;
@@ -1082,49 +1080,25 @@ const AfricanVibesVideoCard = memo(({
     return () => obs.disconnect();
   }, [containerRef]);
 
-  // ── Visibility + fully-visible (drives buffer/dim states) ──────────
-  // Multi-threshold IO. isVisible drives the 90% dim. isFullyVisible
-  // (ratio ≥ 0.95) feeds the 1s anticipation gate below.
+  // ── 1s anticipation gate (mount-based, no viewport detection) ──────
+  // Timer starts the moment the iframe mounts (`shouldMountIframe`
+  // flips true). Cards mount when they enter the play zone, which is
+  // viewport + 100px buffer — so by the time a card is fully visible,
+  // some of the 1s has typically elapsed already (depending on scroll
+  // speed). The "buffer at position 3" effect emerges naturally: a
+  // card just entering view has used less of its 1s timer, a card
+  // settling into the middle has used more. No ratio detection needed.
   useEffect(() => {
-    const card = cardRef.current;
-    const root = containerRef.current;
-    if (!card || !root) return;
-    const obs = new IntersectionObserver(
-      ([entry]) => {
-        setIsVisible(entry.isIntersecting);
-        setIsFullyVisible(entry.intersectionRatio >= 0.95);
-      },
-      { root, threshold: [0, 0.5, 0.95, 1] }
-    );
-    obs.observe(card);
-    return () => obs.disconnect();
-  }, [containerRef]);
-
-  // ── 1s anticipation gate (decoupled from isReady) ──────────────────
-  // Timer runs from the moment the card is fully visible. Doesn't wait
-  // for `isReady` to start counting — that lets the anticipation OVERLAP
-  // with YT bootstrap instead of stacking after it. Net effect: a card
-  // with a fast bootstrap (e.g. 300ms) used to wait 300ms + 1000ms =
-  // 1.3s; now it just waits 1s. A card with a slow bootstrap (e.g.
-  // 1500ms) used to wait 1500ms + 1000ms = 2.5s; now it waits 1.5s
-  // (capped by `isReady` in the paint condition below). Every card
-  // shows the bg-black wrapper for at LEAST 1s, paints whenever both
-  // conditions are met. Tighter, more consistent visual rhythm.
-  //
-  // wasSeenBefore + markSeen plumbing is kept dormant (see v727) — not
-  // read here so cards visible at the same moment all hit the same beat.
-  useEffect(() => {
-    if (hasBeenFullyVisible) return;
-    if (!isFullyVisible) return;
-    const t = setTimeout(() => setHasBeenFullyVisible(true), 1000);
+    if (!shouldMountIframe) return;
+    const t = setTimeout(() => setTimerExpired(true), 1000);
     return () => clearTimeout(t);
-  }, [isFullyVisible, hasBeenFullyVisible]);
+  }, [shouldMountIframe]);
 
   // Persist "seen" status at the carousel level — kept for potential
   // future use even though the anticipation gate above ignores it now.
   useEffect(() => {
-    if (hasBeenFullyVisible) markSeen(track.trackId);
-  }, [hasBeenFullyVisible, track.trackId, markSeen]);
+    if (timerExpired && isReady) markSeen(track.trackId);
+  }, [timerExpired, isReady, track.trackId, markSeen]);
 
   // ── Mount lifecycle: tight focus, 300ms grace ──────────────────────
   // Mount when in play zone (strictly visible + 50px buffer). Unmount
@@ -1140,14 +1114,13 @@ const AfricanVibesVideoCard = memo(({
     return () => clearTimeout(t);
   }, [isInPlayZone]);
 
-  // Reset load + ready + fully-visible flags on unmount so the next
-  // mount cycle starts clean (cover-first, then snap to video once the
-  // card has been fully visible AND iframe is ready).
+  // Reset all per-mount state when the iframe unmounts so the next
+  // mount cycle starts clean.
   useEffect(() => {
     if (!shouldMountIframe) {
       setIsLoaded(false);
       setIsReady(false);
-      setHasBeenFullyVisible(false);
+      setTimerExpired(false);
     }
   }, [shouldMountIframe]);
 
@@ -1211,10 +1184,9 @@ const AfricanVibesVideoCard = memo(({
       style={{
         width: 'clamp(86px, 25vw, 110px)',
         aspectRatio: '95 / 142',
-        // Off-viewport cards dim to 90%. In-viewport cards stay at 100%.
-        // No transition — clean snap, no animation across multiple cards
-        // during scroll (which used to read as flicker).
-        opacity: isVisible ? 1 : 0.9,
+        // In-zone (visible + 100px buffer): 100%. Far off-screen: 90%.
+        // No transition — clean snap, no animation across cards.
+        opacity: isInPlayZone ? 1 : 0.9,
       }}
       onClick={() => onTrackPlay(track)}
     >
@@ -1235,22 +1207,21 @@ const AfricanVibesVideoCard = memo(({
 
       <div className="relative w-full h-full rounded-xl overflow-hidden bg-black">
 
-        {/* Video iframe — mounts when the card enters the play zone
-            (off-screen warming slot). Opacity stays 0 (not display:none
-            — that would unload the iframe in some browsers) until BOTH:
-              · isReady (YT broadcast PLAYING) AND
-              · hasBeenFullyVisible (card has been fully in viewport at
-                least once).
-            That second gate creates the buffer effect: while the card
-            is at the rightmost-visible position (just entered, partially
-            visible), the cover stays. Once it shifts inward to full
-            visibility, snap to video — and stay video for the rest of
-            this mount, even when scrolling back out the right side. */}
+        {/* Video iframe — mounts when the card enters the play zone.
+            Opacity stays 0 (not display:none — that would unload the
+            iframe in some browsers) until BOTH:
+              · isReady (YT broadcast PLAYING — frame is decoded), AND
+              · timerExpired (1s has elapsed since iframe mount).
+            The 1s timer is mount-relative, not viewport-relative. By
+            the time a card is fully visible, some of the timer has
+            already burned (since cards mount in the off-screen play-
+            zone buffer). The "buffer at position 3" effect emerges
+            naturally without any ratio detection. */}
         {shouldMountIframe && (
           <div
             className="absolute inset-0"
             style={{
-              opacity: (isReady && hasBeenFullyVisible) ? 1 : 0,
+              opacity: (isReady && timerExpired) ? 1 : 0,
             }}
           >
             <iframe
