@@ -1083,16 +1083,24 @@ const AfricanVibesVideoCard = memo(({
 
   // ── Mount lifecycle: central OR direction-edge, 300ms grace ────────
   // Mount when this card is the active (central) OR the pre-warm edge
-  // (the next card in the user's scroll direction). 300ms grace on
-  // leaving so quick scroll-back doesn't trigger re-bootstrap.
+  // (the next card in the user's scroll direction).
+  // Two-stage exit so the video → cover handoff is smooth in both
+  // directions: shouldShow flips false immediately on leave (iframe
+  // begins its 600ms opacity fade-out, mirroring the fade-in), then
+  // shouldMountIframe flips false 700ms later (after fade is complete).
+  // The thumbnail base layer is always there underneath, so as the
+  // iframe fades out, the cover smoothly takes over.
   const shouldHoldMounted = isActive || isEdge;
+  const [shouldShow, setShouldShow] = useState(false);
   const [shouldMountIframe, setShouldMountIframe] = useState(false);
   useEffect(() => {
     if (shouldHoldMounted) {
+      setShouldShow(true);
       setShouldMountIframe(true);
       return;
     }
-    const t = setTimeout(() => setShouldMountIframe(false), 300);
+    setShouldShow(false);
+    const t = setTimeout(() => setShouldMountIframe(false), 700);
     return () => clearTimeout(t);
   }, [shouldHoldMounted]);
 
@@ -1202,19 +1210,17 @@ const AfricanVibesVideoCard = memo(({
           alt={track.title}
         />
 
-        {/* Video iframe — opacity 0 until isReady, then a 600ms
-            crossfade brings it in over the thumbnail. The slow fade is
-            the loader-mask: any transitional YT UI between the PLAYING
-            postMessage and a stable video frame is hidden inside the
-            fade, because the thumbnail covers it during the visible
-            ramp. By the time iframe is fully opaque, YT has settled
-            into clean video. No timers, no buffers — the crossfade
-            itself is the mask. */}
+        {/* Video iframe — opacity 0 until isReady AND shouldShow, then
+            a 600ms crossfade. shouldShow flips false BEFORE the iframe
+            unmounts so the fade-out (video → cover) gets a symmetric
+            transition. By the time iframe unmounts (700ms later), it's
+            already invisible and the cover behind it has taken over
+            seamlessly. */}
         {shouldMountIframe && (
           <div
             className="absolute inset-0"
             style={{
-              opacity: isReady ? 1 : 0,
+              opacity: (isReady && shouldShow) ? 1 : 0,
               transition: 'opacity 600ms cubic-bezier(0.16, 1, 0.3, 1)',
             }}
           >
