@@ -1071,24 +1071,26 @@ const AfricanVibesVideoCard = memo(({
       showinfo: '0',
       enablejsapi: '1',
       origin: window.location.origin,
+      // YT single-video loop requires BOTH loop=1 AND playlist=<id>
+      // (the playlist param needs to reference the same video id).
+      // Without playlist, loop=1 is silently ignored and the video ends.
+      loop: '1',
+      playlist: youtubeId,
     });
     return `https://www.youtube.com/embed/${youtubeId}?${params.toString()}`;
   }, [youtubeId]);
 
   // ── Play zone (mount gate) ─────────────────────────────────────────
-  // Viewport + 100px buffer (≈ 1 card-width). The visible cards mount,
-  // and the next-up on each side mounts only as it gets close to entering
-  // view. As the leftmost visible card starts leaving, the next-up on
-  // the right is already crossing into the play zone — that's when its
-  // bootstrap begins. Anything further than 1 card-width away is static
-  // (no iframe at all).
+  // Viewport + 50px buffer. Tight focus — only strictly-visible cards
+  // and the immediate next-up (about to cross the edge) hold iframes.
+  // Any card more than ~half a card-width off-screen is fully unmounted.
   useEffect(() => {
     const card = cardRef.current;
     const root = containerRef.current;
     if (!card || !root) return;
     const obs = new IntersectionObserver(
       ([entry]) => setIsInPlayZone(entry.isIntersecting),
-      { root, rootMargin: '0px 100px 0px 100px' }
+      { root, rootMargin: '0px 50px 0px 50px' }
     );
     obs.observe(card);
     return () => obs.disconnect();
@@ -1110,19 +1112,17 @@ const AfricanVibesVideoCard = memo(({
     return () => obs.disconnect();
   }, [containerRef]);
 
-  // ── Mount lifecycle: focused viewport with 500ms grace ─────────────
-  // Mount when in play zone (visible + 1-card buffer). Unmount on
-  // leaving with 500ms grace — just enough to absorb scroll inertia
-  // bounce without re-bootstrapping if the user immediately scrolls back.
-  // Beyond grace, off-screen cards drop their iframe entirely (back to
-  // static cover only).
+  // ── Mount lifecycle: tight focus, 300ms grace ──────────────────────
+  // Mount when in play zone (strictly visible + 50px buffer). Unmount
+  // on leaving with 300ms grace — just enough to absorb scroll inertia
+  // bounce. Beyond that, off-screen cards drop their iframe entirely.
   const [shouldMountIframe, setShouldMountIframe] = useState(false);
   useEffect(() => {
     if (isInPlayZone) {
       setShouldMountIframe(true);
       return;
     }
-    const t = setTimeout(() => setShouldMountIframe(false), 500);
+    const t = setTimeout(() => setShouldMountIframe(false), 300);
     return () => clearTimeout(t);
   }, [isInPlayZone]);
 
