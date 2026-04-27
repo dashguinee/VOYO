@@ -81,6 +81,12 @@
     <link rel="preconnect" href="https://anmgyxhnyhbyxzpjhxgx.supabase.co" crossorigin>
     <link rel="preconnect" href="https://voyo-edge.dash-webtv.workers.dev" crossorigin>
     <link rel="preconnect" href="https://i.ytimg.com" crossorigin>
+    <!-- YouTube embed origins — warming these saves DNS + TCP + TLS handshake
+         cost on the first AfricanVibes iframe bootstrap (typically 100-300ms
+         off the cold-start). The embed iframes hit www.youtube.com for the
+         player HTML/JS and youtube.com for various subresources. -->
+    <link rel="preconnect" href="https://www.youtube.com" crossorigin>
+    <link rel="preconnect" href="https://www.google.com" crossorigin>
     <!-- Satoshi (primary — Wakanda-tier geometric sans) + Space Grotesk (display) + Italianno (luxury script). -->
     <link href="https://api.fontshare.com/v2/css?f[]=satoshi@300,400,500,600,700,900&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">

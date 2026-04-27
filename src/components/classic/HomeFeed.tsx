@@ -1076,15 +1076,18 @@ const AfricanVibesVideoCard = memo(({
   }, [youtubeId]);
 
   // ── Play zone (mount gate) ─────────────────────────────────────────
-  // Viewport + 500px buffer. Cards mount when entering this zone so YT
-  // bootstrap completes before they're scrolled into view.
+  // Viewport + 1500px buffer (≈ 13 card-widths). Cards 4-5 cards ahead
+  // of the user's current view are already bootstrapping by the time
+  // the user starts scrolling toward them. Most YT bootstraps complete
+  // 1-2s before the card actually enters the visible viewport, so the
+  // cover→video swap happens way ahead of the user's eyes.
   useEffect(() => {
     const card = cardRef.current;
     const root = containerRef.current;
     if (!card || !root) return;
     const obs = new IntersectionObserver(
       ([entry]) => setIsInPlayZone(entry.isIntersecting),
-      { root, rootMargin: '0px 500px 0px 500px' }
+      { root, rootMargin: '0px 1500px 0px 1500px' }
     );
     obs.observe(card);
     return () => obs.disconnect();
@@ -1163,7 +1166,7 @@ const AfricanVibesVideoCard = memo(({
     window.addEventListener('message', onMsg);
     const fallback = window.setTimeout(() => {
       if (armed) { armed = false; setIsReady(true); }
-    }, 800);
+    }, 500);
     return () => {
       armed = false;
       window.removeEventListener('message', onMsg);
