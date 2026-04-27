@@ -1021,6 +1021,7 @@ const AfricanVibesVideoCard = memo(({
   idx,
   activeIdx,
   sectionInView,
+  containerRef,
   registerRef,
   onTrackPlay,
 }: {
@@ -1029,6 +1030,9 @@ const AfricanVibesVideoCard = memo(({
   activeIdx: number;
   /** Carousel-level visibility — the OYÉ Africa section is in viewport. */
   sectionInView: boolean;
+  /** Carousel scroll container — used as IO root for the per-card
+   *  play-zone (mount) and visibility (play/pause) observers below. */
+  containerRef: React.RefObject<HTMLDivElement | null>;
   /** Parent's ref-collector — card registers itself on mount so the
    *  rail-level observer can compute the most-centered active card. */
   registerRef: (idx: number, el: HTMLButtonElement | null) => void;
@@ -1037,13 +1041,16 @@ const AfricanVibesVideoCard = memo(({
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [isLoaded, setIsLoaded] = useState(false);
   const cardRef = useRef<HTMLButtonElement>(null);
+  // Lifecycle state — see header comment.
+  const [isInPlayZone, setIsInPlayZone] = useState(false);
+  const [isVisible, setIsVisible] = useState(false);
   // Register with parent on mount so it can observe + pick activeIdx.
   useEffect(() => {
     registerRef(idx, cardRef.current);
     return () => registerRef(idx, null);
   }, [idx, registerRef]);
 
-  // Active = the centered card, plays its video.
+  // Active = the centered card, drives bronze glow only.
   const isActive = sectionInView && idx === activeIdx;
   // `inWindow` (active + ±1 neighbors) only gates the bronze-glow
   // opacity ramp — neighbors render the glow at opacity 0 so the fade
@@ -1079,20 +1086,68 @@ const AfricanVibesVideoCard = memo(({
     return `https://www.youtube.com/embed/${youtubeId}?${params.toString()}`;
   }, [youtubeId]);
 
-  // Pause/resume via postMessage based on isActive — iframe stays alive
-  // (no remount), just suspends decode while card is off-screen.
+  // ── Observer 1: PLAY ZONE (mount gate) ─────────────────────────────
+  // Viewport + 250px buffer. When a card enters this zone it's still
+  // off-screen by up to 250px, so YT bootstrap runs OUT OF VIEW. By the
+  // time the user scrolls the card into the visible viewport, the
+  // cover→video crossfade has already happened and the user only ever
+  // sees real video frames. This is the heart of the redesign — late-
+  // binding mount-on-active was the source of cards-3+ flicker.
   useEffect(() => {
-    if (!iframeRef.current || !isLoaded) return;
-    const cmd = isActive ? 'playVideo' : 'pauseVideo';
-    iframeRef.current.contentWindow?.postMessage(
-      `{"event":"command","func":"${cmd}","args":""}`, '*'
+    const card = cardRef.current;
+    const root = containerRef.current;
+    if (!card || !root) return;
+    const obs = new IntersectionObserver(
+      ([entry]) => setIsInPlayZone(entry.isIntersecting),
+      { root, rootMargin: '0px 250px 0px 250px' }
     );
-  }, [isActive, isLoaded]);
+    obs.observe(card);
+    return () => obs.disconnect();
+  }, [containerRef]);
 
-  // Subscribe to YT player events so we can detect actual PLAYING state
-  // (used by the ready-gate effect below). Without this `listening` message,
-  // some YT iframe versions don't broadcast `infoDelivery` events — the
-  // ready-gate would then always fall through to the 1200ms timer.
+  // ── Observer 2: VISIBILITY (play/pause gate) ───────────────────────
+  // Strict viewport, no buffer. Multiple visible cards play at the same
+  // time (continuous-tuning feel). Off-screen mounted cards stay paused
+  // on their last decoded frame.
+  useEffect(() => {
+    const card = cardRef.current;
+    const root = containerRef.current;
+    if (!card || !root) return;
+    const obs = new IntersectionObserver(
+      ([entry]) => setIsVisible(entry.intersectionRatio > 0),
+      { root, threshold: [0, 0.1] }
+    );
+    obs.observe(card);
+    return () => obs.disconnect();
+  }, [containerRef]);
+
+  // ── Mount lifecycle: sticky-with-grace ─────────────────────────────
+  // Mount when in play zone. 5s grace before unmount on leaving so quick
+  // scroll-back catches still-warm cards instead of paying for a fresh
+  // YT bootstrap. Generous because staying mounted while paused is cheap;
+  // re-bootstrapping is what's expensive.
+  const [shouldMountIframe, setShouldMountIframe] = useState(false);
+  useEffect(() => {
+    if (isInPlayZone) {
+      setShouldMountIframe(true);
+      return;
+    }
+    const t = setTimeout(() => setShouldMountIframe(false), 5000);
+    return () => clearTimeout(t);
+  }, [isInPlayZone]);
+
+  // Reset load + play flags on unmount so the next mount cycle fires
+  // bootstrap detection cleanly.
+  useEffect(() => {
+    if (!shouldMountIframe) {
+      setIsLoaded(false);
+      setIsReady(false);
+    }
+  }, [shouldMountIframe]);
+
+  // ── Subscribe to YT player events ──────────────────────────────────
+  // Some YT versions don't broadcast `infoDelivery` without an explicit
+  // `listening` postMessage. Sent after iframe `onLoad` fires.
   useEffect(() => {
     if (!iframeRef.current || !isLoaded) return;
     iframeRef.current.contentWindow?.postMessage(
@@ -1100,17 +1155,13 @@ const AfricanVibesVideoCard = memo(({
     );
   }, [isLoaded, track.trackId]);
 
-  // Ready gate — keeps the thumbnail backdrop visible until YT has actually
-  // painted a video frame, otherwise we cross-fade out too early and the
-  // user sees YT's bootstrap (poster + branding) flicker through. Listens
-  // for the YT IFrame API's `infoDelivery` postMessage with playerState=1
-  // (PLAYING) — that's the signal a real frame is being decoded. Falls back
-  // to a 1200ms timer if YT messages don't arrive (network issue or YT API
-  // disabled). Cards 0-1 used to look smooth at 500ms because their iframes
-  // were already warm by the time the user scrolled; cards 3+ were cold-
-  // booting and 500ms wasn't long enough to mask YT startup.
+  // ── PLAYING-state listener: flips isReady (drives cover→video) ─────
+  // Listens for YT's `infoDelivery` postMessage with playerState=1
+  // (PLAYING) — that's the signal a real frame has been decoded. Once
+  // flipped, stays true until iframe unmounts; re-entering the viewport
+  // doesn't replay the cover→video crossfade.
   useEffect(() => {
-    if (!isLoaded || !isActive) { setIsReady(false); return; }
+    if (!isLoaded || isReady) return;
     const targetWindow = iframeRef.current?.contentWindow;
     let armed = true;
     const onMsg = (ev: MessageEvent) => {
@@ -1118,8 +1169,6 @@ const AfricanVibesVideoCard = memo(({
       if (ev.source !== targetWindow) return;
       try {
         const data = typeof ev.data === 'string' ? JSON.parse(ev.data) : ev.data;
-        // YT broadcasts { event: 'infoDelivery', info: { playerState, ... } }
-        // playerState 1 = PLAYING (means a frame has been decoded).
         if (data?.event === 'infoDelivery' && data.info?.playerState === 1) {
           armed = false;
           setIsReady(true);
@@ -1127,51 +1176,26 @@ const AfricanVibesVideoCard = memo(({
       } catch { /* not a YT message */ }
     };
     window.addEventListener('message', onMsg);
-    // Fallback — if no PLAYING message arrives, fire anyway so the
-    // thumbnail doesn't sit there forever on flaky networks. 900ms is
-    // tight but YT typically broadcasts PLAYING well before that on
-    // healthy connections; the gate just lets us hold the album cover
-    // a tiny bit longer when YT is genuinely slow.
     const fallback = window.setTimeout(() => {
       if (armed) { armed = false; setIsReady(true); }
-    }, 900);
+    }, 1200);
     return () => {
       armed = false;
       window.removeEventListener('message', onMsg);
       window.clearTimeout(fallback);
     };
-  }, [isLoaded, isActive]);
+  }, [isLoaded, isReady]);
 
-  // Mount only the active card's iframe (1-mount). 800ms grace before
-  // unmount so a quick scroll-back doesn't trigger a fresh YT reboot.
-  // Trade-off vs the previous 3-mount window: scrolling to a new active
-  // card no longer hits a pre-warmed iframe, so the user sees the
-  // matching-crop thumbnail for the ~1s YT bootstrap before video
-  // appears — which reads as a still video frame, not a delay. In
-  // exchange we save ~3× the memory + decoder + texture cost during
-  // scroll (the previous setup ran 3 YT engines simultaneously even
-  // when the user was only looking at one).
-  const [shouldMountIframe, setShouldMountIframe] = useState(isActive);
+  // ── Play/pause via postMessage based on viewport visibility ────────
+  // Multiple in-view cards play simultaneously. Off-screen mounted cards
+  // hold their last frame paused.
   useEffect(() => {
-    if (isActive) {
-      setShouldMountIframe(true);
-      return;
-    }
-    const t = setTimeout(() => setShouldMountIframe(false), 800);
-    return () => clearTimeout(t);
-  }, [isActive]);
-
-  // (audit-2 P1) Reset isLoaded when the iframe unmounts. Without this,
-  // scrolling back-and-forth under the 3-mount-window grace left
-  // isLoaded=true from the previous mount; the resume postMessage
-  // (line 978) fired against a fresh iframe that hadn't booted yet,
-  // YT silently dropped it, the card stayed paused.
-  useEffect(() => {
-    if (!shouldMountIframe) {
-      setIsLoaded(false);
-      setIsReady(false);
-    }
-  }, [shouldMountIframe]);
+    if (!iframeRef.current || !isLoaded) return;
+    const cmd = isVisible ? 'playVideo' : 'pauseVideo';
+    iframeRef.current.contentWindow?.postMessage(
+      `{"event":"command","func":"${cmd}","args":""}`, '*'
+    );
+  }, [isVisible, isLoaded]);
 
   return (
     <button
@@ -1463,6 +1487,7 @@ const AfricanVibesCarousel = ({
           idx={idx}
           activeIdx={activeIdx}
           sectionInView={isInView}
+          containerRef={containerRef}
           registerRef={registerCardRef}
           onTrackPlay={(t) => { lastWatchedRef.current = t; onTrackPlay(t); }}
         />
