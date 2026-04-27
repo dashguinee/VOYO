@@ -1996,27 +1996,37 @@ const Top10Section = memo(({ tracks, onTrackPlay }: Top10SectionProps) => {
   }, []);
 
   // ── Per-card centered detection ────────────────────────────────────
-  // Picks the card with the highest intersection ratio (must be > 0.7
-  // to qualify) as "centered." Drives the per-card light beam.
+  // Picks the card whose CENTER is closest to the carousel's viewport
+  // center. Distance-based, not ratio-based: when two cards are both
+  // fully visible (ratio 1.0), distance still distinguishes which one
+  // is more in the middle. The previous ratio-based version always
+  // picked the leftmost fully-visible card (= #1 every time), so #2-10
+  // never lit up.
   useEffect(() => {
     const carousel = carouselRef.current;
     if (!carousel) return;
-    const ratios = new Map<number, number>();
+    const distances = new Map<number, number>();
     const obs = new IntersectionObserver(
       (entries) => {
         entries.forEach((entry) => {
           const idx = cardRefs.current.findIndex((el) => el === entry.target);
           if (idx === -1) return;
-          ratios.set(idx, entry.intersectionRatio);
+          if (!entry.isIntersecting || !entry.rootBounds) {
+            distances.delete(idx);
+            return;
+          }
+          const cardCenter = (entry.boundingClientRect.left + entry.boundingClientRect.right) / 2;
+          const rootCenter = (entry.rootBounds.left + entry.rootBounds.right) / 2;
+          distances.set(idx, Math.abs(cardCenter - rootCenter));
         });
         let bestIdx: number | null = null;
-        let bestRatio = 0.7;
-        ratios.forEach((r, i) => {
-          if (r > bestRatio) { bestRatio = r; bestIdx = i; }
+        let bestDist = Infinity;
+        distances.forEach((d, i) => {
+          if (d < bestDist) { bestDist = d; bestIdx = i; }
         });
         setCenteredIdx(bestIdx);
       },
-      { root: carousel, threshold: [0, 0.5, 0.7, 0.9, 1] }
+      { root: carousel, threshold: [0, 0.5, 1] }
     );
     cardRefs.current.forEach((el) => el && obs.observe(el));
     return () => obs.disconnect();
@@ -2115,8 +2125,11 @@ const Top10Section = memo(({ tracks, onTrackPlay }: Top10SectionProps) => {
       `}</style>
       <div
         ref={carouselRef}
-        className="flex gap-6 px-4 overflow-x-auto scrollbar-hide"
-        style={{ scrollSnapType: 'x proximity', overscrollBehaviorX: 'contain', paddingBottom: '60px', position: 'relative', zIndex: 1 }}
+        className="flex gap-6 pr-4 overflow-x-auto scrollbar-hide"
+        // pl-16 (64px) instead of px-4 — gives #1 breathing room from
+        // the left edge so the natural visual center on initial paint
+        // is closer to #2/#3, letting them light up without scrolling.
+        style={{ scrollSnapType: 'x proximity', overscrollBehaviorX: 'contain', paddingBottom: '60px', paddingLeft: '64px', position: 'relative', zIndex: 1 }}
       >
         {tracks.map((track, index) => {
           const maxChars = 12;
