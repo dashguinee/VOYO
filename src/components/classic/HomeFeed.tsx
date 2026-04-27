@@ -987,20 +987,27 @@ const ThumbWithFallback = memo(({ trackId, alt }: { trackId: string; alt: string
 });
 ThumbWithFallback.displayName = 'ThumbWithFallback';
 
-// AfricanVibesVideoCard — v628 (3-mount window).
+// AfricanVibesVideoCard — v712 (1-mount, thumbnail-masked bootstrap).
 //
-// At most 3 iframes mounted across the rail at any time:
-//   · Active card (idx === activeIdx) — playing
-//   · 2 neighbors (|idx - activeIdx| <= 1) — mounted but paused
-//   · Cards beyond — unmounted (800ms grace before unmount when window
-//     slides, so quick scroll-throughs don't reload YT)
+// Only the active card (idx === activeIdx) mounts a YT iframe. 800ms
+// grace before unmount so quick scroll-back doesn't trigger a reboot.
+// Cards 0..N-1 except the active one show only their matching-crop
+// thumbnail — no iframe, no YT JS, no decoder.
 //
-// As user scrolls, the 3-window slides:
-//   · Old active pauses (postMessage), stays mounted as new neighbor
-//   · New active resumes (postMessage) on its already-mounted iframe —
-//     no reload, no YT JS reboot, instant frame-painted play
-//   · Old far-edge unmounts after 800ms grace
-//   · New far-edge mounts (autoplay=1 starts decoding)
+// On scroll-to-new-active:
+//   · Old active iframe unmounts after 800ms (or stays if user came
+//     back).
+//   · New active mounts a fresh iframe → YT bootstraps (~500-1500ms)
+//     → ready-gate listens for `infoDelivery` playerState=1 (PLAYING)
+//     → cross-fade thumbnail OUT, iframe IN.
+//   · During bootstrap, the user sees the matching-crop thumbnail
+//     (scale(3) maxres) which reads as a still video frame.
+//
+// Previous 3-mount window pre-warmed neighbors for instant transitions
+// but ran 3 simultaneous YT engines + 3 large composited textures even
+// when the user was only looking at one card — measurable paint pressure
+// on mid-tier Android during scroll. The 1-mount + matching-crop
+// thumbnail trades that for a brief masked bootstrap on each flip.
 //
 // activeIdx is computed at parent level via a single IntersectionObserver
 // across all card refs, with hysteresis to prevent flicker between
@@ -1034,8 +1041,16 @@ const AfricanVibesVideoCard = memo(({
 
   // Active = the centered card, plays its video.
   const isActive = sectionInView && idx === activeIdx;
-  // Within mount window = active + immediate neighbors. Caps mounted
-  // iframes at 3 across the rail no matter how many cards exist.
+  // `inWindow` (active + ±1 neighbors) only gates the bronze-glow
+  // opacity ramp — neighbors render the glow at opacity 0 so the fade
+  // has something to animate when activeIdx flips. Iframe mounting was
+  // also using this gate (3-mount window) but that meant 3 simultaneous
+  // YT bootstraps + 3 huge `width:300%/height:300%` composited textures
+  // even when the user wasn't looking at neighbors — real paint pressure
+  // on mid-tier Android. Dropped to 1-mount (active-only with 800ms
+  // grace) below — the thumbnail backdrop with matching crop covers the
+  // ~1s YT bootstrap on each new active flip, which feels like a paused
+  // video frame, not a delay.
   const inWindow = sectionInView && Math.abs(idx - activeIdx) <= 1;
   const [isReady, setIsReady] = useState(false);
 
@@ -1120,18 +1135,24 @@ const AfricanVibesVideoCard = memo(({
     };
   }, [isLoaded, isActive]);
 
-  // Mount when in the 3-window (active + 2 neighbors). 800ms grace
-  // before unmount when window slides past — quick scroll-throughs
-  // don't trigger YT reboot.
-  const [shouldMountIframe, setShouldMountIframe] = useState(inWindow);
+  // Mount only the active card's iframe (1-mount). 800ms grace before
+  // unmount so a quick scroll-back doesn't trigger a fresh YT reboot.
+  // Trade-off vs the previous 3-mount window: scrolling to a new active
+  // card no longer hits a pre-warmed iframe, so the user sees the
+  // matching-crop thumbnail for the ~1s YT bootstrap before video
+  // appears — which reads as a still video frame, not a delay. In
+  // exchange we save ~3× the memory + decoder + texture cost during
+  // scroll (the previous setup ran 3 YT engines simultaneously even
+  // when the user was only looking at one).
+  const [shouldMountIframe, setShouldMountIframe] = useState(isActive);
   useEffect(() => {
-    if (inWindow) {
+    if (isActive) {
       setShouldMountIframe(true);
       return;
     }
     const t = setTimeout(() => setShouldMountIframe(false), 800);
     return () => clearTimeout(t);
-  }, [inWindow]);
+  }, [isActive]);
 
   // (audit-2 P1) Reset isLoaded when the iframe unmounts. Without this,
   // scrolling back-and-forth under the 3-mount-window grace left
