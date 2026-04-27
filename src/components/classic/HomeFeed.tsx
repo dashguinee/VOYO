@@ -576,8 +576,6 @@ interface TrackCardProps {
 }
 
 const TrackCard = memo(({ track, onPlay, showBoostBadge = false }: TrackCardProps) => {
-  const [isHovered, setIsHovered] = useState(false);
-
   // ── HOLD-TO-PREFERENCE + SWIPE-UP-TO-BUCKET GESTURE ─────────────
   // Hold 400ms → card enters preference mode. Two shimmers appear:
   // left (grey = "not interested") and right (golden = "interested").
@@ -749,13 +747,6 @@ const TrackCard = memo(({ track, onPlay, showBoostBadge = false }: TrackCardProp
             <span className="text-white text-[10px] font-bold tracking-wider">BUCKETED</span>
           </div>
         )}
-        {isHovered && !prefMode && (
-          <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
-            <div className="w-12 h-12 rounded-full bg-white/15 backdrop-blur-sm flex items-center justify-center">
-              <Play className="w-6 h-6 text-white ml-1" fill="white" />
-            </div>
-          </div>
-        )}
         {showBoostBadge && !prefMode && (
           <div className="absolute top-2 right-2 z-10">
             <OyeButton track={track} size="sm" />
@@ -775,7 +766,6 @@ TrackCard.displayName = 'TrackCard';
 
 const CARD_BREATH_DELAYS = ['0s','3s','6s','2s','5s','1s','4s','7s','2.5s','4.5s','1.5s','6.5s'];
 const WideTrackCard = memo(({ track, onPlay, showBoostBadge = false, breathIdx = 0 }: TrackCardProps & { breathIdx?: number }) => {
-  const [isHovered, setIsHovered] = useState(false);
   const thumbnailUrl = getThumb(track.trackId, 'high');
 
   return (
@@ -803,15 +793,6 @@ const WideTrackCard = memo(({ track, onPlay, showBoostBadge = false, breathIdx =
         />
         <style>{`@keyframes card-purple-breath{0%,100%{opacity:.55}50%{opacity:1}}`}</style>
         <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent" />
-        {isHovered && (
-          <div
-            className="absolute inset-0 bg-black/30 flex items-center justify-center"
-          >
-            <div className="w-10 h-10 rounded-full bg-purple-500/90 flex items-center justify-center">
-              <Play className="w-5 h-5 text-white ml-0.5" fill="white" />
-            </div>
-          </div>
-        )}
         {/* Unified Oye badge — state visuals (purple/bubbling/gold-faded/
             gold-filled) are driven by downloadStore + preferenceStore, so
             the old isBoosted opacity+size toggle is handled automatically. */}
@@ -1096,8 +1077,10 @@ const AfricanVibesVideoCard = memo(({
       ref={cardRef}
       className="flex-shrink-0 relative rounded-xl"
       style={{
-        width: '95px',
-        height: '142px',
+        // Clamp width to viewport — narrow phones (375px) get a bit smaller,
+        // tablets get a touch larger. Height follows the original ~3:2 ratio.
+        width: 'clamp(86px, 25vw, 110px)',
+        aspectRatio: '95 / 142',
         // Guided presence — active card at full opacity, passed cards
         // recede to 0.8. 700ms Apple ease leads the eye through the rail.
         opacity: isActive ? 1 : 0.8,
@@ -1105,16 +1088,20 @@ const AfricanVibesVideoCard = memo(({
       }}
       onClick={() => onTrackPlay(track)}
     >
-      {/* Bronze glow - stronger for hero (idx 0) */}
-      <div
-        className="absolute -inset-1 rounded-xl pointer-events-none"
-        style={{
-          background: idx === 0
-            ? 'linear-gradient(135deg, rgba(212, 160, 83, 0.4) 0%, rgba(212, 160, 83, 0.15) 20%, transparent 50%)'
-            : 'linear-gradient(135deg, rgba(212, 160, 83, 0.2) 0%, rgba(212, 160, 83, 0.08) 15%, transparent 40%)',
-          filter: 'blur(8px)',
-        }}
-      />
+      {/* Bronze glow — only on the active card. Three simultaneous
+          filter:blur layers on adjacent iframe boxes is a known Android
+          paint stall; restraint also keeps focus on the hero. */}
+      {isActive && (
+        <div
+          className="absolute -inset-1 rounded-xl pointer-events-none"
+          style={{
+            background: idx === 0
+              ? 'linear-gradient(135deg, rgba(212, 160, 83, 0.4) 0%, rgba(212, 160, 83, 0.15) 20%, transparent 50%)'
+              : 'linear-gradient(135deg, rgba(212, 160, 83, 0.2) 0%, rgba(212, 160, 83, 0.08) 15%, transparent 40%)',
+            filter: 'blur(8px)',
+          }}
+        />
+      )}
 
       <div className="relative w-full h-full rounded-xl overflow-hidden bg-black">
         {/* Thumbnail backdrop — always rendered. */}
@@ -1167,7 +1154,7 @@ const AfricanVibesVideoCard = memo(({
 
         {/* Genre pill */}
         <div className="absolute top-1.5 left-1.5 z-20">
-          <span className="px-1.5 py-0.5 rounded text-[6px] uppercase bg-purple-600/45 text-white/90"
+          <span className="px-1.5 py-0.5 rounded text-[10px] uppercase bg-purple-600/45 text-white/90"
                 style={{ fontFamily: 'Arial Black, sans-serif', fontWeight: 900, letterSpacing: '0.07em', textShadow: '0 0 6px rgba(167,139,250,0.9), 0 0 14px rgba(139,92,246,0.55)' }}>
             {track.tags?.[0] || 'Afrobeats'}
           </span>
@@ -1175,10 +1162,10 @@ const AfricanVibesVideoCard = memo(({
 
         {/* Track info */}
         <div className="absolute bottom-0 left-0 right-0 p-1.5 z-20">
-          <p className="text-white text-[9px] font-bold truncate">{track.title}</p>
-          <p className="text-white/60 text-[7px] truncate">{track.artist}</p>
+          <p className="text-white text-[11px] font-bold truncate">{track.title}</p>
+          <p className="text-white/60 text-[10px] truncate">{track.artist}</p>
           <div className="flex items-center gap-0.5 mt-0.5">
-            <span className="text-[6px] font-bold text-[#D4A053]">
+            <span className="text-[10px] font-bold text-[#D4A053]">
               {track.oyeScore ? (track.oyeScore / 1000).toFixed(0) + 'K OYE' : ''}
             </span>
           </div>
@@ -1572,7 +1559,10 @@ const FriendSearchPill = ({ open, friends, loading, onClose, onFriendTap }: Frie
       <div
         className="fixed z-[56] left-4 right-4 rounded-[28px] overflow-hidden"
         style={{
-          bottom: '20%',
+          // Anchor above the bottom nav (~76px) plus the home-indicator
+          // safe area. Replaces the old `bottom: 20%` magic which fought
+          // both the nav and the system home indicator on tall phones.
+          bottom: 'calc(env(safe-area-inset-bottom, 0px) + 96px)',
           maxWidth: 380,
           margin: '0 auto',
           background: 'rgba(20, 20, 28, 0.72)',
@@ -1609,7 +1599,9 @@ const FriendSearchPill = ({ open, friends, loading, onClose, onFriendTap }: Frie
               placeholder="Search friends"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              className="flex-1 bg-transparent text-white placeholder:text-white/30 focus:outline-none text-[15px]"
+              className="flex-1 bg-transparent text-white placeholder:text-white/30 focus:outline-none"
+              // 16px floor prevents iOS zoom-on-focus.
+              style={{ fontSize: 16 }}
             />
           </div>
         </div>
@@ -1749,6 +1741,11 @@ const VibesLiveFriendsSheet = ({ friends, loading, onClose, onFriendTap }: Vibes
                 fontFamily: "'Italianno', cursive",
                 fontSize: '2rem',
                 fontWeight: 400,
+                // Reserve width so Satoshi system fallback (≈25% wider during
+                // Italianno FOUT on Android Chrome) doesn't push the close
+                // button off-row before the swap settles.
+                minWidth: '8rem',
+                display: 'inline-block',
                 background: 'linear-gradient(135deg, #FFF3D6 0%, #F4D999 15%, #E6B865 35%, #D4A053 55%, #C4943D 75%, #8B6228 100%)',
                 WebkitBackgroundClip: 'text',
                 WebkitTextFillColor: 'transparent',
@@ -1760,7 +1757,8 @@ const VibesLiveFriendsSheet = ({ friends, loading, onClose, onFriendTap }: Vibes
           </div>
           <button
             onClick={onClose}
-            className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center"
+            className="rounded-full bg-white/10 flex items-center justify-center"
+            style={{ minWidth: 44, minHeight: 44 }}
             aria-label="Close"
           >
             <span className="text-white/60 text-sm leading-none">&times;</span>
@@ -2030,6 +2028,11 @@ const Top10Section = memo(({ tracks, onTrackPlay }: Top10SectionProps) => {
         .top10-scroll-title {
           display: inline-block;
           animation: top10-marquee 10s linear infinite;
+          /* Promote to its own layer only while the marquee is mounted
+             (class is conditionally applied based on overflow). Avoids
+             scroll-jank on Android mid-tier from translating a non-
+             promoted layer. */
+          will-change: transform;
         }
         /* When Top 10 is off-screen, freeze all its decorative CSS
            animations. 22s infinite loops running across the whole feed
@@ -2075,15 +2078,12 @@ const Top10Section = memo(({ tracks, onTrackPlay }: Top10SectionProps) => {
                   zIndex: 1,
                   color: numberFill,
                   WebkitTextStroke: `${strokeWidth} ${numberStroke}`,
-                  textShadow: isActive
-                    ? index === 0
-                      ? '0 0 60px rgba(255,215,0,0.9), 0 0 100px rgba(255,215,0,0.5)'
-                      : index === 1
-                        ? '0 0 50px rgba(230,230,200,0.9), 0 0 80px rgba(255,215,0,0.45)'
-                        : '0 0 50px rgba(139,92,246,0.9), 0 0 80px rgba(157,78,221,0.5)'
-                    : numberGlow,
+                  // Static baseline glow only — the active-state energy is
+                  // carried by the radial-blur halo + box-shadow on the disc.
+                  // Animated text-shadow is never composited and was paying
+                  // a per-frame paint cost on Android mid-tier.
+                  textShadow: numberGlow,
                   fontFamily: 'Arial Black, sans-serif',
-                  transition: 'text-shadow 0.8s ease-in-out',
                 }}
               >
                 {index + 1}
@@ -2296,7 +2296,9 @@ const NextVoyageShelf = memo(({ tracks, onPlay, onPlaylist }: NextVoyageShelfPro
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            minHeight: 140,
+            // Collapse the height with the width so a dismissed marker
+            // doesn't leave an invisible 140px box blocking horizontal swipe.
+            minHeight: dismissed ? 0 : 140,
           }}
         >
           <div className="text-center px-4 select-none pointer-events-none">
@@ -3032,8 +3034,10 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onNavVisibilityChange, onSwitc
 
   return (
     <>
-    {/* Ripple host — fixed viewport layer, receives imperatively added ripple divs */}
-    <div ref={rippleHostRef} style={{ position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 500 }} aria-hidden>
+    {/* Ripple host — fixed viewport layer, receives imperatively added ripple divs.
+        zIndex 5 sits above feed content (z 0-1) but below sticky header (z-10),
+        bottom nav (z-50), AccountMenu (z-56), and DynamicIsland chrome. */}
+    <div ref={rippleHostRef} style={{ position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 5 }} aria-hidden>
       {/* Audio reactive ambient glow — radial pulse breathing with the music */}
       <div ref={audioGlowRef} style={{
         position: 'fixed', bottom: '-80px', left: '50%',
@@ -3063,9 +3067,11 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onNavVisibilityChange, onSwitc
         }
       `}</style>
     </div>
-    {/* Loop fade overlay — above ripple host (501 > 500) so ripples don't bleed through */}
+    {/* Loop fade overlay — above ripple host (6 > 5) but below sticky header (z-10),
+        bottom nav (z-50), AccountMenu (z-56), and DynamicIsland chrome so the loop
+        transition never veils navigation. */}
     <div ref={loopFadeOverlayRef} style={{
-      position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 501,
+      position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 6,
       background: 'rgba(6,6,9,0.92)',
       opacity: 0,
       transition: 'opacity 0.28s ease',
@@ -3082,7 +3088,10 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onNavVisibilityChange, onSwitc
       {/* Header — fully transparent, floats over the continuous canvas.
           The "D" profile button opens the AccountMenu (profile / settings /
           sign out). Dahub stays reachable via the bottom nav. */}
-      <header className="flex items-center justify-between px-4 py-3 sticky top-0 bg-transparent z-10">
+      <header
+        className="flex items-center justify-between px-4 py-3 sticky top-0 bg-transparent z-10"
+        style={{ paddingTop: 'max(12px, env(safe-area-inset-top))' }}
+      >
         <button
           className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-violet-600 flex items-center justify-center text-white font-bold active:scale-95 transition-transform"
           onClick={() => setAccountMenuOpen(true)}
@@ -3091,7 +3100,12 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onNavVisibilityChange, onSwitc
           D
         </button>
         <div className="flex items-center gap-2">
-          <button aria-label="Search" className="p-2 rounded-full bg-white/10 hover:bg-white/20" onClick={onSearch}>
+          <button
+            aria-label="Search"
+            className="rounded-full bg-white/10 hover:bg-white/20 inline-flex items-center justify-center"
+            style={{ minWidth: 44, minHeight: 44 }}
+            onClick={onSearch}
+          >
             <Search className="w-5 h-5 text-white/70" />
           </button>
           {/* Bell removed — no classic-Home notifications pipeline. Push
@@ -3201,10 +3215,11 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onNavVisibilityChange, onSwitc
               }
             `}</style>
 
-            {/* Gold hairline top */}
-            <div className="absolute top-0 left-8 right-8 h-px pointer-events-none" style={{ background: 'linear-gradient(90deg, transparent, rgba(212,160,83,0.4), rgba(230,184,101,0.75), rgba(212,160,83,0.4), transparent)' }} />
+            {/* Gold hairline top — wider inset on tablet+ to avoid the
+                disconnected-slash look on >768px viewports. */}
+            <div className="absolute top-0 left-8 right-8 md:left-12 md:right-12 h-px pointer-events-none" style={{ background: 'linear-gradient(90deg, transparent, rgba(212,160,83,0.4), rgba(230,184,101,0.75), rgba(212,160,83,0.4), transparent)' }} />
             {/* Gold hairline bottom */}
-            <div className="absolute bottom-0 left-8 right-8 h-px pointer-events-none" style={{ background: 'linear-gradient(90deg, transparent, rgba(212,160,83,0.25), rgba(230,184,101,0.5), rgba(212,160,83,0.25), transparent)' }} />
+            <div className="absolute bottom-0 left-8 right-8 md:left-12 md:right-12 h-px pointer-events-none" style={{ background: 'linear-gradient(90deg, transparent, rgba(212,160,83,0.25), rgba(230,184,101,0.5), rgba(212,160,83,0.25), transparent)' }} />
 
             {/* Header */}
             <div className="px-5 mb-6 flex items-center gap-3">
@@ -3286,8 +3301,10 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onNavVisibilityChange, onSwitc
             {/* Disk carousel */}
             <div className="relative">
               {/* RR Roof fades — scintillent white ↔ gold bronze */}
-              <div className="absolute top-0 bottom-0 left-0 pointer-events-none rr-fade-shimmer" style={{ width: 52, background: 'linear-gradient(to right, rgba(255,251,240,0.18) 0%, rgba(230,184,101,0.10) 50%, transparent 100%)', zIndex: 2 }} />
-              <div className="absolute top-0 bottom-0 right-0 pointer-events-none rr-fade-shimmer" style={{ width: 52, background: 'linear-gradient(to left, rgba(255,251,240,0.18) 0%, rgba(230,184,101,0.10) 50%, transparent 100%)', zIndex: 2, animationDelay: '2.5s' }} />
+              {/* Side fades narrowed (52→32) so the first/last disk's
+                  initials and title don't get partially veiled on iPhone SE. */}
+              <div className="absolute top-0 bottom-0 left-0 pointer-events-none rr-fade-shimmer" style={{ width: 32, background: 'linear-gradient(to right, rgba(255,251,240,0.18) 0%, rgba(230,184,101,0.10) 50%, transparent 100%)', zIndex: 2 }} />
+              <div className="absolute top-0 bottom-0 right-0 pointer-events-none rr-fade-shimmer" style={{ width: 32, background: 'linear-gradient(to left, rgba(255,251,240,0.18) 0%, rgba(230,184,101,0.10) 50%, transparent 100%)', zIndex: 2, animationDelay: '2.5s' }} />
               <div
                 className="flex gap-5 px-5 overflow-x-auto scrollbar-hide"
                 style={{ scrollSnapType: 'x proximity', WebkitOverflowScrolling: 'touch', maskImage: 'linear-gradient(to right, transparent 0, black 6%, black 94%, transparent 100%)', WebkitMaskImage: 'linear-gradient(to right, transparent 0, black 6%, black 94%, transparent 100%)' }}
@@ -3323,7 +3340,10 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onNavVisibilityChange, onSwitc
                         aria-label={`Play ${track.title}`}
                       >
                         <div className="relative flex-shrink-0 rounded-full overflow-hidden" style={{ width: 38, height: 38, boxShadow: '0 0 0 1.5px rgba(212,160,83,0.4)' }}>
-                          <SmartImage src={getThumb(track.trackId, 'high')} alt={track.title} className="w-full h-full object-cover" trackId={track.trackId} artist={track.artist} title={track.title} style={{ transform: 'scale(1.3)' }} />
+                          {/* Drop the scale(1.3) zoom — at 38px the YouTube
+                              thumbnail aliases on high-DPI screens. The 'high'
+                              quality + native fit reads sharper. */}
+                          <SmartImage src={getThumb(track.trackId, 'high')} alt={track.title} className="w-full h-full object-cover" trackId={track.trackId} artist={track.artist} title={track.title} />
                         </div>
                         <div className="text-left" style={{ maxWidth: 88 }}>
                           <p className="text-[11px] font-semibold leading-tight truncate" style={{ color: 'rgba(255,255,255,0.9)', fontFamily: 'Satoshi, system-ui, sans-serif' }}>{track.title}</p>
@@ -3393,7 +3413,9 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onNavVisibilityChange, onSwitc
                 letterSpacing: '0.15em',
                 color: 'transparent',
                 WebkitTextStroke: '0.5px rgba(212, 160, 83, 0.7)',
-                textShadow: '0 0 8px rgba(212, 160, 83, 0.15)',
+                // textShadow removed — paired with WebkitTextStroke on a
+                // transparent fill it produced a ghosted second outline on
+                // Safari 14. The stroke alone reads correctly everywhere.
               }}
             >
               TRENDING
