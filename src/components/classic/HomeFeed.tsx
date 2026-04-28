@@ -3247,7 +3247,7 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onNavVisibilityChange, onSwitc
             </h2>
             <p
               key={oyeSubtitle}
-              className="text-[9px] font-medium tracking-wider uppercase mt-1.5"
+              className="text-[9px] font-medium tracking-wider uppercase mt-1.5 flex items-center gap-1.5"
               style={{
                 background: 'linear-gradient(90deg, #D4A053 0%, #C4943D 100%)',
                 WebkitBackgroundClip: 'text',
@@ -3256,6 +3256,33 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onNavVisibilityChange, onSwitc
                 animation: 'voyo-oye-suffix-fade 700ms cubic-bezier(0.16, 1, 0.3, 1)',
               }}
             >
+              {/* N'Ko sigil (Dash 2026-04-29 v823) — heritage script
+                  ornament for the OYÉ My People section. Restrained:
+                  one glyph as a bronze hairline before the subtitle,
+                  not body text. Soussou / Mandinka / Bambara roots. */}
+              <span
+                aria-hidden
+                style={{
+                  fontFamily: "'Noto Sans NKo', system-ui, serif",
+                  fontSize: '1.4em',
+                  letterSpacing: 0,
+                  // background-clip: text was cutting the N'Ko glyph
+                  // because Tailwind's `text-transparent` cascades.
+                  // Render the sigil with explicit color override so
+                  // it gets its own bronze fill independent of the
+                  // gradient cliping the rest of the subtitle text.
+                  background: 'none',
+                  WebkitBackgroundClip: 'border-box',
+                  WebkitTextFillColor: '#D4A053',
+                  color: '#D4A053',
+                  lineHeight: 1,
+                  marginTop: '-1px',
+                }}
+              >
+                {/* ߞ — N'Ko letter Ka. Geometric, distinctive, sits
+                    well at small sizes next to the Latin caps. */}
+                ߞ
+              </span>
               {oyeSubtitle}
             </p>
           </div>
