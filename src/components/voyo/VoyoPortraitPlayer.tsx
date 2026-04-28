@@ -5595,11 +5595,11 @@ export const VoyoPortraitPlayer = ({
           // just artist name slightly covered". Was 476/356/232.
           // v792: 4px more — "tiny bit lower more". Was 466/346/222.
           // v794: another 4px tiny drop (Frame only, nothing else moves).
-          // Was 462/342/218.
-          // v799: Frame drops by ~one title-line height (22px). Was 440/320/196.
-          // v802: Frame down +6 more (paired with Card up −6 below for
-          // ~12px of artist breathing room). Now 434/314/190.
-          height: `calc(100% - ${cubeDockOpen ? 434 : oyeBarBehavior === 'fade' ? 314 : 190}px)`,
+          // v799: Frame drops by ~one title-line height (22px).
+          // v802: Frame +6 / Card −6 = 12px breathing room. Was 434/314/190.
+          // v803: another +4 each direction → 20px total (the "sweet spot").
+          // Now 430/310/186.
+          height: `calc(100% - ${cubeDockOpen ? 430 : oyeBarBehavior === 'fade' ? 310 : 186}px)`,
         }}
       >
 
@@ -5799,9 +5799,10 @@ export const VoyoPortraitPlayer = ({
             v792: bumped 36 → 42 — Dash "a tiny bit lower more, same
             for pause button". The pause button (engine vinyl below) is
             also nudged via the engine wrapper a few lines down.
-            v802: 42 → 36 (card lifts back up 6px) paired with Frame +6
-            below — gives the artist line ~12px of breathing room. */}
-        <div style={{ transform: 'translateY(36px)' }}>
+            v802: 42 → 36 (card lifts back up 6px) paired with Frame +6.
+            v803: 36 → 32 (another −4) paired with Frame +4 = 20px total
+            artist breathing room — Dash "20 is the sweet spot". */}
+        <div style={{ transform: 'translateY(32px)' }}>
         <div
           ref={cardWrapRef}
           className="relative"
@@ -6038,7 +6039,7 @@ export const VoyoPortraitPlayer = ({
           space slides in without pushing the rail offscreen. */}
       <div
         className={`flex-shrink-0 w-full relative z-40 flex flex-col pt-3 pb-7 transition-[min-height] duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] ${
-          cubeDockOpen ? 'min-h-[406px]' : oyeBarBehavior === 'fade' ? 'min-h-[286px]' : ''
+          cubeDockOpen ? 'min-h-[402px]' : oyeBarBehavior === 'fade' ? 'min-h-[282px]' : ''
         }`}
         style={{
           // Two-step Layer B fade.
