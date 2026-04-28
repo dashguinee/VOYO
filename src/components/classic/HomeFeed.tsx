@@ -46,7 +46,7 @@ import { PlaylistModal } from '../playlist/PlaylistModal';
 import { AccountMenu } from '../profile/AccountMenu';
 import { BoostSettings } from '../ui/BoostSettings';
 import { CardHoldActions } from '../ui/CardHoldActions';
-import { useActiveClassicsDrop, fetchTracksByYoutubeIds, isClassicsDismissed, markClassicsDismissed } from '../../services/classicsDropService';
+import { isClassicsDismissed, markClassicsDismissed } from '../../services/classicsDropService';
 import { ClassicsContractedShelf } from './ClassicsContractedShelf';
 import { CLASSICS_HARDCODED, CLASSICS_VERSION } from '../../data/classicsHardcoded';
 import { ClassicsDropCeremony } from './ClassicsDropCeremony';
@@ -3166,122 +3166,21 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onNavVisibilityChange, onSwitc
     }
   }, [hotPool, sessionSeed]);
 
-  // ─── Classics Drop ceremony (Apr 2026) ──────────────────────────────────
-  // Live drop fired from the Hub cockpit. When present, replaces the
-  // All-Time Classics shelf with a single-disc ceremony for the duration.
-  // When null, the existing shelf renders byte-identically.
-  // Platform-wide control IS the drop — fire from cockpit, all visitors see it.
-  const activeClassicsDrop = useActiveClassicsDrop();
-  // Synchronous resolution from local pool/TRACKS. Hits first; backfill
-  // below catches any IDs that miss (niche classics often aren't in the
-  // hot pool of a fresh session).
-  const localResolvedDropTracks = useMemo<Track[]>(() => {
-    if (!activeClassicsDrop) return [];
-    const ids = activeClassicsDrop.track_ids;
-    if (ids && ids.length > 0) {
-      const pool: Track[] = Array.isArray(hotPool) ? hotPool : [];
-      const haystack = new Map<string, Track>();
-      for (const t of pool) {
-        haystack.set(t.trackId, t as Track);
-        haystack.set(t.id, t as Track);
-      }
-      for (const t of TRACKS) {
-        if (!haystack.has(t.trackId)) haystack.set(t.trackId, t);
-        if (!haystack.has(t.id)) haystack.set(t.id, t);
-      }
-      const resolved: Track[] = [];
-      const seen = new Set<string>();
-      for (const id of ids) {
-        const trimmed = String(id).trim();
-        if (!trimmed) continue;
-        const found = haystack.get(trimmed);
-        if (found && !seen.has(found.id)) {
-          resolved.push(found);
-          seen.add(found.id);
-        }
-      }
-      return resolved.slice(0, 7);
-    }
-    // System-curated fallback — same picker as the existing shelf, capped at 7.
-    const pool = Array.isArray(hotPool) ? hotPool : [];
-    const curated = getClassicsTracks(pool, 7);
-    if (curated.length > 0) return curated.slice(0, 7);
-    return [...TRACKS]
-      .filter(t => (t.oyeScore || 0) >= 10_000_000)
-      .sort((a, b) => (b.oyeScore || 0) - (a.oyeScore || 0))
-      .slice(0, 7);
-  }, [activeClassicsDrop, hotPool]);
-
-  // Backfill from video_intelligence for IDs that didn't resolve locally.
-  // Niche classics fired by Dash from cockpit (Fela, Salif) won't be in
-  // a fresh user's hot pool — DB lookup keeps the drop honest.
-  const [backfilledDropTracks, setBackfilledDropTracks] = useState<Track[]>([]);
-  useEffect(() => {
-    if (!activeClassicsDrop?.track_ids || activeClassicsDrop.track_ids.length === 0) {
-      setBackfilledDropTracks([]);
-      return;
-    }
-    const resolvedIds = new Set(localResolvedDropTracks.flatMap(t => [t.id, t.trackId]));
-    const missing = activeClassicsDrop.track_ids.filter(id => !resolvedIds.has(id));
-    if (missing.length === 0) {
-      setBackfilledDropTracks([]);
-      return;
-    }
-    let cancelled = false;
-    void fetchTracksByYoutubeIds(missing).then(rows => {
-      if (!cancelled) setBackfilledDropTracks(rows);
-    });
-    return () => { cancelled = true; };
-  }, [activeClassicsDrop?.id, activeClassicsDrop?.track_ids, localResolvedDropTracks]);
-
-  // Final resolved set, ordered to match the drop's track_ids when present.
-  const classicsDropTracks = useMemo<Track[]>(() => {
-    if (!activeClassicsDrop) return [];
-    const ids = activeClassicsDrop.track_ids;
-    if (!ids || ids.length === 0) return localResolvedDropTracks;
-    const pool = [...localResolvedDropTracks, ...backfilledDropTracks];
-    const map = new Map<string, Track>();
-    for (const t of pool) {
-      if (t.id) map.set(t.id, t);
-      if (t.trackId) map.set(t.trackId, t);
-    }
-    const ordered: Track[] = [];
-    const seen = new Set<string>();
-    for (const id of ids) {
-      const t = map.get(String(id).trim());
-      if (t && !seen.has(t.id)) {
-        ordered.push(t);
-        seen.add(t.id);
-      }
-    }
-    return ordered.slice(0, 7);
-  }, [activeClassicsDrop, localResolvedDropTracks, backfilledDropTracks]);
-
-  // Source resolution + dismissal:
-  //  · Hardcoded baseline lives in src/data/classicsHardcoded.ts (Fela +
-  //    Salif Tekere today). CLASSICS_VERSION is the dismissal key while
-  //    no drop is active — bumping the version (with a new bundle) makes
-  //    the shelf re-appear for everyone who dismissed the prior edition.
-  //  · An active cockpit drop overrides the baseline for its duration;
-  //    its dismissal key is the drop_id, so closing it doesn't kill the
-  //    baseline once the drop ends.
-  const classicsShelfTracks = activeClassicsDrop && classicsDropTracks.length > 0
-    ? classicsDropTracks
-    : CLASSICS_HARDCODED;
-  const classicsShelfKey = activeClassicsDrop && classicsDropTracks.length > 0
-    ? `drop:${activeClassicsDrop.id}`
-    : `hardcoded:${CLASSICS_VERSION}`;
-  const [dismissedKeys, setDismissedKeys] = useState<Set<string>>(new Set());
-  const isShelfDismissed = dismissedKeys.has(classicsShelfKey) || isClassicsDismissed(classicsShelfKey);
-  const showClassicsShelf = !isShelfDismissed && classicsShelfTracks.length > 0;
+  // ─── All-Time Classics — hardcoded baseline (Apr 28, 2026) ──────────────
+  // Static curated list from src/data/classicsHardcoded.ts. No DB, no
+  // realtime, no cross-project Supabase. We update content by editing the
+  // array + bumping CLASSICS_VERSION; the bumped version invalidates the
+  // dismissal key so users who closed the previous edition see the new one.
+  // Battery-cheap: zero network on mount, no subscribers, just a render.
+  const classicsKey = `hardcoded:${CLASSICS_VERSION}`;
+  const [classicsDismissed, setClassicsDismissed] = useState<boolean>(
+    () => isClassicsDismissed(classicsKey),
+  );
+  const showClassicsShelf = !classicsDismissed && CLASSICS_HARDCODED.length > 0;
   const handleClassicsShelfClose = useCallback(() => {
-    markClassicsDismissed(classicsShelfKey);
-    setDismissedKeys(prev => {
-      const next = new Set(prev);
-      next.add(classicsShelfKey);
-      return next;
-    });
-  }, [classicsShelfKey]);
+    markClassicsDismissed(classicsKey);
+    setClassicsDismissed(true);
+  }, [classicsKey]);
 
   // Top 10 on VOYO: Trending tracks, excluding what's in other shelves.
   const trending = useMemo(() => {
@@ -3431,16 +3330,13 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onNavVisibilityChange, onSwitc
         />
       )}
 
-      {/* ═══ CLASSICS — V1.2 hardcoded-baseline + drop-override (Apr 28, 2026) ═══
-          Default: tracks from src/data/classicsHardcoded.ts (currently Fela
-          + Salif Tekere). A live cockpit drop overrides the baseline for
-          its duration. Close button dismisses the current edition by its
-          stable key — bumping CLASSICS_VERSION (or firing a new drop)
-          re-surfaces the shelf for everyone. */}
+      {/* ═══ ALL-TIME CLASSICS — hardcoded baseline (Apr 28, 2026) ═══
+          Static curated list (Fela + Salif Tekere). Close → gone until
+          we bump CLASSICS_VERSION + ship a new bundle. Zero infra.       */}
       {showClassicsShelf && (
         <Safe name="Classics">
           <ClassicsContractedShelf
-            tracks={classicsShelfTracks}
+            tracks={CLASSICS_HARDCODED}
             onPlay={playTrackFull}
             onClose={handleClassicsShelfClose}
           />

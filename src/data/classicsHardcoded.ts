@@ -15,7 +15,7 @@
 import type { Track } from '../types';
 
 /** Bump this string whenever the array below changes — old dismissals expire. */
-export const CLASSICS_VERSION = '2026-04-28';
+export const CLASSICS_VERSION = '2026-04-28-r2';
 
 export const CLASSICS_HARDCODED: Track[] = [
   {
