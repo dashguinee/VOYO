@@ -2227,11 +2227,25 @@ const PlayControls = memo(({
         )}
       
 
-      {/* Jog back 15s — TAP. HOLD = SKEEP fast-scrub.
+      {/* Jog back 15s — TAP. HOLD = SKEEP fast-scrub backward.
           (Dash 2026-04-28: track-prev nav lives on right-swipe; left-swipe
-          is drift. These buttons are now within-track scrubbing tools.) */}
+          is drift. These buttons are within-track scrubbing tools.)
+          v788: gentle pulse + lateral trail when SKEEP active in this
+          direction — visual signature for the scrub motion. */}
       <button
-        className="absolute left-[20%] text-white/50 hover:text-white transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center active:scale-95 transition-transform"
+        className="absolute left-[20%] min-w-[44px] min-h-[44px] flex items-center justify-center active:scale-95 transition-colors transition-transform"
+        style={{
+          color: isScrubbing && scrubDirection === 'backward' ? '#E6C58A' : 'rgba(255,255,255,0.5)',
+          animation: isScrubbing && scrubDirection === 'backward'
+            ? 'voyo-skeep-pulse 0.9s ease-in-out infinite'
+            : 'none',
+          // Lateral trail in the scrub direction — three offset rings
+          // of bronze that fade out leftward (toward the trail).
+          boxShadow: isScrubbing && scrubDirection === 'backward'
+            ? '-14px 0 0 -8px rgba(212,160,83,0.55), -28px 0 0 -10px rgba(212,160,83,0.32), -42px 0 0 -12px rgba(212,160,83,0.16)'
+            : 'none',
+          borderRadius: '50%',
+        }}
         aria-label="Jog back 15 seconds"
         onClick={() => {
           haptics.light();
@@ -2321,9 +2335,20 @@ const PlayControls = memo(({
         </button>
       </div>
 
-      {/* Jog forward 15s — TAP. HOLD = SKEEP fast-scrub. */}
+      {/* Jog forward 15s — TAP. HOLD = SKEEP fast-scrub forward.
+          v788: gentle pulse + rightward trail when SKEEP active here. */}
       <button
-        className="absolute right-[20%] text-white/50 hover:text-white transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center active:scale-95 transition-transform"
+        className="absolute right-[20%] min-w-[44px] min-h-[44px] flex items-center justify-center active:scale-95 transition-colors transition-transform"
+        style={{
+          color: isScrubbing && scrubDirection === 'forward' ? '#E6C58A' : 'rgba(255,255,255,0.5)',
+          animation: isScrubbing && scrubDirection === 'forward'
+            ? 'voyo-skeep-pulse 0.9s ease-in-out infinite'
+            : 'none',
+          boxShadow: isScrubbing && scrubDirection === 'forward'
+            ? '14px 0 0 -8px rgba(212,160,83,0.55), 28px 0 0 -10px rgba(212,160,83,0.32), 42px 0 0 -12px rgba(212,160,83,0.16)'
+            : 'none',
+          borderRadius: '50%',
+        }}
         aria-label="Jog forward 15 seconds"
         onClick={() => {
           haptics.light();
@@ -4967,8 +4992,15 @@ export const VoyoPortraitPlayer = ({
       return;
     }
 
-    // Single tap → Toggle OYO Island DJ widget + controls
+    // Single tap → play/pause + toggle controls reveal.
+    // (Dash 2026-04-28: pause was unreachable from the rest screen
+    //  because the engine wrapper has pointerEvents:'none' until
+    //  controls are revealed AND Layer B's HOT/Discover rail visually
+    //  covers the disk. Wiring play/pause to the canvas tap means the
+    //  whole BigCenterCard area is the play/pause hitbox — what Dash
+    //  asked for in the v784 grammar review.)
     const wasHidden = !isControlsRevealed;
+    handlePlayPause();
     setIsControlsRevealed(prev => !prev);
 
     if (wasHidden) {
@@ -4977,7 +5009,7 @@ export const VoyoPortraitPlayer = ({
     } else {
       setShowOyoIsland(false);
     }
-  }, [isControlsRevealed, isReactionsRevealed, showDJWakeToast]);
+  }, [isControlsRevealed, isReactionsRevealed, showDJWakeToast, handlePlayPause]);
 
   // AUTO-HIDE controls + OyoIsland after 3s - encourages double-tap discovery
   const controlsHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);

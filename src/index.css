@@ -833,6 +833,14 @@ input[type="range"]:focus::-moz-range-thumb {
   100% { opacity: 1; transform: scale(1) translateY(0); }
 }
 
+/* SKEEP gentle pulse — subtle breath on the held jog button while
+   fast-scrub is active. Color is set by the caller via box-shadow;
+   this keyframe just animates the rhythm. (Dash 2026-04-28 v788) */
+@keyframes voyo-skeep-pulse {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.10); }
+}
+
 /* Heat shimmer — subtle wave on the "Heating Up RN" billboard title.
    Mimics hot air rising distortion. translateY oscillates ±1px,
    scaleX stretches ±1% for the wavy feel. Runs at 2s to not be jarring. */
