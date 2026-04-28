@@ -5596,11 +5596,10 @@ export const VoyoPortraitPlayer = ({
           // v792: 4px more — "tiny bit lower more". Was 466/346/222.
           // v794: another 4px tiny drop (Frame only, nothing else moves).
           // Was 462/342/218.
-          // v799: Frame drops by ~one title-line height (22px ≈ 15px font
-          // + 1.2 line-height + margin) so users get ergonomic access to
-          // HOT/Discover at rest before the fade kicks in on scroll.
-          // Nothing else moves. Now 440/320/196.
-          height: `calc(100% - ${cubeDockOpen ? 440 : oyeBarBehavior === 'fade' ? 320 : 196}px)`,
+          // v799: Frame drops by ~one title-line height (22px). Was 440/320/196.
+          // v802: Frame down +6 more (paired with Card up −6 below for
+          // ~12px of artist breathing room). Now 434/314/190.
+          height: `calc(100% - ${cubeDockOpen ? 434 : oyeBarBehavior === 'fade' ? 314 : 190}px)`,
         }}
       >
 
@@ -5799,8 +5798,10 @@ export const VoyoPortraitPlayer = ({
             cleanly. (Dash 2026-04-28)
             v792: bumped 36 → 42 — Dash "a tiny bit lower more, same
             for pause button". The pause button (engine vinyl below) is
-            also nudged via the engine wrapper a few lines down. */}
-        <div style={{ transform: 'translateY(42px)' }}>
+            also nudged via the engine wrapper a few lines down.
+            v802: 42 → 36 (card lifts back up 6px) paired with Frame +6
+            below — gives the artist line ~12px of breathing room. */}
+        <div style={{ transform: 'translateY(36px)' }}>
         <div
           ref={cardWrapRef}
           className="relative"
@@ -6037,7 +6038,7 @@ export const VoyoPortraitPlayer = ({
           space slides in without pushing the rail offscreen. */}
       <div
         className={`flex-shrink-0 w-full relative z-40 flex flex-col pt-3 pb-7 transition-[min-height] duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] ${
-          cubeDockOpen ? 'min-h-[412px]' : oyeBarBehavior === 'fade' ? 'min-h-[292px]' : ''
+          cubeDockOpen ? 'min-h-[406px]' : oyeBarBehavior === 'fade' ? 'min-h-[286px]' : ''
         }`}
         style={{
           // Two-step Layer B fade.
