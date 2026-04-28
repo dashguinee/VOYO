@@ -2036,10 +2036,15 @@ StreamCard.displayName = 'StreamCard';
 // BIG CENTER CARD (NOW PLAYING - Canva-style purple fade with premium typography)
 // TAP ALBUM ART FOR LYRICS VIEW | VIDEO HANDLED BY GLOBAL IFRAME
 // ============================================
-const BigCenterCard = memo(({ track, onExpandVideo, onShowLyrics, hideThumb, isIframeAudio, isMiniPlayerActive = false, controlsActive = false }: {
+const BigCenterCard = memo(({ track, onExpandVideo, onShowLyrics, onLyricsArmed, hideThumb, isIframeAudio, isMiniPlayerActive = false, controlsActive = false }: {
   track: Track;
   onExpandVideo?: () => void;
   onShowLyrics?: () => void;
+  /** Fired when the 350ms hold-for-lyrics timer commits — parent uses this
+   *  to cancel the canvas's 400ms DJ-mode hold so both don't fire from one
+   *  gesture. (Dash 2026-04-29 v826 — fix for swipe-from-artwork interfering
+   *  with tap-to-mode.) */
+  onLyricsArmed?: () => void;
   hideThumb?: boolean;
   isIframeAudio?: boolean;
   /** True when the floating Mini Player is up (videoTarget==='portrait').
@@ -2060,12 +2065,17 @@ const BigCenterCard = memo(({ track, onExpandVideo, onShowLyrics, hideThumb, isI
     return () => clearTimeout(t);
   }, [track?.trackId, hideThumb]);
 
-  // v807 (Dash 2026-04-29): lyrics is HOLD now. Was a tap on the
-  // artwork, which conflicted with the v788 canvas-tap = play/pause.
-  // 350ms hold opens lyrics; quick tap bubbles to canvas tap (play/
-  // pause). pointerdown stopPropagation keeps canvas hold (DJ mode @
-  // 400ms) and swipe handlers from also firing — clean separation.
+  // v826 (Dash 2026-04-29): hold-for-lyrics on artwork. Was previously
+  // wrapped in stopPropagation, which made the artwork a DEAD ZONE for
+  // canvas swipes — drags starting on artwork did nothing, and the
+  // trailing click toggled video mode. Now we LET the canvas pointer
+  // handlers run alongside this one. To avoid double-fire (lyrics @
+  // 350ms + DJ mode @ 400ms from one hold), onLyricsArmed cancels the
+  // canvas hold when our timer commits. Movement > 8px cancels the
+  // lyrics timer so a drag-from-artwork is treated as a swipe, not a
+  // hold.
   const lyricsHoldTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lyricsHoldStart = useRef<{ x: number; y: number } | null>(null);
   useEffect(() => {
     return () => {
       if (lyricsHoldTimer.current) clearTimeout(lyricsHoldTimer.current);
@@ -2139,36 +2149,58 @@ const BigCenterCard = memo(({ track, onExpandVideo, onShowLyrics, hideThumb, isI
       backfaceVisibility: 'hidden',
     }}
   >
-    {/* THUMBNAIL — v807: hold-to-show-lyrics (was tap). Tap on the
-        artwork now bubbles to the canvas for play/pause; hold ≥350ms
-        triggers the lyrics overlay. stopPropagation on pointerdown
-        keeps the canvas DJ-mode hold (400ms) + swipe handlers out. */}
+    {/* THUMBNAIL — v826: hold-to-show-lyrics, but DOES NOT stop
+        propagation. Canvas pointer handlers run alongside so swipes
+        starting on the artwork drag the card normally; tap-to-mode
+        still works on release. onLyricsArmed cancels the canvas
+        DJ-mode hold so both don't fire on a single hold gesture.
+        Movement > 8px cancels the lyrics timer (it's a drag, not a
+        hold). */}
     <div
       onPointerDown={(e) => {
-        e.stopPropagation();
+        // No stopPropagation — let canvas drag handlers run.
         if (lyricsHoldTimer.current) clearTimeout(lyricsHoldTimer.current);
+        lyricsHoldStart.current = { x: e.clientX, y: e.clientY };
         lyricsHoldTimer.current = setTimeout(() => {
           onShowLyrics?.();
+          // Tell parent to cancel its 400ms DJ hold — we own this gesture.
+          onLyricsArmed?.();
           lyricsHoldTimer.current = null;
         }, 350);
+      }}
+      onPointerMove={(e) => {
+        const start = lyricsHoldStart.current;
+        if (!start || !lyricsHoldTimer.current) return;
+        const dx = e.clientX - start.x;
+        const dy = e.clientY - start.y;
+        // Same 8px threshold the canvas swipe uses to switch from
+        // tap/hold mode into drag mode. Once crossed, lyrics is off
+        // the table for this gesture — let the canvas swipe own it.
+        if (Math.abs(dx) > 8 || Math.abs(dy) > 8) {
+          clearTimeout(lyricsHoldTimer.current);
+          lyricsHoldTimer.current = null;
+        }
       }}
       onPointerUp={() => {
         if (lyricsHoldTimer.current) {
           clearTimeout(lyricsHoldTimer.current);
           lyricsHoldTimer.current = null;
         }
+        lyricsHoldStart.current = null;
       }}
       onPointerLeave={() => {
         if (lyricsHoldTimer.current) {
           clearTimeout(lyricsHoldTimer.current);
           lyricsHoldTimer.current = null;
         }
+        lyricsHoldStart.current = null;
       }}
       onPointerCancel={() => {
         if (lyricsHoldTimer.current) {
           clearTimeout(lyricsHoldTimer.current);
           lyricsHoldTimer.current = null;
         }
+        lyricsHoldStart.current = null;
       }}
       className="absolute inset-0 cursor-pointer z-10"
       role="button"
@@ -5865,6 +5897,18 @@ export const VoyoPortraitPlayer = ({
               // pipService directly. Don't reroute this flow.
               onExpandVideo={() => setVideoTarget('portrait')}
               onShowLyrics={() => setShowLyricsOverlay(true)}
+              // v826: when lyrics arms, cancel the canvas DJ-mode 400ms
+              // hold + mark the gesture as a hold so the trailing click
+              // doesn't toggle video mode. didHoldRef.current = true
+              // tells handleCanvasTap to skip; clearing holdTimerRef
+              // stops DJ mode wake from firing 50ms later.
+              onLyricsArmed={() => {
+                if (holdTimerRef.current) {
+                  clearTimeout(holdTimerRef.current);
+                  holdTimerRef.current = null;
+                }
+                didHoldRef.current = true;
+              }}
               hideThumb={videoTarget === 'portrait'}
               isIframeAudio={playbackSource === 'iframe'}
               isMiniPlayerActive={videoTarget === 'portrait'}
