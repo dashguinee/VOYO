@@ -5587,8 +5587,12 @@ export const VoyoPortraitPlayer = ({
           // just artist name slightly covered". Was 476/356/232.
           // v792: 4px more — "tiny bit lower more". Was 466/346/222.
           // v794: another 4px tiny drop (Frame only, nothing else moves).
-          // Now 462/342/218.
-          height: `calc(100% - ${cubeDockOpen ? 462 : oyeBarBehavior === 'fade' ? 342 : 218}px)`,
+          // Was 462/342/218.
+          // v799: Frame drops by ~one title-line height (22px ≈ 15px font
+          // + 1.2 line-height + margin) so users get ergonomic access to
+          // HOT/Discover at rest before the fade kicks in on scroll.
+          // Nothing else moves. Now 440/320/196.
+          height: `calc(100% - ${cubeDockOpen ? 440 : oyeBarBehavior === 'fade' ? 320 : 196}px)`,
         }}
       >
 
@@ -6025,7 +6029,7 @@ export const VoyoPortraitPlayer = ({
           space slides in without pushing the rail offscreen. */}
       <div
         className={`flex-shrink-0 w-full relative z-40 flex flex-col pt-3 pb-7 transition-[min-height] duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] ${
-          cubeDockOpen ? 'min-h-[434px]' : oyeBarBehavior === 'fade' ? 'min-h-[314px]' : ''
+          cubeDockOpen ? 'min-h-[412px]' : oyeBarBehavior === 'fade' ? 'min-h-[292px]' : ''
         }`}
         style={{
           // Two-step Layer B fade.
