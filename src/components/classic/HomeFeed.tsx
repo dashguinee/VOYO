@@ -1387,17 +1387,16 @@ const AfricanVibesCarousel = ({
       onScroll={handleScroll}
     >
       {tracks.slice(0, 12).map((track, idx) => {
-        // v817 (Dash 2026-04-29 "0 gap architecture, 2 step ahead"):
-        // Pre-warm now covers TWO cards in the scroll direction, not
-        // one. The card adjacent to active mounts AND the card after it.
-        // By the time the user reaches the next card, both it and the
-        // one after are already bootstrapped + ready — promotion to
-        // active is just a flag flip, no boot wait. Combined with the
-        // existing isReady-gated opacity crossfade, the user sees only
-        // poster→video when ready, never poster-during-load.
+        // v818 (Dash 2026-04-29 "one extra load to oye africa"): pre-warm
+        // bumped from 2 → 3 cards ahead. At any moment [active, +1, +2,
+        // +3] are all mounted + booting/ready. Buys an extra ~600ms of
+        // headroom for the YT bootstrap so even fast scrollers see the
+        // iframe ready when promoted. Trade-off: 4 concurrent iframes
+        // per direction. Watch for memory pressure on older devices —
+        // can drop back to 2 if it bites.
         const dir = scrollDirection === 'left' ? -1 : 1;
         const distFromActive = (idx - activeIdx) * dir;
-        const isEdge = distFromActive >= 1 && distFromActive <= 2;
+        const isEdge = distFromActive >= 1 && distFromActive <= 3;
         return (
           <AfricanVibesVideoCard
             key={track.id}
