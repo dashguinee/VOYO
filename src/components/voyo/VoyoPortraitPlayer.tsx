@@ -6622,37 +6622,55 @@ export const VoyoPortraitPlayer = ({
 
         </div>
 
-        {/* PLAYLIST RECOMMENDATION BAR - NEON BILLBOARD 2050 */}
+        {/* MIX BOARD — v811 polish (Dash 2026-04-29 "polish mix board,
+            its immature"). Section header gets premium Fraunces italic
+            for "Your Vibes", a bronze hairline below to anchor the
+            row, and a bronze "See all" instead of the kid-purple hover. */}
         <div className="mt-4 px-4">
-          <div className="flex items-center justify-between mb-3">
-            {/* Section Title - MIX BOARD + Your Vibes */}
-            <div
-              className="flex items-center gap-2"
-            >
+          <div className="flex items-center justify-between mb-1.5">
+            {/* Section Title */}
+            <div className="flex items-baseline gap-2">
               <span
-                className="text-[10px] font-black tracking-[0.15em] uppercase text-white/60"
+                className="text-[10px] font-black tracking-[0.18em] uppercase"
+                style={{ color: 'rgba(230,197,138,0.62)' }}
               >
-                MIX BOARD
+                Mix Board
               </span>
-              <span className="text-white/30">•</span>
-              {/* "Your Vibes" - Italic, dynamic color from boosted modes with pulse */}
+              <span style={{ color: 'rgba(230,197,138,0.20)' }}>·</span>
+              {/* "Your Vibes" — Fraunces italic, dynamic color from boosted modes */}
               <span
-                className="text-[11px] font-medium italic"
                 style={{
+                  fontFamily: "'Fraunces', 'Satoshi', system-ui, serif",
+                  fontStyle: 'italic',
+                  fontWeight: 500,
+                  fontSize: 13,
+                  letterSpacing: '0.005em',
                   color: vibesColor.color,
-                  textShadow: `0 0 8px ${vibesColor.glow}, 0 0 16px ${vibesColor.glow}`,
+                  textShadow: `0 0 6px ${vibesColor.glow}, 0 0 12px ${vibesColor.glow}`,
                 }}
               >
                 Your Vibes
               </span>
             </div>
-            {/* "See All" with hover effect */}
+            {/* "See all" — bronze, italic, restrained. */}
             <button
-              className="text-[8px] text-gray-500 hover:text-purple-400 transition-colors"
+              className="text-[10px] italic transition-colors"
+              style={{
+                fontFamily: "'Fraunces', 'Satoshi', system-ui, serif",
+                color: 'rgba(212,160,83,0.55)',
+              }}
             >
               See all →
             </button>
           </div>
+          {/* Bronze hairline — anchors the section header to the cards */}
+          <div
+            className="mb-3"
+            style={{
+              height: 1,
+              background: 'linear-gradient(90deg, rgba(212,160,83,0.22) 0%, rgba(212,160,83,0.05) 65%, transparent 100%)',
+            }}
+          />
           <div className="overflow-x-auto no-scrollbar flex gap-3 pb-1 -mb-2">
             {/* ====== MIX BOARD PRESETS - Tap to boost, Double-tap to react, Click punch to discover ====== */}
             {/* Heating Up RN - ENERGETIC mood (only non-purple, luxury bronze-orange) */}
