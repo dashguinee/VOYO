@@ -2356,14 +2356,13 @@ interface NextVoyageShelfProps {
 }
 
 // END-OF-RAIL DWELL: after the user scrolls to the final marker and it
-// sits in view for 10s, the message fades out while the rail rubber-bands
-// back — the "release pause" gesture from premium iOS apps, where a held
-// element dissolves after you let go. Two orchestrated moves:
-//   · scrollLeft eases back by the marker's width (700ms, material easing)
-//   · marker opacity + max-width both fall to 0 (500ms, starts 200ms in)
-// The offset gives a soft mask instead of a cliff.
+// sits in view for 10s, the rail rubber-bands back and the marker rides
+// the scroll like a closing curtain — opacity + translateX over a single
+// curtain-eased transition, then dimensions snap to 0 silently after the
+// fade so the flex rail never reflows mid-animation (was the source of
+// the jerk).
 const END_DWELL_MS = 10000;
-const END_COLLAPSE_MS = 700;
+const END_FADE_MS = 800;
 
 const NextVoyageShelf = memo(({ tracks, onPlay, onPlaylist }: NextVoyageShelfProps) => {
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -2384,9 +2383,10 @@ const NextVoyageShelf = memo(({ tracks, onPlay, onPlaylist }: NextVoyageShelfPro
       if (entry.isIntersecting && entry.intersectionRatio >= 0.6) {
         if (dwellTimer) return;
         dwellTimer = setTimeout(() => {
-          // Rubber-band: start the scroll-back first, then collapse the
-          // marker mid-ease so the two transitions chain into one smooth
-          // release instead of a visible cliff.
+          // Curtain close: scroll-back and marker fade kick off on the
+          // same frame so the marker rides the rail back instead of
+          // popping after. Dimensions don't collapse during the fade —
+          // they're delayed past END_FADE_MS so layout stays still.
           const container = scrollRef.current;
           const width = el.offsetWidth;
           if (container) {
@@ -2395,7 +2395,7 @@ const NextVoyageShelf = memo(({ tracks, onPlay, onPlaylist }: NextVoyageShelfPro
               behavior: 'smooth',
             });
           }
-          setTimeout(() => setDismissed(true), 200);
+          setDismissed(true);
         }, END_DWELL_MS);
       } else {
         if (dwellTimer) { clearTimeout(dwellTimer); dwellTimer = null; }
@@ -2431,40 +2431,53 @@ const NextVoyageShelf = memo(({ tracks, onPlay, onPlaylist }: NextVoyageShelfPro
           aria-hidden={dismissed}
           style={{
             flexShrink: 0,
-            maxWidth: dismissed ? 0 : 180,
+            // Dimensions hold during the fade and only snap to 0 after
+            // END_FADE_MS via the delayed transition below — that's what
+            // kills the layout-reflow jerk.
+            maxWidth: dismissed ? 0 : 140,
+            minHeight: dismissed ? 0 : 110,
             opacity: dismissed ? 0 : 1,
-            transition: `max-width ${END_COLLAPSE_MS}ms cubic-bezier(0.16, 1, 0.3, 1), opacity 500ms ease-out`,
+            transform: dismissed ? 'translateX(36%)' : undefined,
+            transition: dismissed
+              ? `opacity ${END_FADE_MS}ms cubic-bezier(0.4, 0, 0.2, 1), transform ${END_FADE_MS}ms cubic-bezier(0.4, 0, 0.2, 1), max-width 0ms ${END_FADE_MS}ms, min-height 0ms ${END_FADE_MS}ms`
+              : 'opacity 500ms ease-out',
             overflow: 'hidden',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            // Collapse the height with the width so a dismissed marker
-            // doesn't leave an invisible 140px box blocking horizontal swipe.
-            minHeight: dismissed ? 0 : 140,
           }}
         >
-          <div className="text-center px-4 select-none pointer-events-none">
+          {/* Idle drift — old-CRT bug-logo float, ±3px lateral with a
+              quiet opacity breathe. Disabled while dismissing so the
+              keyframe transform doesn't fight the curtain transform. */}
+          <div
+            className="text-center px-4 select-none pointer-events-none"
+            style={{
+              animation: dismissed ? undefined : 'voyo-endrail-drift 9s ease-in-out infinite',
+              willChange: 'transform, opacity',
+            }}
+          >
             <p
               className="leading-none"
               style={{
                 fontFamily: "'Fraunces', 'Playfair Display', Georgia, serif",
                 fontStyle: 'italic',
-                fontSize: 20,
+                fontSize: 16,
                 fontWeight: 600,
-                color: 'rgba(255,255,255,0.92)',
+                color: 'rgba(255,255,255,0.88)',
                 letterSpacing: '-0.01em',
               }}
             >
               That&rsquo;s All
             </p>
             <p
-              className="leading-none mt-1.5"
+              className="leading-none mt-1"
               style={{
                 fontFamily: "'Fraunces', 'Playfair Display', Georgia, serif",
                 fontStyle: 'italic',
-                fontSize: 14,
+                fontSize: 11,
                 fontWeight: 400,
-                color: 'rgba(255,255,255,0.42)',
+                color: 'rgba(255,255,255,0.38)',
                 letterSpacing: '-0.005em',
               }}
             >

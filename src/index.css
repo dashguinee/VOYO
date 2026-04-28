@@ -390,6 +390,14 @@ body {
   75% { transform: translateY(3px) translateX(-1px); }
 }
 
+/* End-of-rail "That's All / For Now" marker idle drift —
+ * old-CRT bug-logo behavior. Slow ±3px lateral drift with a quiet
+ * opacity breathe so it reads as alive, not a flat label. */
+@keyframes voyo-endrail-drift {
+  0%, 100% { transform: translateX(-3px); opacity: 0.88; }
+  50%      { transform: translateX(3px);  opacity: 1; }
+}
+
 /* VOYO Moments — gold transition word reveal (DASH voice, not Swift) */
 @keyframes voyo-moment-word-in {
   0% { opacity: 0; transform: translateY(8px) scale(0.96); letter-spacing: 0.06em; }
