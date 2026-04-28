@@ -2183,15 +2183,13 @@ const BigCenterCard = memo(({ track, onExpandVideo, onShowLyrics, hideThumb, isI
           React unmounts the old div and mounts a new one, triggering the
           voyo-fade-in animation. Result: text crossfades on every track
           change instead of popping. */}
-      {/* v793 (Dash 2026-04-29): tiny nudge up + contrast bump on the
-          now-playing title/artist. bottom-3 → bottom-5 (8px lift),
-          font sizes 13/10 → 15/11, artist white/70 → white/85, and a
-          soft glow added to each — white halo on the title, bronze
-          halo on the artist (on-theme, signature accent). Nothing else
-          touched. */}
+      {/* v794 (Dash 2026-04-29): position reverted to bottom-3 — Dash
+          clarified the text position should NOT have been moved. Keeping
+          the contrast bump (15/11 sizes + white/bronze halos) since that
+          improves legibility without "moving" anything. */}
       <div
         key={track.trackId}
-        className="absolute bottom-5 left-3 right-3 animate-[voyo-fade-in_0.4s_ease-out]"
+        className="absolute bottom-3 left-3 right-3 animate-[voyo-fade-in_0.4s_ease-out]"
       >
         <p
           className="text-white font-bold text-[15px] truncate pointer-events-none tracking-[0.005em]"
@@ -5603,8 +5601,10 @@ export const VoyoPortraitPlayer = ({
           // so the bottom edge stays put.
           // v791: another 6px tiny drop — Dash "drop it down a tiny bit,
           // just artist name slightly covered". Was 476/356/232.
-          // v792: 4px more — "tiny bit lower more". Now 466/346/222.
-          height: `calc(100% - ${cubeDockOpen ? 466 : oyeBarBehavior === 'fade' ? 346 : 222}px)`,
+          // v792: 4px more — "tiny bit lower more". Was 466/346/222.
+          // v794: another 4px tiny drop (Frame only, nothing else moves).
+          // Now 462/342/218.
+          height: `calc(100% - ${cubeDockOpen ? 462 : oyeBarBehavior === 'fade' ? 342 : 218}px)`,
         }}
       >
 
@@ -6043,7 +6043,7 @@ export const VoyoPortraitPlayer = ({
           space slides in without pushing the rail offscreen. */}
       <div
         className={`flex-shrink-0 w-full relative z-40 flex flex-col pt-3 pb-7 transition-[min-height] duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] ${
-          cubeDockOpen ? 'min-h-[438px]' : oyeBarBehavior === 'fade' ? 'min-h-[318px]' : ''
+          cubeDockOpen ? 'min-h-[434px]' : oyeBarBehavior === 'fade' ? 'min-h-[314px]' : ''
         }`}
         style={{
           // Two-step Layer B fade.
