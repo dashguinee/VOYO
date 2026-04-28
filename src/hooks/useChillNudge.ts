@@ -33,19 +33,6 @@ const LINES = [
   'Whoa now',
 ];
 
-interface OyoNotif {
-  id: string;
-  type: 'system';
-  title: string;
-  subtitle: string;
-}
-
-declare global {
-  interface Window {
-    pushNotification?: (n: OyoNotif) => void;
-  }
-}
-
 export function useChillNudge(enabled: boolean = true): void {
   const samplesRef = useRef<{ y: number; t: number }[]>([]);
   const fireTimesRef = useRef<number[]>([]);
