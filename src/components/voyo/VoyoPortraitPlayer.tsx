@@ -1228,8 +1228,15 @@ const ExpandVideoButton = memo(({ onClick, isIframeAudio, isMiniPlayerActive, co
               : (isIframeAudio && !isDimmed && phase === 'mini'
                   ? 'voyo-iframe-pulse 1.6s ease-in-out infinite'
                   : 'none'),
-          opacity: parked ? 0 : (extraFaded ? 0.8 : 1),
-          pointerEvents: parked ? 'none' : 'auto',
+          // v820 (Dash 2026-04-29 "system must self express"): hide the
+          // "Mini Player" affordance during the pre-mini phase. Tap-
+          // cycle on the artwork (v819) already engages video; the
+          // chip was redundant noise. Show only once the chip has
+          // morphed to "Take Out" — that's the PiP escalation, which
+          // genuinely needs an affordance since gesture-discovery
+          // doesn't reach system PiP.
+          opacity: parked ? 0 : (phase === 'mini' ? 0 : (extraFaded ? 0.8 : 1)),
+          pointerEvents: parked || phase === 'mini' ? 'none' : 'auto',
           transition: [
             'padding 700ms cubic-bezier(0.16, 1, 0.3, 1)',
             'background 700ms cubic-bezier(0.16, 1, 0.3, 1)',
