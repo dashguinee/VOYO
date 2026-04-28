@@ -46,7 +46,7 @@ import { PlaylistModal } from '../playlist/PlaylistModal';
 import { AccountMenu } from '../profile/AccountMenu';
 import { BoostSettings } from '../ui/BoostSettings';
 import { CardHoldActions } from '../ui/CardHoldActions';
-import { useActiveClassicsDrop, fetchTracksByYoutubeIds } from '../../services/classicsDropService';
+import { useActiveClassicsDrop, fetchTracksByYoutubeIds, isDropViewedByUser, markDropViewedByUser } from '../../services/classicsDropService';
 import { ClassicsDropCeremony } from './ClassicsDropCeremony';
 
 // ============================================
@@ -3255,10 +3255,32 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onNavVisibilityChange, onSwitc
     return ordered.slice(0, 7);
   }, [activeClassicsDrop, localResolvedDropTracks, backfilledDropTracks]);
 
-  // Tap-to-reveal: drop active + tracks ready = bronze icon flashes.
-  // User taps icon → ceremony unfolds. Reset when drop changes/ends.
+  // Reveal modes:
+  //  · AUTO — first time a user sees the live drop (per device, localStorage),
+  //    ceremony auto-summons. Once dismissed, marks viewed; future opens of
+  //    the same drop on this device fall back to tap-to-reveal.
+  //  · TAP — bronze icon breathes; ceremony only opens on user tap.
+  // Icon stays tappable in both modes so users can re-summon.
   const [ceremonyOpen, setCeremonyOpen] = useState(false);
   useEffect(() => { setCeremonyOpen(false); }, [activeClassicsDrop?.id]);
+
+  // Auto-summon on first view of an auto-mode drop.
+  useEffect(() => {
+    if (!activeClassicsDrop) return;
+    if (classicsDropTracks.length === 0) return;
+    const mode = activeClassicsDrop.reveal_mode || 'auto';
+    if (mode !== 'auto') return;
+    if (isDropViewedByUser(activeClassicsDrop.id)) return;
+    setCeremonyOpen(true);
+  }, [activeClassicsDrop, classicsDropTracks.length]);
+
+  // Mark drop as viewed once user opens it. Subsequent app loads on this
+  // device won't auto-summon — icon stays tappable for re-watch.
+  useEffect(() => {
+    if (ceremonyOpen && activeClassicsDrop) {
+      markDropViewedByUser(activeClassicsDrop.id);
+    }
+  }, [ceremonyOpen, activeClassicsDrop]);
   // Ceremony renders only after user taps the bronze icon (signal pill).
   // The icon flashes when a drop is live and tracks have resolved — tap
   // = "yes, summon the ceremony." This is the chef's-kiss moment.

@@ -17,6 +17,8 @@ import { supabase } from '../lib/supabase';
 import { devWarn } from '../utils/logger';
 import type { Track } from '../types';
 
+export type RevealMode = 'auto' | 'tap';
+
 export interface ClassicsDrop {
   id: string;
   created_at: string;
@@ -26,6 +28,27 @@ export interface ClassicsDrop {
   is_active: boolean;
   notes: string | null;
   fired_by: string | null;
+  reveal_mode: RevealMode | null;
+}
+
+const VIEWED_LS_PREFIX = 'voyo:classics:drop:viewed:';
+
+export function isDropViewedByUser(dropId: string): boolean {
+  try {
+    return typeof localStorage !== 'undefined' && localStorage.getItem(VIEWED_LS_PREFIX + dropId) === '1';
+  } catch {
+    return false;
+  }
+}
+
+export function markDropViewedByUser(dropId: string): void {
+  try {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(VIEWED_LS_PREFIX + dropId, '1');
+    }
+  } catch {
+    // Quota / private mode — non-fatal.
+  }
 }
 
 /**
