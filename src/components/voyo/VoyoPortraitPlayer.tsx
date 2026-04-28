@@ -3732,22 +3732,33 @@ const LyricsOverlay = memo(({ track, isOpen, onClose, currentTime }: LyricsOverl
       style={{ background: 'rgba(17, 17, 20, 0.92)' }}
       onClick={closePopup}
     >
-      {/* Close button */}
+      {/* v812 (Dash 2026-04-29 "no header on lyrics, use that space"):
+          track-info header removed; the lyrics get the full top of the
+          screen. Tap-anywhere closes (onClick on the outer div above —
+          closePopup falls through to onClose if no popup is open).
+          A tiny close × stays top-right behind safe-area-top for the
+          accessibility win + explicit dismiss. */}
       <button
         onClick={onClose}
-        className="absolute top-4 right-4 z-10 w-10 h-10 rounded-full bg-white/10 flex items-center justify-center"
+        aria-label="Close lyrics"
+        className="absolute z-10 w-9 h-9 rounded-full flex items-center justify-center transition-colors"
+        style={{
+          top: 'max(12px, calc(env(safe-area-inset-top, 0px) + 8px))',
+          right: 'max(12px, calc(env(safe-area-inset-right, 0px) + 8px))',
+          background: 'rgba(255,255,255,0.06)',
+          border: '1px solid rgba(255,255,255,0.08)',
+        }}
       >
-        <span className="text-white text-xl">×</span>
+        <span className="text-white/70 text-lg leading-none">×</span>
       </button>
 
-      {/* Track info header */}
-      <div className="absolute top-4 left-4 right-16">
-        <h2 className="text-white font-bold text-lg truncate">{track.title}</h2>
-        <p className="text-white/60 text-sm">{track.artist}</p>
-      </div>
-
-      {/* Main lyrics area */}
-      <div className="absolute inset-0 pt-20 pb-8 px-6 flex flex-col items-center justify-center overflow-y-auto">
+      {/* Main lyrics area — reclaims the old header space. pt now just
+          covers safe-area-top + a small breathing margin instead of the
+          ~80px reserved for the title/artist row. */}
+      <div
+        className="absolute inset-0 pb-8 px-6 flex flex-col items-center justify-center overflow-y-auto"
+        style={{ paddingTop: 'max(28px, calc(env(safe-area-inset-top, 0px) + 16px))' }}
+      >
         {/* Loading state */}
         {progress && (
           <div className="text-center">
