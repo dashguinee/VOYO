@@ -1172,12 +1172,11 @@ const ExpandVideoButton = memo(({ onClick, isIframeAudio, isMiniPlayerActive, co
 
   const handleClick = () => {
     if (phase === 'takeout') {
-      // Take Out tap → enter Cinema (full-bleed VideoMode). Was system PiP;
-      // cinema is the "full experience" gesture per Dash 2026-04-28. PiP
-      // is rare on mobile and the in-app cinema is what users actually
-      // want from this morph. Falls back to PiP if no cinema callback wired.
-      if (onEnterCinema) onEnterCinema();
-      else void pipService.enter();
+      // v797 (Dash 2026-04-29): Take Out reverted to system PiP — the
+      // cinema rerouting from v782 was a misread on my end. PiP is the
+      // canonical Take Out behavior; Cinema/VideoMode is a separate
+      // experience invoked via other paths (landscape rotation etc.).
+      void pipService.enter();
     } else {
       onClick();
     }
@@ -1242,7 +1241,7 @@ const ExpandVideoButton = memo(({ onClick, isIframeAudio, isMiniPlayerActive, co
           ].join(', '),
           color: isOrange ? '#E6C58A' : '#fff',
         }}
-        aria-label={isTakeout ? 'Take Out — Cinema mode' : 'Open mini player'}
+        aria-label={isTakeout ? 'Take Out — Picture-in-Picture' : 'Open mini player'}
       >
         <span
           className={`rounded-full ${isDimmed ? 'w-1 h-1' : 'w-1.5 h-1.5'}`}
@@ -1306,11 +1305,10 @@ const BottomTakeOutChip = memo(({ portalProgress, onEnterCinema }: { portalProgr
       type="button"
       onClick={(e) => {
         e.stopPropagation();
-        // Cinema-first (full-bleed VideoMode), PiP fallback if no callback.
-        if (onEnterCinema) onEnterCinema();
-        else void pipService.enter();
+        // v797: reverted to PiP — Take Out is the PiP gesture, full stop.
+        void pipService.enter();
       }}
-      aria-label="Take Out — Cinema mode"
+      aria-label="Take Out — Picture-in-Picture"
       className="rounded-full backdrop-blur-sm border flex items-center justify-center voyo-tap-scale"
       style={{
         position: 'fixed',
