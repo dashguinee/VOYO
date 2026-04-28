@@ -5161,15 +5161,16 @@ export const VoyoPortraitPlayer = ({
       return;
     }
 
-    // Single tap → play/pause + toggle controls reveal.
-    // (Dash 2026-04-28: pause was unreachable from the rest screen
-    //  because the engine wrapper has pointerEvents:'none' until
-    //  controls are revealed AND Layer B's HOT/Discover rail visually
-    //  covers the disk. Wiring play/pause to the canvas tap means the
-    //  whole BigCenterCard area is the play/pause hitbox — what Dash
-    //  asked for in the v784 grammar review.)
+    // v808 (Dash 2026-04-29 "tap should just be close mini player, not
+    //  pause"): single tap CLOSES the mini player if it's up; otherwise
+    //  just toggles the controls reveal. Removed the v788 tap-to-pause
+    //  binding. User pauses explicitly via the disk button (reachable
+    //  once controls are revealed).
+    if (videoTarget === 'portrait') {
+      setVideoTarget('hidden');
+      return;
+    }
     const wasHidden = !isControlsRevealed;
-    handlePlayPause();
     setIsControlsRevealed(prev => !prev);
 
     if (wasHidden) {
@@ -5178,7 +5179,7 @@ export const VoyoPortraitPlayer = ({
     } else {
       setShowOyoIsland(false);
     }
-  }, [isControlsRevealed, isReactionsRevealed, showDJWakeToast, handlePlayPause]);
+  }, [isControlsRevealed, isReactionsRevealed, showDJWakeToast, videoTarget, setVideoTarget]);
 
   // AUTO-HIDE controls + OyoIsland after 3s - encourages double-tap discovery
   const controlsHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
