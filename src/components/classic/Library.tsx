@@ -468,6 +468,10 @@ export const Library = ({ onTrackClick }: LibraryProps) => {
   const history = usePlayerStore(s => s.history);
   const playlists = usePlaylistStore(s => s.playlists);
   const knowledgeTracks = useKnowledgeStore(s => s.tracks);
+  // v809: subscribe to currentTrack so allKnownTracks below covers
+  // it — fixes "I just liked the song that's playing but it doesn't
+  // show in My Disco yet" (KnowledgeStore lags fresh-played tracks).
+  const currentTrack = usePlayerStore(s => s.currentTrack);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const inYourLoop = useMemo(() => getUserTopTracks(10), [history]);
 
@@ -498,8 +502,13 @@ export const Library = ({ onTrackClick }: LibraryProps) => {
     // History + queue — have the most complete Track objects (cover already resolved)
     for (const h of history) { if (h.track?.id) map.set(h.track.id, h.track); }
     for (const qi of queue) { if (qi.track?.id) map.set(qi.track.id, qi.track); }
+    // v809 (Dash 2026-04-29 "why are my likes not showing in my disco"):
+    // include currentTrack too. Liking a track that's currently playing
+    // would otherwise miss My Disco until the track hit history (= ended)
+    // — KnowledgeStore takes a beat to register fresh-played tracks.
+    if (currentTrack?.id) map.set(currentTrack.id, currentTrack);
     return map;
-  }, [knowledgeTracks, history, queue]);
+  }, [knowledgeTracks, history, queue, currentTrack]);
 
   // Get liked tracks from preference store (persisted to localStorage)
   const trackPreferences = usePreferenceStore(s => s.trackPreferences);
