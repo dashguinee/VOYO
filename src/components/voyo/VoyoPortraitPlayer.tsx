@@ -4451,11 +4451,21 @@ export const VoyoPortraitPlayer = ({
     if (!el) return;
     el.textContent = text;
     el.style.color = color;
-    el.style.textShadow = `0 0 14px ${color}, 0 0 28px ${color}`;
+    el.style.textShadow = `0 0 12px ${color}, 0 0 22px ${color}`;
+    // soft halo around the pill in the action's color — premium-restraint
+    el.style.boxShadow = `0 0 26px ${color}40, 0 4px 18px rgba(0,0,0,0.5)`;
     el.style.opacity = String(alpha);
+    // smoothened entrance — pill rises + scales as the swipe deepens
+    const scale = 0.96 + alpha * 0.08;
+    const ty = 8 - alpha * 8;
+    el.style.transform = `translateY(${ty}px) scale(${scale})`;
   };
   const clearSwipeLabel = () => {
-    if (swipeLabelRef.current) swipeLabelRef.current.style.opacity = '0';
+    const el = swipeLabelRef.current;
+    if (!el) return;
+    el.style.opacity = '0';
+    el.style.transform = 'translateY(8px) scale(0.96)';
+    el.style.boxShadow = '0 0 0 rgba(0,0,0,0)';
   };
   const setSideWallGlow = (dx: number) => {
     const COMMIT = 120; // mirrors COMMIT_THRESHOLD
@@ -4479,11 +4489,14 @@ export const VoyoPortraitPlayer = ({
       }
     } else if (dx < 0) {
       if (isHold) {
+        // LESS — saturated, committed feedback
         set(wallLessRef, eased);
-        setSwipeLabel('Less', '#7CA0D6', eased);
+        setSwipeLabel('Less', '#5B7FBE', eased);
       } else {
+        // SKIP — neutral silver, "just moving on" — distinct hue from
+        // LESS so the user reads them as separate weights of action
         set(wallSkipRef, eased);
-        setSwipeLabel('Skip', '#B0C4DE', eased);
+        setSwipeLabel('Skip', '#E8EEF7', eased);
       }
     } else {
       clearSwipeLabel();
@@ -5281,7 +5294,9 @@ export const VoyoPortraitPlayer = ({
           zIndex: 60,
         }}
       />
-      {/* LEFT — SKIP (quick) */}
+      {/* LEFT — SKIP (quick). Neutral silver — "just moving on", no
+          judgment. Distinct from LESS so the two left variants don't
+          read as the same color (Dash 2026-04-28 v786). */}
       <div
         ref={wallSkipRef}
         aria-hidden
@@ -5290,13 +5305,14 @@ export const VoyoPortraitPlayer = ({
           top: 0, left: 0, bottom: 0,
           width: '40vw', maxWidth: '320px',
           pointerEvents: 'none', opacity: 0,
-          background: 'linear-gradient(to right, rgba(99,124,160,0.40) 0%, rgba(99,124,160,0.16) 35%, rgba(99,124,160,0) 100%)',
+          background: 'linear-gradient(to right, rgba(220,230,250,0.42) 0%, rgba(220,230,250,0.16) 35%, rgba(220,230,250,0) 100%)',
           mixBlendMode: 'screen',
           transition: 'opacity 220ms cubic-bezier(0.16, 1, 0.3, 1)',
           zIndex: 60,
         }}
       />
-      {/* LEFT — LESS (hold) */}
+      {/* LEFT — LESS (hold). Saturated indigo-blue — committed taste-
+          negative feedback. Distinct hue + heavier opacity from SKIP. */}
       <div
         ref={wallLessRef}
         aria-hidden
@@ -5305,35 +5321,58 @@ export const VoyoPortraitPlayer = ({
           top: 0, left: 0, bottom: 0,
           width: '40vw', maxWidth: '320px',
           pointerEvents: 'none', opacity: 0,
-          background: 'linear-gradient(to right, rgba(60,90,140,0.55) 0%, rgba(60,90,140,0.22) 35%, rgba(60,90,140,0) 100%)',
+          background: 'linear-gradient(to right, rgba(74,103,180,0.62) 0%, rgba(74,103,180,0.26) 35%, rgba(74,103,180,0) 100%)',
           mixBlendMode: 'screen',
           transition: 'opacity 220ms cubic-bezier(0.16, 1, 0.3, 1)',
           zIndex: 60,
         }}
       />
-      {/* NEON SWIPE LABEL — fades in mid-swipe with the active gesture
-          name above the BigCenterCard. Premium italic, glow shadow tinted
-          by the action's color (set imperatively in setSwipeLabel). */}
+      {/* SWIPE LABEL PILL — VOYO signature transparent glass pill, sits
+          low on the viewport (above the safe-area bottom), fades in
+          mid-swipe with the active gesture name. Color tint set
+          imperatively in setSwipeLabel via CSS custom prop on the pill.
+          Smoothened via a slight scale-in + longer ease (Dash 2026-04-28
+          "transparent pill, low, smoothen it"). */}
       <div
-        ref={swipeLabelRef}
         aria-hidden
         style={{
           position: 'fixed',
-          top: 'calc(env(safe-area-inset-top, 0px) + 92px)',
           left: 0, right: 0,
-          textAlign: 'center',
-          fontFamily: "'Fraunces', 'Satoshi', system-ui, serif",
-          fontStyle: 'italic',
-          fontSize: 22,
-          fontWeight: 600,
-          letterSpacing: '0.04em',
+          bottom: 'calc(env(safe-area-inset-bottom, 0px) + 22%)',
+          display: 'flex',
+          justifyContent: 'center',
           pointerEvents: 'none',
-          opacity: 0,
-          transition: 'opacity 180ms ease-out',
           zIndex: 65,
-          textShadow: '0 0 14px rgba(255,255,255,0)',
         }}
-      />
+      >
+        <div
+          ref={swipeLabelRef}
+          aria-hidden
+          style={{
+            // pill chrome — VOYO glass language
+            background: 'rgba(15,15,22,0.58)',
+            backdropFilter: 'blur(18px) saturate(140%)',
+            WebkitBackdropFilter: 'blur(18px) saturate(140%)',
+            border: '1px solid rgba(255,255,255,0.10)',
+            borderRadius: 999,
+            padding: '8px 18px',
+            // typography
+            fontFamily: "'Fraunces', 'Satoshi', system-ui, serif",
+            fontStyle: 'italic',
+            fontSize: 16,
+            fontWeight: 600,
+            letterSpacing: '0.06em',
+            // motion — smoothened
+            opacity: 0,
+            transform: 'translateY(8px) scale(0.96)',
+            transition: 'opacity 240ms cubic-bezier(0.16, 1, 0.3, 1), transform 360ms cubic-bezier(0.16, 1, 0.3, 1), color 220ms ease, box-shadow 240ms ease',
+            // text glow inherits color set by setSwipeLabel
+            textShadow: '0 0 12px currentColor, 0 0 20px currentColor',
+            // soft outer halo — color is set inline by setSwipeLabel
+            boxShadow: '0 0 0 rgba(0,0,0,0)',
+          }}
+        />
+      </div>
 
       {/* FULLSCREEN BACKGROUND - Album art with dark overlay for floating effect.
           Auto-shows when videoBlocked (region-restricted embeds → graceful fallback). */}
