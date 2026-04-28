@@ -5608,12 +5608,21 @@ export const VoyoPortraitPlayer = ({
           // v791: another 6px tiny drop — Dash "drop it down a tiny bit,
           // just artist name slightly covered". Was 476/356/232.
           // v792: 4px more — "tiny bit lower more". Was 466/346/222.
-          // v794: another 4px tiny drop (Frame only, nothing else moves).
-          // v799: Frame drops by ~one title-line height (22px).
-          // v802: Frame +6 / Card −6 = 12px breathing room. Was 434/314/190.
-          // v803: another +4 each direction → 20px total (the "sweet spot").
-          // Now 430/310/186.
-          height: `calc(100% - ${cubeDockOpen ? 430 : oyeBarBehavior === 'fade' ? 310 : 186}px)`,
+          // v805 (Dash 2026-04-29): pixel offsets converted to clamp(min,
+          // vh-based, max) so the layout breathes correctly across
+          // iPhone SE → Pro Max → iPad portrait → PWA standalone (no
+          // browser chrome = full device height). On compact viewports
+          // the min kicks in (frame doesn't shrink past usability); on
+          // tall viewports the max caps it (frame doesn't dominate).
+          // Locked baseline values from v803 sit near the middle of each
+          // clamp band.
+          height: `calc(100% - ${
+            cubeDockOpen
+              ? 'clamp(380px, 50dvh, 460px)'
+              : oyeBarBehavior === 'fade'
+              ? 'clamp(280px, 36dvh, 340px)'
+              : 'clamp(170px, 22dvh, 210px)'
+          })`,
         }}
       >
 
@@ -6053,7 +6062,10 @@ export const VoyoPortraitPlayer = ({
           space slides in without pushing the rail offscreen. */}
       <div
         className={`flex-shrink-0 w-full relative z-40 flex flex-col pt-3 pb-7 transition-[min-height] duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] ${
-          cubeDockOpen ? 'min-h-[402px]' : oyeBarBehavior === 'fade' ? 'min-h-[282px]' : ''
+          // v805: min-h converted to clamp() so Layer B's bottom edge
+          // stays put across viewport heights. Numbers track the Anchor
+          // reservation above (28px buffer pattern preserved).
+          cubeDockOpen ? 'min-h-[clamp(352px,47dvh,432px)]' : oyeBarBehavior === 'fade' ? 'min-h-[clamp(252px,33dvh,312px)]' : ''
         }`}
         style={{
           // Two-step Layer B fade.
