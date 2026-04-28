@@ -3229,7 +3229,7 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onNavVisibilityChange, onSwitc
           <div className="flex-1">
             <h2
               className="text-white text-[28px] leading-none"
-              style={{ fontWeight: 800, letterSpacing: '-0.01em' }}
+              style={{ fontWeight: 900, letterSpacing: '-0.015em' }}
             >
               OYÉ{' '}
               {/* Suffix crossfades on each rotation — `key` change
