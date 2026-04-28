@@ -1093,7 +1093,7 @@ const BackdropLibrary = ({
 // Any tap / reveal resets both timers — the button breathes with the
 // rest of the UI instead of running on its own mount-time clock.
 // ============================================
-const ExpandVideoButton = memo(({ onClick, isIframeAudio, isMiniPlayerActive, controlsActive, onEnterCinema }: { onClick: () => void; isIframeAudio: boolean; isMiniPlayerActive: boolean; controlsActive: boolean; onEnterCinema?: () => void }) => {
+const ExpandVideoButton = memo(({ onClick, isIframeAudio, isMiniPlayerActive, controlsActive }: { onClick: () => void; isIframeAudio: boolean; isMiniPlayerActive: boolean; controlsActive: boolean }) => {
   const [mode, setMode] = useState<'active' | 'dimmed'>('active');
   const [extraFaded, setExtraFaded] = useState(false);
   // Phase machine: 'mini' = default (purple, "Mini Player"), 'morphing'
@@ -1284,7 +1284,7 @@ const ExpandVideoButton = memo(({ onClick, isIframeAudio, isMiniPlayerActive, co
 // less chrome. Was a 7%-opacity ghost which read as broken AND was a
 // silent tap trap. Pill state replaces decay state.
 // ============================================
-const BottomTakeOutChip = memo(({ portalProgress, onEnterCinema }: { portalProgress: number; onEnterCinema?: () => void }) => {
+const BottomTakeOutChip = memo(({ portalProgress }: { portalProgress: number }) => {
   const [compact, setCompact] = useState(false);
   // riseProgress: 0 below 0.2, 1 by 0.45 — rises in tandem with the
   // mix-board layer climbing into view.
@@ -2027,7 +2027,7 @@ StreamCard.displayName = 'StreamCard';
 // BIG CENTER CARD (NOW PLAYING - Canva-style purple fade with premium typography)
 // TAP ALBUM ART FOR LYRICS VIEW | VIDEO HANDLED BY GLOBAL IFRAME
 // ============================================
-const BigCenterCard = memo(({ track, onExpandVideo, onShowLyrics, hideThumb, isIframeAudio, isMiniPlayerActive = false, controlsActive = false, onEnterCinema }: {
+const BigCenterCard = memo(({ track, onExpandVideo, onShowLyrics, hideThumb, isIframeAudio, isMiniPlayerActive = false, controlsActive = false }: {
   track: Track;
   onExpandVideo?: () => void;
   onShowLyrics?: () => void;
@@ -2039,9 +2039,6 @@ const BigCenterCard = memo(({ track, onExpandVideo, onShowLyrics, hideThumb, isI
   /** Driven by isControlsRevealed upstream — while true, the Mini Player
    *  toggle stays fully active; when false, dim decay timers start. */
   controlsActive?: boolean;
-  /** Called when "Take Out" chip is tapped — enters cinema mode
-   *  (full-bleed VideoMode). Falls back to system PiP if not provided. */
-  onEnterCinema?: () => void;
 }) => {
   // Poster purple fade (v792, Dash 2026-04-29). Resets on track change,
   // fades IN ~3s after the new track starts. Skipped in video mode
@@ -2244,7 +2241,7 @@ const BigCenterCard = memo(({ track, onExpandVideo, onShowLyrics, hideThumb, isI
       it stays visible after BigCenterCard fades to opacity:0 in
       mini-player mode (CSS opacity cascades to descendants). */}
   {onExpandVideo && (
-    <ExpandVideoButton onClick={onExpandVideo} isIframeAudio={!!isIframeAudio} isMiniPlayerActive={isMiniPlayerActive} controlsActive={controlsActive} onEnterCinema={onEnterCinema} />
+    <ExpandVideoButton onClick={onExpandVideo} isIframeAudio={!!isIframeAudio} isMiniPlayerActive={isMiniPlayerActive} controlsActive={controlsActive} />
   )}
   {/* Close perspective container */}
   </div>
@@ -3186,9 +3183,9 @@ const ReactionBar = memo(({
 });
 
 // (FullscreenVideoPlayer stub removed 2026-04-28 — was a static SmartImage
-//  placeholder reachable only by dead code. Real cinema mode lives in
-//  components/voyo/VideoMode.tsx and is now wired through the Take Out
-//  chip via the onEnterCinema prop chain.)
+//  placeholder reachable only by dead code. Cinema lives in VideoMode.tsx
+//  and is reached via landscape rotation; Take Out keeps its original
+//  PiP behavior, do not reroute it.)
 
 // ============================================
 // WORD TRANSLATION POPUP - Shows when tapping a word
@@ -3877,16 +3874,11 @@ LyricsOverlay.displayName = 'LyricsOverlay';
 export const VoyoPortraitPlayer = ({
   onVoyoFeed,
   onSearch,
-  onEnterCinema,
 }: {
   onVoyoFeed: () => void;
   djMode?: boolean;
   onToggleDJMode?: () => void;
   onSearch?: () => void;
-  /** Promote to full-bleed cinema (VideoMode). Threaded down to the
-   *  "Take Out" chip — tap on Take Out enters cinema. Without this prop
-   *  the chip falls back to system PiP. */
-  onEnterCinema?: () => void;
 }) => {
   // Battery fix: fine-grained selectors — prevents re-render cascade from progress/duration ticks
   const currentTrack = usePlayerStore(s => s.currentTrack);
@@ -4081,10 +4073,8 @@ export const VoyoPortraitPlayer = ({
   const [backdropEnabled, setBackdropEnabled] = useState(false); // v796: back to OFF default — Dash "lol why am I in fullscreen". Toggle still lives in Studio settings.
   const [currentBackdrop, setCurrentBackdrop] = useState('album'); // 'album', 'gradient-purple', etc.
   const [isBackdropLibraryOpen, setIsBackdropLibraryOpen] = useState(false);
-  // State for fullscreen video mode
   // (legacy: isFullscreenVideo state for the stub player was removed
-  //  2026-04-28 in favor of the real cinema wire — VideoMode via
-  //  onEnterCinema prop chain.)
+  //  2026-04-28. Cinema = landscape VideoMode. Take Out = PiP, untouched.)
   // State for boost settings panel
   const [isBoostSettingsOpen, setIsBoostSettingsOpen] = useState(false);
 
@@ -4856,9 +4846,9 @@ export const VoyoPortraitPlayer = ({
     setIsDiscoveryBeltActive(prev => !prev);
   }, []);
 
-  // (handleExpandVideo deleted 2026-04-28 — fell into the removed
-  //  stub fullscreen path; the real cinema mode is invoked via the
-  //  onEnterCinema callback chain to App's setAppMode('video').)
+  // (handleExpandVideo deleted 2026-04-28 — fell into the removed stub
+  //  fullscreen path. Cinema lives in VideoMode via landscape; Take Out
+  //  is PiP, wired directly inside ExpandVideoButton + BottomTakeOutChip.)
 
   // Did the pointer/tap originate on an actual interactive element
   // (button, input, link, custom ARIA role)? If so, the canvas tap/hold
@@ -5569,10 +5559,9 @@ export const VoyoPortraitPlayer = ({
         />
       </div>
 
-      {/* (Fullscreen video render block removed 2026-04-28 — see the
-          stub FullscreenVideoPlayer note up at the component-definitions
-          section. Cinema is now invoked via the onEnterCinema callback
-          chain → App.tsx setAppMode('video') → VideoMode component.) */}
+      {/* (Fullscreen video render block removed 2026-04-28 — was a dead
+          stub. Cinema lives in components/voyo/VideoMode.tsx, reached via
+          landscape rotation. Take Out remains PiP, do not reroute.) */}
 
 
       {/* ╔═════════════════════════════════════════════════════════════╗
@@ -5813,17 +5802,15 @@ export const VoyoPortraitPlayer = ({
             <BigCenterCard
               track={currentTrack}
               // Stage 1: tap = expand to mini player (floating iframe).
-              // Stage 2: 5s after mini engages the chip morphs to "Take
-              // Out" — tapping Take Out promotes to full-bleed cinema
-              // (VideoMode), per Dash 2026-04-28. PiP-fallback if
-              // onEnterCinema isn't wired upstream.
+              // Stage 2: 5s after mini engages the chip morphs to
+              // "Take Out" — tapping Take Out enters system PiP via
+              // pipService directly. Don't reroute this flow.
               onExpandVideo={() => setVideoTarget('portrait')}
               onShowLyrics={() => setShowLyricsOverlay(true)}
               hideThumb={videoTarget === 'portrait'}
               isIframeAudio={playbackSource === 'iframe'}
               isMiniPlayerActive={videoTarget === 'portrait'}
               controlsActive={isControlsRevealed}
-              onEnterCinema={onEnterCinema}
             />
           ) : (
             <div className="w-48 h-48 rounded-[2rem] bg-black/30 border border-white/5 flex items-center justify-center">
@@ -6895,7 +6882,7 @@ export const VoyoPortraitPlayer = ({
           decays to 7% opacity after 5s. Only mounted while the mini
           player is up — otherwise Take Out has nothing to take out. */}
       {videoTarget === 'portrait' && (
-        <BottomTakeOutChip portalProgress={portalProgress} onEnterCinema={onEnterCinema} />
+        <BottomTakeOutChip portalProgress={portalProgress} />
       )}
 
 
