@@ -46,9 +46,13 @@ import { PlaylistModal } from '../playlist/PlaylistModal';
 import { AccountMenu } from '../profile/AccountMenu';
 import { BoostSettings } from '../ui/BoostSettings';
 import { CardHoldActions } from '../ui/CardHoldActions';
-import { isClassicsDismissed, markClassicsDismissed } from '../../services/classicsDropService';
-import { ClassicsContractedShelf } from './ClassicsContractedShelf';
-import { CLASSICS_HARDCODED, CLASSICS_VERSION } from '../../data/classicsHardcoded';
+// All-Time Classics: shelved Apr 28 2026 ("special edition" candidate).
+// Components live in the repo, unused on Home — Dash will revive when ready.
+//   src/components/classic/ClassicsContractedShelf.tsx
+//   src/components/classic/ClassicsDropCeremony.tsx
+//   src/data/classicsHardcoded.ts
+//   src/services/classicsDropService.ts (subscriber + dismiss helpers)
+// To resurrect: import + render between KeepTheEnergyShelf and African Vibes.
 import { ClassicsDropCeremony } from './ClassicsDropCeremony';
 
 // ============================================
@@ -1195,7 +1199,9 @@ const AfricanVibesVideoCard = memo(({
       ref={cardRef}
       className="flex-shrink-0 relative rounded-xl"
       style={{
-        width: 'clamp(86px, 25vw, 110px)',
+        // Bumped ~25% (Apr 28 2026) — OYÉ My People is the stabilizing
+        // core of Home; gained space from Classics retiring goes here.
+        width: 'clamp(108px, 31vw, 138px)',
         aspectRatio: '95 / 142',
       }}
       onClick={() => onTrackPlay(track)}
@@ -1523,7 +1529,7 @@ const AfricanVibesEndSentinel = memo(({
   return (
     <div
       className="flex-shrink-0 relative rounded-xl overflow-hidden"
-      style={{ width: '95px', height: '142px' }}
+      style={{ width: '119px', height: '178px' }}
     >
       {/* Bronze ambient glow — matches the rest of the African Vibes cards */}
       <div
@@ -3166,21 +3172,8 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onNavVisibilityChange, onSwitc
     }
   }, [hotPool, sessionSeed]);
 
-  // ─── All-Time Classics — hardcoded baseline (Apr 28, 2026) ──────────────
-  // Static curated list from src/data/classicsHardcoded.ts. No DB, no
-  // realtime, no cross-project Supabase. We update content by editing the
-  // array + bumping CLASSICS_VERSION; the bumped version invalidates the
-  // dismissal key so users who closed the previous edition see the new one.
-  // Battery-cheap: zero network on mount, no subscribers, just a render.
-  const classicsKey = `hardcoded:${CLASSICS_VERSION}`;
-  const [classicsDismissed, setClassicsDismissed] = useState<boolean>(
-    () => isClassicsDismissed(classicsKey),
-  );
-  const showClassicsShelf = !classicsDismissed && CLASSICS_HARDCODED.length > 0;
-  const handleClassicsShelfClose = useCallback(() => {
-    markClassicsDismissed(classicsKey);
-    setClassicsDismissed(true);
-  }, [classicsKey]);
+  // All-Time Classics state was here — shelved Apr 28 2026. See import-block
+  // comment for how to revive.
 
   // Top 10 on VOYO: Trending tracks, excluding what's in other shelves.
   const trending = useMemo(() => {
@@ -3330,18 +3323,8 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onNavVisibilityChange, onSwitc
         />
       )}
 
-      {/* ═══ ALL-TIME CLASSICS — hardcoded baseline (Apr 28, 2026) ═══
-          Static curated list (Fela + Salif Tekere). Close → gone until
-          we bump CLASSICS_VERSION + ship a new bundle. Zero infra.       */}
-      {showClassicsShelf && (
-        <Safe name="Classics">
-          <ClassicsContractedShelf
-            tracks={CLASSICS_HARDCODED}
-            onPlay={playTrackFull}
-            onClose={handleClassicsShelfClose}
-          />
-        </Safe>
-      )}
+      {/* All-Time Classics shelf used to render here — shelved Apr 28 2026
+          as a future "special edition" surface. See import-block comment. */}
 
       {/* 🌍 African Vibes - cultural pillar, holds its ground.
           Watch More moved OFF the header (Apr 2026): it now only appears at the
@@ -3349,12 +3332,12 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onNavVisibilityChange, onSwitc
           purple Open VOYO morph. Header stays clean, CTA earns the scroll.
           contain:paint scopes the AfricanVibesVideoCard iframe loads + the
           carousel's bronze breath animations to this section. */}
-      <div className="mt-5 mb-10" style={{ contain: 'paint' }}>
-        <div className="px-4 mb-5 flex items-center gap-3">
-          <AfricaIcon size={36} />
+      <div className="mt-5 mb-12" style={{ contain: 'paint' }}>
+        <div className="px-4 mb-6 flex items-center gap-3">
+          <AfricaIcon size={44} />
           <div className="flex-1">
             <h2
-              className="text-white text-[22px] leading-none"
+              className="text-white text-[28px] leading-none"
               style={{ fontWeight: 800, letterSpacing: '-0.01em' }}
             >
               OYÉ{' '}
