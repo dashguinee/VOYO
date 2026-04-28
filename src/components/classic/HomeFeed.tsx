@@ -1019,9 +1019,19 @@ const AfricanVibesVideoCard = memo(({
   const [shouldMountIframe, setShouldMountIframe] = useState(false);
   useEffect(() => {
     if (shouldHoldMounted) {
-      setShouldShow(true);
-      setShouldMountIframe(true);
-      return;
+      // v810 (Dash 2026-04-29 "gap for scroll to set, avoid rapid
+      // movement reloads"): 200ms entry settle. Cards that flicker into
+      // active for less than 200ms during rapid scroll never trigger
+      // a YT mount. Pre-warm via isEdge handles the smooth-scroll case
+      // — by the time activeIdx lands here, this card has likely been
+      // edge for longer than 200ms already, so the felt latency is
+      // small. The exit lifecycle (100ms head-start + 600ms fade + 800ms
+      // unmount) remains as Dash tuned it.
+      const settleTimer = setTimeout(() => {
+        setShouldShow(true);
+        setShouldMountIframe(true);
+      }, 200);
+      return () => clearTimeout(settleTimer);
     }
     const showTimer = setTimeout(() => setShouldShow(false), 100);
     const mountTimer = setTimeout(() => setShouldMountIframe(false), 800);
