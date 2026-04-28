@@ -2183,19 +2183,25 @@ const BigCenterCard = memo(({ track, onExpandVideo, onShowLyrics, hideThumb, isI
           React unmounts the old div and mounts a new one, triggering the
           voyo-fade-in animation. Result: text crossfades on every track
           change instead of popping. */}
+      {/* v793 (Dash 2026-04-29): tiny nudge up + contrast bump on the
+          now-playing title/artist. bottom-3 → bottom-5 (8px lift),
+          font sizes 13/10 → 15/11, artist white/70 → white/85, and a
+          soft glow added to each — white halo on the title, bronze
+          halo on the artist (on-theme, signature accent). Nothing else
+          touched. */}
       <div
         key={track.trackId}
-        className="absolute bottom-3 left-3 right-3 animate-[voyo-fade-in_0.4s_ease-out]"
+        className="absolute bottom-5 left-3 right-3 animate-[voyo-fade-in_0.4s_ease-out]"
       >
         <p
-          className="text-white font-bold text-[13px] truncate pointer-events-none"
-          style={{ textShadow: '0 1px 4px rgba(0,0,0,0.6)' }}
+          className="text-white font-bold text-[15px] truncate pointer-events-none tracking-[0.005em]"
+          style={{ textShadow: '0 1px 4px rgba(0,0,0,0.7), 0 0 12px rgba(255,255,255,0.22)' }}
         >
           {track.title}
         </p>
         <p
-          className="text-white/70 text-[10px] truncate pointer-events-none"
-          style={{ textShadow: '0 1px 3px rgba(0,0,0,0.6)' }}
+          className="text-white/85 text-[11px] truncate pointer-events-none"
+          style={{ textShadow: '0 1px 3px rgba(0,0,0,0.7), 0 0 10px rgba(212,160,83,0.30)' }}
         >
           {track.artist}
         </p>
