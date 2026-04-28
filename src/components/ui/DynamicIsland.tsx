@@ -91,8 +91,12 @@ const TIMING = {
 const TYPE_COLOR: Record<NotifType, string> = {
   music:   '#a855f7',
   message: '#8b5cf6',
-  system:  '#ef4444',
-  admin:   '#ef4444',
+  // v828 (Dash 2026-04-29): softer red — was the harsh #ef4444.
+  // The dot phase already runs faded + skirted, but the base hue
+  // also drifts down to a warm coral so it feels like a candle
+  // glow, not an alert.
+  system:  '#f87171',
+  admin:   '#f87171',
 };
 
 const dotColor = (n: Notification | undefined): string =>
@@ -551,6 +555,7 @@ export const DynamicIsland = ({
   // ── Render ─────────────────────────────────────────────────────────
 
   if (showDot) {
+    const skirtColor = dotColor(currentNotification);
     return (
       <div
         className="cursor-pointer flex-1 h-8 flex items-center justify-center"
@@ -558,21 +563,55 @@ export const DynamicIsland = ({
         style={{ minWidth: 120 }}
         aria-label={`${notifications.length} notification${notifications.length === 1 ? '' : 's'} — tap to view`}
       >
-        <div
-          className="w-2 h-2 rounded-full voyo-island-dot-pulse"
-          style={{ backgroundColor: dotColor(currentNotification) }}
-        />
+        {/* v828 (Dash 2026-04-29 "smaller, softer, gentle pulse with a
+            skirt, very faded"): two-layer dot.
+              - SKIRT: outer halo that breathes outward (sonar-pulse),
+                very translucent, slow 3.6s rhythm. The "ambient" cue.
+              - CORE: small 5px dot, faded (~50% opacity max), gentle
+                opacity-only pulse. No more scale punch — the skirt
+                carries the motion.
+            CSS color() vars per dot so we can tint everything from
+            one source. */}
+        <div className="voyo-island-dot-wrap" style={{ ['--dot-color' as never]: skirtColor }}>
+          <div className="voyo-island-dot-skirt" />
+          <div className="voyo-island-dot-core" />
+        </div>
         <style>{`
-          @keyframes voyo-island-dot {
-            0%, 100% { opacity: 0.55; transform: scale(1); }
-            50%      { opacity: 1;    transform: scale(1.3); }
+          .voyo-island-dot-wrap {
+            position: relative;
+            width: 5px;
+            height: 5px;
           }
-          .voyo-island-dot-pulse {
-            animation: voyo-island-dot 2.4s ease-in-out infinite;
-            box-shadow: 0 0 6px currentColor;
+          .voyo-island-dot-core {
+            position: absolute;
+            inset: 0;
+            border-radius: 9999px;
+            background-color: var(--dot-color);
+            opacity: 0.42;
+            animation: voyo-island-dot-core 3.2s ease-in-out infinite;
+          }
+          .voyo-island-dot-skirt {
+            position: absolute;
+            inset: 0;
+            border-radius: 9999px;
+            background-color: var(--dot-color);
+            opacity: 0;
+            transform: scale(1);
+            animation: voyo-island-dot-skirt 3.6s ease-out infinite;
+            pointer-events: none;
+          }
+          @keyframes voyo-island-dot-core {
+            0%, 100% { opacity: 0.32; }
+            50%      { opacity: 0.55; }
+          }
+          @keyframes voyo-island-dot-skirt {
+            0%   { opacity: 0.22; transform: scale(1);   }
+            70%  { opacity: 0;    transform: scale(2.6); }
+            100% { opacity: 0;    transform: scale(2.6); }
           }
           @media (prefers-reduced-motion: reduce) {
-            .voyo-island-dot-pulse { animation: none; opacity: 0.7; }
+            .voyo-island-dot-core { animation: none; opacity: 0.42; }
+            .voyo-island-dot-skirt { animation: none; opacity: 0; }
           }
         `}</style>
       </div>
