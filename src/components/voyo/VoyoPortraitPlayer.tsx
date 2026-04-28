@@ -1386,6 +1386,21 @@ const RightToolbar = memo(({ onSettingsClick }: { onSettingsClick: () => void })
   const setExplicitLike = usePreferenceStore(s => s.setExplicitLike);
   const isLiked = currentTrack?.trackId ? trackPreferences[currentTrack.trackId]?.explicitLike === true : false;
 
+  // Heart pulse — flashes the toolbar button on every false→true like
+  // transition, including the right-swipe Like gesture (v792, Dash
+  // 2026-04-29: "light up the heart too — both work well together").
+  const [heartPulse, setHeartPulse] = useState(false);
+  const prevLikedRef = useRef(isLiked);
+  useEffect(() => {
+    if (isLiked && !prevLikedRef.current) {
+      setHeartPulse(true);
+      const t = setTimeout(() => setHeartPulse(false), 900);
+      prevLikedRef.current = isLiked;
+      return () => clearTimeout(t);
+    }
+    prevLikedRef.current = isLiked;
+  }, [isLiked]);
+
   const handleLike = () => {
     if (!currentTrack?.trackId) return;
     setExplicitLike(currentTrack.trackId, !isLiked);
@@ -1401,7 +1416,12 @@ const RightToolbar = memo(({ onSettingsClick }: { onSettingsClick: () => void })
       className="absolute top-1/2 -translate-y-1/2 z-50 flex flex-col gap-3"
       style={{ right: 'max(1.5rem, env(safe-area-inset-right, 1.5rem))' }}
     >
-      {/* Like Button — purple when active */}
+      {/* Like Button — purple when active. v792: pulse-fades when
+          isLiked transitions to true, including from the swipe-right
+          Like gesture (Dash 2026-04-29: "for swipe right instead of
+          typing like, you could light up the heart too — both work
+          well together"). The wall + label + heart-pulse all fire
+          on the same like-stroke. */}
       <button
         onClick={handleLike}
         className={`w-11 h-11 rounded-full flex items-center justify-center backdrop-blur-md shadow-lg transition-all duration-300 active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-500/50 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0a0a0c] ${
@@ -1411,10 +1431,8 @@ const RightToolbar = memo(({ onSettingsClick }: { onSettingsClick: () => void })
         }`}
         style={{
           background: isLiked ? 'rgba(139, 92, 246, 0.25)' : 'rgba(28, 28, 35, 0.65)',
-          // Was an absolute -z-10 inset blur child — Safari clips behind
-          // parent compositing context, often invisible. Render the glow
-          // as a box-shadow on the button itself so it's always painted.
           boxShadow: isLiked ? '0 0 14px rgba(139,92,246,0.35)' : undefined,
+          animation: heartPulse ? 'voyo-heart-pulse 0.9s cubic-bezier(0.16, 1, 0.3, 1)' : undefined,
         }}
         aria-label={isLiked ? 'Unlike this track' : 'Like this track'}
         title={isLiked ? 'Unlike' : 'Like'}
@@ -2027,6 +2045,17 @@ const BigCenterCard = memo(({ track, onExpandVideo, onShowLyrics, hideThumb, isI
    *  (full-bleed VideoMode). Falls back to system PiP if not provided. */
   onEnterCinema?: () => void;
 }) => {
+  // Poster purple fade (v792, Dash 2026-04-29). Resets on track change,
+  // fades IN ~3s after the new track starts. Skipped in video mode
+  // (hideThumb=true) since the iframe has its own visual treatment.
+  const [posterPurple, setPosterPurple] = useState(false);
+  useEffect(() => {
+    setPosterPurple(false);
+    if (hideThumb) return;
+    const t = setTimeout(() => setPosterPurple(true), 3000);
+    return () => clearTimeout(t);
+  }, [track?.trackId, hideThumb]);
+
   return (
   // ── PERSPECTIVE CONTAINER ─────────────────────────────────────────
   // Wraps the card in a 3D space. perspective: 1200px is deep enough
@@ -2132,6 +2161,24 @@ const BigCenterCard = memo(({ track, onExpandVideo, onShowLyrics, hideThumb, isI
           background: 'linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.55) 35%, transparent 100%)',
         }}
       />
+      {/* Poster purple progressive fade — bottom-up violet glow that
+          fades IN ~3s after a new track starts (Dash 2026-04-29 v792:
+          "poster used to have its own overlay, this purple progressive
+          fade from bottom — fade in after few seconds"). Adds depth to
+          the now-playing card once the user has settled in. Long
+          opacity transition so it feels atmospheric, not snap-on.
+          Skipped in video mode (hideThumb=true). */}
+      {!hideThumb && (
+        <div
+          className="absolute left-0 right-0 bottom-0 h-2/3 pointer-events-none"
+          style={{
+            background: 'linear-gradient(to top, rgba(139,92,246,0.42) 0%, rgba(139,92,246,0.18) 35%, transparent 100%)',
+            mixBlendMode: 'screen',
+            opacity: posterPurple ? 1 : 0,
+            transition: 'opacity 1.4s cubic-bezier(0.16, 1, 0.3, 1)',
+          }}
+        />
+      )}
       {/* Title + artist fade in on each new track via key-based re-mount.
           React unmounts the old div and mounts a new one, triggering the
           voyo-fade-in animation. Result: text crossfades on every track
@@ -5550,7 +5597,8 @@ export const VoyoPortraitPlayer = ({
           // so the bottom edge stays put.
           // v791: another 6px tiny drop — Dash "drop it down a tiny bit,
           // just artist name slightly covered". Was 476/356/232.
-          height: `calc(100% - ${cubeDockOpen ? 470 : oyeBarBehavior === 'fade' ? 350 : 226}px)`,
+          // v792: 4px more — "tiny bit lower more". Now 466/346/222.
+          height: `calc(100% - ${cubeDockOpen ? 466 : oyeBarBehavior === 'fade' ? 346 : 222}px)`,
         }}
       >
 
@@ -5746,8 +5794,11 @@ export const VoyoPortraitPlayer = ({
             the artwork sits a touch deeper which feels less compacted.
             The inner cardWrapRef keeps its swipe transform (translateX
             during drag), so vertical and horizontal positioning compose
-            cleanly. (Dash 2026-04-28) */}
-        <div style={{ transform: 'translateY(36px)' }}>
+            cleanly. (Dash 2026-04-28)
+            v792: bumped 36 → 42 — Dash "a tiny bit lower more, same
+            for pause button". The pause button (engine vinyl below) is
+            also nudged via the engine wrapper a few lines down. */}
+        <div style={{ transform: 'translateY(42px)' }}>
         <div
           ref={cardWrapRef}
           className="relative"
@@ -5893,7 +5944,9 @@ export const VoyoPortraitPlayer = ({
             VOYO cube) is the dominant surface and the engine is hidden;
             engine reveals as the user scrolls past 0.2 or taps to reveal
             controls. Codifies the Anchor / Frame / Canvas language —
-            see memory/voyo-portrait-anchor-frame-canvas.md (2026-04-28). */}
+            see memory/voyo-portrait-anchor-frame-canvas.md (2026-04-28).
+            v792: translateY(12px) — pause button rides a touch lower
+            with the hero bump. Stays inside Anchor's vertical budget. */}
         <div
           style={{
             opacity: Math.max(
@@ -5902,6 +5955,7 @@ export const VoyoPortraitPlayer = ({
             ),
             pointerEvents: (isControlsRevealed || portalProgress > 0.25) ? 'auto' : 'none',
             transition: 'opacity 0.32s cubic-bezier(0.16, 1, 0.3, 1)',
+            transform: 'translateY(12px)',
           }}
         >
           <PlayControls
@@ -5983,7 +6037,7 @@ export const VoyoPortraitPlayer = ({
           space slides in without pushing the rail offscreen. */}
       <div
         className={`flex-shrink-0 w-full relative z-40 flex flex-col pt-3 pb-7 transition-[min-height] duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] ${
-          cubeDockOpen ? 'min-h-[442px]' : oyeBarBehavior === 'fade' ? 'min-h-[322px]' : ''
+          cubeDockOpen ? 'min-h-[438px]' : oyeBarBehavior === 'fade' ? 'min-h-[318px]' : ''
         }`}
         style={{
           // Two-step Layer B fade.

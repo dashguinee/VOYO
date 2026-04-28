@@ -856,6 +856,16 @@ input[type="range"]:focus::-moz-range-thumb {
   50%      { transform: translateY(4px); }
 }
 
+/* Heart pulse — toolbar Heart button flashes when isLiked transitions
+   to true. Fires on the right-swipe Like gesture too (Dash 2026-04-29
+   v792: "light up the heart too"). Scale pop + brighter purple halo
+   that decays over 900ms. */
+@keyframes voyo-heart-pulse {
+  0%   { transform: scale(1);    box-shadow: 0 0 14px rgba(139,92,246,0.35); }
+  35%  { transform: scale(1.18); box-shadow: 0 0 26px rgba(139,92,246,0.7), 0 0 40px rgba(196,181,253,0.4); }
+  100% { transform: scale(1);    box-shadow: 0 0 14px rgba(139,92,246,0.35); }
+}
+
 /* Heat shimmer — subtle wave on the "Heating Up RN" billboard title.
    Mimics hot air rising distortion. translateY oscillates ±1px,
    scaleX stretches ±1% for the wavy feel. Runs at 2s to not be jarring. */
