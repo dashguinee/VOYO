@@ -5129,18 +5129,23 @@ export const VoyoPortraitPlayer = ({
       return;
     }
 
-    // v808 (Dash 2026-04-29 "tap should just be close mini player, not
-    //  pause"): single tap CLOSES the mini player if it's up; otherwise
-    //  just toggles the controls reveal. Removed the v788 tap-to-pause
-    //  binding. User pauses explicitly via the disk button (reachable
-    //  once controls are revealed).
+    // v819 (Dash 2026-04-29 "tap should also be the mode change,
+    //  tap>tap>tap poster>video>poster, hold remains lyrics clean"):
+    //  single tap now cycles videoTarget between 'portrait' (mini
+    //  player visible) and 'hidden' (poster). The hold-for-lyrics
+    //  gesture (artwork onPointerDown 350ms) still works — lyrics
+    //  fires before this tap handler, and stopPropagation on the
+    //  artwork keeps the canvas swipe/DJ-mode hold out. Mini Player
+    //  chip on the artwork still works too as a parallel affordance.
     if (videoTarget === 'portrait') {
       setVideoTarget('hidden');
-      return;
+    } else {
+      setVideoTarget('portrait');
     }
+    // Preserve the controls/OyoIsland reveal cascade so tap also surfaces
+    // the engine row + chat trigger like before.
     const wasHidden = !isControlsRevealed;
     setIsControlsRevealed(prev => !prev);
-
     if (wasHidden) {
       setShowOyoIsland(true);
       haptics.light();
