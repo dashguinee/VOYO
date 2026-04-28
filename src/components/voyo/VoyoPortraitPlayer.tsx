@@ -4080,7 +4080,7 @@ export const VoyoPortraitPlayer = ({
   }, [hotTracks, discoverTracks, playTrack]);
 
   // Backdrop state
-  const [backdropEnabled, setBackdropEnabled] = useState(true); // v795: ON by default — Dash 2026-04-29
+  const [backdropEnabled, setBackdropEnabled] = useState(false); // v796: back to OFF default — Dash "lol why am I in fullscreen". Toggle still lives in Studio settings.
   const [currentBackdrop, setCurrentBackdrop] = useState('album'); // 'album', 'gradient-purple', etc.
   const [isBackdropLibraryOpen, setIsBackdropLibraryOpen] = useState(false);
   // State for fullscreen video mode
