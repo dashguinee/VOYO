@@ -31,25 +31,35 @@ export interface ClassicsDrop {
   reveal_mode: RevealMode | null;
 }
 
-const VIEWED_LS_PREFIX = 'voyo:classics:drop:viewed:';
+const DISMISSED_LS_PREFIX = 'voyo:classics:dismissed:';
 
-export function isDropViewedByUser(dropId: string): boolean {
+/**
+ * Generic dismissal — works for both hardcoded baselines (key = version
+ * string) and cockpit drops (key = drop_id). New version / new drop_id =
+ * automatically bypasses old dismissal.
+ */
+export function isClassicsDismissed(key: string): boolean {
   try {
-    return typeof localStorage !== 'undefined' && localStorage.getItem(VIEWED_LS_PREFIX + dropId) === '1';
+    return typeof localStorage !== 'undefined' && localStorage.getItem(DISMISSED_LS_PREFIX + key) === '1';
   } catch {
     return false;
   }
 }
 
-export function markDropViewedByUser(dropId: string): void {
+export function markClassicsDismissed(key: string): void {
   try {
     if (typeof localStorage !== 'undefined') {
-      localStorage.setItem(VIEWED_LS_PREFIX + dropId, '1');
+      localStorage.setItem(DISMISSED_LS_PREFIX + key, '1');
     }
   } catch {
     // Quota / private mode — non-fatal.
   }
 }
+
+// Legacy aliases (still imported in HomeFeed) — kept thin so the migration
+// is a single edit. Will go away in the next refactor pass.
+export const isDropViewedByUser = isClassicsDismissed;
+export const markDropViewedByUser = markClassicsDismissed;
 
 /**
  * Backfill resolver: when a drop's track_ids miss the local hotPool/TRACKS

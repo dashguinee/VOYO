@@ -46,8 +46,9 @@ import { PlaylistModal } from '../playlist/PlaylistModal';
 import { AccountMenu } from '../profile/AccountMenu';
 import { BoostSettings } from '../ui/BoostSettings';
 import { CardHoldActions } from '../ui/CardHoldActions';
-import { useActiveClassicsDrop, fetchTracksByYoutubeIds, isDropViewedByUser, markDropViewedByUser } from '../../services/classicsDropService';
+import { useActiveClassicsDrop, fetchTracksByYoutubeIds, isClassicsDismissed, markClassicsDismissed } from '../../services/classicsDropService';
 import { ClassicsContractedShelf } from './ClassicsContractedShelf';
+import { CLASSICS_HARDCODED, CLASSICS_VERSION } from '../../data/classicsHardcoded';
 import { ClassicsDropCeremony } from './ClassicsDropCeremony';
 
 // ============================================
@@ -3256,37 +3257,31 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onNavVisibilityChange, onSwitc
     return ordered.slice(0, 7);
   }, [activeClassicsDrop, localResolvedDropTracks, backfilledDropTracks]);
 
-  // Reveal modes:
-  //  · AUTO — first time a user sees the live drop (per device, localStorage),
-  //    ceremony auto-summons. Once dismissed, marks viewed; future opens of
-  //    the same drop on this device fall back to tap-to-reveal.
-  //  · TAP — bronze icon breathes; ceremony only opens on user tap.
-  // Icon stays tappable in both modes so users can re-summon.
-  const [ceremonyOpen, setCeremonyOpen] = useState(false);
-  useEffect(() => { setCeremonyOpen(false); }, [activeClassicsDrop?.id]);
-
-  // Auto-summon on first view of an auto-mode drop.
-  useEffect(() => {
-    if (!activeClassicsDrop) return;
-    if (classicsDropTracks.length === 0) return;
-    const mode = activeClassicsDrop.reveal_mode || 'auto';
-    if (mode !== 'auto') return;
-    if (isDropViewedByUser(activeClassicsDrop.id)) return;
-    setCeremonyOpen(true);
-  }, [activeClassicsDrop, classicsDropTracks.length]);
-
-  // Mark drop as viewed once user opens it. Subsequent app loads on this
-  // device won't auto-summon — icon stays tappable for re-watch.
-  useEffect(() => {
-    if (ceremonyOpen && activeClassicsDrop) {
-      markDropViewedByUser(activeClassicsDrop.id);
-    }
-  }, [ceremonyOpen, activeClassicsDrop]);
-  // Ceremony renders only after user taps the bronze icon (signal pill).
-  // The icon flashes when a drop is live and tracks have resolved — tap
-  // = "yes, summon the ceremony." This is the chef's-kiss moment.
-  const dropTracksReady = Boolean(activeClassicsDrop) && classicsDropTracks.length >= 1;
-  const showClassicsDropCeremony = dropTracksReady && ceremonyOpen;
+  // Source resolution + dismissal:
+  //  · Hardcoded baseline lives in src/data/classicsHardcoded.ts (Fela +
+  //    Salif Tekere today). CLASSICS_VERSION is the dismissal key while
+  //    no drop is active — bumping the version (with a new bundle) makes
+  //    the shelf re-appear for everyone who dismissed the prior edition.
+  //  · An active cockpit drop overrides the baseline for its duration;
+  //    its dismissal key is the drop_id, so closing it doesn't kill the
+  //    baseline once the drop ends.
+  const classicsShelfTracks = activeClassicsDrop && classicsDropTracks.length > 0
+    ? classicsDropTracks
+    : CLASSICS_HARDCODED;
+  const classicsShelfKey = activeClassicsDrop && classicsDropTracks.length > 0
+    ? `drop:${activeClassicsDrop.id}`
+    : `hardcoded:${CLASSICS_VERSION}`;
+  const [dismissedKeys, setDismissedKeys] = useState<Set<string>>(new Set());
+  const isShelfDismissed = dismissedKeys.has(classicsShelfKey) || isClassicsDismissed(classicsShelfKey);
+  const showClassicsShelf = !isShelfDismissed && classicsShelfTracks.length > 0;
+  const handleClassicsShelfClose = useCallback(() => {
+    markClassicsDismissed(classicsShelfKey);
+    setDismissedKeys(prev => {
+      const next = new Set(prev);
+      next.add(classicsShelfKey);
+      return next;
+    });
+  }, [classicsShelfKey]);
 
   // Top 10 on VOYO: Trending tracks, excluding what's in other shelves.
   const trending = useMemo(() => {
@@ -3436,17 +3431,21 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onNavVisibilityChange, onSwitc
         />
       )}
 
-      {/* ═══ CLASSICS — V1.1 contracted shelf (Apr 2026) ═══
-          Compact header on the left, single luxury disc on the right.
-          Horizontal swipe cycles through cards from an active drop;
-          end-state is a "come back tomorrow" sign-off. Replaces the
-          multi-disc carousel — Dash's design call, lock-on April 28. */}
-      <Safe name="Classics">
-        <ClassicsContractedShelf
-          tracks={activeClassicsDrop ? classicsDropTracks : []}
-          onPlay={playTrackFull}
-        />
-      </Safe>
+      {/* ═══ CLASSICS — V1.2 hardcoded-baseline + drop-override (Apr 28, 2026) ═══
+          Default: tracks from src/data/classicsHardcoded.ts (currently Fela
+          + Salif Tekere). A live cockpit drop overrides the baseline for
+          its duration. Close button dismisses the current edition by its
+          stable key — bumping CLASSICS_VERSION (or firing a new drop)
+          re-surfaces the shelf for everyone. */}
+      {showClassicsShelf && (
+        <Safe name="Classics">
+          <ClassicsContractedShelf
+            tracks={classicsShelfTracks}
+            onPlay={playTrackFull}
+            onClose={handleClassicsShelfClose}
+          />
+        </Safe>
+      )}
 
       {/* 🌍 African Vibes - cultural pillar, holds its ground.
           Watch More moved OFF the header (Apr 2026): it now only appears at the

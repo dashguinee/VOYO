@@ -29,9 +29,10 @@ const BRONZE = '#D4A053';
 interface Props {
   tracks: Track[];
   onPlay: (track: Track) => void;
+  onClose?: () => void;
 }
 
-function ClassicsContractedShelfImpl({ tracks, onPlay }: Props) {
+function ClassicsContractedShelfImpl({ tracks, onPlay, onClose }: Props) {
   const [index, setIndex] = useState(0);
 
   // Keep index inside valid range as tracks list updates (e.g. drop ends).
@@ -103,6 +104,32 @@ function ClassicsContractedShelfImpl({ tracks, onPlay }: Props) {
       onPointerCancel={() => { dragRef.current = null; }}
       onWheel={onWheel}
     >
+      {/* Close button — tap to dismiss the drop. Stays gone until a new
+          drop fires (different drop_id flips it back on). Subtle, sized
+          for thumb but small enough not to compete with the disc. */}
+      {onClose && (
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); onClose(); }}
+          onPointerDown={(e) => e.stopPropagation()}
+          aria-label="Dismiss Classics Drop"
+          className="absolute top-2 right-2 z-10 flex items-center justify-center rounded-full"
+          style={{
+            width: 28,
+            height: 28,
+            background: 'rgba(10,6,4,0.55)',
+            backdropFilter: 'blur(6px)',
+            border: '1px solid rgba(212,160,83,0.22)',
+            color: 'rgba(212,160,83,0.78)',
+            cursor: 'pointer',
+          }}
+        >
+          <svg width="11" height="11" viewBox="0 0 11 11" fill="none" aria-hidden>
+            <path d="M1.5 1.5 L9.5 9.5 M9.5 1.5 L1.5 9.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+          </svg>
+        </button>
+      )}
+
       {/* Hairline gold borders anchoring the row. */}
       <div
         className="absolute top-0 left-8 right-8 md:left-12 md:right-12 h-px pointer-events-none"
