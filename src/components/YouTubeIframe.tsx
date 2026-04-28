@@ -690,54 +690,93 @@ export const YouTubeIframe = memo(() => {
     }
   }, [seekPosition, playbackSource, videoTarget]);
 
-  // Fallback sync: When boosted/r2, video should follow audio (not vice versa)
-  // Only kicks in if drift exceeds threshold - YouTube rarely buffers
+  // ── Iframe sync (Apr 28 2026 redesign) ────────────────────────────────
+  // Replaces the 2.5s polling drift correction. Pattern: poster art covers
+  // the iframe through any sync work, so the user never sees a YT load
+  // spinner. We do at most TWO syncs per track lifecycle:
+  //   1. ONE confident initial sync — fires after a min-poster window AND
+  //      the iframe has reached canplay/PLAYING. Seeks video to audio time.
+  //   2. ONE drift correction — checked once at T+8s after the initial
+  //      sync confirmed. If drift exceeded threshold, poster fades back in,
+  //      we re-seek, then fade out. Marked done; never re-check.
+  // No interval polling. No "hectic reactive reload."
+  const POSTER_MIN_MS = 3000;        // poster minimum dwell
+  const DRIFT_CHECK_DELAY_MS = 8000; // single drift check, T+ this after sync
+  const DRIFT_THRESHOLD_S = 1.5;
+  const POSTER_FADE_MS = 360;
+
+  // Phase machine: 'poster' = poster fully covers iframe; 'synced' = poster
+  // faded out, iframe visible; 'correcting' = poster faded in for a one-shot
+  // drift correction, will return to 'synced' when seek lands.
+  type VideoSyncPhase = 'poster' | 'synced' | 'correcting';
+  const [videoSyncPhase, setVideoSyncPhase] = useState<VideoSyncPhase>('poster');
+  const driftCorrectedRef = useRef(false);
+
+  // Reset phase + drift-corrected flag whenever the track changes.
+  useEffect(() => {
+    setVideoSyncPhase('poster');
+    driftCorrectedRef.current = false;
+  }, [currentTrack?.trackId]);
+
   useEffect(() => {
     if ((playbackSource !== 'cached' && playbackSource !== 'r2') || !isPlaying) return;
-    // (audit-3) Gate on videoTarget — when hidden the iframe has no
-    // visible video to drift-correct. The previous version mounted
-    // this 1.5s interval for every R2 track regardless of whether the
-    // video was on screen, burning ~40 seekTo polls/min for nothing
-    // on the dominant pure-audio flow.
     if (videoTarget === 'hidden') return;
+    if (!currentTrack) return;
 
-    // Loosened 2026-04-26: was 1.5s/0.6s. Each correction is a YT
-    // seekTo() which causes a visible re-buffer "load" — the YT iframe
-    // API has no smoother sync mechanism (setPlaybackRate only takes
-    // discrete 0.25 steps, useless for fractional convergence). So the
-    // best we can do is correct LESS often. 0.6s threshold caught almost
-    // every drift; 1.5s only catches actually-noticeable offsets. Music
-    // videos rarely lip-sync-critical so the tradeoff is worth it.
-    const DRIFT_THRESHOLD = 1.5;
-    const CHECK_INTERVAL = 2500;
+    let cancelled = false;
+    const minPosterDeadline = Date.now() + POSTER_MIN_MS;
+    let driftTimer: ReturnType<typeof setTimeout> | null = null;
 
-    // CRITICAL: read currentTime via getState() inside the callback, NOT
-    // from the closure. The previous version had `currentTime` in the dep
-    // array, which made this useEffect re-run on every audio tick (5-10Hz).
-    // Each re-run cleared and recreated the interval — meaning the 5s
-    // drift check almost never actually fired (it was reset before reaching
-    // its trigger time). Plus the constant create/clear churn was wasted
-    // CPU on the main thread.
-    const syncInterval = setInterval(() => {
-      // Battery: skip drift work when tab is hidden — iframe is frozen
-      // there anyway, and the seek() call would queue up against a stale
-      // player. Mirrors the time-update interval guard below.
-      if (document.hidden) return;
+    // Single confident sync: wait for both (a) min poster dwell and (b)
+    // YT player ready. Then ONE seek + ONE phase flip. Schedule the lone
+    // drift check after we confirm sync.
+    const tryInitialSync = () => {
+      if (cancelled) return;
+      if (Date.now() < minPosterDeadline) return;
       const player = playerRef.current;
-      if (!player?.getCurrentTime || !player?.seekTo) return;
-
-      const videoTime = player.getCurrentTime() || 0;
+      if (!player?.seekTo || !player?.getPlayerState) return;
+      const state = player.getPlayerState();
+      // 1=PLAYING, 3=BUFFERING — both acceptable; the seek itself will
+      // settle it. Don't sync before the player has any state at all.
+      if (state !== 1 && state !== 3) return;
       const audioTime = usePlayerStore.getState().currentTime;
-      const drift = Math.abs(videoTime - audioTime);
+      try { player.seekTo(audioTime, true); } catch {}
+      setVideoSyncPhase('synced');
+      // Schedule the SOLE drift correction.
+      driftTimer = setTimeout(() => {
+        if (cancelled || driftCorrectedRef.current) return;
+        if (document.hidden) return;
+        const p = playerRef.current;
+        if (!p?.getCurrentTime || !p?.seekTo) return;
+        const videoT = p.getCurrentTime() || 0;
+        const audioT = usePlayerStore.getState().currentTime;
+        const drift = Math.abs(videoT - audioT);
+        driftCorrectedRef.current = true; // either way, never check again.
+        if (drift > DRIFT_THRESHOLD_S) {
+          devLog(`[YouTubeIframe] One-shot drift correction: ${drift.toFixed(2)}s`);
+          setVideoSyncPhase('correcting');
+          try { p.seekTo(audioT, true); } catch {}
+          // Hold poster up for the YT re-buffer, then fade it out.
+          setTimeout(() => { if (!cancelled) setVideoSyncPhase('synced'); }, POSTER_FADE_MS + 800);
+        }
+      }, DRIFT_CHECK_DELAY_MS);
+    };
 
-      if (drift > DRIFT_THRESHOLD) {
-        devLog(`[YouTubeIframe] Drift detected: ${drift.toFixed(1)}s - syncing video to audio`);
-        player.seekTo(audioTime, true);
-      }
-    }, CHECK_INTERVAL);
+    // Poll ONCE every 250ms only until the initial sync lands. Stops the
+    // moment we transition to 'synced'. This is the only loop in the
+    // entire pipeline — bounded, brief, single-purpose.
+    const probe = setInterval(() => {
+      if (cancelled) return;
+      if (videoSyncPhase !== 'poster') { clearInterval(probe); return; }
+      tryInitialSync();
+    }, 250);
 
-    return () => clearInterval(syncInterval);
-  }, [playbackSource, isPlaying, videoTarget]);
+    return () => {
+      cancelled = true;
+      clearInterval(probe);
+      if (driftTimer) clearTimeout(driftTimer);
+    };
+  }, [playbackSource, isPlaying, videoTarget, currentTrack, videoSyncPhase]);
 
   // Time update interval (only when streaming from iframe).
   //
@@ -935,6 +974,28 @@ export const YouTubeIframe = memo(() => {
           ref={mountRef}
           style={{ width: '100%', height: '100%' }}
         />
+        {/* Poster art overlay (Apr 28 2026 sync redesign).
+            Sits above the iframe; covers any YT load/buffer/seek state so
+            the user never sees a load spinner. Visible during 'poster'
+            (initial settle) and 'correcting' (one-shot drift fix). Fades
+            out only when the phase machine reaches 'synced'. */}
+        {currentTrack?.coverUrl && (videoSyncPhase === 'poster' || videoSyncPhase === 'correcting') && (
+          <div
+            aria-hidden
+            style={{
+              position: 'absolute',
+              inset: 0,
+              backgroundImage: `url(${currentTrack.coverUrl})`,
+              backgroundSize: 'cover',
+              backgroundPosition: 'center',
+              opacity: 1,
+              transition: `opacity ${POSTER_FADE_MS}ms ease-out`,
+              zIndex: 4,
+              pointerEvents: 'none',
+              filter: 'brightness(0.92)',
+            }}
+          />
+        )}
       </div>
 
       {/* Take Out is now wired on the BigCenterCard's ExpandVideoButton
