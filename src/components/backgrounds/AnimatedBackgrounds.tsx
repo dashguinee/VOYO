@@ -39,7 +39,12 @@ export const ReactionCanvas = () => {
 
   return (
     <div className="absolute inset-0 overflow-hidden pointer-events-none z-30">
-      {reactions.map(reaction => {
+      {reactions
+        // OY\u00C9 is the gateway, not a celebration \u2014 skip floating confetti
+        // for OY\u00C9-typed reactions (Dash 2026-04-28). Other users'
+        // realtime broadcasts of OY\u00C9 are filtered out here too.
+        .filter(reaction => reaction.type !== 'oye')
+        .map(reaction => {
         const xPos = reaction.x || 50;
         const xOffset = getStableOffset(reaction.id);
 
@@ -55,7 +60,6 @@ export const ReactionCanvas = () => {
           >
             {reaction.emoji || (
               reaction.type === 'oyo' ? '\uD83D\uDC4B' :
-              reaction.type === 'oye' ? '\uD83C\uDF89' :
               reaction.type === 'fire' ? '\uD83D\uDD25' :
               reaction.type === 'wazzguan' ? '\uD83E\uDD19' :
               '\u2728'

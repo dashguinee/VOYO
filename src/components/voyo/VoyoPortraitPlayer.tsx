@@ -2813,7 +2813,13 @@ const ReactionBar = memo(({
     else multiplier = 10;
 
     getReactionHaptic(multiplier)();
-    onReaction(type, emoji, text, multiplier);
+    // OYÉ is the gateway — wake + charge but no floating confetti
+    // (Dash 2026-04-28: "remove the confettis on oye"). The multiplier
+    // badge during hold is already enough feedback; the 🎉 emoji floating
+    // up was the kid-style we matured everywhere else.
+    if (type !== 'oye') {
+      onReaction(type, emoji, text, multiplier);
+    }
     setCharging(null);
     setCurrentMultiplier(1);
   };
@@ -5452,10 +5458,11 @@ export const VoyoPortraitPlayer = ({
 
         </div>
 
-        {/* FLOATING REACTIONS OVERLAY */}
+        {/* FLOATING REACTIONS OVERLAY — OYÉ filtered out (gateway, not
+            celebration; Dash 2026-04-28 "remove the confettis on oye"). */}
         <div className="absolute inset-0 pointer-events-none">
-          
-            {reactions.map(reaction => (
+
+            {reactions.filter(r => r.type !== 'oye').map(reaction => (
               <div
                 key={reaction.id}
                 className="absolute"
@@ -5471,7 +5478,7 @@ export const VoyoPortraitPlayer = ({
                 </div>
               </div>
             ))}
-          
+
         </div>
 
         {/* MINIMAL PROGRESS - Fades when idle, only current time + red dot */}
