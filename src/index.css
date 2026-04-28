@@ -841,6 +841,21 @@ input[type="range"]:focus::-moz-range-thumb {
   50%      { transform: scale(1.10); }
 }
 
+/* Teach overlay pulse — subtle fade in/out for the session-start
+   pause + scroll-down hint sitting in the cube area. Noticeable but
+   not nagging. (Dash 2026-04-29 v791) */
+@keyframes voyo-teach-pulse {
+  0%, 100% { opacity: 0.55; }
+  50%      { opacity: 0.95; }
+}
+
+/* Scroll-down chevron bounce — small vertical hop suggesting the user
+   should scroll down. Pairs with voyo-teach-pulse on the parent. */
+@keyframes voyo-bounce-down {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(4px); }
+}
+
 /* Heat shimmer — subtle wave on the "Heating Up RN" billboard title.
    Mimics hot air rising distortion. translateY oscillates ±1px,
    scaleX stretches ±1% for the wavy feel. Runs at 2s to not be jarring. */

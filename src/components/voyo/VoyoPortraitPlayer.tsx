@@ -13,7 +13,7 @@ import { useState, useEffect, useRef, useCallback, memo, useMemo } from 'react';
 import { useNavigate as useRouterNavigate } from 'react-router-dom';
 import {
   Play, Pause, SkipForward, SkipBack, Zap, Flame, Plus, Film, Settings, Heart,
-  Shuffle, Repeat, Repeat1, Share2, Mic, Mic2, X
+  Shuffle, Repeat, Repeat1, Share2, Mic, Mic2, X, ChevronDown
 } from 'lucide-react';
 import { usePlayerStore } from '../../store/playerStore';
 import { useShallow } from 'zustand/shallow';
@@ -4476,6 +4476,29 @@ export const VoyoPortraitPlayer = ({
   const [showDJWakeMessage, setShowDJWakeMessage] = useState(false); // Tutorial toast
   const [djWakeMessageText, setDjWakeMessageText] = useState(''); // Dynamic message content
   const [showOyoIsland, setShowOyoIsland] = useState(false); // OYO DJ Island - tap to show
+  // Session-start teach in the divider/cube area (Dash 2026-04-29 v791).
+  // Phase 1 (0-5s): pause icon — teach "tap to pause".
+  // Phase 2 (5-10s): chevron-down — teach "scroll for more".
+  // Phase 3: gone. Once-per-session via sessionStorage so it doesn't nag.
+  const [teachStep, setTeachStep] = useState<'pause' | 'scroll' | 'done'>(() => {
+    if (typeof window === 'undefined') return 'done';
+    try { return window.sessionStorage.getItem('voyo-teach-shown') === '1' ? 'done' : 'pause'; }
+    catch { return 'done'; }
+  });
+  useEffect(() => {
+    if (teachStep === 'done') return;
+    if (teachStep === 'pause') {
+      const t = setTimeout(() => setTeachStep('scroll'), 5000);
+      return () => clearTimeout(t);
+    }
+    if (teachStep === 'scroll') {
+      const t = setTimeout(() => {
+        setTeachStep('done');
+        try { window.sessionStorage.setItem('voyo-teach-shown', '1'); } catch { /* private mode */ }
+      }, 5000);
+      return () => clearTimeout(t);
+    }
+  }, [teachStep]);
   const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastTapRef = useRef<number>(0);
   const didHoldRef = useRef(false);
@@ -5524,8 +5547,10 @@ export const VoyoPortraitPlayer = ({
           // v790: Anchor reservation reduced by 32px so the Frame
           // (HOT/Discovery + Mix Board) drops down a touch — engine vinyl
           // peeks above Frame at rest. Layer B's min-h reduced in lockstep
-          // (line ~5927) so the bottom edge stays put. Was 508/388/264.
-          height: `calc(100% - ${cubeDockOpen ? 476 : oyeBarBehavior === 'fade' ? 356 : 232}px)`,
+          // so the bottom edge stays put.
+          // v791: another 6px tiny drop — Dash "drop it down a tiny bit,
+          // just artist name slightly covered". Was 476/356/232.
+          height: `calc(100% - ${cubeDockOpen ? 470 : oyeBarBehavior === 'fade' ? 350 : 226}px)`,
         }}
       >
 
@@ -5958,7 +5983,7 @@ export const VoyoPortraitPlayer = ({
           space slides in without pushing the rail offscreen. */}
       <div
         className={`flex-shrink-0 w-full relative z-40 flex flex-col pt-3 pb-7 transition-[min-height] duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] ${
-          cubeDockOpen ? 'min-h-[448px]' : oyeBarBehavior === 'fade' ? 'min-h-[328px]' : ''
+          cubeDockOpen ? 'min-h-[442px]' : oyeBarBehavior === 'fade' ? 'min-h-[322px]' : ''
         }`}
         style={{
           // Two-step Layer B fade.
@@ -6344,8 +6369,10 @@ export const VoyoPortraitPlayer = ({
                 )}
               
 
-              {/* VOYO text - gradient on stale, white on active */}
-              {(isHotBeltActive || isDiscoveryBeltActive) ? (
+              {/* VOYO text - gradient on stale, white on active.
+                  Hidden during the session-start teach so the Pause /
+                  Scroll-down icon owns the cube center for ~10s. */}
+              {teachStep === 'done' && ((isHotBeltActive || isDiscoveryBeltActive) ? (
                 <span className="text-[9px] font-bold text-white tracking-widest relative z-10">VOYO</span>
               ) : (
                 <span
@@ -6358,6 +6385,37 @@ export const VoyoPortraitPlayer = ({
                 >
                   VOYO
                 </span>
+              ))}
+
+              {/* Session-start teach overlay (v791, Dash 2026-04-29).
+                  Phase 1 (0-5s): Pause icon — "tap to pause".
+                  Phase 2 (5-10s): ChevronDown — "scroll for more".
+                  Translucent bubble over the cube; pointer-events:none so
+                  the cube remains tappable. Pulse-fade animation makes
+                  it noticeable but not nagging. Once-per-session. */}
+              {teachStep !== 'done' && (
+                <div
+                  aria-hidden
+                  className="absolute inset-0 rounded-full flex items-center justify-center pointer-events-none z-20"
+                  style={{
+                    background: 'rgba(15,15,22,0.55)',
+                    backdropFilter: 'blur(8px)',
+                    WebkitBackdropFilter: 'blur(8px)',
+                    border: '1px solid rgba(255,255,255,0.20)',
+                    boxShadow: '0 0 18px rgba(255,255,255,0.18)',
+                    animation: 'voyo-teach-pulse 1.6s ease-in-out infinite',
+                  }}
+                >
+                  {teachStep === 'pause' ? (
+                    <Pause size={20} className="text-white/90" fill="currentColor" />
+                  ) : (
+                    <ChevronDown
+                      size={22}
+                      className="text-white/90"
+                      style={{ animation: 'voyo-bounce-down 1.4s ease-in-out infinite' }}
+                    />
+                  )}
+                </div>
               )}
             </button>
           </div>
