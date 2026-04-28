@@ -3262,15 +3262,12 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onNavVisibilityChange, onSwitc
                   not body text. Soussou / Mandinka / Bambara roots. */}
               <span
                 aria-hidden
+                dir="rtl"
                 style={{
                   fontFamily: "'Noto Sans NKo', system-ui, serif",
-                  fontSize: '1.4em',
+                  fontSize: '1.15em',
+                  fontWeight: 400,
                   letterSpacing: 0,
-                  // background-clip: text was cutting the N'Ko glyph
-                  // because Tailwind's `text-transparent` cascades.
-                  // Render the sigil with explicit color override so
-                  // it gets its own bronze fill independent of the
-                  // gradient cliping the rest of the subtitle text.
                   background: 'none',
                   WebkitBackgroundClip: 'border-box',
                   WebkitTextFillColor: '#D4A053',
@@ -3279,9 +3276,11 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onNavVisibilityChange, onSwitc
                   marginTop: '-1px',
                 }}
               >
-                {/* ߞ — N'Ko letter Ka. Geometric, distinctive, sits
-                    well at small sizes next to the Latin caps. */}
-                ߞ
+                {/* ߒߞߏ — the autonym "N'Ko" itself ("I say" in
+                    Manding). Three glyphs RTL: Na + Ka + O. Sized
+                    down vs single sigil so the cluster doesn't
+                    overpower the Latin caps next to it. */}
+                ߒߞߏ
               </span>
               {oyeSubtitle}
             </p>
