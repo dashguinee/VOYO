@@ -2061,13 +2061,21 @@ const BigCenterCard = memo(({ track, onExpandVideo, onShowLyrics, hideThumb, isI
   // without inheriting the card's opacity:0 fade in mini-player mode.
   <div className="relative w-56 h-56 md:w-64 md:h-64" style={{ perspective: '1200px' }}>
   <div
-    className="relative w-56 h-56 md:w-64 md:h-64 rounded-[2rem] overflow-hidden z-20 group"
+    className="relative w-56 h-56 md:w-64 md:h-64 rounded-[2rem] z-20 group"
     style={{
+      // v800 (Dash 2026-04-29): replaced overflow-hidden with clip-path
+      // and isolation: isolate. iOS Safari was failing to clip the
+      // rounded corners when a parent had transform: translateY (the
+      // v789 hero bump wrapper) — card flashed as a hard square with
+      // a white edge during scroll. clip-path is GPU-stable across
+      // nested transform contexts; isolation creates a clean stacking
+      // context so SmartImage's compositing doesn't bleed.
+      clipPath: 'inset(0 round 2rem)',
+      WebkitClipPath: 'inset(0 round 2rem)',
+      isolation: 'isolate',
       // Solid dark backing — without this, any transient moment where
       // SmartImage is loading or the card transform exposes a sub-pixel
-      // gap shows the page bg/whatever is behind, which manifested as a
-      // black-then-white flash on scroll in poster mode. Backing matches
-      // SmartImage's default placeholder so the transition is silent.
+      // gap shows the page bg/whatever is behind.
       backgroundColor: '#1a1a1a',
       // ── 3D DEPTH SYSTEM (Silicon Valley 2050, not 2015 flip card) ──
       //
