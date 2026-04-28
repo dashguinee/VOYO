@@ -38,6 +38,7 @@ import { StationHero, type Station } from './StationHero';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../hooks/useAuth';
 import { useBackGuard } from '../../hooks/useBackGuard';
+import { useChillNudge } from '../../hooks/useChillNudge';
 import { friendsAPI, type Friend } from '../../lib/voyo-api';
 import { VoyoLoadOrb } from '../voyo/VoyoLoadOrb';
 import { useNavigate } from 'react-router-dom';
@@ -2550,6 +2551,12 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onNavVisibilityChange, onSwitc
   const setExplicitLike = usePreferenceStore(s => s.setExplicitLike);
   const [playlistModalTrack, setPlaylistModalTrack] = useState<Track | null>(null);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
+
+  // Empathy pill on violent scrolls — fades in via Dynamic Island when
+  // the feed is being flicked hard. Rate-limited (max 2 per 5min, 30s
+  // min spacing) so it stays charming. Temporary cover for known
+  // scroll jank — leans into the bug instead of hiding it.
+  useChillNudge(true);
 
   // OYÉ section header rotation. Stays as "OYÉ My People" (index 0)
   // for the first 5 minutes of the session — that's the user's
