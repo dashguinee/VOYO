@@ -6169,8 +6169,10 @@ export const VoyoPortraitPlayer = ({
 
 
 
-        {/* Stream Labels - Enhanced Neon Style with Glow */}
-        <div className="flex justify-between px-6 mb-3">
+        {/* Stream Labels - Enhanced Neon Style with Glow.
+            v801 (Dash 2026-04-29): mb-3 → mb-1 (12px → 4px) — labels sit
+            tighter to the cards row beneath, less dead air between them. */}
+        <div className="flex justify-between px-6 mb-1">
           {/* HOT Label — deep rust ember (mature, aged, premium) */}
           <button
             onClick={handleToggleHotBelt}
