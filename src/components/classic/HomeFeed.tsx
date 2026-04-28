@@ -46,6 +46,8 @@ import { PlaylistModal } from '../playlist/PlaylistModal';
 import { AccountMenu } from '../profile/AccountMenu';
 import { BoostSettings } from '../ui/BoostSettings';
 import { CardHoldActions } from '../ui/CardHoldActions';
+import { useActiveClassicsDrop, isClassicsDropFlagEnabled } from '../../services/classicsDropService';
+import { ClassicsDropCeremony } from './ClassicsDropCeremony';
 
 // ============================================
 // HELPER FUNCTIONS
@@ -3162,6 +3164,56 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onNavVisibilityChange, onSwitc
     }
   }, [hotPool, sessionSeed]);
 
+  // ─── Classics Drop ceremony (Apr 2026) ──────────────────────────────────
+  // Live drop fired from the Hub cockpit. When present + flag on, replaces
+  // the All-Time Classics shelf with a single-disc ceremony for the duration.
+  // When null OR flag off, the existing shelf renders byte-identically.
+  const activeClassicsDrop = useActiveClassicsDrop();
+  const classicsDropFlag = isClassicsDropFlagEnabled();
+  const classicsDropTracks = useMemo<Track[]>(() => {
+    if (!activeClassicsDrop) return [];
+    const ids = activeClassicsDrop.track_ids;
+    if (ids && ids.length > 0) {
+      // Look up by trackId or id, mirroring the rest of HomeFeed's resolution.
+      const pool: Track[] = Array.isArray(hotPool) ? hotPool : [];
+      const haystack = new Map<string, Track>();
+      for (const t of pool) {
+        haystack.set(t.trackId, t as Track);
+        haystack.set(t.id, t as Track);
+      }
+      for (const t of TRACKS) {
+        if (!haystack.has(t.trackId)) haystack.set(t.trackId, t);
+        if (!haystack.has(t.id)) haystack.set(t.id, t);
+      }
+      const resolved: Track[] = [];
+      const seen = new Set<string>();
+      for (const id of ids) {
+        const trimmed = String(id).trim();
+        if (!trimmed) continue;
+        const found = haystack.get(trimmed);
+        if (found && !seen.has(found.id)) {
+          resolved.push(found);
+          seen.add(found.id);
+        }
+      }
+      return resolved.slice(0, 7);
+    }
+    // System-curated fallback — same picker as the existing shelf, capped at 7.
+    const pool = Array.isArray(hotPool) ? hotPool : [];
+    const curated = getClassicsTracks(pool, 7);
+    if (curated.length > 0) return curated.slice(0, 7);
+    // Cold-boot seed fallback (mirror of classicsTracks logic).
+    return [...TRACKS]
+      .filter(t => (t.oyeScore || 0) >= 10_000_000)
+      .sort((a, b) => (b.oyeScore || 0) - (a.oyeScore || 0))
+      .slice(0, 7);
+  }, [activeClassicsDrop, hotPool]);
+  // Ceremony renders only with at least 3 resolved tracks — otherwise the
+  // existing shelf takes over (don't ship a broken ceremony).
+  const showClassicsDropCeremony = Boolean(
+    classicsDropFlag && activeClassicsDrop && classicsDropTracks.length >= 3,
+  );
+
   // Top 10 on VOYO: Trending tracks, excluding what's in other shelves.
   const trending = useMemo(() => {
     try {
@@ -3311,8 +3363,17 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onNavVisibilityChange, onSwitc
       )}
 
       {/* ═══ CLASSICS — always visible, one fixed position after history/SignIn ═══ */}
+      {/* Classics Drop hijack: when the flag is on AND a live drop exists,
+          the shelf transforms into a single-disc ceremony for the duration.
+          Off / no drop → existing shelf renders unchanged below. */}
       <Safe name="Classics">
-        {classicsTracks.length > 0 && (
+        {showClassicsDropCeremony && activeClassicsDrop ? (
+          <ClassicsDropCeremony
+            drop={activeClassicsDrop}
+            tracks={classicsDropTracks}
+            onPlay={playTrackFull}
+          />
+        ) : classicsTracks.length > 0 && (
           <div
             className="mb-10 pt-12 pb-12 relative overflow-hidden"
             style={{
