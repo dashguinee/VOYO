@@ -1810,8 +1810,11 @@ const PortalBelt = memo(({ tracks, onTap, onQueueAdd, playedTrackIds, type, mixM
   return (
     <div
       ref={containerRef}
-      className="flex-1 relative h-20 overflow-hidden cursor-grab active:cursor-grabbing select-none"
-      style={{ touchAction: 'pan-x' }} // Allow horizontal drag, prevent vertical scroll
+      className="flex-1 relative h-20 cursor-grab active:cursor-grabbing select-none"
+      // v789: overflow-x: clip + overflow-y: visible — clips horizontally
+      // for the looping belt but lets card glows bleed vertically (was
+      // clipping the top halo on HOT/Discovery cards, Dash 2026-04-28).
+      style={{ touchAction: 'pan-x', overflowX: 'clip', overflowY: 'visible' }}
       // PortalBelt has its own horizontal drag. Mark it so the global
       // canvas swipe (center-section swipe-to-skip) bails on pointerdown
       // and doesn't double-handle the same gesture.
@@ -5544,12 +5547,17 @@ export const VoyoPortraitPlayer = ({
         }}
       >
 
-        {/* Left: History (scrollable). Width shifts based on active side. */}
+        {/* Left: History (scrollable). Width shifts based on active side.
+            v789: overflow-x clipped (carousel needs horizontal containment)
+            but overflow-y visible — was clipping next-up bronze halo on
+            small cards (Dash 2026-04-28). */}
         <div
-          className="relative overflow-hidden"
+          className="relative"
           style={{
             flexBasis: topRowActive === 'history' ? '68%' : topRowActive === 'queue' ? '30%' : '49%',
             transition: 'flex-basis 0.42s cubic-bezier(0.16, 1, 0.3, 1)',
+            overflowX: 'clip',
+            overflowY: 'visible',
           }}
           data-no-canvas-swipe="true"
           onPointerDown={() => activateTopRow('history')}
@@ -5582,12 +5590,16 @@ export const VoyoPortraitPlayer = ({
           </div>
         </div>
 
-        {/* Right: Queue + Add (scrollable, reversed). Side-shift mirror. */}
+        {/* Right: Queue + Add (scrollable, reversed). Side-shift mirror.
+            v789: same overflow fix as History — vertical overflow visible
+            so the next-up halo isn't clipped at the top. */}
         <div
-          className="relative overflow-hidden"
+          className="relative"
           style={{
             flexBasis: topRowActive === 'queue' ? '68%' : topRowActive === 'history' ? '30%' : '49%',
             transition: 'flex-basis 0.42s cubic-bezier(0.16, 1, 0.3, 1)',
+            overflowX: 'clip',
+            overflowY: 'visible',
           }}
           onPointerDown={() => activateTopRow('queue')}
           onTouchStart={() => activateTopRow('queue')}
@@ -5655,7 +5667,16 @@ export const VoyoPortraitPlayer = ({
         {/* 1. Main Artwork with Expand Video Button + GLOBAL DRAG WRAPPER.
             cardWrapRef receives direct style mutations on pointermove (no
             re-render). Dragging from anywhere on the app surface drives
-            this transform via handleCanvasPointerMove → applyCardTransform. */}
+            this transform via handleCanvasPointerMove → applyCardTransform.
+
+            v789: outer translateY shifts the hero ~36px lower in its
+            frame — half the retracted Mini Player chip height (44px / 2)
+            + ~75% of the same as a "decided" extra. Top row stays put,
+            the artwork sits a touch deeper which feels less compacted.
+            The inner cardWrapRef keeps its swipe transform (translateX
+            during drag), so vertical and horizontal positioning compose
+            cleanly. (Dash 2026-04-28) */}
+        <div style={{ transform: 'translateY(36px)' }}>
         <div
           ref={cardWrapRef}
           className="relative"
@@ -5765,6 +5786,7 @@ export const VoyoPortraitPlayer = ({
           </div>
 
         </div>
+        </div>{/* /translateY wrapper (v789 hero bump) */}
 
         {/* FLOATING REACTIONS OVERLAY — OYÉ filtered out (gateway, not
             celebration; Dash 2026-04-28 "remove the confettis on oye"). */}
