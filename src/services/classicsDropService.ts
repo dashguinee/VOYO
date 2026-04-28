@@ -15,6 +15,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { devWarn } from '../utils/logger';
+import type { Track } from '../types';
 
 export interface ClassicsDrop {
   id: string;
@@ -25,6 +26,42 @@ export interface ClassicsDrop {
   is_active: boolean;
   notes: string | null;
   fired_by: string | null;
+}
+
+/**
+ * Backfill resolver: when a drop's track_ids miss the local hotPool/TRACKS
+ * (curated picks often do — they're niche classics, not chart trending),
+ * fetch their metadata from `video_intelligence` and synthesize Track shapes.
+ *
+ * Cheap (single query, IN-list), idempotent, non-fatal on failure.
+ */
+export async function fetchTracksByYoutubeIds(ids: string[]): Promise<Track[]> {
+  if (!supabase || ids.length === 0) return [];
+  try {
+    const { data, error } = await supabase
+      .from('video_intelligence')
+      .select('youtube_id,title,artist,thumbnail_url,release_year,timelessness')
+      .in('youtube_id', ids);
+    if (error) {
+      devWarn('[ClassicsDrop] backfill fetch error:', error.message);
+      return [];
+    }
+    if (!data) return [];
+    return data.map((row): Track => ({
+      id: row.youtube_id as string,
+      trackId: row.youtube_id as string,
+      title: (row.title as string) || 'Unknown',
+      artist: (row.artist as string) || 'Unknown',
+      coverUrl: (row.thumbnail_url as string) || `https://i.ytimg.com/vi/${row.youtube_id}/hqdefault.jpg`,
+      duration: 0,
+      tags: ['classic'],
+      oyeScore: typeof row.timelessness === 'number' ? row.timelessness * 1_000_000 : 0,
+      createdAt: new Date().toISOString(),
+    }));
+  } catch (e) {
+    devWarn('[ClassicsDrop] backfill threw:', e);
+    return [];
+  }
 }
 
 /**

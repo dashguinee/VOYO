@@ -46,7 +46,7 @@ import { PlaylistModal } from '../playlist/PlaylistModal';
 import { AccountMenu } from '../profile/AccountMenu';
 import { BoostSettings } from '../ui/BoostSettings';
 import { CardHoldActions } from '../ui/CardHoldActions';
-import { useActiveClassicsDrop } from '../../services/classicsDropService';
+import { useActiveClassicsDrop, fetchTracksByYoutubeIds } from '../../services/classicsDropService';
 import { ClassicsDropCeremony } from './ClassicsDropCeremony';
 
 // ============================================
@@ -3170,11 +3170,13 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onNavVisibilityChange, onSwitc
   // When null, the existing shelf renders byte-identically.
   // Platform-wide control IS the drop — fire from cockpit, all visitors see it.
   const activeClassicsDrop = useActiveClassicsDrop();
-  const classicsDropTracks = useMemo<Track[]>(() => {
+  // Synchronous resolution from local pool/TRACKS. Hits first; backfill
+  // below catches any IDs that miss (niche classics often aren't in the
+  // hot pool of a fresh session).
+  const localResolvedDropTracks = useMemo<Track[]>(() => {
     if (!activeClassicsDrop) return [];
     const ids = activeClassicsDrop.track_ids;
     if (ids && ids.length > 0) {
-      // Look up by trackId or id, mirroring the rest of HomeFeed's resolution.
       const pool: Track[] = Array.isArray(hotPool) ? hotPool : [];
       const haystack = new Map<string, Track>();
       for (const t of pool) {
@@ -3202,19 +3204,66 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onNavVisibilityChange, onSwitc
     const pool = Array.isArray(hotPool) ? hotPool : [];
     const curated = getClassicsTracks(pool, 7);
     if (curated.length > 0) return curated.slice(0, 7);
-    // Cold-boot seed fallback (mirror of classicsTracks logic).
     return [...TRACKS]
       .filter(t => (t.oyeScore || 0) >= 10_000_000)
       .sort((a, b) => (b.oyeScore || 0) - (a.oyeScore || 0))
       .slice(0, 7);
   }, [activeClassicsDrop, hotPool]);
-  // Ceremony renders with any resolved track. Manual track_ids picks are
-  // honored exactly (even a 1-track drop is intentional). System-curated
-  // mode pulls 7 from the pool; if the pool is so sparse it returns 0,
-  // we silently fall back to the existing shelf.
-  const showClassicsDropCeremony = Boolean(
-    activeClassicsDrop && classicsDropTracks.length >= 1,
-  );
+
+  // Backfill from video_intelligence for IDs that didn't resolve locally.
+  // Niche classics fired by Dash from cockpit (Fela, Salif) won't be in
+  // a fresh user's hot pool — DB lookup keeps the drop honest.
+  const [backfilledDropTracks, setBackfilledDropTracks] = useState<Track[]>([]);
+  useEffect(() => {
+    if (!activeClassicsDrop?.track_ids || activeClassicsDrop.track_ids.length === 0) {
+      setBackfilledDropTracks([]);
+      return;
+    }
+    const resolvedIds = new Set(localResolvedDropTracks.flatMap(t => [t.id, t.trackId]));
+    const missing = activeClassicsDrop.track_ids.filter(id => !resolvedIds.has(id));
+    if (missing.length === 0) {
+      setBackfilledDropTracks([]);
+      return;
+    }
+    let cancelled = false;
+    void fetchTracksByYoutubeIds(missing).then(rows => {
+      if (!cancelled) setBackfilledDropTracks(rows);
+    });
+    return () => { cancelled = true; };
+  }, [activeClassicsDrop?.id, activeClassicsDrop?.track_ids, localResolvedDropTracks]);
+
+  // Final resolved set, ordered to match the drop's track_ids when present.
+  const classicsDropTracks = useMemo<Track[]>(() => {
+    if (!activeClassicsDrop) return [];
+    const ids = activeClassicsDrop.track_ids;
+    if (!ids || ids.length === 0) return localResolvedDropTracks;
+    const pool = [...localResolvedDropTracks, ...backfilledDropTracks];
+    const map = new Map<string, Track>();
+    for (const t of pool) {
+      if (t.id) map.set(t.id, t);
+      if (t.trackId) map.set(t.trackId, t);
+    }
+    const ordered: Track[] = [];
+    const seen = new Set<string>();
+    for (const id of ids) {
+      const t = map.get(String(id).trim());
+      if (t && !seen.has(t.id)) {
+        ordered.push(t);
+        seen.add(t.id);
+      }
+    }
+    return ordered.slice(0, 7);
+  }, [activeClassicsDrop, localResolvedDropTracks, backfilledDropTracks]);
+
+  // Tap-to-reveal: drop active + tracks ready = bronze icon flashes.
+  // User taps icon → ceremony unfolds. Reset when drop changes/ends.
+  const [ceremonyOpen, setCeremonyOpen] = useState(false);
+  useEffect(() => { setCeremonyOpen(false); }, [activeClassicsDrop?.id]);
+  // Ceremony renders only after user taps the bronze icon (signal pill).
+  // The icon flashes when a drop is live and tracks have resolved — tap
+  // = "yes, summon the ceremony." This is the chef's-kiss moment.
+  const dropTracksReady = Boolean(activeClassicsDrop) && classicsDropTracks.length >= 1;
+  const showClassicsDropCeremony = dropTracksReady && ceremonyOpen;
 
   // Top 10 on VOYO: Trending tracks, excluding what's in other shelves.
   const trending = useMemo(() => {
@@ -3462,14 +3511,48 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onNavVisibilityChange, onSwitc
 
             {/* Header */}
             <div className="px-5 mb-6 flex items-center gap-3">
-              <div
-                className="flex-shrink-0 relative rounded-full"
-                style={{ width: 36, height: 36, background: 'radial-gradient(circle at 50% 50%, #2a1a08 0%, #0d0804 100%)', boxShadow: '0 0 0 1.5px rgba(212,160,83,0.55), 0 4px 14px rgba(0,0,0,0.65)' }}
+              {/* Bronze disc icon — when a drop is ready, becomes a tappable
+                  trigger. Inner dot glows + softly fills the outer layer
+                  on a 1.6s breathe so the user sees "songs are here, tap me." */}
+              <style>{`
+                @keyframes classics-icon-breathe {
+                  0%, 100% {
+                    background: radial-gradient(circle, #D4A053 0%, #8B5E1A 100%);
+                    box-shadow: 0 0 0 0 rgba(212,160,83,0.0);
+                  }
+                  50% {
+                    background: radial-gradient(circle, #F4D999 0%, #D4A053 100%);
+                    box-shadow: 0 0 14px 2px rgba(212,160,83,0.55);
+                  }
+                }
+                @keyframes classics-icon-fill-breathe {
+                  0%, 100% { box-shadow: 0 0 0 1.5px rgba(212,160,83,0.55), 0 4px 14px rgba(0,0,0,0.65); }
+                  50%      { box-shadow: 0 0 0 2px rgba(230,184,101,0.95), 0 4px 14px rgba(0,0,0,0.65), 0 0 22px rgba(212,160,83,0.45); }
+                }
+                .classics-icon-ready {
+                  animation: classics-icon-fill-breathe 1.8s ease-in-out infinite;
+                  cursor: pointer;
+                }
+                .classics-icon-ready .classics-icon-dot {
+                  animation: classics-icon-breathe 1.8s ease-in-out infinite;
+                }
+                @media (prefers-reduced-motion: reduce) {
+                  .classics-icon-ready,
+                  .classics-icon-ready .classics-icon-dot { animation: none; }
+                }
+              `}</style>
+              <button
+                type="button"
+                aria-label={dropTracksReady ? 'Open Classics Drop ceremony' : 'All-Time Classics'}
+                disabled={!dropTracksReady}
+                onClick={() => { if (dropTracksReady) setCeremonyOpen(true); }}
+                className={`flex-shrink-0 relative rounded-full p-0 border-0 ${dropTracksReady ? 'classics-icon-ready' : ''}`}
+                style={{ width: 36, height: 36, background: 'radial-gradient(circle at 50% 50%, #2a1a08 0%, #0d0804 100%)', boxShadow: dropTracksReady ? undefined : '0 0 0 1.5px rgba(212,160,83,0.55), 0 4px 14px rgba(0,0,0,0.65)' }}
               >
-                <div className="absolute rounded-full" style={{ width: 11, height: 11, top: '50%', left: '50%', transform: 'translate(-50%,-50%)', background: 'radial-gradient(circle, #D4A053 0%, #8B5E1A 100%)' }} />
+                <div className="classics-icon-dot absolute rounded-full" style={{ width: 11, height: 11, top: '50%', left: '50%', transform: 'translate(-50%,-50%)', background: 'radial-gradient(circle, #D4A053 0%, #8B5E1A 100%)' }} />
                 <div className="absolute inset-0 rounded-full" style={{ border: '1px solid rgba(212,160,83,0.18)', margin: 5 }} />
                 <div className="absolute inset-0 rounded-full" style={{ border: '1px solid rgba(212,160,83,0.08)', margin: 9 }} />
-              </div>
+              </button>
               <div>
                 {/* Two layered effects fuse the header into the shelf:
                     · background stack — repeating 1px warm-white striation
