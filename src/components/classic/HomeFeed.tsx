@@ -46,7 +46,7 @@ import { PlaylistModal } from '../playlist/PlaylistModal';
 import { AccountMenu } from '../profile/AccountMenu';
 import { BoostSettings } from '../ui/BoostSettings';
 import { CardHoldActions } from '../ui/CardHoldActions';
-import { useActiveClassicsDrop, isClassicsDropFlagEnabled } from '../../services/classicsDropService';
+import { useActiveClassicsDrop } from '../../services/classicsDropService';
 import { ClassicsDropCeremony } from './ClassicsDropCeremony';
 
 // ============================================
@@ -3165,11 +3165,11 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onNavVisibilityChange, onSwitc
   }, [hotPool, sessionSeed]);
 
   // ─── Classics Drop ceremony (Apr 2026) ──────────────────────────────────
-  // Live drop fired from the Hub cockpit. When present + flag on, replaces
-  // the All-Time Classics shelf with a single-disc ceremony for the duration.
-  // When null OR flag off, the existing shelf renders byte-identically.
+  // Live drop fired from the Hub cockpit. When present, replaces the
+  // All-Time Classics shelf with a single-disc ceremony for the duration.
+  // When null, the existing shelf renders byte-identically.
+  // Platform-wide control IS the drop — fire from cockpit, all visitors see it.
   const activeClassicsDrop = useActiveClassicsDrop();
-  const classicsDropFlag = isClassicsDropFlagEnabled();
   const classicsDropTracks = useMemo<Track[]>(() => {
     if (!activeClassicsDrop) return [];
     const ids = activeClassicsDrop.track_ids;
@@ -3211,7 +3211,7 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onNavVisibilityChange, onSwitc
   // Ceremony renders only with at least 3 resolved tracks — otherwise the
   // existing shelf takes over (don't ship a broken ceremony).
   const showClassicsDropCeremony = Boolean(
-    classicsDropFlag && activeClassicsDrop && classicsDropTracks.length >= 3,
+    activeClassicsDrop && classicsDropTracks.length >= 3,
   );
 
   // Top 10 on VOYO: Trending tracks, excluding what's in other shelves.

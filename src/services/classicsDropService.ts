@@ -3,13 +3,12 @@
  *
  * Reads the live `voyo_classics_drops` row (if any) from Supabase and keeps
  * it in sync via realtime. The All-Time Classics shelf in HomeFeed swaps to
- * the ceremony component when this hook returns a non-null drop AND the
- * feature flag is on. When it returns null, the existing shelf renders
- * unchanged.
+ * the ceremony component when this hook returns a non-null drop. When it
+ * returns null, the existing shelf renders unchanged.
  *
- * Feature flag (either source enables):
- *   - import.meta.env.VITE_VOYO_CLASSICS_DROP_ENABLED === 'true'
- *   - localStorage['voyo:classics:drop:enabled'] === '1'  (per-device override)
+ * Platform-wide control IS the drop itself: Dash fires from Hub cockpit =
+ * ceremony for every visitor. Dash ends drop = back to shelf for everyone.
+ * No flag, no env var, no localStorage — the cockpit is the only switch.
  *
  * Channel name: classics_drops:global  (singleton — only one live drop at a time)
  */
@@ -26,24 +25,6 @@ export interface ClassicsDrop {
   is_active: boolean;
   notes: string | null;
   fired_by: string | null;
-}
-
-const FLAG_LS_KEY = 'voyo:classics:drop:enabled';
-const FLAG_LS_VALUE = '1';
-
-export function isClassicsDropFlagEnabled(): boolean {
-  // Env flag — production toggle.
-  const envFlag = (import.meta.env.VITE_VOYO_CLASSICS_DROP_ENABLED as string | undefined) || '';
-  if (envFlag.toLowerCase() === 'true') return true;
-  // Per-device override — Dash flips this in the console without a redeploy.
-  try {
-    if (typeof localStorage !== 'undefined' && localStorage.getItem(FLAG_LS_KEY) === FLAG_LS_VALUE) {
-      return true;
-    }
-  } catch {
-    // Private mode / SSR — fall through.
-  }
-  return false;
 }
 
 /**
@@ -96,13 +77,11 @@ async function fetchActiveDrop(): Promise<ClassicsDrop | null> {
  *     cheap and authoritative.
  *   - Expiry: schedules a one-shot timer for `expires_at` so the ceremony
  *     dissolves itself even if the cockpit doesn't dismiss explicitly.
- *   - Bails out cleanly if the flag is OFF (returns null and never queries).
  */
 export function useActiveClassicsDrop(): ClassicsDrop | null {
   const [drop, setDrop] = useState<ClassicsDrop | null>(null);
 
   useEffect(() => {
-    if (!isClassicsDropFlagEnabled()) return;
     if (!supabase) return;
 
     let cancelled = false;
