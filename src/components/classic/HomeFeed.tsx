@@ -1019,22 +1019,17 @@ const AfricanVibesVideoCard = memo(({
   const [shouldMountIframe, setShouldMountIframe] = useState(false);
   useEffect(() => {
     if (shouldHoldMounted) {
-      // v814 (Dash 2026-04-29) — REVERTED v810's 200ms entry settle.
-      // Back to immediate mount on the entry side.
+      // v816 (Dash 2026-04-29 "no its not working revert to safe").
+      // Back to the safe locked lifecycle:
+      //   entry: immediate mount
+      //   exit:  100ms head-start, 800ms total unmount
+      // Dash will guide the next iteration.
       setShouldShow(true);
       setShouldMountIframe(true);
       return;
     }
-    // v815 (Dash 2026-04-29 "make sure the next video has mounted before
-    // the one going to card goes to card so its smoother"): extended
-    // exit lifecycle. Old head-start was 100ms — too short for the
-    // new card's YT iframe to bootstrap (~600-1000ms typical). Old
-    // card started fading while new was still loading → poster gap.
-    // New: 600ms head-start (old stays bright while new mounts) +
-    // ~500ms fade window + 1100ms total unmount. The cross-fade
-    // happens AFTER the new card is most-likely ready.
-    const showTimer = setTimeout(() => setShouldShow(false), 600);
-    const mountTimer = setTimeout(() => setShouldMountIframe(false), 1100);
+    const showTimer = setTimeout(() => setShouldShow(false), 100);
+    const mountTimer = setTimeout(() => setShouldMountIframe(false), 800);
     return () => {
       clearTimeout(showTimer);
       clearTimeout(mountTimer);
