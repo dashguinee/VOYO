@@ -2202,9 +2202,13 @@ const BigCenterCard = memo(({ track, onExpandVideo, onShowLyrics, onLyricsArmed,
         }
         lyricsHoldStart.current = null;
       }}
+      // v826b: NO role="button" / aria-label here. didOriginateOnInteractive
+      // matches [role="button"] and made handleCanvasPointerDown bail out
+      // early, which is why removing stopPropagation alone didn't fix the
+      // dead zone. The artwork is a multi-gesture region (tap → canvas
+      // mode toggle, hold → lyrics, drag → swipe) — not a button. Aria
+      // intent moves to the parent card.
       className="absolute inset-0 cursor-pointer z-10"
-      role="button"
-      aria-label="Hold for lyrics, tap to play/pause"
     >
       <SmartImage
         src={getTrackThumbnailUrl(track, 'high')}
