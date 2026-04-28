@@ -2051,6 +2051,18 @@ const BigCenterCard = memo(({ track, onExpandVideo, onShowLyrics, hideThumb, isI
     return () => clearTimeout(t);
   }, [track?.trackId, hideThumb]);
 
+  // v807 (Dash 2026-04-29): lyrics is HOLD now. Was a tap on the
+  // artwork, which conflicted with the v788 canvas-tap = play/pause.
+  // 350ms hold opens lyrics; quick tap bubbles to canvas tap (play/
+  // pause). pointerdown stopPropagation keeps canvas hold (DJ mode @
+  // 400ms) and swipe handlers from also firing — clean separation.
+  const lyricsHoldTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    return () => {
+      if (lyricsHoldTimer.current) clearTimeout(lyricsHoldTimer.current);
+    };
+  }, []);
+
   return (
   // ── PERSPECTIVE CONTAINER ─────────────────────────────────────────
   // Wraps the card in a 3D space. perspective: 1200px is deep enough
@@ -2118,12 +2130,40 @@ const BigCenterCard = memo(({ track, onExpandVideo, onShowLyrics, hideThumb, isI
       backfaceVisibility: 'hidden',
     }}
   >
-    {/* THUMBNAIL */}
+    {/* THUMBNAIL — v807: hold-to-show-lyrics (was tap). Tap on the
+        artwork now bubbles to the canvas for play/pause; hold ≥350ms
+        triggers the lyrics overlay. stopPropagation on pointerdown
+        keeps the canvas DJ-mode hold (400ms) + swipe handlers out. */}
     <div
-      onClick={onShowLyrics}
+      onPointerDown={(e) => {
+        e.stopPropagation();
+        if (lyricsHoldTimer.current) clearTimeout(lyricsHoldTimer.current);
+        lyricsHoldTimer.current = setTimeout(() => {
+          onShowLyrics?.();
+          lyricsHoldTimer.current = null;
+        }, 350);
+      }}
+      onPointerUp={() => {
+        if (lyricsHoldTimer.current) {
+          clearTimeout(lyricsHoldTimer.current);
+          lyricsHoldTimer.current = null;
+        }
+      }}
+      onPointerLeave={() => {
+        if (lyricsHoldTimer.current) {
+          clearTimeout(lyricsHoldTimer.current);
+          lyricsHoldTimer.current = null;
+        }
+      }}
+      onPointerCancel={() => {
+        if (lyricsHoldTimer.current) {
+          clearTimeout(lyricsHoldTimer.current);
+          lyricsHoldTimer.current = null;
+        }
+      }}
       className="absolute inset-0 cursor-pointer z-10"
       role="button"
-      aria-label="Show lyrics"
+      aria-label="Hold for lyrics, tap to play/pause"
     >
       <SmartImage
         src={getTrackThumbnailUrl(track, 'high')}
