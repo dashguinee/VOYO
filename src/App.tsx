@@ -859,6 +859,44 @@ function App() {
   const handleVideoModeEnter = () => setAppMode('video');
   const handleVideoModeExit = () => setAppMode('voyo');
 
+  // ── Edge-swipe app-mode nav (Dash 2026-04-29 v821) ─────────────────
+  // Global left/right swipes from within 24px of the screen edge flip
+  // appMode between 'classic' (Home) and 'voyo' (Player). Inner content
+  // gestures (player swipe-to-skip, peer-rail drags, etc.) all START
+  // in the middle of the canvas — never within 24px of the edge — so
+  // there's no conflict. Cinema mode (appMode === 'video') is excluded:
+  // it has its own dismiss flow + we don't want a stray edge swipe to
+  // exit cinema accidentally.
+  const edgeSwipeRef = useRef<{ x: number; y: number; side: 'left' | 'right' } | null>(null);
+  const handleEdgeSwipeDown = useCallback((e: React.PointerEvent) => {
+    if (appMode === 'video') return;
+    const w = window.innerWidth;
+    const x = e.clientX;
+    if (x > 24 && x < w - 24) return; // not at an edge
+    edgeSwipeRef.current = { x, y: e.clientY, side: x <= 24 ? 'left' : 'right' };
+  }, [appMode]);
+  const handleEdgeSwipeUp = useCallback((e: React.PointerEvent) => {
+    const start = edgeSwipeRef.current;
+    edgeSwipeRef.current = null;
+    if (!start) return;
+    const dx = e.clientX - start.x;
+    const dy = e.clientY - start.y;
+    // Need ≥80px horizontal travel + horizontal-dominant motion.
+    if (Math.abs(dx) < 80) return;
+    if (Math.abs(dx) <= Math.abs(dy) * 1.4) return;
+    // Right-edge swipe LEFT (dx < 0) → engage Player (voyo)
+    if (start.side === 'right' && dx < 0 && appMode === 'classic') {
+      setAppMode('voyo');
+    }
+    // Left-edge swipe RIGHT (dx > 0) → return to Home (classic)
+    if (start.side === 'left' && dx > 0 && appMode === 'voyo') {
+      setAppMode('classic');
+    }
+  }, [appMode]);
+  const handleEdgeSwipeCancel = useCallback(() => {
+    edgeSwipeRef.current = null;
+  }, []);
+
   // Search-triggered video: use the existing 'portrait' target — a
   // 208×208 floating mini-player rendered by the global YouTubeIframe.
   // Search stays on top of (or alongside) a draggable mini video, no
@@ -948,7 +986,12 @@ function App() {
         </div>
       </div>
     }>
-    <div className="relative h-full w-full bg-[#050508] overflow-hidden">
+    <div
+      className="relative h-full w-full bg-[#050508] overflow-hidden"
+      onPointerDown={handleEdgeSwipeDown}
+      onPointerUp={handleEdgeSwipeUp}
+      onPointerCancel={handleEdgeSwipeCancel}
+    >
       {/* VOYO Boot Loader — VOYO wordmark + 3 dots + boom-expand ring burst.
           minDuration is 900ms — just enough to see the boom rings expand once
           + the 220ms fade-out. Faster perceived boot, less standing around. */}
