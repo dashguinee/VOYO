@@ -34,6 +34,7 @@ import { pipService } from '../../services/pipService';
 // TiviPlusCrossPromo moved to HomeFeed.tsx (classic homepage)
 import { useAuth } from '../../hooks/useAuth';
 import { getCurrentSegment, fetchLyricsSimple, type EnrichedLyrics, type LyricsGenerationProgress } from '../../services/lyricsEngine';
+import { refineSegmentsWithOnsets } from '../../services/lyricsOnsetSync';
 import { LyricsCanvas } from './lyrics/LyricsCanvas';
 import { findLyrics } from '../../services/lyricsAgent';
 // getVideoStreamUrl removed — no longer needed after LyricsAgent replaced Whisper pipeline
@@ -3663,6 +3664,30 @@ const LyricsOverlay = memo(({ track, isOpen, onClose, currentTime }: LyricsOverl
           setLyrics(lrcResult.enriched);
           setProgress({ stage: 'complete', progress: 100, message: 'Found! (LRCLIB)' });
           setTimeout(() => setProgress(null), 1000);
+          // v814 (Lyrics V2 Phase 3): defer onset-sync refinement to idle
+          // time. Snaps each LRCLIB timestamp to the nearest detected
+          // audio onset within ±150ms — brings raw drift from ~200-300ms
+          // down to ~50ms, the felt difference between "off" and "locked."
+          // Falls back to original segments on any failure (network,
+          // decode, no-onsets), so the bar canvas always renders.
+          const audioUrl = `https://voyo-edge.dash-webtv.workers.dev/audio/${track.trackId}?q=high`;
+          const enriched = lrcResult.enriched;
+          const refine = () => {
+            void refineSegmentsWithOnsets(track.trackId, audioUrl, enriched.translated)
+              .then((refined) => {
+                // Only commit if the user hasn't navigated away.
+                setLyrics((cur) =>
+                  cur && cur.trackId === enriched.trackId
+                    ? { ...cur, translated: refined }
+                    : cur,
+                );
+              });
+          };
+          if (typeof window.requestIdleCallback === 'function') {
+            window.requestIdleCallback(refine, { timeout: 4000 });
+          } else {
+            setTimeout(refine, 1200);
+          }
           return;
         }
 
