@@ -4446,25 +4446,29 @@ export const VoyoPortraitPlayer = ({
   // the action's color. Pedagogy: users learn the grammar by seeing it
   // spell itself out as they move.
   const swipeLabelRef = useRef<HTMLDivElement>(null);
-  const setSwipeLabel = (text: string, color: string, alpha: number) => {
+  const setSwipeLabel = (text: string, color: string, alpha: number, dx = 0) => {
     const el = swipeLabelRef.current;
     if (!el) return;
     el.textContent = text;
     el.style.color = color;
     el.style.textShadow = `0 0 12px ${color}, 0 0 22px ${color}`;
-    // soft halo around the pill in the action's color — premium-restraint
     el.style.boxShadow = `0 0 26px ${color}40, 0 4px 18px rgba(0,0,0,0.5)`;
     el.style.opacity = String(alpha);
-    // smoothened entrance — pill rises + scales as the swipe deepens
     const scale = 0.96 + alpha * 0.08;
     const ty = 8 - alpha * 8;
-    el.style.transform = `translateY(${ty}px) scale(${scale})`;
+    // Pill drifts AWAY from the wall side — Dash 2026-04-28 v787:
+    // LEFT swipe (wall on left) → pill nudges RIGHT (~+34px)
+    // RIGHT swipe (wall on right) → pill nudges LEFT (~−34px)
+    // Visual breathing room so the pill and the wall don't compete on
+    // the same edge. Magnitude scales with swipe depth.
+    const tx = dx === 0 ? 0 : (dx > 0 ? -34 : 34) * alpha;
+    el.style.transform = `translate(${tx}px, ${ty}px) scale(${scale})`;
   };
   const clearSwipeLabel = () => {
     const el = swipeLabelRef.current;
     if (!el) return;
     el.style.opacity = '0';
-    el.style.transform = 'translateY(8px) scale(0.96)';
+    el.style.transform = 'translate(0, 8px) scale(0.96)';
     el.style.boxShadow = '0 0 0 rgba(0,0,0,0)';
   };
   const setSideWallGlow = (dx: number) => {
@@ -4482,21 +4486,18 @@ export const VoyoPortraitPlayer = ({
     if (dx > 0) {
       if (isHold) {
         set(wallDiscoverRef, eased);
-        setSwipeLabel('Discover', '#E6C58A', eased);
+        setSwipeLabel('Discover', '#E6C58A', eased, dx);
       } else {
         set(wallLikeRef, eased);
-        setSwipeLabel('Like', '#F472B6', eased);
+        setSwipeLabel('Like', '#F472B6', eased, dx);
       }
     } else if (dx < 0) {
       if (isHold) {
-        // LESS — saturated, committed feedback
         set(wallLessRef, eased);
-        setSwipeLabel('Less', '#5B7FBE', eased);
+        setSwipeLabel('Less', '#5B7FBE', eased, dx);
       } else {
-        // SKIP — neutral silver, "just moving on" — distinct hue from
-        // LESS so the user reads them as separate weights of action
         set(wallSkipRef, eased);
-        setSwipeLabel('Skip', '#E8EEF7', eased);
+        setSwipeLabel('Skip', '#E8EEF7', eased, dx);
       }
     } else {
       clearSwipeLabel();
