@@ -107,22 +107,54 @@ export function prev(): void {
 }
 
 /**
- * Drift — discover-more skip. Pulls from discoverTracks (the off-vibe
- * exploration pool) instead of the user's queue. Visually distinct from
- * skip() which continues the planned vibe. Falls back to skip() if the
- * discovery pool isn't populated yet. (Dash 2026-04-28: paired with the
- * left-swipe gesture in portrait player — "take the vibe far from this
- * right now".)
+ * Drift / Discover — hold + right swipe in portrait. Refreshes the
+ * discovery pool against the current track FIRST (same semantics as
+ * Search's "Discover More Like This" button — Dash 2026-04-28 confirmed
+ * this should be the same Discover the user knows from Search), then
+ * picks from the freshened pool. Falls back to skip() if the pool can't
+ * be populated.
  */
 export function drift(): void {
   const state = usePlayerStore.getState();
-  const pool = state.discoverTracks;
-  if (!pool || pool.length === 0) {
+  const cur = state.currentTrack;
+  if (cur && typeof state.updateDiscoveryForTrack === 'function') {
+    state.updateDiscoveryForTrack(cur);
+  }
+  const refreshed = usePlayerStore.getState().discoverTracks;
+  if (!refreshed || refreshed.length === 0) {
     skip();
     return;
   }
-  const pick = pool[Math.floor(Math.random() * pool.length)] as Track;
+  const pick = refreshed[Math.floor(Math.random() * refreshed.length)] as Track;
   playTrack(pick, 'drift');
+}
+
+/**
+ * Like — quick right swipe in portrait. Records explicit positive
+ * preference on the current track; the user STAYS on the song (no skip).
+ * Same persisted flag as the Heart button in RightToolbar — single source
+ * of truth for explicit likes. Visual: pink wall-of-light + brief flourish.
+ * (Dash 2026-04-28)
+ */
+export function like(): void {
+  const cur = usePlayerStore.getState().currentTrack;
+  if (cur?.id) {
+    usePreferenceStore.getState().setExplicitLike(cur.id, true);
+  }
+}
+
+/**
+ * Less — hold + left swipe in portrait. "Not my vibe" — records explicit
+ * NEGATIVE preference so the recommender biases away from this artist/
+ * style going forward, then skips. Upgraded skip with a taste signal.
+ * (Dash 2026-04-28)
+ */
+export function less(): void {
+  const cur = usePlayerStore.getState().currentTrack;
+  if (cur?.id) {
+    usePreferenceStore.getState().setExplicitLike(cur.id, false);
+  }
+  skip();
 }
 
 export function togglePlay(): void {
@@ -339,6 +371,8 @@ export const app = {
   skip,
   prev,
   drift,
+  like,
+  less,
   togglePlay,
   pause,
   resume,

@@ -4424,47 +4424,76 @@ export const VoyoPortraitPlayer = ({
   const swipeFiredRef = useRef(false);
   const hasCrossedThresholdRef = useRef(false); // haptic on threshold cross
   const cardWrapRef = useRef<HTMLDivElement>(null);
-  // Drift precision gate (Dash 2026-04-28: "delayed hold swipe").
-  // Right-swipe = next is QUICK (no gate). Left-swipe = drift is PRECISE
-  // — only commits if the user paused at least 200ms BEFORE moving.
-  // This makes drift feel deliberate; accidental left swipes spring
-  // back without firing. Cube hold (chat dock) and DJ-mode hold (400ms)
-  // are independent timers on the same pointer-down.
-  const driftReadyRef = useRef(false);
-  const driftReadyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Side-wall-of-light affordance during swipe (Dash 2026-04-28
-  // "external wall of light, subtle and descriptive premium"). Two
-  // edge-mounted gradients fade in as the user pulls. Right wall = bronze
-  // (Next, queue continuation). Left wall = bronze (Drift, off-path) —
-  // direction carries the meaning, palette stays singular for restraint.
-  // Driven imperatively from handleCanvasPointerMove + reset in
-  // launchCardAndSkip / cancel handlers.
-  const rightWallRef = useRef<HTMLDivElement>(null);
-  const leftWallRef = useRef<HTMLDivElement>(null);
+  // Hold-swipe precision gate (Dash 2026-04-28 v785 grammar). The 200ms
+  // pause-before-move flag arms the "upgraded" variant on either side:
+  // hold-then-LEFT = "Less" (taste-negative skip), hold-then-RIGHT =
+  // "Discover" (off-path exploration). Quick swipes still fire — they
+  // just bind to the lighter actions: LEFT-quick = Skip (slow drift from
+  // vibe), RIGHT-quick = Like (stamp, no skip). 200ms is below the
+  // 400ms DJ-mode hold timer so they don't collide.
+  const holdSwipeReadyRef = useRef(false);
+  const holdSwipeReadyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Side-wall-of-light affordance — four variants, one per gesture. Each
+  // wall has its own color so the user learns the grammar: pink right =
+  // Like, bronze right = Discover, steel left = Skip, deep blue left =
+  // Less. Driven imperatively (no React re-render) from setSideWallGlow.
+  const wallLikeRef     = useRef<HTMLDivElement>(null); // R quick, pink
+  const wallDiscoverRef = useRef<HTMLDivElement>(null); // R hold,  bronze
+  const wallSkipRef     = useRef<HTMLDivElement>(null); // L quick, steel
+  const wallLessRef     = useRef<HTMLDivElement>(null); // L hold,  deep blue
+  // Neon teaching label — fades in mid-swipe with the active gesture
+  // name above the BigCenterCard. Premium type, glow shadow tinted by
+  // the action's color. Pedagogy: users learn the grammar by seeing it
+  // spell itself out as they move.
+  const swipeLabelRef = useRef<HTMLDivElement>(null);
+  const setSwipeLabel = (text: string, color: string, alpha: number) => {
+    const el = swipeLabelRef.current;
+    if (!el) return;
+    el.textContent = text;
+    el.style.color = color;
+    el.style.textShadow = `0 0 14px ${color}, 0 0 28px ${color}`;
+    el.style.opacity = String(alpha);
+  };
+  const clearSwipeLabel = () => {
+    if (swipeLabelRef.current) swipeLabelRef.current.style.opacity = '0';
+  };
   const setSideWallGlow = (dx: number) => {
     const COMMIT = 120; // mirrors COMMIT_THRESHOLD
     const norm = Math.min(1, Math.abs(dx) / COMMIT);
     const eased = norm * norm * (3 - 2 * norm);
-    const right = rightWallRef.current;
-    const left = leftWallRef.current;
-    if (!right || !left) return;
+    const set = (ref: React.RefObject<HTMLDivElement | null>, opacity: number) => {
+      if (ref.current) ref.current.style.opacity = String(opacity);
+    };
+    // Hide all walls first, then light only the active variant.
+    set(wallLikeRef, 0); set(wallDiscoverRef, 0);
+    set(wallSkipRef, 0); set(wallLessRef, 0);
+
+    const isHold = holdSwipeReadyRef.current;
     if (dx > 0) {
-      // Right pull = next, always armed
-      right.style.opacity = String(eased);
-      left.style.opacity = '0';
-    } else if (dx < 0 && driftReadyRef.current) {
-      // Left pull = drift, only glows when the precise gate is open
-      left.style.opacity = String(eased);
-      right.style.opacity = '0';
+      if (isHold) {
+        set(wallDiscoverRef, eased);
+        setSwipeLabel('Discover', '#E6C58A', eased);
+      } else {
+        set(wallLikeRef, eased);
+        setSwipeLabel('Like', '#F472B6', eased);
+      }
+    } else if (dx < 0) {
+      if (isHold) {
+        set(wallLessRef, eased);
+        setSwipeLabel('Less', '#7CA0D6', eased);
+      } else {
+        set(wallSkipRef, eased);
+        setSwipeLabel('Skip', '#B0C4DE', eased);
+      }
     } else {
-      // Left pull without the pause-first gate — no glow, no commit
-      right.style.opacity = '0';
-      left.style.opacity = '0';
+      clearSwipeLabel();
     }
   };
   const clearSideWallGlow = () => {
-    if (rightWallRef.current) rightWallRef.current.style.opacity = '0';
-    if (leftWallRef.current) leftWallRef.current.style.opacity = '0';
+    [wallLikeRef, wallDiscoverRef, wallSkipRef, wallLessRef].forEach(r => {
+      if (r.current) r.current.style.opacity = '0';
+    });
+    clearSwipeLabel();
   };
 
   // Apply a transform + opacity to the card wrapper directly. Called from
@@ -4480,26 +4509,46 @@ export const VoyoPortraitPlayer = ({
     el.style.willChange = dragging ? 'transform, opacity' : 'auto';
   };
 
-  // Launch the card off-screen in the direction of the swipe, then fire
-  // the skip. After the skip, the new track mounts and we reset the
-  // wrapper's transform instantly (no animation) so it's ready for the
-  // next gesture.
-  const launchCardAndSkip = (dx: number) => {
+  // Launch the card off-screen in the direction of the swipe and fire
+  // the action. After the action, the new track (if any) mounts and we
+  // reset the wrapper's transform instantly so it's ready for the next
+  // gesture. v785 grammar (Dash 2026-04-28):
+  //   left  + quick = SKIP (slow drift from this vibe — keep planned next)
+  //   left  + hold  = LESS  (taste-negative + skip)
+  //   right + quick = LIKE  (stamp the current track, no skip — flourish only)
+  //   right + hold  = DISCOVER (refresh discover pool from current + play)
+  type SwipeAction = 'skip' | 'less' | 'like' | 'discover';
+  const launchCardWithAction = (dx: number, action: SwipeAction) => {
     const el = cardWrapRef.current;
     const dir = dx > 0 ? 1 : -1;
+
+    // LIKE — stamp + snap back (the song stays). Brief scale pop, no
+    // fly-off, then spring to center. Pink wall + label already up.
+    if (action === 'like') {
+      app.like();
+      if (el) {
+        el.style.transition = 'transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.18s ease-out';
+        el.style.transform = `translateX(${dx * 0.3}px) rotate(${dir * 4}deg) scale(1.04)`;
+        el.style.opacity = '1';
+        setTimeout(() => {
+          if (!el) return;
+          el.style.transition = 'transform 0.42s cubic-bezier(0.34, 1.56, 0.64, 1)';
+          el.style.transform = 'translateX(0) rotate(0deg) scale(1)';
+        }, 180);
+      }
+      return;
+    }
+
+    // SKIP / LESS / DISCOVER — fly off + advance track.
     if (el) {
       el.style.transition = 'transform 0.28s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.24s ease-out';
       el.style.transform = `translateX(${dir * window.innerWidth}px) rotate(${dir * 28}deg)`;
       el.style.opacity = '0';
     }
     setTimeout(() => {
-      // Dash 2026-04-28: swipe vocabulary inverted from the old prev/next
-      // pair. Right swipe = NEXT (queue continuation, vibe-aligned).
-      // Left swipe = DRIFT (off-path discovery — picks from discoverTracks
-      // instead of queue). Previous-track navigation is gone from the
-      // engine; users reach the past via the history rail or by asking
-      // OYO to rewind.
-      if (dir > 0) app.skip(); else app.drift();
+      if (action === 'less')         app.less();
+      else if (action === 'discover') app.drift();
+      else                            app.skip(); // 'skip'
       setTimeout(() => {
         const el2 = cardWrapRef.current;
         if (!el2) return;
@@ -4694,16 +4743,16 @@ export const VoyoPortraitPlayer = ({
     didHoldRef.current = false;
     swipeFiredRef.current = false;
     hasCrossedThresholdRef.current = false;
-    driftReadyRef.current = false;
+    holdSwipeReadyRef.current = false;
     swipeStartRef.current = { x: e.clientX, y: e.clientY, t: Date.now() };
 
     // Arm the drift gate: if the user holds still for 200ms BEFORE moving,
     // a left-swipe will commit drift on release. If they move before 200ms,
     // the timer is cancelled in pointermove and left swipe will spring back.
-    if (driftReadyTimer.current) clearTimeout(driftReadyTimer.current);
-    driftReadyTimer.current = setTimeout(() => {
-      driftReadyRef.current = true;
-      driftReadyTimer.current = null;
+    if (holdSwipeReadyTimer.current) clearTimeout(holdSwipeReadyTimer.current);
+    holdSwipeReadyTimer.current = setTimeout(() => {
+      holdSwipeReadyRef.current = true;
+      holdSwipeReadyTimer.current = null;
       haptics.light(); // tactile "drift armed"
     }, 200);
 
@@ -4756,15 +4805,15 @@ export const VoyoPortraitPlayer = ({
     // Once we've moved meaningfully horizontally, cancel the hold timers
     // (this is a drag, not a DJ-mode hold). The drift-arm timer is
     // cancelled here too — if user moves before the 200ms gate fires,
-    // driftReadyRef stays false and a left swipe will spring back.
+    // holdSwipeReadyRef stays false and a left swipe will spring back.
     if (Math.abs(dx) > 8) {
       if (holdTimerRef.current) {
         clearTimeout(holdTimerRef.current);
         holdTimerRef.current = null;
       }
-      if (driftReadyTimer.current) {
-        clearTimeout(driftReadyTimer.current);
-        driftReadyTimer.current = null;
+      if (holdSwipeReadyTimer.current) {
+        clearTimeout(holdSwipeReadyTimer.current);
+        holdSwipeReadyTimer.current = null;
       }
       swipeFiredRef.current = true; // eat the trailing click
     }
@@ -4802,27 +4851,35 @@ export const VoyoPortraitPlayer = ({
     // full 120px — matches the feel of flicking away a card.
     const shouldCommit = Math.abs(dx) > COMMIT_THRESHOLD || (velocity > 0.6 && Math.abs(dx) > 40);
 
-    // Drift precision gate: left swipe only commits if the user paused
-    // ≥200ms before moving. Right swipe (next) is unconditional —
-    // forward through the queue is the default action.
+    // v785 grammar — every committed swipe fires SOMETHING:
+    //   left  + quick = SKIP        (slow drift from this vibe)
+    //   left  + hold  = LESS         (taste-negative skip)
+    //   right + quick = LIKE         (stamp + flourish, no skip)
+    //   right + hold  = DISCOVER     (refresh discover pool + play)
+    // The hold gate (200ms pause-before-move) selects the "upgraded"
+    // variant on either side. Quick swipes are the default actions.
     const isLeft = dx < 0;
-    const armedForCommit = shouldCommit && (!isLeft || driftReadyRef.current);
+    const isHold = holdSwipeReadyRef.current;
 
-    if (armedForCommit) {
+    if (shouldCommit) {
       haptics.medium();
-      launchCardAndSkip(dx);
+      let action: 'skip' | 'less' | 'like' | 'discover';
+      if (isLeft && isHold)        action = 'less';
+      else if (isLeft)             action = 'skip';
+      else if (!isLeft && isHold)  action = 'discover';
+      else                         action = 'like';
+      launchCardWithAction(dx, action);
       setTimeout(clearSideWallGlow, 240);
     } else {
-      // Spring back — either didn't reach threshold OR left-swipe wasn't
-      // gated by the pause (drift requires intent).
+      // Didn't reach threshold — spring back, no action.
       applyCardTransform(0, false);
       clearSideWallGlow();
     }
-    if (driftReadyTimer.current) {
-      clearTimeout(driftReadyTimer.current);
-      driftReadyTimer.current = null;
+    if (holdSwipeReadyTimer.current) {
+      clearTimeout(holdSwipeReadyTimer.current);
+      holdSwipeReadyTimer.current = null;
     }
-    driftReadyRef.current = false;
+    holdSwipeReadyRef.current = false;
   }, []);
 
   // Dedicated pointer-CANCEL handler. Distinct from pointer-UP because
@@ -4844,11 +4901,11 @@ export const VoyoPortraitPlayer = ({
     // "forget this gesture happened".
     applyCardTransform(0, false);
     clearSideWallGlow();
-    if (driftReadyTimer.current) {
-      clearTimeout(driftReadyTimer.current);
-      driftReadyTimer.current = null;
+    if (holdSwipeReadyTimer.current) {
+      clearTimeout(holdSwipeReadyTimer.current);
+      holdSwipeReadyTimer.current = null;
     }
-    driftReadyRef.current = false;
+    holdSwipeReadyRef.current = false;
   }, []);
 
   const handleCanvasTap = useCallback((e: React.MouseEvent) => {
@@ -5188,42 +5245,93 @@ export const VoyoPortraitPlayer = ({
       onPointerCancel={handleCanvasPointerCancel}
     >
 
-      {/* SIDE-WALL OF LIGHT — appears as the user pulls a swipe gesture.
-          External glow from the screen edge inward, opacity tracks pull
-          distance via setSideWallGlow (imperative, no re-render). Bronze
-          on both sides — direction carries the meaning, palette stays
-          singular for restraint (Dash 2026-04-28: "subtle and descriptive
-          premium"). Pointer-events:none so the wall never steals taps. */}
+      {/* SIDE-WALLS OF LIGHT — four variants, one per gesture (v785 grammar,
+          Dash 2026-04-28). Each side carries its own color so the user
+          learns the language: pink right = Like, bronze right = Discover,
+          steel left = Skip, deep blue left = Less. Imperative opacity in
+          setSideWallGlow — no re-renders. mix-blend-mode: screen for the
+          atmospheric "wall of light" feel against dark canvas. */}
+      {/* RIGHT — LIKE (quick) */}
       <div
-        ref={rightWallRef}
+        ref={wallLikeRef}
         aria-hidden
         style={{
           position: 'fixed',
           top: 0, right: 0, bottom: 0,
-          width: '40vw',
-          maxWidth: '320px',
-          pointerEvents: 'none',
-          opacity: 0,
+          width: '40vw', maxWidth: '320px',
+          pointerEvents: 'none', opacity: 0,
+          background: 'linear-gradient(to left, rgba(236,72,153,0.42) 0%, rgba(236,72,153,0.18) 35%, rgba(236,72,153,0) 100%)',
+          mixBlendMode: 'screen',
+          transition: 'opacity 220ms cubic-bezier(0.16, 1, 0.3, 1)',
+          zIndex: 60,
+        }}
+      />
+      {/* RIGHT — DISCOVER (hold) */}
+      <div
+        ref={wallDiscoverRef}
+        aria-hidden
+        style={{
+          position: 'fixed',
+          top: 0, right: 0, bottom: 0,
+          width: '40vw', maxWidth: '320px',
+          pointerEvents: 'none', opacity: 0,
           background: 'linear-gradient(to left, rgba(212,160,83,0.42) 0%, rgba(212,160,83,0.18) 35%, rgba(212,160,83,0) 100%)',
           mixBlendMode: 'screen',
           transition: 'opacity 220ms cubic-bezier(0.16, 1, 0.3, 1)',
           zIndex: 60,
         }}
       />
+      {/* LEFT — SKIP (quick) */}
       <div
-        ref={leftWallRef}
+        ref={wallSkipRef}
         aria-hidden
         style={{
           position: 'fixed',
           top: 0, left: 0, bottom: 0,
-          width: '40vw',
-          maxWidth: '320px',
-          pointerEvents: 'none',
-          opacity: 0,
-          background: 'linear-gradient(to right, rgba(212,160,83,0.42) 0%, rgba(212,160,83,0.18) 35%, rgba(212,160,83,0) 100%)',
+          width: '40vw', maxWidth: '320px',
+          pointerEvents: 'none', opacity: 0,
+          background: 'linear-gradient(to right, rgba(99,124,160,0.40) 0%, rgba(99,124,160,0.16) 35%, rgba(99,124,160,0) 100%)',
           mixBlendMode: 'screen',
           transition: 'opacity 220ms cubic-bezier(0.16, 1, 0.3, 1)',
           zIndex: 60,
+        }}
+      />
+      {/* LEFT — LESS (hold) */}
+      <div
+        ref={wallLessRef}
+        aria-hidden
+        style={{
+          position: 'fixed',
+          top: 0, left: 0, bottom: 0,
+          width: '40vw', maxWidth: '320px',
+          pointerEvents: 'none', opacity: 0,
+          background: 'linear-gradient(to right, rgba(60,90,140,0.55) 0%, rgba(60,90,140,0.22) 35%, rgba(60,90,140,0) 100%)',
+          mixBlendMode: 'screen',
+          transition: 'opacity 220ms cubic-bezier(0.16, 1, 0.3, 1)',
+          zIndex: 60,
+        }}
+      />
+      {/* NEON SWIPE LABEL — fades in mid-swipe with the active gesture
+          name above the BigCenterCard. Premium italic, glow shadow tinted
+          by the action's color (set imperatively in setSwipeLabel). */}
+      <div
+        ref={swipeLabelRef}
+        aria-hidden
+        style={{
+          position: 'fixed',
+          top: 'calc(env(safe-area-inset-top, 0px) + 92px)',
+          left: 0, right: 0,
+          textAlign: 'center',
+          fontFamily: "'Fraunces', 'Satoshi', system-ui, serif",
+          fontStyle: 'italic',
+          fontSize: 22,
+          fontWeight: 600,
+          letterSpacing: '0.04em',
+          pointerEvents: 'none',
+          opacity: 0,
+          transition: 'opacity 180ms ease-out',
+          zIndex: 65,
+          textShadow: '0 0 14px rgba(255,255,255,0)',
         }}
       />
 
