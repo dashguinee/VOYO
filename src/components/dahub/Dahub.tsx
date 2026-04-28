@@ -1033,19 +1033,58 @@ export function Dahub({ userId, userName, userAvatar, coreId, appContext, onClos
   };
 
   return (
-    <div className="h-full bg-[#0a0a0f] flex flex-col overflow-hidden">
+    <div className="relative h-full flex flex-col overflow-hidden" style={{ background: '#08080a' }}>
+      {/* v806 (Dash 2026-04-29 "doesn't feel native"): warm atmospheric
+          fade behind the page so DaHub reads as a sister surface to the
+          VOYO portrait player instead of a flat solid block. Layered
+          fixed inside the page (not relying on the global AtmosphereLayer
+          which can't reach through opaque containers above z-1). */}
+      <div
+        aria-hidden
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          background: 'linear-gradient(to bottom, rgba(28,18,8,0.42) 0%, rgba(20,12,6,0.18) 28%, rgba(8,8,10,0) 60%)',
+        }}
+      />
+      <div
+        aria-hidden
+        className="absolute inset-x-0 bottom-0 h-1/3 pointer-events-none"
+        style={{
+          background: 'radial-gradient(ellipse at 50% 100%, rgba(212,160,83,0.06) 0%, transparent 70%)',
+        }}
+      />
+
       {/* Header — safe-area-top so the title doesn't sit under the phone
           notch / status bar on installed PWAs. Keeps the same 20px
           breathing-room on devices without an inset. */}
       <div
-        className="flex-shrink-0 px-6 pb-3"
+        className="relative flex-shrink-0 px-6 pb-3 z-10"
         style={{ paddingTop: 'max(20px, calc(env(safe-area-inset-top, 0px) + 12px))' }}
       >
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold text-white tracking-tight">DaHub</h1>
+            {/* DaHub wordmark — VOYO brand gradient (purple → bronze) so
+                it reads as native to the player ecosystem. */}
+            <h1
+              className="text-2xl font-black tracking-tight"
+              style={{
+                background: 'linear-gradient(135deg, #a78bfa 0%, #8b5cf6 50%, #D4A053 100%)',
+                WebkitBackgroundClip: 'text',
+                WebkitTextFillColor: 'transparent',
+                backgroundClip: 'text',
+              }}
+            >
+              DaHub
+            </h1>
             {isMasterView && (
-              <span className="px-2.5 py-1 rounded-lg bg-purple-500/15 border border-purple-500/20 text-purple-400 text-[10px] font-semibold uppercase tracking-wider">
+              <span
+                className="px-2.5 py-1 rounded-lg text-[10px] font-semibold uppercase tracking-wider"
+                style={{
+                  background: 'rgba(212,160,83,0.12)',
+                  border: '1px solid rgba(212,160,83,0.28)',
+                  color: '#E6C58A',
+                }}
+              >
                 All Apps
               </span>
             )}
@@ -1055,8 +1094,8 @@ export function Dahub({ userId, userName, userAvatar, coreId, appContext, onClos
       </div>
 
       {isLoading ? (
-        <div className="flex-1 flex items-center justify-center">
-          <Loader2 size={32} className="animate-spin text-purple-400" />
+        <div className="relative z-10 flex-1 flex items-center justify-center">
+          <Loader2 size={32} className="animate-spin" style={{ color: '#D4A053' }} />
         </div>
       ) : (
         <>

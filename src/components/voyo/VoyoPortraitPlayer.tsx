@@ -6919,13 +6919,12 @@ export const VoyoPortraitPlayer = ({
         )}
       
 
-      {/* BOTTOM-RIGHT TAKE OUT CHIP — rises into view when user scrolls
-          toward the mix board (portalProgress > 0.2), settles, then
-          decays to 7% opacity after 5s. Only mounted while the mini
-          player is up — otherwise Take Out has nothing to take out. */}
-      {videoTarget === 'portrait' && (
-        <BottomTakeOutChip portalProgress={portalProgress} />
-      )}
+      {/* (BottomTakeOutChip removed v806 per Dash 2026-04-29 — the
+          rising bottom-right chip felt redundant with the morphed
+          ExpandVideoButton on the BigCenterCard which already does the
+          same job. PiP is reachable via the chip on the artwork; the
+          BottomTakeOutChip component itself stays in this file in case
+          we want to bring it back, just not rendered.) */}
 
 
       {/* LYRICS OVERLAY - Tap album art to show */}
