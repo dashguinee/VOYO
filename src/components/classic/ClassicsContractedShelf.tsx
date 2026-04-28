@@ -228,7 +228,7 @@ function ClassicsContractedShelfImpl({ tracks, onPlay }: Props) {
                 }}
               >
                 <SmartImage
-                  src={getThumb(currentTrack)}
+                  src={currentTrack.coverUrl || getThumb(currentTrack.trackId || currentTrack.id)}
                   alt={`${currentTrack.title} — ${currentTrack.artist}`}
                   className="w-full h-full object-cover"
                 />
