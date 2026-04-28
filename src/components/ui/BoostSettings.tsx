@@ -9,7 +9,7 @@
  */
 
 import { useState, useEffect, useRef } from 'react';
-import { Zap, Trash2, X, HardDrive, Settings, Sliders, Flame, Moon, Timer, Bell, BellOff } from 'lucide-react';
+import { Zap, Trash2, X, HardDrive, Settings, Sliders, Flame, Moon, Timer, Bell, BellOff, Film } from 'lucide-react';
 import { useDownloadStore } from '../../store/downloadStore';
 import { usePlayerStore } from '../../store/playerStore';
 import { haptics } from '../../utils/haptics';
@@ -18,6 +18,11 @@ import { usePushNotifications } from '../../hooks/usePushNotifications';
 interface BoostSettingsProps {
   isOpen: boolean;
   onClose: () => void;
+  /** Backdrop toggle — moved from the player surface into Settings
+   *  per Dash 2026-04-29 v795. Player stays uncluttered; the option
+   *  remains available for those who want to disable. */
+  backdropEnabled?: boolean;
+  onToggleBackdrop?: () => void;
 }
 
 // ============================================
@@ -227,7 +232,7 @@ function OyoNotificationsSection() {
   );
 }
 
-export const BoostSettings = ({ isOpen, onClose }: BoostSettingsProps) => {
+export const BoostSettings = ({ isOpen, onClose, backdropEnabled, onToggleBackdrop }: BoostSettingsProps) => {
   // Fine-grained selectors — avoid re-render on every download progress tick.
   const autoBoostEnabled = useDownloadStore(s => s.autoBoostEnabled);
   const enableAutoBoost = useDownloadStore(s => s.enableAutoBoost);
@@ -635,6 +640,43 @@ export const BoostSettings = ({ isOpen, onClose }: BoostSettingsProps) => {
               </button>
             </div>
           </div>
+
+          {/* Backdrop toggle — moved here from the player surface
+              (v795 Dash 2026-04-29). Default ON; turn off if you want
+              the cleaner solid-canvas look. */}
+          {onToggleBackdrop !== undefined && (
+            <div className="bg-white/5 rounded-2xl p-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center">
+                    <Film size={16} className="text-white/55" />
+                  </div>
+                  <div>
+                    <div className="text-sm font-medium text-white">Video Backdrop</div>
+                    <div className="text-[10px] text-gray-500 mt-0.5">
+                      Live artwork behind the player
+                    </div>
+                  </div>
+                </div>
+                <button
+                  onClick={() => { onToggleBackdrop(); haptics.light(); }}
+                  className="w-12 h-7 rounded-full transition-colors relative active:scale-95"
+                  aria-label={backdropEnabled ? 'Disable backdrop' : 'Enable backdrop'}
+                  style={{
+                    background: backdropEnabled
+                      ? 'linear-gradient(135deg, #D4A053, #B17C2A)'
+                      : 'rgba(255,255,255,0.10)',
+                    boxShadow: backdropEnabled ? '0 0 12px rgba(212,160,83,0.4)' : 'none',
+                  }}
+                >
+                  <div
+                    className="absolute top-1 w-5 h-5 rounded-full bg-white shadow-md voyo-transition-all"
+                    style={{ left: backdropEnabled ? 26 : 4 }}
+                  />
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Sleep Timer */}
           <SleepTimerSection />

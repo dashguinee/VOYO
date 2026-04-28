@@ -4080,7 +4080,7 @@ export const VoyoPortraitPlayer = ({
   }, [hotTracks, discoverTracks, playTrack]);
 
   // Backdrop state
-  const [backdropEnabled, setBackdropEnabled] = useState(false); // OFF by default for smoothness
+  const [backdropEnabled, setBackdropEnabled] = useState(true); // v795: ON by default — Dash 2026-04-29
   const [currentBackdrop, setCurrentBackdrop] = useState('album'); // 'album', 'gradient-purple', etc.
   const [isBackdropLibraryOpen, setIsBackdropLibraryOpen] = useState(false);
   // State for fullscreen video mode
@@ -5532,12 +5532,9 @@ export const VoyoPortraitPlayer = ({
         <FullscreenBackground trackId={currentTrack?.trackId} />
       )}
 
-      {/* BACKDROP TOGGLE - Sleek vertical toggle on left side */}
-      <BackdropToggle
-        isEnabled={backdropEnabled}
-        onToggle={() => setBackdropEnabled(!backdropEnabled)}
-        onOpenLibrary={() => setIsBackdropLibraryOpen(true)}
-      />
+      {/* (v795 Dash 2026-04-29: BackdropToggle removed from the main
+          surface. Backdrop is now ON by default; toggle lives in Settings
+          → Studio so the player itself stays uncluttered.) */}
 
       {/* BACKDROP LIBRARY MODAL */}
       
@@ -6789,11 +6786,13 @@ export const VoyoPortraitPlayer = ({
           past the music shelves. */}
       <div className="flex-shrink-0 w-full" style={{ height: '480px' }} />
 
-      {/* BOOST SETTINGS PANEL */}
+      {/* BOOST SETTINGS PANEL — also hosts the Backdrop toggle (v795). */}
       <div data-no-canvas-swipe="true">
         <BoostSettings
           isOpen={isBoostSettingsOpen}
           onClose={() => setIsBoostSettingsOpen(false)}
+          backdropEnabled={backdropEnabled}
+          onToggleBackdrop={() => setBackdropEnabled(!backdropEnabled)}
         />
       </div>
 
