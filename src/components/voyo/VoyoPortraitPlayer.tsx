@@ -3934,6 +3934,11 @@ export const VoyoPortraitPlayer = ({
   const setPlaybackRate = usePlayerStore(s => s.setPlaybackRate);
   const stopSkeep = usePlayerStore(s => s.stopSkeep);
   const oyeBarBehavior = usePlayerStore(s => s.oyeBarBehavior);
+  // v804: read playerCompact (set true when SearchOverlay is open).
+  // Used to gate canvas pointer/tap handlers so search-time touches
+  // don't leak through to player gestures (Dash 2026-04-29
+  // "tap to pause leak, gesture conflicts").
+  const playerCompact = usePlayerStore(s => s.playerCompact);
   const shuffleMode = usePlayerStore(s => s.shuffleMode);
   const repeatMode = usePlayerStore(s => s.repeatMode);
   const toggleShuffle = usePlayerStore(s => s.toggleShuffle);
@@ -4888,6 +4893,11 @@ export const VoyoPortraitPlayer = ({
   // via didOriginateOnInteractive so they keep their own event handling.
   const handleCanvasPointerDown = useCallback((e: React.PointerEvent) => {
     if (didOriginateOnInteractive(e)) return;
+    // v804: bail when SearchOverlay is open (playerCompact === true).
+    // SearchOverlay's z-50 backdrop should already block taps from
+    // reaching here, but in some browsers a stray touch can leak
+    // through during the close transition. Belt-and-suspenders.
+    if (usePlayerStore.getState().playerCompact) return;
     // Also skip if the pointer started on a scrollable rail (history/queue
     // card belts have their own horizontal drag — we don't want to double-
     // handle). They're marked with data-no-canvas-swipe.
@@ -5063,6 +5073,10 @@ export const VoyoPortraitPlayer = ({
   }, []);
 
   const handleCanvasTap = useCallback((e: React.MouseEvent) => {
+    // v804: bail when SearchOverlay is open — same belt-and-suspenders
+    // guard as handleCanvasPointerDown. Prevents the tap-to-pause leak
+    // Dash spotted from canvas taps that "leaked through" search.
+    if (usePlayerStore.getState().playerCompact) return;
     // Skip clicks that came from real interactive elements (player
     // buttons, inputs, etc.) — those have their own onClick already.
     if (didOriginateOnInteractive(e)) return;

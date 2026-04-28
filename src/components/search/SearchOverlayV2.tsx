@@ -742,12 +742,15 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap, onEnterVideoMode
               }
             }
           `}</style>
-          {/* Backdrop — solid 90% black scrim. Was blur(16px) full-screen
-              backdrop-filter; that repainted across the whole viewport on
-              every scroll frame and was the dominant search-page jank
-              source on mobile. The dim alone gives enough separation. */}
+          {/* Backdrop — 95% black scrim + light backdrop-blur. Was /90,
+              which let the landscape iframe leak through too visibly
+              when videoTarget was 'landscape'. Bumped to /95 + a small
+              blur (4px is GPU-cheap, not the heavy 16px from the original
+              jank-causing version). Eliminates the landscape leak Dash
+              spotted in v803. */}
           <div
-            className="fixed inset-0 z-40 bg-black/90"
+            className="fixed inset-0 z-40 bg-black/95"
+            style={{ backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)' }}
             onClick={onClose}
           />
 

@@ -866,13 +866,15 @@ function App() {
   const openVideoOverlay = useCallback(() => {
     usePlayerStore.getState().setVideoTarget('portrait');
   }, []);
-  // Restore hidden on search close so the mini iframe doesn't linger.
+  // v804 (Dash 2026-04-29 "tap to pause leak"): closeSearch no longer
+  // forces videoTarget to 'hidden'. The previous behavior would tear
+  // down the iframe on every search close — and when the iframe was
+  // the audio source (playbackSource === 'iframe'), that paused the
+  // music. Surfaced as a phantom pause whenever the user dismissed
+  // search. Let videoTarget persist; user manages mini player via
+  // its own controls.
   const closeSearch = useCallback(() => {
     setIsSearchOpen(false);
-    const vt = usePlayerStore.getState().videoTarget;
-    if (vt === 'portrait' || vt === 'landscape') {
-      usePlayerStore.getState().setVideoTarget('hidden');
-    }
   }, []);
 
   // Compact the floating portrait player when Search is active — it
