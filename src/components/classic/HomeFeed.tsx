@@ -3208,10 +3208,12 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onNavVisibilityChange, onSwitc
       .sort((a, b) => (b.oyeScore || 0) - (a.oyeScore || 0))
       .slice(0, 7);
   }, [activeClassicsDrop, hotPool]);
-  // Ceremony renders only with at least 3 resolved tracks — otherwise the
-  // existing shelf takes over (don't ship a broken ceremony).
+  // Ceremony renders with any resolved track. Manual track_ids picks are
+  // honored exactly (even a 1-track drop is intentional). System-curated
+  // mode pulls 7 from the pool; if the pool is so sparse it returns 0,
+  // we silently fall back to the existing shelf.
   const showClassicsDropCeremony = Boolean(
-    activeClassicsDrop && classicsDropTracks.length >= 3,
+    activeClassicsDrop && classicsDropTracks.length >= 1,
   );
 
   // Top 10 on VOYO: Trending tracks, excluding what's in other shelves.
