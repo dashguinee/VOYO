@@ -662,7 +662,7 @@ function ChatIsland({
               width: '32px',
               height: '32px',
               borderRadius: '50%',
-              background: 'linear-gradient(135deg, #8B5CF6 0%, #EC4899 100%)',
+              background: 'linear-gradient(135deg, #D4A053 0%, #B8862E 100%)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -714,8 +714,8 @@ function ChatIsland({
                   padding: '8px 12px',
                   borderRadius: msg.role === 'user' ? '16px 16px 4px 16px' : '16px 16px 16px 4px',
                   background: msg.role === 'user'
-                    ? 'linear-gradient(135deg, #8B5CF6 0%, #7C3AED 100%)'
-                    : 'rgba(255,255,255,0.1)',
+                    ? 'linear-gradient(135deg, rgba(212,160,83,0.32) 0%, rgba(184,134,46,0.28) 100%)'
+                    : 'rgba(255,255,255,0.08)',
                   color: 'white',
                   fontSize: '13px',
                   }}
@@ -759,7 +759,7 @@ function ChatIsland({
               width: '40px',
               height: '40px',
               borderRadius: '12px',
-              background: 'linear-gradient(135deg, #8B5CF6 0%, #EC4899 100%)',
+              background: 'linear-gradient(135deg, #D4A053 0%, #B8862E 100%)',
               border: 'none',
               display: 'flex',
               alignItems: 'center',

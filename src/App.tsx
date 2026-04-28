@@ -1158,6 +1158,7 @@ function App() {
                   onSearch={() => setIsSearchOpen(true)}
                   onDahub={() => setVoyoTab('dahub')}
                   onHome={handleSwitchToClassic}
+                  onEnterCinema={handleVideoModeEnter}
                 />
               )}
             </div>

@@ -372,8 +372,6 @@ const NeonBillboardCard = memo(({
     textTransition: isStarving ? 0.8 : baseTiming.textTransition,
   };
 
-  const animVariant = textAnimationVariants[textAnimation];
-
   // Calculate glow intensity - starving = dim, boosted = BRIGHT
   const glowIntensity = isStarving ? 0.2 : (0.4 + barRatio * 0.8); // 0.2 when dead, up to 1.2 when maxed
 
@@ -416,12 +414,7 @@ const NeonBillboardCard = memo(({
     `.trim();
   };
 
-  // Startup flicker effect (research: NEON_RESEARCH.md)
-  const [hasStartupFlicker, setHasStartupFlicker] = useState(true);
-  useEffect(() => {
-    const timer = setTimeout(() => setHasStartupFlicker(false), 1500);
-    return () => clearTimeout(timer);
-  }, []);
+  // (Startup flicker state removed 2026-04-28 — never read, dead code.)
 
   return (
     <button
@@ -1063,7 +1056,7 @@ const BackdropLibrary = ({
 // Any tap / reveal resets both timers — the button breathes with the
 // rest of the UI instead of running on its own mount-time clock.
 // ============================================
-const ExpandVideoButton = memo(({ onClick, isIframeAudio, isMiniPlayerActive, controlsActive }: { onClick: () => void; isIframeAudio: boolean; isMiniPlayerActive: boolean; controlsActive: boolean }) => {
+const ExpandVideoButton = memo(({ onClick, isIframeAudio, isMiniPlayerActive, controlsActive, onEnterCinema }: { onClick: () => void; isIframeAudio: boolean; isMiniPlayerActive: boolean; controlsActive: boolean; onEnterCinema?: () => void }) => {
   const [mode, setMode] = useState<'active' | 'dimmed'>('active');
   const [extraFaded, setExtraFaded] = useState(false);
   // Phase machine: 'mini' = default (purple, "Mini Player"), 'morphing'
@@ -1142,25 +1135,32 @@ const ExpandVideoButton = memo(({ onClick, isIframeAudio, isMiniPlayerActive, co
 
   const handleClick = () => {
     if (phase === 'takeout') {
-      void pipService.enter();
+      // Take Out tap → enter Cinema (full-bleed VideoMode). Was system PiP;
+      // cinema is the "full experience" gesture per Dash 2026-04-28. PiP
+      // is rare on mobile and the in-app cinema is what users actually
+      // want from this morph. Falls back to PiP if no cinema callback wired.
+      if (onEnterCinema) onEnterCinema();
+      else void pipService.enter();
     } else {
       onClick();
     }
   };
 
-  // Color palette swaps for the orange Take Out state. Border + glow
-  // + dot + text all move from purple → orange. Text crossfades via
-  // the labelOpacity below.
-  const borderClass = isOrange ? 'border-orange-400/60 hover:border-orange-400/80' : 'border-purple-400/60 hover:border-purple-400/80';
-  const borderClassDim = isOrange ? 'border-orange-400/40' : 'border-purple-400/40';
+  // 2026-04-28: matured palette — Mini state = neutral glass (matches the
+  // reaction-bar siblings, signals "available"); Take Out state = bronze
+  // (signals "ready to commit to the full experience"). Was purple → orange
+  // which read as kid-style and clashed with the rest of the matured UI.
+  // The phase contrast (cool → warm) still reads as a clear progression.
+  const borderClass = isOrange ? 'border-[rgba(212,160,83,0.55)]' : 'border-white/15';
+  const borderClassDim = isOrange ? 'border-[rgba(212,160,83,0.35)]' : 'border-white/10';
 
   return (
     <>
       <style>{`
         @keyframes voyo-takeout-morph-pulse {
-          0%   { box-shadow: 0 0 16px rgba(139,92,246,0.5), 0 0 28px rgba(139,92,246,0.25); }
-          50%  { box-shadow: 0 0 26px rgba(196,181,253,0.95), 0 0 48px rgba(196,181,253,0.55); }
-          100% { box-shadow: 0 0 14px rgba(244,162,62,0.45), 0 0 24px rgba(244,162,62,0.25); }
+          0%   { box-shadow: 0 0 14px rgba(255,255,255,0.18), 0 0 22px rgba(255,255,255,0.10); }
+          50%  { box-shadow: 0 0 22px rgba(230,197,138,0.55), 0 0 36px rgba(212,160,83,0.30); }
+          100% { box-shadow: 0 0 14px rgba(212,160,83,0.45), 0 0 24px rgba(212,160,83,0.22); }
         }
       `}</style>
       <button
@@ -1172,18 +1172,18 @@ const ExpandVideoButton = memo(({ onClick, isIframeAudio, isMiniPlayerActive, co
         }`}
         style={{
           background: isOrange
-            ? (isDimmed ? 'rgba(244,162,62,0.14)' : 'rgba(244,162,62,0.20)')
-            : (isDimmed ? 'rgba(139,92,246,0.14)' : 'rgba(139,92,246,0.22)'),
+            ? (isDimmed ? 'rgba(212,160,83,0.14)' : 'rgba(212,160,83,0.20)')
+            : (isDimmed ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.07)'),
           boxShadow:
             phase === 'morphing'
               ? undefined  // owned by the keyframe
               : isOrange
                 ? (isDimmed
-                    ? '0 0 8px rgba(244,162,62,0.25), 0 0 14px rgba(244,162,62,0.12)'
-                    : '0 0 14px rgba(244,162,62,0.45), 0 0 24px rgba(244,162,62,0.22)')
+                    ? '0 0 8px rgba(212,160,83,0.25), 0 0 14px rgba(212,160,83,0.12)'
+                    : '0 0 14px rgba(212,160,83,0.45), 0 0 24px rgba(212,160,83,0.22)')
                 : (isDimmed
-                    ? '0 0 9px rgba(139,92,246,0.28), 0 0 16px rgba(139,92,246,0.14)'
-                    : '0 0 16px rgba(139,92,246,0.5), 0 0 28px rgba(139,92,246,0.25)'),
+                    ? '0 0 6px rgba(255,255,255,0.10), 0 0 12px rgba(255,255,255,0.05)'
+                    : '0 0 12px rgba(255,255,255,0.18), 0 0 22px rgba(255,255,255,0.08)'),
           animation:
             phase === 'morphing'
               ? 'voyo-takeout-morph-pulse 0.9s cubic-bezier(0.16, 1, 0.3, 1) forwards'
@@ -1192,12 +1192,6 @@ const ExpandVideoButton = memo(({ onClick, isIframeAudio, isMiniPlayerActive, co
                   : 'none'),
           opacity: parked ? 0 : (extraFaded ? 0.8 : 1),
           pointerEvents: parked ? 'none' : 'auto',
-          // Single 700ms easing for visual props so the chip morph stays
-          // coherent (no wobble between dot/text/box). Opacity fade is
-          // longer (1.4s) on purpose — the parking/extra-fade decay is a
-          // slower presence cue, separate from the morph beat.
-          // box-shadow is suppressed during 'morphing' to avoid
-          // competing with the keyframe (see voyo-takeout-morph-pulse).
           transition: [
             'padding 700ms cubic-bezier(0.16, 1, 0.3, 1)',
             'background 700ms cubic-bezier(0.16, 1, 0.3, 1)',
@@ -1209,16 +1203,17 @@ const ExpandVideoButton = memo(({ onClick, isIframeAudio, isMiniPlayerActive, co
             'opacity 1.4s cubic-bezier(0.16, 1, 0.3, 1)',
             'color 700ms cubic-bezier(0.16, 1, 0.3, 1)',
           ].join(', '),
-          color: isOrange ? '#F4A23E' : '#fff',
+          color: isOrange ? '#E6C58A' : '#fff',
         }}
-        aria-label={isTakeout ? 'Take Out — Picture-in-Picture' : 'Open mini player'}
+        aria-label={isTakeout ? 'Take Out — Cinema mode' : 'Open mini player'}
       >
         <span
-          className={`rounded-full ${isDimmed ? 'w-1 h-1' : 'w-1.5 h-1.5'} ${isOrange ? 'bg-orange-300' : 'bg-purple-300'}`}
+          className={`rounded-full ${isDimmed ? 'w-1 h-1' : 'w-1.5 h-1.5'}`}
           style={{
+            background: isOrange ? '#E6C58A' : 'rgba(255,255,255,0.85)',
             boxShadow: isOrange
-              ? (isDimmed ? '0 0 4px rgba(244,162,62,0.65)' : '0 0 6px rgba(244,162,62,0.9)')
-              : (isDimmed ? '0 0 4px rgba(196,181,253,0.65)' : '0 0 6px rgba(196,181,253,0.9)'),
+              ? (isDimmed ? '0 0 4px rgba(212,160,83,0.65)' : '0 0 6px rgba(212,160,83,0.9)')
+              : (isDimmed ? '0 0 4px rgba(255,255,255,0.5)' : '0 0 6px rgba(255,255,255,0.7)'),
             transition: 'box-shadow 900ms cubic-bezier(0.16, 1, 0.3, 1), background-color 900ms cubic-bezier(0.16, 1, 0.3, 1)',
           }}
         />
@@ -1253,7 +1248,7 @@ const ExpandVideoButton = memo(({ onClick, isIframeAudio, isMiniPlayerActive, co
 // less chrome. Was a 7%-opacity ghost which read as broken AND was a
 // silent tap trap. Pill state replaces decay state.
 // ============================================
-const BottomTakeOutChip = memo(({ portalProgress }: { portalProgress: number }) => {
+const BottomTakeOutChip = memo(({ portalProgress, onEnterCinema }: { portalProgress: number; onEnterCinema?: () => void }) => {
   const [compact, setCompact] = useState(false);
   // riseProgress: 0 below 0.2, 1 by 0.45 — rises in tandem with the
   // mix-board layer climbing into view.
@@ -1272,23 +1267,31 @@ const BottomTakeOutChip = memo(({ portalProgress }: { portalProgress: number }) 
   return (
     <button
       type="button"
-      onClick={(e) => { e.stopPropagation(); void pipService.enter(); }}
-      aria-label="Take Out — Picture-in-Picture"
+      onClick={(e) => {
+        e.stopPropagation();
+        // Cinema-first (full-bleed VideoMode), PiP fallback if no callback.
+        if (onEnterCinema) onEnterCinema();
+        else void pipService.enter();
+      }}
+      aria-label="Take Out — Cinema mode"
       className="rounded-full backdrop-blur-sm border flex items-center justify-center voyo-tap-scale"
       style={{
         position: 'fixed',
         bottom: 'calc(env(safe-area-inset-bottom, 0px) + 16px)',
         right: 'calc(env(safe-area-inset-right, 0px) + 14px)',
         padding: compact ? 0 : '6px 12px',
-        background: 'rgba(244,162,62,0.20)',
-        border: '1.5px solid rgba(244,162,62,0.55)',
-        color: '#F4A23E',
+        // 2026-04-28: matured to bronze (#D4A053 family) to harmonize with
+        // the rest of the Take Out / Cinema palette in ExpandVideoButton.
+        // Was rgba(244,162,62,...) — too saturated against the new theme.
+        background: 'rgba(212,160,83,0.20)',
+        border: '1.5px solid rgba(212,160,83,0.55)',
+        color: '#E6C58A',
         fontSize: 12,
         fontWeight: 600,
         letterSpacing: '0.04em',
         boxShadow: compact
-          ? '0 0 8px rgba(244,162,62,0.30)'
-          : '0 0 14px rgba(244,162,62,0.45), 0 0 24px rgba(244,162,62,0.20)',
+          ? '0 0 8px rgba(212,160,83,0.30)'
+          : '0 0 14px rgba(212,160,83,0.45), 0 0 24px rgba(212,160,83,0.20)',
         minHeight: 44,
         width: compact ? 44 : 'auto',
         zIndex: 70,
@@ -1310,8 +1313,8 @@ const BottomTakeOutChip = memo(({ portalProgress }: { portalProgress: number }) 
         aria-hidden="true"
         style={{
           width: 6, height: 6, borderRadius: '50%',
-          background: '#FBBF77',
-          boxShadow: '0 0 6px rgba(251,191,119,0.9)',
+          background: '#E6C58A',
+          boxShadow: '0 0 6px rgba(212,160,83,0.9)',
           marginRight: compact ? 0 : 6,
           maxWidth: compact ? 0 : 6,
           opacity: compact ? 0 : 1,
@@ -1399,13 +1402,8 @@ const RightToolbar = memo(({ onSettingsClick }: { onSettingsClick: () => void })
   );
 });
 
-// Spring configs - OPTIMIZED for smooth, fluid motion
-const springs = {
-  gentle: { type: 'spring' as const, stiffness: 150, damping: 20 },      // Smoother gentle transitions
-  snappy: { type: 'spring' as const, stiffness: 300, damping: 25 },      // Less aggressive snappy
-  smooth: { type: 'spring' as const, stiffness: 180, damping: 22 },      // General purpose smooth
-  ultraSmooth: { type: 'spring' as const, stiffness: 120, damping: 18 }, // Ultra fluid for large elements
-};
+// (springs config removed 2026-04-28 — leftover from framer-motion era,
+//  unused since the migration to plain CSS transitions.)
 
 // ============================================
 // VOYO BRAND TINT - Purple overlay that fades on hover
@@ -1973,7 +1971,7 @@ StreamCard.displayName = 'StreamCard';
 // BIG CENTER CARD (NOW PLAYING - Canva-style purple fade with premium typography)
 // TAP ALBUM ART FOR LYRICS VIEW | VIDEO HANDLED BY GLOBAL IFRAME
 // ============================================
-const BigCenterCard = memo(({ track, onExpandVideo, onShowLyrics, hideThumb, isIframeAudio, isMiniPlayerActive = false, controlsActive = false }: {
+const BigCenterCard = memo(({ track, onExpandVideo, onShowLyrics, hideThumb, isIframeAudio, isMiniPlayerActive = false, controlsActive = false, onEnterCinema }: {
   track: Track;
   onExpandVideo?: () => void;
   onShowLyrics?: () => void;
@@ -1985,6 +1983,9 @@ const BigCenterCard = memo(({ track, onExpandVideo, onShowLyrics, hideThumb, isI
   /** Driven by isControlsRevealed upstream — while true, the Mini Player
    *  toggle stays fully active; when false, dim decay timers start. */
   controlsActive?: boolean;
+  /** Called when "Take Out" chip is tapped — enters cinema mode
+   *  (full-bleed VideoMode). Falls back to system PiP if not provided. */
+  onEnterCinema?: () => void;
 }) => {
   return (
   // ── PERSPECTIVE CONTAINER ─────────────────────────────────────────
@@ -2149,7 +2150,7 @@ const BigCenterCard = memo(({ track, onExpandVideo, onShowLyrics, hideThumb, isI
       it stays visible after BigCenterCard fades to opacity:0 in
       mini-player mode (CSS opacity cascades to descendants). */}
   {onExpandVideo && (
-    <ExpandVideoButton onClick={onExpandVideo} isIframeAudio={!!isIframeAudio} isMiniPlayerActive={isMiniPlayerActive} controlsActive={controlsActive} />
+    <ExpandVideoButton onClick={onExpandVideo} isIframeAudio={!!isIframeAudio} isMiniPlayerActive={isMiniPlayerActive} controlsActive={controlsActive} onEnterCinema={onEnterCinema} />
   )}
   {/* Close perspective container */}
   </div>
@@ -2187,25 +2188,8 @@ const PlayControls = memo(({
   // Convert skeepLevel to display speed
   const displaySpeed = skeepLevel === 1 ? 2 : skeepLevel === 2 ? 4 : 8;
 
-  // Calculate spin animation based on state - SKEEP makes it spin FAST
-  const getSpinAnimation = () => {
-    if (isScrubbing) {
-      // SKEEP mode: spin speed based on skeepLevel
-      const spinDuration = 3 / displaySpeed;
-      return {
-        rotate: [0, 360],
-        transition: { duration: spinDuration, repeat: Infinity, ease: 'linear' as const }
-      };
-    }
-    if (isPlaying) {
-      // Normal playback: slow vinyl spin
-      return {
-        rotate: [0, 360],
-        transition: { duration: 3, repeat: Infinity, ease: 'linear' as const }
-      };
-    }
-    return { rotate: 0 };
-  };
+  // (getSpinAnimation removed 2026-04-28 — never invoked; vinyl spin is
+  //  driven by CSS keyframes on the disk element directly.)
 
   return (
     <div className="relative flex items-center justify-center w-full mb-3 z-30">
@@ -2756,9 +2740,8 @@ const ReactionBar = memo(({
 
   // Track which button just flashed (for sleep mode single-tap feedback)
   const [flashingButton, setFlashingButton] = useState<string | null>(null);
-  // Track if Wazzguán was primed (tapped once in sleep mode) - use ref to avoid stale closure
-  const [wazzguanPrimed, setWazzguanPrimed] = useState(false);
-  const wazzguanPrimedRef = useRef(false);
+  // (legacy: Wazzguán prime/2-tap state was removed in the 2026-04-28
+  // chat-polish pass — single-tap now opens the chat directly.)
 
   // All reactions in a row - OYÉ is the gateway (defined early for use in handlers)
   // REFINED PREMIUM COLORS - sophisticated, muted, elegant (not "kid style")
@@ -2771,31 +2754,13 @@ const ReactionBar = memo(({
 
   const handlePressStart = (type: string) => {
     // === WAZZGUÁN FLOW ===
+    // Single-tap opens chat regardless of sleep/active state. Was a 2-tap
+    // prime → tap dance which read as "broken" (first tap did nothing
+    // visible) — Dash 2026-04-28 chat-polish pass. Wazzguán = chat, one
+    // gesture, every time. Active wake still happens via OYÉ.
     if (type === 'wazzguan') {
-      if (isActive) {
-        // Active mode: direct open chat
-        handleWazzguanTap();
-        return;
-      } else if (wazzguanPrimedRef.current) {
-        // Sleep mode + primed: open chat
-        handleWazzguanTap();
-        wazzguanPrimedRef.current = false;
-        setWazzguanPrimed(false);
-        return;
-      } else {
-        // Sleep mode + not primed: prime it (flash and wait for second tap)
-        setFlashingButton('wazzguan');
-        wazzguanPrimedRef.current = true;
-        setWazzguanPrimed(true);
-        haptics.light();
-        setTimeout(() => setFlashingButton(null), 400);
-        // Auto-unprime after 3 seconds
-        setTimeout(() => {
-          wazzguanPrimedRef.current = false;
-          setWazzguanPrimed(false);
-        }, 3000);
-        return;
-      }
+      handleWazzguanTap();
+      return;
     }
 
     // === OYÉ FLOW (Gateway) ===
@@ -2870,13 +2835,11 @@ const ReactionBar = memo(({
   }, [charging, chargeStart]);
 
   const isCharging = (type: string) => charging === type;
-  const getScale = (type: string) => isCharging(type) ? 1 + (currentMultiplier - 1) * 0.05 : 1;
-
-  // Position offsets - all buttons hidden when chat opens, so no spread needed
-  const getSpreadX = (_type: string) => 0;
+  // (getScale + getSpreadX removed 2026-04-28 — both unused after the
+  //  spread-on-chat layout was simplified to "hide all buttons.")
 
   // Check if button is currently flashing (sleep mode tap feedback)
-  const isFlashing = (type: string) => flashingButton === type || (type === 'wazzguan' && wazzguanPrimed);
+  const isFlashing = (type: string) => flashingButton === type;
 
   // DISAPPEAR MODE: Return nothing when not revealed - State 0 (big card, no bar)
   // Double-tap reveals it, then auto-hides back to State 0
@@ -2909,30 +2872,29 @@ const ReactionBar = memo(({
           // Fire flicker animation (only used when not in chat mode)
           const isFireSpread = false;
 
+          // Mature palette (2026-04-28 Dash): one accent (bronze #D4A053)
+          // reserved for the OYÉ gateway only, all other buttons share a
+          // single neutral-glass scale (sleep → lit). No per-reaction
+          // gradients, no bright purple, no kid-style. Restraint = premium.
+          const sizeCls = isGateway
+            ? 'min-h-[44px] h-11 px-6 text-sm z-10'
+            : 'min-h-[38px] h-[38px] px-4 text-xs';
+          const palette = isGateway
+            ? (isLit
+                ? 'bg-[rgba(212,160,83,0.18)] border border-[rgba(212,160,83,0.42)] text-[#E6C58A]'
+                : 'bg-[rgba(212,160,83,0.08)] border border-[rgba(212,160,83,0.22)] text-[#D4A053]/70')
+            : (isLit
+                ? 'bg-white/[0.07] border border-white/15 text-white/85'
+                : 'bg-white/[0.03] border border-white/[0.08] text-white/45');
+
           return (
             <button
               key={r.type}
               className={`
-                relative rounded-full font-bold flex items-center gap-1.5
+                relative rounded-full font-medium flex items-center gap-1.5
                 backdrop-blur-sm transition-colors duration-300
-                ${isGateway
-                  ? 'min-h-[44px] h-11 px-6 text-sm z-10'
-                  : 'min-h-[38px] h-[38px] px-4 text-xs'
-                }
-                ${isGateway
-                  ? (isLit
-                    ? 'bg-gradient-to-r from-[#D4A053]/70 to-[#C4943D]/60 border border-[#D4A053]/30 text-white shadow-lg shadow-[#D4A053]/30'
-                    : 'bg-[#D4A053]/20 border border-[#D4A053]/30 text-[#D4A053]/80')
-                  : isChat
-                    ? (buttonFlashing
-                      ? 'bg-gradient-to-r from-[#D4A053]/70 to-[#C4943D]/60 border border-[#D4A053]/40 text-white shadow-lg shadow-[#D4A053]/30'
-                      : isLit
-                        ? 'bg-gradient-to-r from-stone-600/50 to-stone-700/40 border border-stone-400/20 text-white shadow-lg'
-                        : 'bg-stone-900/30 border border-stone-600/20 text-stone-300/50')
-                    : (isLit
-                      ? `bg-gradient-to-r ${r.gradient} border border-white/20 text-white shadow-lg`
-                      : 'bg-white/5 border border-white/10 text-white/50')
-                }
+                ${sizeCls}
+                ${palette}
               `}
               style={{
                 opacity: isFireSpread
@@ -2940,6 +2902,12 @@ const ReactionBar = memo(({
                   : isFadeGhosted
                     ? (isGateway ? 0.35 : 0.25)
                     : (isChatMode ? 0.6 : (isLit ? 1 : (isGateway ? 0.9 : 0.5))),
+                // ONE signature element: a soft bronze halo on OYÉ when lit.
+                // Other buttons stay un-shadowed — restraint is premium
+                // (memory/feedback-voyo-premium-less-is-more).
+                boxShadow: isGateway && isLit
+                  ? '0 0 14px rgba(212,160,83,0.22), inset 0 0 0 1px rgba(212,160,83,0.18)'
+                  : undefined,
               }}
               onMouseDown={() => handlePressStart(r.type)}
               onMouseUp={() => handlePressEnd(r.type as ReactionType, r.emoji, r.text)}
@@ -2950,9 +2918,13 @@ const ReactionBar = memo(({
               {r.icon && <r.icon size={isGateway ? 14 : 11} fill="currentColor" />}
               <span>{r.text}</span>
 
-              {/* Chat indicator on Wazzguán */}
+              {/* Chat indicator on Wazzguán — bronze dot, restrained. */}
               {isChat && isActive && !isChatMode && (
-                <span className="text-[10px]">?</span>
+                <span
+                  className="w-1 h-1 rounded-full"
+                  style={{ background: '#D4A053', boxShadow: '0 0 4px rgba(212,160,83,0.55)' }}
+                  aria-hidden
+                />
               )}
 
               {/* Multiplier display */}
@@ -2964,10 +2936,13 @@ const ReactionBar = memo(({
                 </span>
               )}
 
-              {/* Gateway pulse indicator */}
+              {/* Gateway resting outline — bronze (was purple), matches the
+                  one-accent rule. Only renders when bar is dormant; once
+                  OYÉ wakes the row, the halo (above) takes over. */}
               {isGateway && !isActive && !isChatMode && (
                 <div
-                  className="absolute inset-0 rounded-full border-2 border-purple-400/50"
+                  className="absolute inset-0 rounded-full border pointer-events-none"
+                  style={{ borderColor: 'rgba(212,160,83,0.32)' }}
                 />
               )}
             </button>
@@ -2979,7 +2954,12 @@ const ReactionBar = memo(({
         
           {isChatMode && (
             <div
-              className="absolute left-1/2 -translate-x-1/2 flex items-center gap-2 bg-gradient-to-r from-stone-800/50 to-stone-900/40 backdrop-blur-xl rounded-full border border-stone-500/20 px-3 py-1.5 shadow-lg shadow-black/30"
+              className="absolute left-1/2 -translate-x-1/2 flex items-center gap-2 backdrop-blur-xl rounded-full px-3 py-1.5"
+              style={{
+                background: 'rgba(15,15,22,0.62)',
+                border: '1px solid rgba(212,160,83,0.18)',
+                boxShadow: '0 4px 18px rgba(0,0,0,0.45), 0 0 22px rgba(212,160,83,0.06)',
+              }}
             >
               {/* Voice countdown */}
               {voiceCountdown !== null ? (
@@ -2990,12 +2970,13 @@ const ReactionBar = memo(({
                   <span className="text-lg font-bold text-white">{voiceCountdown}</span>
                 </div>
               ) : isRecording ? (
-                /* Recording with waveform */
+                /* Recording with waveform — bronze on-theme */
                 <div className="flex-1 flex items-center justify-center gap-1">
                   {waveformLevels.map((level, i) => (
                     <div
                       key={i}
-                      className="w-1 bg-purple-400 rounded-full"
+                      className="w-1 rounded-full"
+                      style={{ background: '#D4A053' }}
                     />
                   ))}
                   {voiceTranscript && (
@@ -3016,15 +2997,21 @@ const ReactionBar = memo(({
                 />
               )}
 
-              {/* Mic button - Tap for sing/hum, Hold for voice command */}
+              {/* Mic button — bronze gradient when idle, red when recording */}
               <button
                 onPointerDown={handleMicHoldStart}
                 onPointerUp={handleMicHoldEnd}
                 onPointerLeave={handleMicHoldEnd}
                 onClick={!isVoiceMode && !isRecording ? handleMicTap : undefined}
-                className={`min-w-[44px] min-h-[44px] rounded-full flex items-center justify-center flex-shrink-0 active:scale-95 transition-transform ${
-                  isRecording ? 'bg-red-500/80' : 'bg-purple-600/60'
-                }`}
+                className="min-w-[44px] min-h-[44px] rounded-full flex items-center justify-center flex-shrink-0 active:scale-95 transition-transform"
+                style={{
+                  background: isRecording
+                    ? 'rgba(239,68,68,0.8)'
+                    : 'linear-gradient(135deg, #D4A053, #B8862E)',
+                  boxShadow: isRecording
+                    ? '0 0 14px rgba(239,68,68,0.4)'
+                    : '0 0 14px rgba(212,160,83,0.22)',
+                }}
                 aria-label={isRecording ? 'Stop recording' : 'Voice input'}
                 disabled={isProcessing && !isRecording}
               >
@@ -3071,73 +3058,10 @@ const ReactionBar = memo(({
   );
 });
 
-// ============================================
-// FULLSCREEN VIDEO PLAYER - Takes over screen for video watching
-// ============================================
-const FullscreenVideoPlayer = ({
-  track,
-  isPlaying,
-  onClose,
-  onTogglePlay,
-}: {
-  track: Track;
-  isPlaying: boolean;
-  onClose: () => void;
-  onTogglePlay: () => void;
-}) => {
-  return (
-  <div
-    className="fixed inset-0 z-[100] bg-black flex flex-col"
-  >
-    {/* Video Container - YouTube iframe would go here */}
-    <div className="flex-1 relative bg-black flex items-center justify-center">
-      {/* Placeholder - in production this would be a YouTube embed */}
-      <div className="relative w-full h-full max-w-4xl mx-auto">
-        <SmartImage
-          src={getTrackThumbnailUrl(track, 'high')}
-          alt={`${track.title} by ${track.artist}`}
-          className="w-full h-full object-contain"
-          trackId={track.trackId}
-          artist={track.artist}
-          title={track.title}
-          lazy={false}
-        />
-        {/* Play overlay */}
-        <button
-          onClick={onTogglePlay}
-          className="absolute inset-0 flex items-center justify-center bg-black/30 hover:bg-black/40 transition-colors"
-          aria-label={isPlaying ? 'Pause video' : 'Play video'}
-        >
-          <div className="w-20 h-20 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center">
-            {isPlaying ? (
-              <Pause size={32} className="text-white" />
-            ) : (
-              <Play size={32} className="text-white ml-1" />
-            )}
-          </div>
-        </button>
-      </div>
-    </div>
-
-    {/* Bottom Bar - Track info and close */}
-    <div className="bg-black/90 backdrop-blur-xl border-t border-white/10 p-4">
-      <div className="flex items-center justify-between max-w-4xl mx-auto">
-        <div className="flex-1 min-w-0">
-          <h2 className="text-white font-bold text-lg truncate">{track.title}</h2>
-          <p className="text-purple-300 text-sm truncate">{track.artist}</p>
-        </div>
-        <button
-          onClick={onClose}
-          className="ml-4 px-6 py-2 rounded-full bg-white/10 border border-white/20 text-white text-sm font-bold hover:bg-white/20 transition-colors min-h-[44px] active:scale-95 transition-transform"
-          aria-label="Close fullscreen video"
-        >
-          Close
-        </button>
-      </div>
-    </div>
-  </div>
-  );
-};
+// (FullscreenVideoPlayer stub removed 2026-04-28 — was a static SmartImage
+//  placeholder reachable only by dead code. Real cinema mode lives in
+//  components/voyo/VideoMode.tsx and is now wired through the Take Out
+//  chip via the onEnterCinema prop chain.)
 
 // ============================================
 // WORD TRANSLATION POPUP - Shows when tapping a word
@@ -3826,11 +3750,16 @@ LyricsOverlay.displayName = 'LyricsOverlay';
 export const VoyoPortraitPlayer = ({
   onVoyoFeed,
   onSearch,
+  onEnterCinema,
 }: {
   onVoyoFeed: () => void;
   djMode?: boolean;
   onToggleDJMode?: () => void;
   onSearch?: () => void;
+  /** Promote to full-bleed cinema (VideoMode). Threaded down to the
+   *  "Take Out" chip — tap on Take Out enters cinema. Without this prop
+   *  the chip falls back to system PiP. */
+  onEnterCinema?: () => void;
 }) => {
   // Battery fix: fine-grained selectors — prevents re-render cascade from progress/duration ticks
   const currentTrack = usePlayerStore(s => s.currentTrack);
@@ -4026,7 +3955,9 @@ export const VoyoPortraitPlayer = ({
   const [currentBackdrop, setCurrentBackdrop] = useState('album'); // 'album', 'gradient-purple', etc.
   const [isBackdropLibraryOpen, setIsBackdropLibraryOpen] = useState(false);
   // State for fullscreen video mode
-  const [isFullscreenVideo, setIsFullscreenVideo] = useState(false);
+  // (legacy: isFullscreenVideo state for the stub player was removed
+  //  2026-04-28 in favor of the real cinema wire — VideoMode via
+  //  onEnterCinema prop chain.)
   // State for boost settings panel
   const [isBoostSettingsOpen, setIsBoostSettingsOpen] = useState(false);
 
@@ -4040,7 +3971,7 @@ export const VoyoPortraitPlayer = ({
   // 2. Queue bonus = based on what you're actually adding to queue (up to 5 extra)
   // Display = manual + queue_bonus (capped at 6)
   const MAX_BARS = 6;      // Max any single mode can display
-  const QUEUE_BONUS = 5;   // Max bonus bars from queue behavior
+  // (QUEUE_BONUS = 5 removed 2026-04-28 — never referenced.)
 
   // Manual bars - user taps to set preferences (zero-sum)
   const [manualBars, setManualBars] = useState<Record<string, number>>({
@@ -4118,7 +4049,7 @@ export const VoyoPortraitPlayer = ({
 
   // Handle mode tap - adds 1 manual bar to tapped mode, steals from others
   // Zero-sum: total MANUAL bars always = 6
-  const TOTAL_MANUAL_BARS = 6;
+  // (TOTAL_MANUAL_BARS const removed 2026-04-28 — never referenced.)
   const handleModeBoost = useCallback((modeId: string) => {
     setManualBars(prev => {
       const currentBars = prev[modeId] || 0;
@@ -4189,8 +4120,7 @@ export const VoyoPortraitPlayer = ({
     handleModeBoost(modeId);
   }, [hotTracks, discoverTracks, trackQueueAddition, handleModeBoost]);
 
-  // Random Mixer spin animation state
-  const [xRandomizerSpin, setXRandomizerSpin] = useState(false);
+  // (xRandomizerSpin state removed 2026-04-28 — never read.)
 
   // ============================================
   // INTENT ENGINE SYNC - Wire MixBoard to HOT/DISCOVERY
@@ -4268,12 +4198,10 @@ export const VoyoPortraitPlayer = ({
     }, 500); // Small delay to let queue update first
   }, [handleModeToQueue, intentRecordDragToQueue, refreshRecommendations]);
 
-  // Enhanced queue addition that also records intent
-  const trackQueueAdditionWithIntent = useCallback((track: Track) => {
-    const modeId = detectTrackMode(track);
-    intentRecordTrackQueued(modeId as VibeMode);
-    trackQueueAddition(track);
-  }, [detectTrackMode, trackQueueAddition, intentRecordTrackQueued]);
+  // (trackQueueAdditionWithIntent removed 2026-04-28 — fully wired but
+  //  never invoked. The intent recording happens inside handleModeBoost
+  //  for now; resurrect from git history if a queue-driven intent
+  //  pipeline returns.)
 
   // Check if a mode is "active" (has at least 1 bar)
   const isModeActive = useCallback((modeId: string) => {
@@ -4397,6 +4325,17 @@ export const VoyoPortraitPlayer = ({
   const lastScrollAt = useRef(0);
   const wheelResetting = useRef(false);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  // First-session scrollbar teaching cue (Dash 2026-04-28). On the very
+  // first session we let the native scrollbar render so the user sees
+  // there's content below the fold; after they've actually scrolled past
+  // the fade range once, we persist a flag and suppress the scrollbar
+  // forever after. Subtle pedagogy — the bar is only ever present when
+  // the user genuinely needs the hint.
+  const [scrollTaught, setScrollTaught] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return true;
+    try { return window.localStorage.getItem('voyo-scroll-taught') === '1'; }
+    catch { return true; }
+  });
   // rAF throttle: scroll events fire much faster than 60Hz on touch devices.
   // Coalescing setPortalProgress() to once per animation frame eliminates
   // 60+ React re-render cascades per second of scrolling — which was the
@@ -4436,6 +4375,13 @@ export const VoyoPortraitPlayer = ({
         const FADE_RANGE = 360;
         const next = Math.max(0, Math.min(1, currentY / FADE_RANGE));
         setPortalProgress(next);
+        // First-session scroll teach: once the user reaches half-fade,
+        // they've discovered the scroll. Mark taught and persist; from
+        // here on the bar stays hidden in subsequent sessions.
+        if (!scrollTaught && next > 0.5) {
+          setScrollTaught(true);
+          try { window.localStorage.setItem('voyo-scroll-taught', '1'); } catch { /* private mode */ }
+        }
       }
 
       lastScrollY.current = currentY;
@@ -4634,13 +4580,8 @@ export const VoyoPortraitPlayer = ({
     setTimeout(() => setShowDJWakeMessage(false), 1500);
   }, []);
 
-  // Show tutorial hint after 3 single taps
-  const showTutorialHint = useCallback(() => {
-    if (hasShownHintRef.current) return; // Already discovered DJ mode
-    setDjWakeMessageText("Don't forget, double tap to wake DJ ✌🏾");
-    setShowDJWakeMessage(true);
-    setTimeout(() => setShowDJWakeMessage(false), 2000);
-  }, []);
+  // (showTutorialHint removed 2026-04-28 — never invoked. The
+  //  hasShownHintRef + djWake flow handles discoverability sufficiently.)
 
   // ============================================
   // MEMOIZED CALLBACKS - Prevent re-renders on tap
@@ -4657,9 +4598,9 @@ export const VoyoPortraitPlayer = ({
     setIsDiscoveryBeltActive(prev => !prev);
   }, []);
 
-  const handleExpandVideo = useCallback(() => {
-    setIsFullscreenVideo(true);
-  }, []);
+  // (handleExpandVideo deleted 2026-04-28 — fell into the removed
+  //  stub fullscreen path; the real cinema mode is invoked via the
+  //  onEnterCinema callback chain to App's setAppMode('video').)
 
   // Did the pointer/tap originate on an actual interactive element
   // (button, input, link, custom ARIA role)? If so, the canvas tap/hold
@@ -5135,7 +5076,9 @@ export const VoyoPortraitPlayer = ({
       ref={scrollContainerRef}
       onScroll={handleHeaderScroll}
       className={`relative w-full h-full bg-[#020203] text-white font-sans flex flex-col overflow-x-hidden ${
-        oyeBarBehavior === 'fade' ? 'overflow-y-auto' : 'overflow-hidden'
+        oyeBarBehavior === 'fade'
+          ? `overflow-y-auto ${scrollTaught ? 'scrollbar-hide' : ''}`
+          : 'overflow-hidden'
       }`}
       // FULL-SCREEN SWIPE SURFACE. The canvas-swipe handlers now live on
       // the outermost container so horizontal swipe-to-skip works from
@@ -5198,18 +5141,11 @@ export const VoyoPortraitPlayer = ({
         />
       </div>
 
-      {/* FULLSCREEN VIDEO PLAYER - Shows when expand button clicked */}
-      {isFullscreenVideo && currentTrack && (
-        <div data-no-canvas-swipe="true">
-          <FullscreenVideoPlayer
-            track={currentTrack}
-            isPlaying={isPlaying}
-            onClose={() => setIsFullscreenVideo(false)}
-            onTogglePlay={handlePlayPause}
-          />
-        </div>
-      )}
-      
+      {/* (Fullscreen video render block removed 2026-04-28 — see the
+          stub FullscreenVideoPlayer note up at the component-definitions
+          section. Cinema is now invoked via the onEnterCinema callback
+          chain → App.tsx setAppMode('video') → VideoMode component.) */}
+
 
       {/* ╔═════════════════════════════════════════════════════════════╗
           ║ ANCHOR LAYER (A) — top bubbles + center hero, always fixed  ║
@@ -5273,20 +5209,24 @@ export const VoyoPortraitPlayer = ({
       {/* --- TOP SECTION (History/Queue) --- Part of the anchor.
            Visible in step 1 of the portal scroll. In step 2 (canvas
            reveal), the bubbles fade out so only the central OYO player
-           and the canvas remain. Carousel side-shift on each rail. */}
+           and the canvas remain. Carousel side-shift on each rail.
+           When committing to mini-player (videoTarget==='portrait'),
+           the top row dissolves entirely — the floating mini chip and
+           the queue cards otherwise pile onto the same vertical band,
+           and the warm-it-up philosophy says: when the user goes video,
+           the queue gets out of the way. */}
       <div
         className="px-3 flex items-start gap-3 z-20 h-[14%]"
         style={{
-          // Reduced from 56px / safe+8px to 36px / safe+4px (per Dash):
-          // history+queue row was overlaying the central player a touch
-          // too much; bumping it up gives the hero more breathing room.
-          // ExpandVideoButton at top-3 still has clearance.
           paddingTop: 'max(calc(env(safe-area-inset-top, 0px) + 4px), 36px)',
-          // Step 2 (portalProgress > 0.55) fades the bubbles out.
-          opacity: Math.max(0, 1 - Math.max(0, (portalProgress - 0.55) / 0.35)),
-          transform: `translateY(${Math.max(0, (portalProgress - 0.55) / 0.35) * -16}px)`,
-          pointerEvents: portalProgress > 0.7 ? 'none' : 'auto',
-          transition: 'opacity 0.2s ease-out, transform 0.2s ease-out',
+          opacity: videoTarget === 'portrait'
+            ? 0
+            : Math.max(0, 1 - Math.max(0, (portalProgress - 0.55) / 0.35)),
+          transform: videoTarget === 'portrait'
+            ? 'translateY(-12px)'
+            : `translateY(${Math.max(0, (portalProgress - 0.55) / 0.35) * -16}px)`,
+          pointerEvents: (videoTarget === 'portrait' || portalProgress > 0.7) ? 'none' : 'auto',
+          transition: 'opacity 0.32s cubic-bezier(0.16, 1, 0.3, 1), transform 0.32s cubic-bezier(0.16, 1, 0.3, 1)',
         }}
       >
 
@@ -5415,16 +5355,17 @@ export const VoyoPortraitPlayer = ({
             <BigCenterCard
               track={currentTrack}
               // Stage 1: tap = expand to mini player (floating iframe).
-              // The button morphs to "Take Out" 1.5s after mini engages
-              // and the takeout tap goes through pipService directly.
+              // Stage 2: 5s after mini engages the chip morphs to "Take
+              // Out" — tapping Take Out promotes to full-bleed cinema
+              // (VideoMode), per Dash 2026-04-28. PiP-fallback if
+              // onEnterCinema isn't wired upstream.
               onExpandVideo={() => setVideoTarget('portrait')}
               onShowLyrics={() => setShowLyricsOverlay(true)}
               hideThumb={videoTarget === 'portrait'}
               isIframeAudio={playbackSource === 'iframe'}
-              // True when the floating mini player is up. Drives the
-              // Mini Player → Take Out morph inside ExpandVideoButton.
               isMiniPlayerActive={videoTarget === 'portrait'}
               controlsActive={isControlsRevealed}
+              onEnterCinema={onEnterCinema}
             />
           ) : (
             <div className="w-48 h-48 rounded-[2rem] bg-black/30 border border-white/5 flex items-center justify-center">
@@ -5550,20 +5491,37 @@ export const VoyoPortraitPlayer = ({
           </div>
         </div>
 
-        {/* 2. THE ENGINE (Play Control) - SPINNING VINYL DISK + HOLD TO SKEEP */}
-        <PlayControls
-          isPlaying={isPlaying}
-          onToggle={handlePlayPause}
-          onPrev={prevTrack}
-          onNext={handleNextTrack}
-          isScrubbing={isScrubbing}
-          onScrubStart={handleScrubStart}
-          onScrubEnd={handleScrubEnd}
-          trackArt={currentTrack ? getTrackThumbnailUrl(currentTrack, 'max') : undefined}
-          trackId={currentTrack?.trackId}
-          scrubDirection={scrubDirection}
-          skeepLevel={skeepLevel}
-        />
+        {/* 2. THE ENGINE (Play Control) — SPINNING VINYL DISK + HOLD TO SKEEP.
+            Opacity ramps with portalProgress so the engine emerges
+            intentionally as Frame fades. At rest, Frame (HOT/Discover +
+            VOYO cube) is the dominant surface and the engine is hidden;
+            engine reveals as the user scrolls past 0.2 or taps to reveal
+            controls. Codifies the Anchor / Frame / Canvas language —
+            see memory/voyo-portrait-anchor-frame-canvas.md (2026-04-28). */}
+        <div
+          style={{
+            opacity: Math.max(
+              isControlsRevealed ? 1 : 0,
+              Math.min(1, Math.max(0, (portalProgress - 0.2) / 0.3))
+            ),
+            pointerEvents: (isControlsRevealed || portalProgress > 0.25) ? 'auto' : 'none',
+            transition: 'opacity 0.32s cubic-bezier(0.16, 1, 0.3, 1)',
+          }}
+        >
+          <PlayControls
+            isPlaying={isPlaying}
+            onToggle={handlePlayPause}
+            onPrev={prevTrack}
+            onNext={handleNextTrack}
+            isScrubbing={isScrubbing}
+            onScrubStart={handleScrubStart}
+            onScrubEnd={handleScrubEnd}
+            trackArt={currentTrack ? getTrackThumbnailUrl(currentTrack, 'max') : undefined}
+            trackId={currentTrack?.trackId}
+            scrubDirection={scrubDirection}
+            skeepLevel={skeepLevel}
+          />
+        </div>
 
         {/* 3. OYÉ REACTIONS - Only takes space when visible */}
         {/* Disappear mode + not revealed = no wrapper, no space (State 0) */}
@@ -5698,15 +5656,18 @@ export const VoyoPortraitPlayer = ({
               {cubeOyoLine || (cubeOyoThinking ? 'thinking…' : 'Talk to OYO — what\'s the vibe?')}
             </div>
 
-            {/* Quick prompt chips */}
+            {/* Quick prompt chips — neutral glass with bronze tint, on-theme */}
             <div className="flex flex-wrap justify-center gap-1.5 mb-2">
               {['More like this', 'Switch it up', 'Slower', 'More energy'].map((p) => (
                 <button
                   key={p}
                   onClick={() => submitCubePrompt(p)}
                   disabled={cubeOyoThinking}
-                  className="px-2.5 py-1 rounded-full text-[10px] text-white/70 border border-white/10 active:scale-95 transition-transform"
-                  style={{ background: 'rgba(139,92,246,0.08)' }}
+                  className="px-2.5 py-1 rounded-full text-[10px] text-white/70 active:scale-95 transition-transform"
+                  style={{
+                    background: 'rgba(212,160,83,0.06)',
+                    border: '1px solid rgba(212,160,83,0.18)',
+                  }}
                 >
                   {p}
                 </button>
@@ -5726,13 +5687,17 @@ export const VoyoPortraitPlayer = ({
                 onFocus={armCubeAutoClose}
                 placeholder="Ask OYO…"
                 disabled={cubeOyoThinking}
-                className="flex-1 px-3 py-2 rounded-full bg-white/5 border border-white/10 text-white text-[12px] placeholder:text-white/30 focus:outline-none focus:border-purple-500/40"
+                className="flex-1 px-3 py-2 rounded-full bg-white/5 border border-white/10 text-white text-[12px] placeholder:text-white/30 focus:outline-none focus:border-[rgba(212,160,83,0.42)]"
               />
               <button
                 onClick={() => submitCubePrompt(cubeInput)}
                 disabled={cubeOyoThinking || !cubeInput.trim()}
-                className="px-3 py-2 rounded-full text-[11px] font-semibold text-white disabled:opacity-40 active:scale-95 transition-transform"
-                style={{ background: 'linear-gradient(135deg, #8b5cf6, #D4A053)' }}
+                className="px-3 py-2 rounded-full text-[11px] font-semibold disabled:opacity-40 active:scale-95 transition-transform"
+                style={{
+                  background: 'linear-gradient(135deg, #D4A053, #B8862E)',
+                  color: '#0f0f16',
+                  boxShadow: '0 0 14px rgba(212,160,83,0.22)',
+                }}
               >
                 Send
               </button>
@@ -6439,7 +6404,7 @@ export const VoyoPortraitPlayer = ({
           decays to 7% opacity after 5s. Only mounted while the mini
           player is up — otherwise Take Out has nothing to take out. */}
       {videoTarget === 'portrait' && (
-        <BottomTakeOutChip portalProgress={portalProgress} />
+        <BottomTakeOutChip portalProgress={portalProgress} onEnterCinema={onEnterCinema} />
       )}
 
 

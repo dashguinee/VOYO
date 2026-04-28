@@ -105,7 +105,11 @@ export const VideoMode = ({ onExit }: VideoModeProps) => {
           <div
             className="absolute inset-0"
             style={{
-              background: 'linear-gradient(45deg, rgba(139,92,246,0.25), rgba(212,160,83,0.20), rgba(139,92,246,0.15))',
+              // 2026-04-28: matured to bronze-only — purple was lighting
+              // up the album-art fallback in a way that felt like the rest
+              // of the older brand. Cinema mode reads more premium with a
+              // warm, restrained tint.
+              background: 'linear-gradient(45deg, rgba(212,160,83,0.18), rgba(15,15,22,0.55), rgba(212,160,83,0.10))',
             }}
           />
         </div>

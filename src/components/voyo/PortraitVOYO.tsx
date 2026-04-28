@@ -139,9 +139,10 @@ interface PortraitVOYOProps {
   onSearch?: () => void;
   onDahub?: () => void;
   onHome?: () => void;
+  onEnterCinema?: () => void;
 }
 
-export const PortraitVOYO = ({ onSearch, onDahub, onHome }: PortraitVOYOProps) => {
+export const PortraitVOYO = ({ onSearch, onDahub, onHome, onEnterCinema }: PortraitVOYOProps) => {
   // Fine-grained selectors — avoid re-render on every progress tick.
   const isPlaying = usePlayerStore(s => s.isPlaying);
   const togglePlay = usePlayerStore(s => s.togglePlay);
@@ -299,6 +300,7 @@ export const PortraitVOYO = ({ onSearch, onDahub, onHome }: PortraitVOYOProps) =
               djMode={djMode === 'listening' || djMode === 'responding'}
               onToggleDJMode={handleListenMode}
               onSearch={onSearch}
+              onEnterCinema={onEnterCinema}
             />
           </Suspense>
         </div>
