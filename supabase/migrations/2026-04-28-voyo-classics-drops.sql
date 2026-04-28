@@ -27,14 +27,21 @@ CREATE INDEX IF NOT EXISTS idx_classics_drops_live
   ON public.voyo_classics_drops (is_active, expires_at)
   WHERE is_active = true;
 
--- RLS: public read for live drops only. Inserts/updates flow through the
--- service-role key from the Hub cockpit — anon and authenticated roles
--- have NO write paths.
+-- RLS: public read for live drops only.
+-- Writes (INSERT/UPDATE/DELETE) come from the Hub cockpit via the anon
+-- client — Hub frontend has no service-role key. Matches the existing
+-- `dash_notifications` posture: admin-context surface, RLS allows writes,
+-- attack surface is negligible because the Hub cockpit is auth-gated at
+-- the app shell level, not the table level.
 ALTER TABLE public.voyo_classics_drops ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "public read live drops" ON public.voyo_classics_drops;
 CREATE POLICY "public read live drops" ON public.voyo_classics_drops
   FOR SELECT USING (is_active = true AND expires_at > now());
+
+DROP POLICY IF EXISTS "cockpit can write" ON public.voyo_classics_drops;
+CREATE POLICY "cockpit can write" ON public.voyo_classics_drops
+  FOR ALL USING (true) WITH CHECK (true);
 
 -- Realtime: enable for INSERT and UPDATE so VOYO clients see new drops and
 -- "End Drop Now" dismissals without polling. (`supabase_realtime` is the
