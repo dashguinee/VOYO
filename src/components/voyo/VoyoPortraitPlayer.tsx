@@ -76,6 +76,43 @@ const CurrentTimeDisplay = memo(() => {
 });
 
 // Progress indicator - display only, no seeking (VOYO is a music player, not video player)
+/**
+ * CardSeek — slim, faded variant of ProgressSlider that lives INSIDE the
+ * BigCenterCard, below the artist name (Dash 2026-04-29 v790). Hairline
+ * track + 4px playhead dot, all dimmed via the `visible` prop which is
+ * driven by isControlsRevealed → fades in on canvas tap, out after 5s.
+ * "On touch appear, fade after 5s" + smaller dot + more faded than the
+ * old engine-row seek which has been retired.
+ */
+const CardSeek = memo(({ visible }: { visible: boolean }) => {
+  const currentTime = usePlayerStore(s => s.currentTime);
+  const duration = usePlayerStore(s => s.duration);
+  return (
+    <div
+      className="relative h-2 mt-1.5 transition-opacity duration-500"
+      style={{ opacity: visible ? 0.62 : 0 }}
+      aria-hidden
+    >
+      {/* Hairline track — faded, doesn't compete with title/artist */}
+      <div
+        className="absolute left-0 right-0 top-1/2 -translate-y-1/2 h-[1px] rounded-full"
+        style={{ background: 'rgba(255,255,255,0.32)' }}
+      />
+      {/* Playhead dot — smaller (4px) and softer than the original 6px */}
+      <div
+        className="absolute w-[4px] h-[4px] rounded-full top-1/2"
+        style={{
+          left: `${duration > 0 ? (currentTime / duration) * 100 : 0}%`,
+          transform: 'translate(-50%, -50%)',
+          background: '#D4613E',
+          boxShadow: '0 0 5px rgba(212,97,62,0.6), 0 0 10px rgba(212,97,62,0.25)',
+        }}
+      />
+    </div>
+  );
+});
+CardSeek.displayName = 'CardSeek';
+
 const ProgressSlider = memo(({ isScrubbing }: { isScrubbing: boolean }) => {
   const currentTime = usePlayerStore((state) => state.currentTime);
   const duration = usePlayerStore((state) => state.duration);
@@ -2101,20 +2138,25 @@ const BigCenterCard = memo(({ track, onExpandVideo, onShowLyrics, hideThumb, isI
           change instead of popping. */}
       <div
         key={track.trackId}
-        className="absolute bottom-3 left-3 right-3 pointer-events-none animate-[voyo-fade-in_0.4s_ease-out]"
+        className="absolute bottom-3 left-3 right-3 animate-[voyo-fade-in_0.4s_ease-out]"
       >
         <p
-          className="text-white font-bold text-[13px] truncate"
+          className="text-white font-bold text-[13px] truncate pointer-events-none"
           style={{ textShadow: '0 1px 4px rgba(0,0,0,0.6)' }}
         >
           {track.title}
         </p>
         <p
-          className="text-white/70 text-[10px] truncate"
+          className="text-white/70 text-[10px] truncate pointer-events-none"
           style={{ textShadow: '0 1px 3px rgba(0,0,0,0.6)' }}
         >
           {track.artist}
         </p>
+        {/* CardSeek — slim faded progress under the artist name. Visible
+            briefly on canvas tap (driven by controlsActive prop, ties to
+            isControlsRevealed → 5s auto-hide). Replaces the old engine-
+            row seek. (Dash 2026-04-29 v790) */}
+        <CardSeek visible={!!controlsActive} />
       </div>
       {/* Lyrics hint icon */}
       {onShowLyrics && (
@@ -5023,7 +5065,7 @@ export const VoyoPortraitPlayer = ({
       controlsHideTimerRef.current = setTimeout(() => {
         setIsControlsRevealed(false);
         setShowOyoIsland(false); // Also hide OyoIsland
-      }, 3000); // Hide after 3 seconds
+      }, 5000); // v790: 5s (was 3s) — matches the new card-seek fade window
     }
     return () => {
       if (controlsHideTimerRef.current) clearTimeout(controlsHideTimerRef.current);
@@ -5479,7 +5521,11 @@ export const VoyoPortraitPlayer = ({
       <div
         className="sticky top-0 z-20 flex flex-col flex-shrink-0"
         style={{
-          height: `calc(100% - ${cubeDockOpen ? 508 : oyeBarBehavior === 'fade' ? 388 : 264}px)`,
+          // v790: Anchor reservation reduced by 32px so the Frame
+          // (HOT/Discovery + Mix Board) drops down a touch — engine vinyl
+          // peeks above Frame at rest. Layer B's min-h reduced in lockstep
+          // (line ~5927) so the bottom edge stays put. Was 508/388/264.
+          height: `calc(100% - ${cubeDockOpen ? 476 : oyeBarBehavior === 'fade' ? 356 : 232}px)`,
         }}
       >
 
@@ -5811,22 +5857,10 @@ export const VoyoPortraitPlayer = ({
 
         </div>
 
-        {/* MINIMAL PROGRESS - Fades when idle, only current time + red dot */}
-        {/* Uses isolated components to prevent full re-renders */}
-        <div
-          // 180px was cramped on Pixel-7 (412px = 43% of width). Clamp
-          // up to 220 / 60vw — reads better on wider phones, still
-          // tight on iPhone SE (375 × 60% = 225, capped at 220).
-          className="w-full mt-2 mb-4 px-2 z-30"
-          style={{ maxWidth: 'min(220px, 60vw)' }}
-        >
-          <div className="flex items-center gap-2">
-            {/* Current Time only - isolated component */}
-            <CurrentTimeDisplay />
-            {/* Progress slider - isolated component */}
-            <ProgressSlider isScrubbing={isScrubbing} />
-          </div>
-        </div>
+        {/* (Old MINIMAL PROGRESS row removed 2026-04-29 v790 — the seek
+            now lives inside the BigCenterCard below the artist name as
+            CardSeek. Auto-fades after 5s, faded baseline. Frees up the
+            engine row for cleaner play/pause + jog buttons.) */}
 
         {/* 2. THE ENGINE (Play Control) — SPINNING VINYL DISK + HOLD TO SKEEP.
             Opacity ramps with portalProgress so the engine emerges
@@ -5924,7 +5958,7 @@ export const VoyoPortraitPlayer = ({
           space slides in without pushing the rail offscreen. */}
       <div
         className={`flex-shrink-0 w-full relative z-40 flex flex-col pt-3 pb-7 transition-[min-height] duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] ${
-          cubeDockOpen ? 'min-h-[480px]' : oyeBarBehavior === 'fade' ? 'min-h-[360px]' : ''
+          cubeDockOpen ? 'min-h-[448px]' : oyeBarBehavior === 'fade' ? 'min-h-[328px]' : ''
         }`}
         style={{
           // Two-step Layer B fade.
