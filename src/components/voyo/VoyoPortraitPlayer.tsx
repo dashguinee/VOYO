@@ -34,6 +34,7 @@ import { pipService } from '../../services/pipService';
 // TiviPlusCrossPromo moved to HomeFeed.tsx (classic homepage)
 import { useAuth } from '../../hooks/useAuth';
 import { getCurrentSegment, fetchLyricsSimple, type EnrichedLyrics, type LyricsGenerationProgress } from '../../services/lyricsEngine';
+import { LyricsCanvas } from './lyrics/LyricsCanvas';
 import { findLyrics } from '../../services/lyricsAgent';
 // getVideoStreamUrl removed — no longer needed after LyricsAgent replaced Whisper pipeline
 import { translateWord, type TranslationMatch } from '../../services/lexiconService';
@@ -3776,116 +3777,47 @@ const LyricsOverlay = memo(({ track, isOpen, onClose, currentTime }: LyricsOverl
           </div>
         )}
 
-        {/* Lyrics display */}
+        {/* v813 — Lyrics V2 surface (Dash 2026-04-29 "I want excellence
+            immersion fun"). Pill choreography + typography sync via
+            LyricsCanvas. The old gradient card + scroll-list + karaoke
+            wipe are replaced by the bar-pill rhythm: queued → arriving
+            → live → decay → gone, with active-bar weight breathing on
+            --voyo-energy and hook detection lifting the chorus.
+            Spec: outputs/SPEC-lyrics-v2-2026-04-29.md (Phases 1+2). */}
         {lyrics && !progress && (
-          <div className="w-full max-w-md space-y-6">
-            {/* Stats bar */}
-            <div className="flex justify-center gap-4 text-xs text-white/40">
-              <span>🌍 {lyrics.language}</span>
-              <span>📊 {lyrics.translationCoverage.toFixed(0)}% translated</span>
-              <span className={lyrics.phonetic.polishedBy?.length ? 'text-purple-400' : ''}>
-                {lyrics.phonetic.polishedBy?.length ? '✓ Polished' : '○ Raw'}
-              </span>
-            </div>
-
-            {/* Tap hint */}
-            <p className="text-center text-purple-400/60 text-xs">
-              💡 Tap any word for translation
-            </p>
-
-            {/* Current segment highlight */}
-            {currentSegment && (
+          <>
+            <LyricsCanvas lyrics={lyrics} currentTime={currentTime} />
+            {/* Bottom chrome — slim metadata + actions, doesn't compete
+                with the bars. Floats anchored to the canvas bottom. */}
+            <div
+              className="absolute left-0 right-0 flex flex-col items-center gap-3 pointer-events-none"
+              style={{
+                bottom: 'max(20px, calc(env(safe-area-inset-bottom, 0px) + 12px))',
+              }}
+            >
               <div
-                key={currentSegment.startTime}
-                className="bg-gradient-to-r from-purple-500/20 to-violet-600/20 rounded-2xl p-6 border border-purple-500/30 animate-voyo-scale-in"
+                className="flex items-center gap-3 text-[10px] tracking-[0.12em] uppercase"
+                style={{ color: 'rgba(230,197,138,0.42)' }}
               >
-                <p className="text-white text-2xl font-bold text-center mb-3">
-                  {renderTappableText(currentSegment.original, true)}
-                </p>
-                {currentSegment.phonetic !== currentSegment.original && (
-                  <p className="text-purple-300 text-sm text-center italic mb-2">
-                    {currentSegment.phonetic}
-                  </p>
-                )}
-                {currentSegment.english && (
-                  <p className="text-white/70 text-center">
-                    🇬🇧 {currentSegment.english}
-                  </p>
-                )}
-                {currentSegment.french && (
-                  <p className="text-white/60 text-sm text-center mt-1">
-                    🇫🇷 {currentSegment.french}
-                  </p>
-                )}
+                <span>{lyrics.language}</span>
+                <span style={{ color: 'rgba(230,197,138,0.20)' }}>·</span>
+                <span>{lyrics.translated.length} bars</span>
+                {lyrics.phonetic.polishedBy?.length ? (
+                  <>
+                    <span style={{ color: 'rgba(230,197,138,0.20)' }}>·</span>
+                    <span>polished</span>
+                  </>
+                ) : null}
               </div>
-            )}
-
-            {/* All segments — tap a line to seek playback to that moment.
-                Uses playerStore.seekTo which AudioPlayer + iframe both
-                honor via their seekPosition effect. Premium UX detail:
-                users treat lyrics as a timeline, not just a readout. */}
-            <div className="space-y-4 max-h-[50vh] overflow-y-auto">
-              {lyrics.translated.map((segment, i) => {
-                const isCurrent = currentSegment?.startTime === segment.startTime;
-                return (
-                  <button
-                    key={segment.startTime ?? i}
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (typeof segment.startTime === 'number' && isFinite(segment.startTime)) {
-                        usePlayerStore.getState().seekTo(segment.startTime);
-                      }
-                    }}
-                    className={`w-full text-left p-4 rounded-xl transition-all active:scale-[0.98] ${
-                      isCurrent
-                        ? 'bg-purple-500/30 border border-purple-500/50'
-                        : 'bg-white/5 hover:bg-white/[0.08]'
-                    }`}
-                  >
-                    <p
-                      className={isCurrent ? 'text-lg font-semibold' : 'text-white text-sm'}
-                      style={isCurrent ? {
-                        // Karaoke reveal — bright white fills from left to
-                        // right across the segment's duration. Faded white
-                        // tail gives the line definition before the wipe
-                        // reaches it. Web Audio currentTime drives this at
-                        // ~4Hz which is plenty smooth for word-scale text.
-                        backgroundImage: `linear-gradient(90deg,
-                          rgba(255,255,255,1) 0%,
-                          rgba(255,255,255,1) ${Math.max(0, segmentProgress * 100 - 4)}%,
-                          rgba(255,255,255,0.45) ${Math.min(100, segmentProgress * 100 + 4)}%,
-                          rgba(255,255,255,0.45) 100%)`,
-                        backgroundClip: 'text',
-                        WebkitBackgroundClip: 'text',
-                        color: 'transparent',
-                        WebkitTextFillColor: 'transparent',
-                      } : undefined}
-                    >
-                      {renderTappableText(segment.original, isCurrent)}
-                    </p>
-                    {segment.english && (
-                      <p className="text-white/50 text-xs mt-1">{segment.english}</p>
-                    )}
-                  </button>
-                );
-              })}
+              <div className="pointer-events-auto">
+                <LyricsActionButtons
+                  lyrics={lyrics}
+                  track={track}
+                  onEditRequest={handleEditRequest}
+                />
+              </div>
             </div>
-
-            {/* Translation coverage info */}
-            {lyrics.translationCoverage < 50 && (
-              <p className="text-center text-white/30 text-xs">
-                🌍 Words from Soussou lexicon (8,982+ words)
-              </p>
-            )}
-
-            {/* Action Buttons - Copy, Share, Edit */}
-            <LyricsActionButtons
-              lyrics={lyrics}
-              track={track}
-              onEditRequest={handleEditRequest}
-            />
-          </div>
+          </>
         )}
 
         {/* No lyrics yet */}
