@@ -38,7 +38,8 @@ import { r2HasTrack } from '../../player/r2Probe';
 
 export type PlaySource =
   | 'feed' | 'queue' | 'search' | 'artist' | 'vibe' | 'moment'
-  | 'oyo-pick' | 'previous' | 'history' | 'library' | 'auto' | 'unknown';
+  | 'oyo-pick' | 'previous' | 'history' | 'library' | 'auto' | 'unknown'
+  | 'drift';  // 2026-04-28: portrait-player left-swipe / discover-more
 
 /**
  * The canonical "play this track" action. Every click that results in
@@ -103,6 +104,25 @@ export function skip(): void {
 
 export function prev(): void {
   usePlayerStore.getState().prevTrack();
+}
+
+/**
+ * Drift — discover-more skip. Pulls from discoverTracks (the off-vibe
+ * exploration pool) instead of the user's queue. Visually distinct from
+ * skip() which continues the planned vibe. Falls back to skip() if the
+ * discovery pool isn't populated yet. (Dash 2026-04-28: paired with the
+ * left-swipe gesture in portrait player — "take the vibe far from this
+ * right now".)
+ */
+export function drift(): void {
+  const state = usePlayerStore.getState();
+  const pool = state.discoverTracks;
+  if (!pool || pool.length === 0) {
+    skip();
+    return;
+  }
+  const pick = pool[Math.floor(Math.random() * pool.length)] as Track;
+  playTrack(pick, 'drift');
 }
 
 export function togglePlay(): void {
@@ -318,6 +338,7 @@ export const app = {
   // Controls
   skip,
   prev,
+  drift,
   togglePlay,
   pause,
   resume,

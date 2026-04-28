@@ -2227,10 +2227,12 @@ const PlayControls = memo(({
         )}
       
 
-      {/* Prev - HOLD TO REWIND */}
+      {/* Jog back 15s — TAP. HOLD = SKEEP fast-scrub.
+          (Dash 2026-04-28: track-prev nav lives on right-swipe; left-swipe
+          is drift. These buttons are now within-track scrubbing tools.) */}
       <button
         className="absolute left-[20%] text-white/50 hover:text-white transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center active:scale-95 transition-transform"
-        aria-label="Previous track"
+        aria-label="Jog back 15 seconds"
         onClick={() => {
           haptics.light();
           onPrev();
@@ -2319,10 +2321,10 @@ const PlayControls = memo(({
         </button>
       </div>
 
-      {/* Next - HOLD TO FAST FORWARD */}
+      {/* Jog forward 15s — TAP. HOLD = SKEEP fast-scrub. */}
       <button
         className="absolute right-[20%] text-white/50 hover:text-white transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center active:scale-95 transition-transform"
-        aria-label="Next track"
+        aria-label="Jog forward 15 seconds"
         onClick={() => {
           haptics.light();
           onNext();
@@ -4422,6 +4424,48 @@ export const VoyoPortraitPlayer = ({
   const swipeFiredRef = useRef(false);
   const hasCrossedThresholdRef = useRef(false); // haptic on threshold cross
   const cardWrapRef = useRef<HTMLDivElement>(null);
+  // Drift precision gate (Dash 2026-04-28: "delayed hold swipe").
+  // Right-swipe = next is QUICK (no gate). Left-swipe = drift is PRECISE
+  // — only commits if the user paused at least 200ms BEFORE moving.
+  // This makes drift feel deliberate; accidental left swipes spring
+  // back without firing. Cube hold (chat dock) and DJ-mode hold (400ms)
+  // are independent timers on the same pointer-down.
+  const driftReadyRef = useRef(false);
+  const driftReadyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Side-wall-of-light affordance during swipe (Dash 2026-04-28
+  // "external wall of light, subtle and descriptive premium"). Two
+  // edge-mounted gradients fade in as the user pulls. Right wall = bronze
+  // (Next, queue continuation). Left wall = bronze (Drift, off-path) —
+  // direction carries the meaning, palette stays singular for restraint.
+  // Driven imperatively from handleCanvasPointerMove + reset in
+  // launchCardAndSkip / cancel handlers.
+  const rightWallRef = useRef<HTMLDivElement>(null);
+  const leftWallRef = useRef<HTMLDivElement>(null);
+  const setSideWallGlow = (dx: number) => {
+    const COMMIT = 120; // mirrors COMMIT_THRESHOLD
+    const norm = Math.min(1, Math.abs(dx) / COMMIT);
+    const eased = norm * norm * (3 - 2 * norm);
+    const right = rightWallRef.current;
+    const left = leftWallRef.current;
+    if (!right || !left) return;
+    if (dx > 0) {
+      // Right pull = next, always armed
+      right.style.opacity = String(eased);
+      left.style.opacity = '0';
+    } else if (dx < 0 && driftReadyRef.current) {
+      // Left pull = drift, only glows when the precise gate is open
+      left.style.opacity = String(eased);
+      right.style.opacity = '0';
+    } else {
+      // Left pull without the pause-first gate — no glow, no commit
+      right.style.opacity = '0';
+      left.style.opacity = '0';
+    }
+  };
+  const clearSideWallGlow = () => {
+    if (rightWallRef.current) rightWallRef.current.style.opacity = '0';
+    if (leftWallRef.current) leftWallRef.current.style.opacity = '0';
+  };
 
   // Apply a transform + opacity to the card wrapper directly. Called from
   // pointermove. Zero re-renders.
@@ -4449,16 +4493,19 @@ export const VoyoPortraitPlayer = ({
       el.style.opacity = '0';
     }
     setTimeout(() => {
-      if (dir > 0) app.prev(); else { app.skip(); }
-      // Reset wrapper to center instantly — next track's artwork will
-      // fade in via BigCenterCard's own mount animation.
+      // Dash 2026-04-28: swipe vocabulary inverted from the old prev/next
+      // pair. Right swipe = NEXT (queue continuation, vibe-aligned).
+      // Left swipe = DRIFT (off-path discovery — picks from discoverTracks
+      // instead of queue). Previous-track navigation is gone from the
+      // engine; users reach the past via the history rail or by asking
+      // OYO to rewind.
+      if (dir > 0) app.skip(); else app.drift();
       setTimeout(() => {
         const el2 = cardWrapRef.current;
         if (!el2) return;
         el2.style.transition = 'none';
         el2.style.transform = 'translateX(0) rotate(0deg)';
         el2.style.opacity = '1';
-        // Force reflow then re-enable transitions so subsequent drags animate.
         el2.offsetHeight;
         el2.style.transition = 'transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.3s ease-out';
       }, 40);
@@ -4647,7 +4694,18 @@ export const VoyoPortraitPlayer = ({
     didHoldRef.current = false;
     swipeFiredRef.current = false;
     hasCrossedThresholdRef.current = false;
+    driftReadyRef.current = false;
     swipeStartRef.current = { x: e.clientX, y: e.clientY, t: Date.now() };
+
+    // Arm the drift gate: if the user holds still for 200ms BEFORE moving,
+    // a left-swipe will commit drift on release. If they move before 200ms,
+    // the timer is cancelled in pointermove and left swipe will spring back.
+    if (driftReadyTimer.current) clearTimeout(driftReadyTimer.current);
+    driftReadyTimer.current = setTimeout(() => {
+      driftReadyRef.current = true;
+      driftReadyTimer.current = null;
+      haptics.light(); // tactile "drift armed"
+    }, 200);
 
     // Reset card wrapper for a clean take-over. If we're rapid-tapping
     // after a skip, the wrapper may still be mid-transition. Force it
@@ -4695,18 +4753,26 @@ export const VoyoPortraitPlayer = ({
       return;
     }
 
-    // Once we've moved meaningfully horizontally, cancel the hold timer
-    // (this is a drag, not a DJ-mode hold) and mark so tap is suppressed.
+    // Once we've moved meaningfully horizontally, cancel the hold timers
+    // (this is a drag, not a DJ-mode hold). The drift-arm timer is
+    // cancelled here too — if user moves before the 200ms gate fires,
+    // driftReadyRef stays false and a left swipe will spring back.
     if (Math.abs(dx) > 8) {
       if (holdTimerRef.current) {
         clearTimeout(holdTimerRef.current);
         holdTimerRef.current = null;
+      }
+      if (driftReadyTimer.current) {
+        clearTimeout(driftReadyTimer.current);
+        driftReadyTimer.current = null;
       }
       swipeFiredRef.current = true; // eat the trailing click
     }
 
     // Drive the card wrapper transform directly — no React re-render.
     applyCardTransform(dx, true);
+    // Mirror to the side-wall glow — same imperative pattern, no re-render.
+    setSideWallGlow(dx);
 
     // Fire haptic on threshold cross — tactile "armed" feedback.
     const crossed = Math.abs(dx) >= COMMIT_THRESHOLD;
@@ -4736,13 +4802,27 @@ export const VoyoPortraitPlayer = ({
     // full 120px — matches the feel of flicking away a card.
     const shouldCommit = Math.abs(dx) > COMMIT_THRESHOLD || (velocity > 0.6 && Math.abs(dx) > 40);
 
-    if (shouldCommit) {
+    // Drift precision gate: left swipe only commits if the user paused
+    // ≥200ms before moving. Right swipe (next) is unconditional —
+    // forward through the queue is the default action.
+    const isLeft = dx < 0;
+    const armedForCommit = shouldCommit && (!isLeft || driftReadyRef.current);
+
+    if (armedForCommit) {
       haptics.medium();
       launchCardAndSkip(dx);
+      setTimeout(clearSideWallGlow, 240);
     } else {
-      // Spring back to center.
+      // Spring back — either didn't reach threshold OR left-swipe wasn't
+      // gated by the pause (drift requires intent).
       applyCardTransform(0, false);
+      clearSideWallGlow();
     }
+    if (driftReadyTimer.current) {
+      clearTimeout(driftReadyTimer.current);
+      driftReadyTimer.current = null;
+    }
+    driftReadyRef.current = false;
   }, []);
 
   // Dedicated pointer-CANCEL handler. Distinct from pointer-UP because
@@ -4763,6 +4843,12 @@ export const VoyoPortraitPlayer = ({
     // Spring back regardless of where the finger was — cancel means
     // "forget this gesture happened".
     applyCardTransform(0, false);
+    clearSideWallGlow();
+    if (driftReadyTimer.current) {
+      clearTimeout(driftReadyTimer.current);
+      driftReadyTimer.current = null;
+    }
+    driftReadyRef.current = false;
   }, []);
 
   const handleCanvasTap = useCallback((e: React.MouseEvent) => {
@@ -5086,18 +5172,60 @@ export const VoyoPortraitPlayer = ({
           ? `overflow-y-auto ${scrollTaught ? 'scrollbar-hide' : ''}`
           : 'overflow-hidden'
       }`}
-      // FULL-SCREEN SWIPE SURFACE. The canvas-swipe handlers now live on
-      // the outermost container so horizontal swipe-to-skip works from
-      // ANYWHERE in the portrait player, not just the thin center section.
-      // Interactive children (buttons, inputs, scrollable rails) are
-      // filtered via didOriginateOnInteractive + data-no-canvas-swipe.
-      // manipulation on the outer container = shelves scroll horizontally.
-      // The pointer handlers for the card drag live on the CENTER SECTION
-      // (which has pan-y), NOT here. If they were here, the browser's
-      // 'manipulation' touch-action consumes horizontal swipes before
-      // our pointermove ever fires.
-      style={{ touchAction: 'manipulation', overscrollBehavior: 'none' }}
+      // FULL-SCREEN SWIPE SURFACE (Dash 2026-04-28: "the whole screen but
+      // a precise swipe"). Pointer handlers live on the outermost
+      // container so horizontal next/drift gestures can be initiated
+      // from anywhere — not just the BigCenterCard. touchAction: pan-y
+      // lets the browser handle vertical scroll natively while leaving
+      // horizontal motion to JS pointermove. Interactive children
+      // (buttons, inputs, horizontal rails) are filtered via
+      // didOriginateOnInteractive + the data-no-canvas-swipe attribute
+      // inside handleCanvasPointerDown — the precise-gesture filter.
+      style={{ touchAction: 'pan-y', overscrollBehavior: 'none' }}
+      onPointerDown={handleCanvasPointerDown}
+      onPointerMove={handleCanvasPointerMove}
+      onPointerUp={handleCanvasPointerUp}
+      onPointerCancel={handleCanvasPointerCancel}
     >
+
+      {/* SIDE-WALL OF LIGHT — appears as the user pulls a swipe gesture.
+          External glow from the screen edge inward, opacity tracks pull
+          distance via setSideWallGlow (imperative, no re-render). Bronze
+          on both sides — direction carries the meaning, palette stays
+          singular for restraint (Dash 2026-04-28: "subtle and descriptive
+          premium"). Pointer-events:none so the wall never steals taps. */}
+      <div
+        ref={rightWallRef}
+        aria-hidden
+        style={{
+          position: 'fixed',
+          top: 0, right: 0, bottom: 0,
+          width: '40vw',
+          maxWidth: '320px',
+          pointerEvents: 'none',
+          opacity: 0,
+          background: 'linear-gradient(to left, rgba(212,160,83,0.42) 0%, rgba(212,160,83,0.18) 35%, rgba(212,160,83,0) 100%)',
+          mixBlendMode: 'screen',
+          transition: 'opacity 220ms cubic-bezier(0.16, 1, 0.3, 1)',
+          zIndex: 60,
+        }}
+      />
+      <div
+        ref={leftWallRef}
+        aria-hidden
+        style={{
+          position: 'fixed',
+          top: 0, left: 0, bottom: 0,
+          width: '40vw',
+          maxWidth: '320px',
+          pointerEvents: 'none',
+          opacity: 0,
+          background: 'linear-gradient(to right, rgba(212,160,83,0.42) 0%, rgba(212,160,83,0.18) 35%, rgba(212,160,83,0) 100%)',
+          mixBlendMode: 'screen',
+          transition: 'opacity 220ms cubic-bezier(0.16, 1, 0.3, 1)',
+          zIndex: 60,
+        }}
+      />
 
       {/* FULLSCREEN BACKGROUND - Album art with dark overlay for floating effect.
           Auto-shows when videoBlocked (region-restricted embeds → graceful fallback). */}
@@ -5518,8 +5646,13 @@ export const VoyoPortraitPlayer = ({
           <PlayControls
             isPlaying={isPlaying}
             onToggle={handlePlayPause}
-            onPrev={prevTrack}
-            onNext={handleNextTrack}
+            // Dash 2026-04-28: prev/next track nav lives on swipe now.
+            // The engine buttons repurposed to JOG ±15s within the
+            // current track. Hold still triggers SKEEP fast-scrub
+            // (existing onScrubStart/End below), so the buttons read
+            // as scrubbing tools, not navigation.
+            onPrev={() => seekTo(Math.max(0, (usePlayerStore.getState().currentTime ?? 0) - 15))}
+            onNext={() => seekTo((usePlayerStore.getState().currentTime ?? 0) + 15)}
             isScrubbing={isScrubbing}
             onScrubStart={handleScrubStart}
             onScrubEnd={handleScrubEnd}
