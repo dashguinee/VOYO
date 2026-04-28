@@ -20,11 +20,11 @@ import { TrackCardGestures } from '../ui/TrackCardGestures';
 import { GreetingArea } from './GreetingArea';
 import { VIBES, Vibe, TRACKS } from '../../data/tracks';
 import { VibesReel } from './VibesReel';
-import { getUserTopTracks, getPoolAwareHotTracks, getPoolAwareDiscoveryTracks, calculateBehaviorScore, recordPoolEngagement } from '../../services/personalization';
-import { curateAllSections } from '../../services/poolCurator';
+import { getUserTopTracks, getPoolAwareHotTracks, calculateBehaviorScore, recordPoolEngagement } from '../../services/personalization';
+import { curateAllSections, ensurePoolBootstrapped } from '../../services/poolCurator';
 import type { PooledTrack } from '../../store/trackPoolStore';
 import type { HistoryItem } from '../../types';
-import { getInsights as getOyoInsights } from '../../services/oyoDJ';
+import { getInsights as getOyoInsights, initOYO } from '../../services/oyoDJ';
 import { usePools, app } from '../../services/oyo';
 import { usePreferenceStore } from '../../store/preferenceStore';
 import { usePlayerStore } from '../../store/playerStore';
@@ -47,13 +47,12 @@ import { AccountMenu } from '../profile/AccountMenu';
 import { BoostSettings } from '../ui/BoostSettings';
 import { CardHoldActions } from '../ui/CardHoldActions';
 // All-Time Classics: shelved Apr 28 2026 ("special edition" candidate).
-// Components live in the repo, unused on Home — Dash will revive when ready.
+// Components live in the repo, unused on Home — tree-shaken from bundle.
 //   src/components/classic/ClassicsContractedShelf.tsx
 //   src/components/classic/ClassicsDropCeremony.tsx
 //   src/data/classicsHardcoded.ts
 //   src/services/classicsDropService.ts (subscriber + dismiss helpers)
 // To resurrect: import + render between KeepTheEnergyShelf and African Vibes.
-import { ClassicsDropCeremony } from './ClassicsDropCeremony';
 
 // ============================================
 // HELPER FUNCTIONS
@@ -182,13 +181,6 @@ const OYE_SIBLINGS: Record<OyeTitleType, string[]> = OYE_TITLES.reduce((acc, t) 
 const getWestAfricanTracks = (hotPool: PooledTrack[], limit: number = 15): Track[] => {
   return [...hotPool]
     .filter(t => t.tags?.includes('west-african'))
-    .sort((a, b) => (b.poolScore || 0) - (a.poolScore || 0))
-    .slice(0, limit) as Track[];
-};
-
-const getClassicsTracks = (hotPool: PooledTrack[], limit: number = 15): Track[] => {
-  return [...hotPool]
-    .filter(t => t.tags?.includes('classic'))
     .sort((a, b) => (b.poolScore || 0) - (a.poolScore || 0))
     .slice(0, limit) as Track[];
 };
@@ -820,92 +812,6 @@ const WideTrackCard = memo(({ track, onPlay, showBoostBadge = false, breathIdx =
 });
 WideTrackCard.displayName = 'WideTrackCard';
 
-// ============================================
-// CLASSICS DISK CARD — zoomed-disc treatment
-// A breather in the feed: pure artwork, no labels. Circular crop so the
-// cover reads like a zoomed-in vinyl label. 90% opacity keeps it
-// effortless — there but not shouting.
-// ============================================
-const ClassicsDiskCard = memo(({ track, index, isSelected, onPlay }: {
-  track: Track;
-  index: number;
-  isSelected?: boolean;
-  onPlay: (track: Track) => void;
-}) => {
-  const thumbnailUrl = getThumb(track.trackId, 'high');
-  const driftDuration = 6 + (index % 4) * 0.9;
-  const driftDelay = (index % 6) * 0.55;
-  return (
-    <button
-      className="flex-shrink-0 flex flex-col items-center gap-2 transition-transform duration-150"
-      style={{ scrollSnapAlign: 'start', transform: isSelected ? 'scale(1.08)' : 'scale(1)', transition: 'transform 0.35s cubic-bezier(0.16,1,0.3,1)' }}
-      onClick={() => onPlay(track)}
-      aria-label={`Play ${track.title} by ${track.artist}`}
-    >
-      {/* Outer glow ring — only on selected */}
-      <div className="relative" style={{ padding: isSelected ? 6 : 0, transition: 'padding 0.35s ease' }}>
-        {isSelected && (
-          <div
-            className="absolute inset-0 rounded-full pointer-events-none classics-disk-glow-ring"
-            style={{ boxShadow: '0 0 0 3px rgba(212,160,83,0.9), 0 0 28px rgba(212,160,83,0.6), 0 0 56px rgba(212,160,83,0.3)' }}
-          />
-        )}
-        {/* Disk */}
-        <div
-          className={`relative rounded-full overflow-hidden ${isSelected ? 'classics-disk-spin' : 'classics-disk-drift'}`}
-          style={{
-            width: 130,
-            height: 130,
-            ['--drift-dur' as string]: `${driftDuration}s`,
-            ['--drift-delay' as string]: `${driftDelay}s`,
-            boxShadow: isSelected
-              ? '0 0 0 2.5px rgba(212,160,83,0.9), 0 0 0 5px rgba(212,160,83,0.25), 0 12px 36px rgba(0,0,0,0.8), inset 0 0 24px rgba(0,0,0,0.4)'
-              : '0 0 0 2px rgba(212,160,83,0.45), 0 0 0 4px rgba(212,160,83,0.12), 0 10px 28px rgba(0,0,0,0.65), inset 0 0 24px rgba(0,0,0,0.4)',
-          }}
-        >
-          <SmartImage
-            src={thumbnailUrl}
-            alt={track.title}
-            className="w-full h-full object-cover"
-            trackId={track.trackId}
-            artist={track.artist}
-            title={track.title}
-            style={{ transform: 'scale(1.5)' }}
-          />
-          {/* Vinyl grooves */}
-          <div
-            className="absolute inset-0 rounded-full pointer-events-none"
-            style={{ background: 'radial-gradient(circle at 50% 50%, transparent 28%, rgba(0,0,0,0.18) 30%, transparent 32%, rgba(0,0,0,0.10) 46%, transparent 48%, rgba(0,0,0,0.08) 62%, transparent 64%)' }}
-          />
-          {/* Sepia wash */}
-          <div className="absolute inset-0 rounded-full pointer-events-none" style={{ background: 'rgba(160,100,20,0.12)', mixBlendMode: 'multiply' }} />
-          {/* Gold light burst on selected */}
-          {isSelected && (
-            <div
-              className="absolute inset-0 rounded-full pointer-events-none classics-disk-lightburst"
-              style={{ background: 'radial-gradient(circle at 38% 32%, rgba(255,210,100,0.28) 0%, transparent 60%)' }}
-            />
-          )}
-          {/* Center spindle */}
-          <div
-            className="absolute rounded-full pointer-events-none"
-            style={{ width: 10, height: 10, top: '50%', left: '50%', transform: 'translate(-50%,-50%)', background: 'radial-gradient(circle, #D4A053 0%, #8B5E1A 100%)', boxShadow: isSelected ? '0 0 8px rgba(212,160,83,1), 0 0 16px rgba(212,160,83,0.6)' : '0 0 4px rgba(212,160,83,0.6)' }}
-          />
-        </div>
-      </div>
-      {/* Label */}
-      <div className="text-center w-[120px]">
-        <p className="text-[10px] font-semibold leading-tight truncate" style={{ color: isSelected ? 'rgba(244,217,153,1)' : 'rgba(255,255,255,0.8)', fontFamily: 'Satoshi, system-ui, sans-serif', transition: 'color 0.3s' }}>
-          {track.title}
-        </p>
-        <p className="text-[10px] leading-tight truncate mt-0.5" style={{ color: 'rgba(212,160,83,0.7)', fontFamily: 'Satoshi, system-ui, sans-serif' }}>
-          {track.artist}
-        </p>
-      </div>
-    </button>
-  );
-});
-ClassicsDiskCard.displayName = 'ClassicsDiskCard';
 
 // ============================================
 // ARTIST CARD COMPONENT
@@ -2920,26 +2826,11 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onNavVisibilityChange, onSwitc
     overscrollYRef.current = 0;
   }, [onSwitchToVOYO]);
 
-  // Poll live friend count every 30s while mounted
-  useEffect(() => {
-    if (!isLoggedIn || !dashId) return;
-    let cancelled = false;
-
-    const fetchOnlineFriends = async () => {
-      try {
-        const friends = await friendsAPI.getFriends(dashId);
-        if (cancelled) return;
-        const online = friends.filter(f => f.status === 'online');
-        setAllFriends(friends);
-        setLiveFriends(online);
-        setLiveCount(online.length);
-      } catch { /* silent — presence is decorative */ }
-    };
-
-    fetchOnlineFriends();
-    const interval = setInterval(fetchOnlineFriends, 30_000);
-    return () => { cancelled = true; clearInterval(interval); };
-  }, [isLoggedIn, dashId]);
+  // (Removed Apr 28 2026) 30s friend-presence polling — `liveCount` was
+  // set but never read on Home, and `liveFriends`/`allFriends` are only
+  // consumed by the Vibes sheet and Friend Search Pill, which run their
+  // own one-shot fetches when opened. Was burning ~144 API calls/hr per
+  // Home session for nothing visible.
 
   // Long-press handler for "Vibes on Vibes" header block
   const handleVibesPointerDown = useCallback((e: React.PointerEvent) => {
@@ -3035,10 +2926,15 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onNavVisibilityChange, onSwitc
     refreshRecommendations();
   }, [hotPool.length, refreshRecommendations]);
 
-  // Session prewarm: fill pool trending/west-african/classics sections on Home mount.
-  // These feed the freshness tier in Hot and the Discovery pool.
-  // Portrait player is warm by the time user taps play — same pool, shared session.
+  // Session prewarm: fill pool trending/west-african sections on Home mount.
+  // These feed the freshness tier in Hot and the Discovery pool. Portrait
+  // player is warm by the time user taps play — same pool, shared session.
+  // ensurePoolBootstrapped is the explicit replacement for the old
+  // module-level setTimeout in poolCurator.ts (3-5 queries that fired on
+  // every page load, before any UI mounted). Now intentional + traceable.
   useEffect(() => {
+    initOYO();
+    void ensurePoolBootstrapped();
     curateAllSections().catch(() => {});
   }, []);
 
@@ -3146,34 +3042,9 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onNavVisibilityChange, onSwitc
     }
   }, [hotPool, trackPreferences, sessionSeed]);
 
-  const classicsTracks = useMemo(() => {
-    try {
-      const pool = Array.isArray(hotPool) ? hotPool : [];
-      const curated = getClassicsTracks(pool, 45);
-
-      // Seed fallback — hand-vetted all-time classics from the static TRACKS
-      // data, sorted by oyeScore. Guarantees the shelf is never empty on
-      // cold boot before curateAllSections has finished its searches.
-      const seedClassics = [...TRACKS]
-        .filter(t => (t.oyeScore || 0) >= 10_000_000)
-        .sort((a, b) => (b.oyeScore || 0) - (a.oyeScore || 0));
-
-      const seen = new Set(curated.map(t => t.trackId));
-      const merged: Track[] = [...curated];
-      for (const t of seedClassics) {
-        if (merged.length >= 15) break;
-        if (!seen.has(t.trackId)) merged.push(t);
-      }
-      if (merged.length < 5) return [];
-      return seededShuffle(merged, sessionSeed).slice(0, 12);
-    } catch (e) {
-      devWarn('[HomeFeed] classicsTracks failed:', e);
-      return [];
-    }
-  }, [hotPool, sessionSeed]);
-
-  // All-Time Classics state was here — shelved Apr 28 2026. See import-block
-  // comment for how to revive.
+  // All-Time Classics: shelved Apr 28 2026. The classicsTracks useMemo +
+  // related state used to live here. To revive, restore from git history
+  // and re-import the shelf component (see import-block comment).
 
   // Top 10 on VOYO: Trending tracks, excluding what's in other shelves.
   const trending = useMemo(() => {

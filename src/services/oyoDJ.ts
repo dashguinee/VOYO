@@ -348,11 +348,9 @@ export async function hydrateFromSignals(): Promise<void> {
   }
 }
 
-// ── Auto-init ─────────────────────────────────────────────────────────────
-
-if (typeof window !== 'undefined') {
-  initOYO();
-}
+// (Removed Apr 28 2026) Auto-init on import. Was firing initOYO() on
+// every page load before any UI mounted — 1 Supabase fetch + a localStorage
+// write per nav. Now: HomeFeed calls initOYO() once on mount, intentionally.
 
 export default {
   getProfile, setDJName, setUserNickname, resetDJ,

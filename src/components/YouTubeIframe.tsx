@@ -673,15 +673,22 @@ export const YouTubeIframe = memo(() => {
     }
   }, [videoTarget, playbackSource, isPlaying]);
 
-  // Seek handling
+  // Seek handling — apply seek to the YT player ONLY when the iframe is
+  // the audio source OR the video is user-visible. When R2 owns audio and
+  // the iframe is hidden, a YT seekTo flushes the embed's internal buffer
+  // and triggers a fresh range fetch — pure waste during SKEEP at 100ms.
+  // (Apr 28 2026 audit fix #1.) Clearing seekPosition is AudioPlayer's job
+  // (the always-mounted source-of-truth), not ours — drop the redundant
+  // clear so we only do one store write per seek instead of three.
   useEffect(() => {
     if (seekPosition === null) return;
+    const iframeIsActive = playbackSource === 'iframe' || videoTarget !== 'hidden';
+    if (!iframeIsActive) return;
     const player = playerRef.current;
     if (player?.seekTo) {
       player.seekTo(seekPosition, true);
-      clearSeekPosition();
     }
-  }, [seekPosition, clearSeekPosition]);
+  }, [seekPosition, playbackSource, videoTarget]);
 
   // Fallback sync: When boosted/r2, video should follow audio (not vice versa)
   // Only kicks in if drift exceeds threshold - YouTube rarely buffers

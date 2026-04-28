@@ -506,35 +506,42 @@ export async function curateAllSections(): Promise<void> {
 }
 
 // ============================================
-// AUTO-BOOTSTRAP ON IMPORT
+// LAZY BOOTSTRAP — explicit, no module-level side effect
 // ============================================
 
-// On load: Seed pool first (instant), then expand with searches
-setTimeout(async () => {
+/**
+ * Initialize the pool. Call once from a top-level surface (HomeFeed) so
+ * the bootstrap is intentional and traceable, not a hidden side effect of
+ * importing this module. Idempotent — safe to call multiple times.
+ *
+ * Was previously a top-level setTimeout that auto-fired on every import,
+ * triggering 3-5 Supabase queries on every page load even before any UI
+ * mounted. (Apr 28 2026 cleanup.)
+ */
+let bootstrapStarted = false;
+export async function ensurePoolBootstrapped(): Promise<void> {
+  if (bootstrapStarted) return;
+  bootstrapStarted = true;
+
   const poolStore = useTrackPoolStore.getState();
   const stats = poolStore.getPoolStats();
 
-  // If pool is empty or very small, seed it first
   if (stats.hot < 10) {
     devLog(`[Pool Curator] Pool empty/small (${stats.hot}), seeding...`);
     await seedPool();
   }
 
-  // Check again after seed
   const newStats = poolStore.getPoolStats();
   if (newStats.hot < 30) {
     devLog(`[Pool Curator] Pool has ${newStats.hot} tracks, expanding with searches...`);
-    await bootstrapPool(); // This does API searches to add more variety
+    await bootstrapPool();
   } else {
     devLog(`[Pool Curator] Pool has ${newStats.hot} tracks, ready`);
     isBootstrapped = true;
   }
 
-  // Curate sections (classics, west-african, trending) so shelves like
-  // "Timeless Classics" and "African Vibes" have properly tagged content.
-  // bootstrapPool tags everything as 'trending' — this fills the gaps.
   curateAllSections().catch(() => {});
-}, 1500);
+}
 
 // ============================================
 // DEBUG HELPERS (available in browser console)
