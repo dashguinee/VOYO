@@ -1230,6 +1230,21 @@ const AfricanVibesCarousel = ({
   const [isInView, setIsInView] = useState(false);
   const [sentinelState, setSentinelState] = useState<EndSentinelState>('hidden');
   const lastWatchedRef = useRef<Track | null>(null);
+
+  // v822 (Dash 2026-04-29 "alternate based on music type — chill = 2,
+  // fire = 3"): pre-warm count adapts to the current track's energy.
+  // Fire moods scroll fast → 3 ahead. Chill moods linger → 2 (lighter
+  // on memory). Default 2 — safer fallback. One signal: track.mood,
+  // with track.tags as a backup classifier. No knob.
+  const currentTrack = usePlayerStore((s) => s.currentTrack);
+  const prewarmCount = useMemo(() => {
+    const fireMoods = new Set(['hype', 'dance', 'party', 'gym', 'street', 'afro']);
+    const fireTags = new Set(['afrobeats', 'amapiano', 'workout', 'hype', 'party', 'afro-heat', 'street']);
+    if (currentTrack?.mood && fireMoods.has(currentTrack.mood)) return 3;
+    const tags = currentTrack?.tags ?? [];
+    if (tags.some((t) => fireTags.has(t.toLowerCase()))) return 3;
+    return 2;
+  }, [currentTrack?.mood, currentTrack?.tags]);
   // activeIdx — computed via a single IntersectionObserver across all
   // card refs (most-intersecting wins, with hysteresis to prevent
   // flicker mid-scroll between two adjacent cards). Drives bronze glow.
@@ -1387,16 +1402,11 @@ const AfricanVibesCarousel = ({
       onScroll={handleScroll}
     >
       {tracks.slice(0, 12).map((track, idx) => {
-        // v818 (Dash 2026-04-29 "one extra load to oye africa"): pre-warm
-        // bumped from 2 → 3 cards ahead. At any moment [active, +1, +2,
-        // +3] are all mounted + booting/ready. Buys an extra ~600ms of
-        // headroom for the YT bootstrap so even fast scrollers see the
-        // iframe ready when promoted. Trade-off: 4 concurrent iframes
-        // per direction. Watch for memory pressure on older devices —
-        // can drop back to 2 if it bites.
+        // v822: prewarmCount is dynamic per-track-energy (computed at
+        // carousel scope above). Fire moods → 3 ahead, chill → 2 ahead.
         const dir = scrollDirection === 'left' ? -1 : 1;
         const distFromActive = (idx - activeIdx) * dir;
-        const isEdge = distFromActive >= 1 && distFromActive <= 3;
+        const isEdge = distFromActive >= 1 && distFromActive <= prewarmCount;
         return (
           <AfricanVibesVideoCard
             key={track.id}
