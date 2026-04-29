@@ -5826,24 +5826,29 @@ export const VoyoPortraitPlayer = ({
             CardSeek. Auto-fades after 5s, faded baseline. Frees up the
             engine row for cleaner play/pause + jog buttons.) */}
 
-        {/* 2. THE ENGINE (Play Control) — SPINNING VINYL DISK + HOLD TO SKEEP.
-            Opacity ramps with portalProgress so the engine emerges
-            intentionally as Frame fades. At rest, Frame (HOT/Discover +
-            VOYO cube) is the dominant surface and the engine is hidden;
-            engine reveals as the user scrolls past 0.2 or taps to reveal
-            controls. Codifies the Anchor / Frame / Canvas language —
-            see memory/voyo-portrait-anchor-frame-canvas.md (2026-04-28).
-            v792: translateY(12px) — pause button rides a touch lower
-            with the hero bump. Stays inside Anchor's vertical budget. */}
+        {/* 2. THE ENGINE (Play Control) — SPINNING VINYL DISK + JOG.
+            v868 (Dash 2026-04-29 "keep on first screen only as art
+            depth, do not show on second screen all together instead
+            of no spin only"). Inverted gating: engine is FIRST-SCREEN
+            ART. As soon as the user scrolls into Frame (portal >= 0.4),
+            the whole engine FADES OUT, not just the spin. On Anchor
+            it's the music's heartbeat; on Canvas it's just clutter.
+            v792 translateY(12px) preserved. */}
         <div
           style={{
-            opacity: Math.max(
-              isControlsRevealed ? 1 : 0,
-              Math.min(1, Math.max(0, (portalProgress - 0.2) / 0.3))
-            ),
-            pointerEvents: (isControlsRevealed || portalProgress > 0.25) ? 'auto' : 'none',
-            transition: 'opacity 0.32s cubic-bezier(0.16, 1, 0.3, 1)',
-            transform: 'translateY(12px)',
+            // Hard hide on second screen (portal >= 0.4). On Anchor,
+            // honour the existing controls-revealed gate so the disk
+            // appears with engine-row taps as before.
+            opacity: portalProgress >= 0.4
+              ? 0
+              : Math.max(isControlsRevealed ? 1 : 0, Math.min(1, Math.max(0, (0.4 - portalProgress) / 0.2))),
+            pointerEvents: portalProgress >= 0.4 ? 'none' : (isControlsRevealed ? 'auto' : 'none'),
+            transition: 'opacity 0.32s cubic-bezier(0.16, 1, 0.3, 1), transform 0.32s cubic-bezier(0.16, 1, 0.3, 1)',
+            // v868 — Dash flipped: rise was too prominent, lower it
+            // for subtlety. 12px → 24px = recedes a touch deeper
+            // below the artwork. Reads as background presence, not
+            // peer with the hero card.
+            transform: 'translateY(24px)',
           }}
         >
           <PlayControls
