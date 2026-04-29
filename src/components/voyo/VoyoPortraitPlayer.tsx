@@ -2541,8 +2541,26 @@ const PlayControls = memo(({
           )}
           
 
-          {/* Center hole (vinyl style) */}
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-[#0a0a0f] border border-white/30 z-10 flex items-center justify-center">
+          {/* v836: SKEEP zone — LEFT half of the disk. Hold here to
+              fast-scrub backward (2x → 4x → 8x escalation, with the
+              existing pulse + bronze trail animation on the visual
+              jog button). z-15 sits above the album art / spin layer
+              but below the center hole (z-10 → bumped to z-20 below).
+              The overlay is invisible — pure pointer-event capture.
+              Won't fire pause: handleCanvasPointerDown checks for
+              [data-disk-skeep] FIRST and stops there. */}
+          <div
+            data-disk-skeep="backward"
+            aria-hidden
+            className="absolute left-0 top-0 w-1/2 h-full"
+            style={{ pointerEvents: 'auto', zIndex: 15 }}
+          />
+
+          {/* Center hole (vinyl style) — z-20 keeps it above the skeep
+              overlay (which is z-15) so the play/pause icon at dead
+              center is still pointer-targetable, even though that
+              tiny region falls within the left skeep zone bounds. */}
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-[#0a0a0f] border border-white/30 z-20 flex items-center justify-center">
             {/* Play/Pause icon in center */}
             {isPlaying ? (
               <Pause size={10} className="text-white/70" />
@@ -4651,6 +4669,17 @@ export const VoyoPortraitPlayer = ({
   const diskHoldTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const diskHoldFiredRef = useRef(false);
   const DISK_HOLD_MS = 150;
+  // v836: skeep on disk's left half. Hold the LEFT space of the
+  // spinning vinyl → backward fast-scrub with the existing
+  // 2x→4x→8x escalation animation. Same gesture grammar as the
+  // left jog button hold (which still works as a fallback). Skeep
+  // wins over pause when the gesture starts on the left zone — same
+  // movement-cancel rule (drag >8px aborts). Refs hold the latest
+  // handleScrub* so this callback can fire them despite being
+  // declared earlier in source order than the handlers themselves.
+  const diskSkeepActiveRef = useRef(false);
+  const handleScrubStartRef = useRef<((dir: 'forward' | 'backward') => void) | null>(null);
+  const handleScrubEndRef = useRef<(() => void) | null>(null);
   // GLOBAL DRAG: touch ANYWHERE on the app surface and the central card
   // follows your finger. Release past the commit threshold (120px) OR
   // with enough velocity launches the card off-screen + fires prev/next.
@@ -5042,12 +5071,19 @@ export const VoyoPortraitPlayer = ({
       haptics.medium();
     }, 400);
 
-    // v835: retro disk-hold pause. If the pointerdown landed on
-    // [data-disk-hold] (the spinning vinyl), arm a 150ms timer.
-    // When it fires (no movement), pause the audio + freeze the
-    // disk. Release fires resume. Cancelled by movement >8px in
-    // pointermove, same gate the canvas swipe + DJ-mode-hold use.
-    if (target?.closest?.('[data-disk-hold]')) {
+    // v836: SKEEP on left-disk-hold takes priority over the v835
+    // pause. handleScrubStart already runs its own 200ms gate before
+    // engaging skeep mode, so quick taps on the left zone are a no-op
+    // (the timer is cancelled in handleScrubEnd / pointercancel).
+    const skeepZone = target?.closest?.('[data-disk-skeep]') as HTMLElement | null;
+    if (skeepZone) {
+      const direction = (skeepZone.getAttribute('data-disk-skeep') as 'forward' | 'backward') || 'backward';
+      handleScrubStartRef.current?.(direction);
+      diskSkeepActiveRef.current = true;
+    } else if (target?.closest?.('[data-disk-hold]')) {
+      // v835: retro disk-hold pause (only on non-skeep zones of the
+      // disk). 150ms timer, audio pauses, disk freezes mid-rotation.
+      // Release fires resume.
       if (diskHoldTimerRef.current) clearTimeout(diskHoldTimerRef.current);
       diskHoldFiredRef.current = false;
       diskHoldTimerRef.current = setTimeout(() => {
@@ -5089,6 +5125,11 @@ export const VoyoPortraitPlayer = ({
         clearTimeout(diskHoldTimerRef.current);
         diskHoldTimerRef.current = null;
       }
+      // v836: vertical-scroll cancels skeep too.
+      if (diskSkeepActiveRef.current) {
+        handleScrubEndRef.current?.();
+        diskSkeepActiveRef.current = false;
+      }
       return;
     }
 
@@ -5111,6 +5152,11 @@ export const VoyoPortraitPlayer = ({
       if (diskHoldTimerRef.current) {
         clearTimeout(diskHoldTimerRef.current);
         diskHoldTimerRef.current = null;
+      }
+      // v836: same for active skeep — drag overrides scrubbing.
+      if (diskSkeepActiveRef.current) {
+        handleScrubEndRef.current?.();
+        diskSkeepActiveRef.current = false;
       }
       swipeFiredRef.current = true; // eat the trailing click
     }
@@ -5138,9 +5184,6 @@ export const VoyoPortraitPlayer = ({
     // v835: retro disk-hold release. If the user actually held long
     // enough to fire the pause (diskHoldFiredRef true), release the
     // finger from the vinyl → audio resumes from the same position.
-    // The audio engine's natural sync handles the resume — same
-    // currentTime, same source. Disk's animation-play-state gates on
-    // isPlaying so it spins back up automatically once we toggle.
     if (diskHoldTimerRef.current) {
       clearTimeout(diskHoldTimerRef.current);
       diskHoldTimerRef.current = null;
@@ -5151,6 +5194,12 @@ export const VoyoPortraitPlayer = ({
         handlePlayPause();
         haptics.light();
       }
+    }
+    // v836: release skeep on pointerup. handleScrubEnd is idempotent
+    // and clears its own internal hold timer if 200ms hadn't fired.
+    if (diskSkeepActiveRef.current) {
+      handleScrubEndRef.current?.();
+      diskSkeepActiveRef.current = false;
     }
 
     const start = swipeStartRef.current;
@@ -5234,6 +5283,11 @@ export const VoyoPortraitPlayer = ({
       if (!usePlayerStore.getState().isPlaying) {
         handlePlayPause();
       }
+    }
+    // v836: cancel skeep too — same "forget this gesture" semantics.
+    if (diskSkeepActiveRef.current) {
+      handleScrubEndRef.current?.();
+      diskSkeepActiveRef.current = false;
     }
   }, [handlePlayPause]);
 
@@ -5514,6 +5568,14 @@ export const VoyoPortraitPlayer = ({
       setTimeout(clear, 80);
     }
   }, [isScrubbing, setPlaybackRate, handlePlayPause]);
+
+  // v836: keep the disk-skeep refs pointed at the latest handlers
+  // so handleCanvasPointerDown (declared earlier in source order)
+  // can fire skeep without TDZ issues.
+  useEffect(() => {
+    handleScrubStartRef.current = handleScrubStart;
+    handleScrubEndRef.current = handleScrubEnd;
+  }, [handleScrubStart, handleScrubEnd]);
 
   // Safe next track - blocks only if SKEEP truly just ended (≤250ms window).
   const handleNextTrack = useCallback(() => {
