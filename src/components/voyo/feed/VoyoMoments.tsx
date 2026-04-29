@@ -1886,13 +1886,14 @@ export const VoyoMoments: React.FC<VoyoMomentsProps> = ({ onPlayFullTrack, onArt
       // back if Dash wants tiktok feel for a specific axis later.
 
       if (Math.abs(dx) > Math.abs(dy)) {
-        // v906 lane gate. Left/right = lane drift. When the header is
-        // hidden ("screen off"), the user has to tap first to enter a
-        // lane — horizontal swipe alone does NOT switch sub-cat. The
-        // tap fires the gold frame pulse (v906 visual cue) and wakes
-        // the header. Up/down (consumption) stays free regardless.
+        // v908 lane gate (refined from v907). Left/right = lane drift.
+        // When the header is hidden, horizontal swipe is BLOCKED but
+        // doesn't wake the header — that would yank the user out of
+        // zen mode for a gesture they didn't explicitly request. Just
+        // pulse the gold frame as a hint and let them stay immersed.
+        // Explicit tap is the only path to "enter the lane" and drift.
         if (!headerVisible) {
-          wakeHeaderOnTap();
+          setFramePulseKey(k => k + 1);
           return;
         }
         if (dx < 0) {
@@ -2065,11 +2066,12 @@ export const VoyoMoments: React.FC<VoyoMomentsProps> = ({ onPlayFullTrack, onArt
       <div style={S.topShade} />
       <div style={S.bottomGlow} />
 
-      {/* v906 — Frame light pulse. Fires for 2s every time the user
-          taps while the header was hidden ("you entered a lane").
-          Key change re-mounts the element so the CSS animation
-          restarts cleanly. pointerEvents: none so it never blocks
-          gestures underneath. */}
+      {/* v906/v908 — Frame light pulse. Fires for 2s on tap-while-
+          locked OR locked horizontal swipe. v908 dropped intensity
+          (1.5px ring + 24px ambient) so it reads as ambient cue, not
+          alert. Caption sits centered inside, fading with the same
+          keyframe so the user understands "drift mode" is the gesture
+          they just unlocked / hinted at. */}
       <div
         key={`frame-pulse-${framePulseKey}`}
         aria-hidden
@@ -2081,11 +2083,32 @@ export const VoyoMoments: React.FC<VoyoMomentsProps> = ({ onPlayFullTrack, onArt
           zIndex: 6,
           opacity: framePulseKey > 0 ? 1 : 0,
           animation: framePulseKey > 0 ? 'voyo-frame-pulse 2s ease-out forwards' : 'none',
-          // The actual visible glow lives in the inset shadow so it
-          // hugs the cube edge without clipping.
-          boxShadow: 'inset 0 0 0 2px rgba(212,160,83,0.55), inset 0 0 36px rgba(212,160,83,0.32)',
+          boxShadow: 'inset 0 0 0 1.5px rgba(212,160,83,0.45), inset 0 0 24px rgba(212,160,83,0.22)',
         }}
       />
+      {framePulseKey > 0 && (
+        <div
+          key={`pulse-caption-${framePulseKey}`}
+          aria-hidden
+          style={{
+            position: 'absolute',
+            top: '50%', left: 0, right: 0,
+            transform: 'translateY(-50%)',
+            textAlign: 'center',
+            pointerEvents: 'none',
+            zIndex: 7,
+            animation: 'voyo-frame-pulse 2s ease-out forwards',
+            color: 'rgba(232,193,128,0.92)',
+            fontSize: 11,
+            fontWeight: 600,
+            letterSpacing: '0.18em',
+            textTransform: 'uppercase',
+            textShadow: '0 1px 6px rgba(0,0,0,0.85)',
+          }}
+        >
+          ‹ &nbsp; drift &nbsp; ›
+        </div>
+      )}
 
       {/* TOP BAR — unified gradient surface. Visible when uiPhase isn't
           immersive OR when headerVisible is true (set by tap-to-wake). */}
