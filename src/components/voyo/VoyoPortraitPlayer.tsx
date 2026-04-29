@@ -2723,13 +2723,11 @@ const ReactionBar = memo(({
   onReaction,
   isRevealed,
   onRevealChange,
-  oyeBarBehavior = 'fade',
   activateChatTrigger = 0,
 }: {
   onReaction: (type: ReactionType, emoji: string, text: string, multiplier: number) => void;
   isRevealed: boolean;
   onRevealChange: (revealed: boolean) => void;
-  oyeBarBehavior?: 'fade' | 'disappear';
   activateChatTrigger?: number;
 }) => {
   const [isActive, setIsActive] = useState(false); // false = ghosted, true = lit
@@ -3166,12 +3164,6 @@ const ReactionBar = memo(({
   // Check if button is currently flashing (sleep mode tap feedback)
   const isFlashing = (type: string) => flashingButton === type;
 
-  // DISAPPEAR MODE: Return nothing when not revealed - State 0 (big card, no bar)
-  // Double-tap reveals it, then auto-hides back to State 0
-  if (oyeBarBehavior === 'disappear' && !isRevealed) {
-    return null;
-  }
-
   return (
     <div className="relative z-30 flex flex-col items-center mb-4">
       {/* Main reaction row - buttons spread when chat opens */}
@@ -3186,13 +3178,8 @@ const ReactionBar = memo(({
           // Hide ALL reaction buttons when chat is open - completely clean
           if (isChatMode) return null;
 
-          // VISIBILITY LOGIC based on oyeBarBehavior:
-          // 'fade' mode: ALWAYS visible (signature), just more ghosted when not revealed
-          // 'disappear' mode: Only show when revealed
-          if (oyeBarBehavior === 'disappear' && !isRevealed) return null;
-
-          // In fade mode, buttons are always visible but more transparent when not revealed
-          const isFadeGhosted = oyeBarBehavior === 'fade' && !isRevealed;
+          // Buttons are always visible (signature) but more ghosted when not revealed.
+          const isFadeGhosted = !isRevealed;
 
           // Fire flicker animation (only used when not in chat mode)
           const isFireSpread = false;
@@ -4092,7 +4079,6 @@ export const VoyoPortraitPlayer = ({
   const isSkeeping = usePlayerStore(s => s.isSkeeping);
   const setPlaybackRate = usePlayerStore(s => s.setPlaybackRate);
   const stopSkeep = usePlayerStore(s => s.stopSkeep);
-  const oyeBarBehavior = usePlayerStore(s => s.oyeBarBehavior);
   // v804: read playerCompact (set true when SearchOverlay is open).
   // Used to gate canvas pointer/tap handlers so search-time touches
   // don't leak through to player gestures (Dash 2026-04-29
@@ -5509,11 +5495,7 @@ export const VoyoPortraitPlayer = ({
     <div
       ref={scrollContainerRef}
       onScroll={handleHeaderScroll}
-      className={`relative w-full h-full bg-[#020203] text-white font-sans flex flex-col overflow-x-hidden ${
-        oyeBarBehavior === 'fade'
-          ? `overflow-y-auto ${scrollTaught ? 'scrollbar-hide' : ''}`
-          : 'overflow-hidden'
-      }`}
+      className={`relative w-full h-full bg-[#020203] text-white font-sans flex flex-col overflow-x-hidden overflow-y-auto ${scrollTaught ? 'scrollbar-hide' : ''}`}
       // FULL-SCREEN SWIPE SURFACE (Dash 2026-04-28: "the whole screen but
       // a precise swipe"). Pointer handlers live on the outermost
       // container so horizontal next/drift gestures can be initiated
@@ -5743,11 +5725,7 @@ export const VoyoPortraitPlayer = ({
           // tall viewports the max caps it (frame doesn't dominate).
           // Locked baseline values from v803 sit near the middle of each
           // clamp band.
-          height: `calc(100% - ${
-            oyeBarBehavior === 'fade'
-              ? 'clamp(280px, 36dvh, 340px)'
-              : 'clamp(170px, 22dvh, 210px)'
-          })`,
+          height: `calc(100% - clamp(280px, 36dvh, 340px))`,
         }}
       >
 
@@ -5908,9 +5886,7 @@ export const VoyoPortraitPlayer = ({
       {/* --- CENTER SECTION (Hero + Engine) --- */}
       {/* TAP: Quick controls | HOLD/DOUBLE TAP: Full DJ Mode */}
       <div
-        className={`flex flex-col items-center justify-end relative z-10 flex-1 ${
-          oyeBarBehavior === 'fade' ? 'pt-12' : 'pt-10'
-        }`}
+        className="flex flex-col items-center justify-end relative z-10 flex-1 pt-12"
         style={{
           // pan-y: browser handles vertical scroll (portal reveal), JS handles
           // horizontal (card drag). The pointer handlers LIVE HERE on the center
@@ -6162,20 +6138,17 @@ export const VoyoPortraitPlayer = ({
             the reactions + chat input rise toward where the disk
             used to peek. Equal-and-opposite move keeps the visual
             tension intact while compressing the gap. */}
-        {(oyeBarBehavior === 'fade' || isControlsRevealed || isReactionsRevealed) && (
-          <div
-            className="mt-3 min-h-[60px] flex items-center justify-center"
-            style={{ transform: 'translateY(-12px)' }}
-          >
-            <ReactionBar
+        <div
+          className="mt-3 min-h-[60px] flex items-center justify-center"
+          style={{ transform: 'translateY(-12px)' }}
+        >
+          <ReactionBar
             onReaction={handleReaction}
             isRevealed={isControlsRevealed || isReactionsRevealed}
             onRevealChange={setIsReactionsRevealed}
-            oyeBarBehavior={oyeBarBehavior}
             activateChatTrigger={activateChatTrigger}
           />
-          </div>
-        )}
+        </div>
 
         {/* DJ Wake Toast - "Now Peace ✌🏾".
             Was popping in/out with zero animation. Now fades + scale-pops
@@ -6221,12 +6194,7 @@ export const VoyoPortraitPlayer = ({
           When the cube dock is open, the min-height grows so the chat
           space slides in without pushing the rail offscreen. */}
       <div
-        className={`flex-shrink-0 w-full relative z-40 flex flex-col pt-3 pb-7 transition-[min-height] duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] ${
-          // v805: min-h converted to clamp() so Layer B's bottom edge
-          // stays put across viewport heights. Numbers track the Anchor
-          // reservation above (28px buffer pattern preserved).
-          oyeBarBehavior === 'fade' ? 'min-h-[clamp(252px,33dvh,312px)]' : ''
-        }`}
+        className="flex-shrink-0 w-full relative z-40 flex flex-col pt-3 pb-7 transition-[min-height] duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] min-h-[clamp(252px,33dvh,312px)]"
         style={{
           // Two-step Layer B fade.
           // Step 1 (portal 0 → 0.55): mild fade to ~60%, soft blur,

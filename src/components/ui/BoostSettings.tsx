@@ -245,8 +245,6 @@ export const BoostSettings = ({ isOpen, onClose, backdropEnabled, onToggleBackdr
   // Battery fix: fine-grained selectors to avoid re-render on progress/currentTime changes
   const boostProfile = usePlayerStore(s => s.boostProfile);
   const setBoostProfile = usePlayerStore(s => s.setBoostProfile);
-  const oyeBarBehavior = usePlayerStore(s => s.oyeBarBehavior);
-  const setOyeBarBehavior = usePlayerStore(s => s.setOyeBarBehavior);
   const voyexSpatial = usePlayerStore(s => s.voyexSpatial);
   const setVoyexSpatial = usePlayerStore(s => s.setVoyexSpatial);
 
@@ -588,56 +586,6 @@ export const BoostSettings = ({ isOpen, onClose, backdropEnabled, onToggleBackdr
               {manualBoostCount > 0
                 ? `${manualBoostCount} ${manualBoostCount === 1 ? 'track' : 'tracks'} boosted manually`
                 : 'Listen past a few seconds → kept for keeps'}
-            </div>
-          </div>
-
-          {/* OYE Bar Behavior — the cards ARE the effect.
-              No eye icons. The selected card has a subtle glow/animation
-              that demonstrates the behavior. Neutral tones (no purple). */}
-          <div className="bg-white/5 rounded-2xl p-4">
-            <div className="text-sm font-medium text-white mb-3">OYE Bar</div>
-            <div className="grid grid-cols-2 gap-2">
-              {/* Fade option — card has a subtle opacity gradient to show "fading" */}
-              <button
-                onClick={() => { setOyeBarBehavior('fade'); haptics.light(); }}
-                className={`relative flex flex-col items-center justify-center gap-1 p-3 rounded-xl border transition-all active:scale-95 overflow-hidden ${
-                  oyeBarBehavior === 'fade'
-                    ? 'bg-white/8 border-white/25 text-white'
-                    : 'bg-white/[0.03] border-white/8 text-gray-500 hover:bg-white/5'
-                }`}
-              >
-                {/* The "fade" effect visualized ON the card */}
-                <div
-                  className="absolute inset-0 pointer-events-none"
-                  style={{
-                    background: oyeBarBehavior === 'fade'
-                      ? 'linear-gradient(to bottom, rgba(255,255,255,0.06) 0%, transparent 60%)'
-                      : 'none',
-                  }}
-                />
-                <span className="text-[11px] font-semibold relative z-10">Fade</span>
-                <span className="text-[8px] opacity-50 relative z-10">to DJ OYO's Space</span>
-              </button>
-              {/* Disappear option — card has a "vanishing" feel */}
-              <button
-                onClick={() => { setOyeBarBehavior('disappear'); haptics.light(); }}
-                className={`relative flex flex-col items-center justify-center gap-1 p-3 rounded-xl border transition-all active:scale-95 overflow-hidden ${
-                  oyeBarBehavior === 'disappear'
-                    ? 'bg-white/8 border-white/25 text-white'
-                    : 'bg-white/[0.03] border-white/8 text-gray-500 hover:bg-white/5'
-                }`}
-              >
-                <div
-                  className="absolute inset-0 pointer-events-none"
-                  style={{
-                    background: oyeBarBehavior === 'disappear'
-                      ? 'linear-gradient(to bottom, transparent 40%, rgba(255,255,255,0.04) 100%)'
-                      : 'none',
-                  }}
-                />
-                <span className="text-[11px] font-semibold relative z-10">Disappear</span>
-                <span className="text-[8px] opacity-50 relative z-10">OYO's Space Direct</span>
-              </button>
             </div>
           </div>
 

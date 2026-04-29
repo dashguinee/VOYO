@@ -304,11 +304,6 @@ interface PlayerStore {
   boostProfile: 'off' | 'boosted' | 'calm' | 'voyex';
   voyexSpatial: number;
 
-  // OYÉ Bar Behavior - Signature VOYO element
-  // 'fade' - stays visible but ghosted after timeout
-  // 'disappear' - hides completely after timeout
-  oyeBarBehavior: 'fade' | 'disappear';
-
   // OYÉ Lightning Bulb — predictive pre-warm of the upcoming queue (N+1, N+2).
   // Bulb on  → voyoStream.prewarmUpcoming fires ensureTrackReady ahead of time
   //            so the next track's audio is already in R2 when the user gets
@@ -426,7 +421,6 @@ interface PlayerStore {
   detectNetworkQuality: () => void;
   setBoostProfile: (profile: 'off' | 'boosted' | 'calm' | 'voyex') => void;
   setVoyexSpatial: (value: number) => void;
-  setOyeBarBehavior: (behavior: 'fade' | 'disappear') => void;
   setOyePrewarm: (enabled: boolean) => void;
 
   // Verse Jam — visitor is locked to a host's playback
@@ -475,9 +469,6 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   })(),
   voyexSpatial: ((): number => {
     try { return parseInt(localStorage.getItem('voyo-voyex-spatial') || '0', 10); } catch { return 0; }
-  })(),
-  oyeBarBehavior: ((): 'fade' | 'disappear' => {
-    try { return (localStorage.getItem('voyo-oye-behavior') as 'fade' | 'disappear') || 'fade'; } catch { return 'fade'; }
   })(),
   oyePrewarm: ((): boolean => {
     try { return localStorage.getItem('voyo-oye-prewarm') !== 'false'; } catch { return true; }
@@ -1904,10 +1895,6 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       try { localStorage.setItem('voyo-voyex-spatial', String(clamped)); } catch {}
       _voyexPersistTimer = null;
     }, 500);
-  },
-  setOyeBarBehavior: (behavior) => {
-    set({ oyeBarBehavior: behavior });
-    try { localStorage.setItem('voyo-oye-behavior', behavior); } catch {}
   },
   setOyePrewarm: (enabled) => {
     set({ oyePrewarm: enabled });
