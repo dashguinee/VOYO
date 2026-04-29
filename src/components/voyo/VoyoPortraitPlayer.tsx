@@ -2378,19 +2378,26 @@ const PlayControls = memo(({
   // Convert skeepLevel to display speed
   const displaySpeed = skeepLevel === 1 ? 2 : skeepLevel === 2 ? 4 : 8;
 
-  // v834 — restore the spinning vinyl, exactly how the original
-  // getSpinAnimation defined it (8304753 baseline):
-  //   - Normal playback : 3s linear infinite
-  //   - Scrubbing       : 3 / displaySpeed seconds (= 1.5s @ 2x,
-  //                       0.75s @ 4x, 0.375s @ 8x — visibly faster)
-  //   - Paused          : no animation
-  // Driven via the existing `spin-vinyl` keyframe in src/index.css.
-  // Gated on isFirstScreen so the disk is still as the user scrolls
-  // into the discovery layer.
+  // v835 — spinning vinyl, retro grammar (Dash 2026-04-29 "keep it
+  // spinning, pause is not really a pause, pause becomes holding the
+  // disk"). The disk spins WHENEVER we're on the first screen and the
+  // animation isn't explicitly paused via a hold. The traditional
+  // play/pause binary no longer drives the visual rotation — only
+  // the user's finger on the vinyl does. animation-play-state is
+  // toggled to 'paused' during a held-pause so the disk freezes
+  // mid-rotation (CSS handles the snapshot — no JS rAF needed).
+  //
+  // Speeds match the original 8304753 getSpinAnimation:
+  //   Normal : 3s linear infinite
+  //   Scrub  : 3 / displaySpeed s (1.5s @ 2x, 0.75s @ 4x, 0.375s @ 8x)
   const spinDurationS = isScrubbing ? (3 / displaySpeed) : 3;
-  const shouldSpin = !!isFirstScreen && (isPlaying || isScrubbing);
+  const shouldSpin = !!isFirstScreen;
   const spinStyle: React.CSSProperties = shouldSpin
-    ? { animation: `spin-vinyl ${spinDurationS}s linear infinite`, willChange: 'transform' }
+    ? {
+        animation: `spin-vinyl ${spinDurationS}s linear infinite`,
+        animationPlayState: isPlaying || isScrubbing ? 'running' : 'paused',
+        willChange: 'transform',
+      }
     : {};
 
   return (
@@ -2474,21 +2481,24 @@ const PlayControls = memo(({
         />
 
         {/* Spinning Vinyl Disk */}
-        {/* v833 (Dash 2026-04-29 "add the swipe motion to the pause button
-            also"): data-canvas-passthrough opts this button INTO the
-            canvas drag gesture even though it's <button>. The disk
-            is positioned right where the user's thumb naturally
-            rests, so dragging from here should swipe the card just
-            like dragging from the artwork. handlePlayPause itself
-            already gates with swipeFiredRef in the parent. */}
+        {/* v835 (Dash 2026-04-29 "kill the pause, pause becomes holding
+            the disk it stops like the retro way"): tap on the disk is
+            DEAD. Hold (≥150ms, no movement) puts your finger on the
+            spinning vinyl — audio pauses, disk freezes mid-rotation.
+            Release = audio resumes, disk spins back up. Pure physical
+            metaphor. The hold detection lives in handleCanvasPointer*
+            in the parent — it sees [data-disk-hold] on the gesture
+            target and arms the timer alongside the existing canvas
+            swipe. data-canvas-passthrough still in place so drags
+            from the disk drive the card swipe (v833).
+            onClick = stopPropagation only — kills the canvas-level
+            mode toggle that would otherwise fire on bare disk taps. */}
         <button
           data-canvas-passthrough
+          data-disk-hold
           className="absolute inset-0 rounded-full overflow-hidden border-2 border-white/20 shadow-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-500/50 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0a0a0c]"
-          aria-label={isPlaying ? 'Pause' : 'Play'}
-          onClick={() => {
-            haptics.medium();
-            onToggle();
-            }}
+          aria-label="Hold to pause"
+          onClick={(e) => { e.stopPropagation(); }}
           style={{
             background: isPlaying || isScrubbing
               ? 'transparent'
@@ -4633,6 +4643,14 @@ export const VoyoPortraitPlayer = ({
   const lastTapRef = useRef<number>(0);
   const didHoldRef = useRef(false);
   const djWakeCountRef = useRef(0); // Track how many times DJ mode was activated
+  // v835 (Dash 2026-04-29): retro vinyl-finger pause. When the gesture
+  // started on [data-disk-hold] AND stayed put for 150ms, audio pauses
+  // and the disk freezes mid-rotation. Release fires resume — the
+  // music picks up exactly where it stopped (sync-resume). Cancelled
+  // by movement >8px (drag mode wins).
+  const diskHoldTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const diskHoldFiredRef = useRef(false);
+  const DISK_HOLD_MS = 150;
   // GLOBAL DRAG: touch ANYWHERE on the app surface and the central card
   // follows your finger. Release past the commit threshold (120px) OR
   // with enough velocity launches the card off-screen + fires prev/next.
@@ -5023,7 +5041,25 @@ export const VoyoPortraitPlayer = ({
       showDJWakeToast();
       haptics.medium();
     }, 400);
-  }, [showDJWakeToast]);
+
+    // v835: retro disk-hold pause. If the pointerdown landed on
+    // [data-disk-hold] (the spinning vinyl), arm a 150ms timer.
+    // When it fires (no movement), pause the audio + freeze the
+    // disk. Release fires resume. Cancelled by movement >8px in
+    // pointermove, same gate the canvas swipe + DJ-mode-hold use.
+    if (target?.closest?.('[data-disk-hold]')) {
+      if (diskHoldTimerRef.current) clearTimeout(diskHoldTimerRef.current);
+      diskHoldFiredRef.current = false;
+      diskHoldTimerRef.current = setTimeout(() => {
+        diskHoldTimerRef.current = null;
+        if (usePlayerStore.getState().isPlaying) {
+          diskHoldFiredRef.current = true;
+          handlePlayPause();
+          haptics.light();
+        }
+      }, DISK_HOLD_MS);
+    }
+  }, [showDJWakeToast, handlePlayPause]);
 
   // POINTER MOVE: drag the central card with the finger. The card wrapper
   // transforms 1:1 with horizontal delta (plus a subtle tilt and opacity
@@ -5048,6 +5084,11 @@ export const VoyoPortraitPlayer = ({
         clearTimeout(holdTimerRef.current);
         holdTimerRef.current = null;
       }
+      // v835: vertical-scroll cancels the disk-hold too.
+      if (diskHoldTimerRef.current) {
+        clearTimeout(diskHoldTimerRef.current);
+        diskHoldTimerRef.current = null;
+      }
       return;
     }
 
@@ -5063,6 +5104,13 @@ export const VoyoPortraitPlayer = ({
       if (holdSwipeReadyTimer.current) {
         clearTimeout(holdSwipeReadyTimer.current);
         holdSwipeReadyTimer.current = null;
+      }
+      // v835: drag mode wins over disk-hold. If the user starts on
+      // the disk but ends up swiping, kill the pending vinyl-pause
+      // so we don't pause the audio mid-swipe.
+      if (diskHoldTimerRef.current) {
+        clearTimeout(diskHoldTimerRef.current);
+        diskHoldTimerRef.current = null;
       }
       swipeFiredRef.current = true; // eat the trailing click
     }
@@ -5085,6 +5133,24 @@ export const VoyoPortraitPlayer = ({
     if (holdTimerRef.current) {
       clearTimeout(holdTimerRef.current);
       holdTimerRef.current = null;
+    }
+
+    // v835: retro disk-hold release. If the user actually held long
+    // enough to fire the pause (diskHoldFiredRef true), release the
+    // finger from the vinyl → audio resumes from the same position.
+    // The audio engine's natural sync handles the resume — same
+    // currentTime, same source. Disk's animation-play-state gates on
+    // isPlaying so it spins back up automatically once we toggle.
+    if (diskHoldTimerRef.current) {
+      clearTimeout(diskHoldTimerRef.current);
+      diskHoldTimerRef.current = null;
+    }
+    if (diskHoldFiredRef.current) {
+      diskHoldFiredRef.current = false;
+      if (!usePlayerStore.getState().isPlaying) {
+        handlePlayPause();
+        haptics.light();
+      }
     }
 
     const start = swipeStartRef.current;
@@ -5129,7 +5195,7 @@ export const VoyoPortraitPlayer = ({
       holdSwipeReadyTimer.current = null;
     }
     holdSwipeReadyRef.current = false;
-  }, []);
+  }, [handlePlayPause]);
 
   // Dedicated pointer-CANCEL handler. Distinct from pointer-UP because
   // cancel means "the gesture was interrupted" — finger left viewport,
@@ -5155,7 +5221,21 @@ export const VoyoPortraitPlayer = ({
       holdSwipeReadyTimer.current = null;
     }
     holdSwipeReadyRef.current = false;
-  }, []);
+    // v835: cancel ≠ release. The finger left the viewport / app
+    // backgrounded — we should still resume audio if a vinyl-pause
+    // had fired, otherwise the song stays silently paused with no
+    // affordance to recover.
+    if (diskHoldTimerRef.current) {
+      clearTimeout(diskHoldTimerRef.current);
+      diskHoldTimerRef.current = null;
+    }
+    if (diskHoldFiredRef.current) {
+      diskHoldFiredRef.current = false;
+      if (!usePlayerStore.getState().isPlaying) {
+        handlePlayPause();
+      }
+    }
+  }, [handlePlayPause]);
 
   const handleCanvasTap = useCallback((e: React.MouseEvent) => {
     // v804: bail when SearchOverlay is open — same belt-and-suspenders
@@ -6093,19 +6173,12 @@ export const VoyoPortraitPlayer = ({
             // 0.3 matches the engine opacity ramp threshold above so the
             // visual effect ends together with the engine row's reveal.
             isFirstScreen={portalProgress < 0.3}
-            // v833: gate the button click — if a canvas swipe just fired
-            // (drag-from-disk), eat the click so we don't ALSO toggle
-            // play/pause. The button's onClick fires before
-            // handleCanvasTap (target-first event order), so we read
-            // swipeFiredRef directly. Swallow + clear so the next genuine
-            // tap still pauses normally.
-            onToggle={() => {
-              if (swipeFiredRef.current) {
-                swipeFiredRef.current = false;
-                return;
-              }
-              handlePlayPause();
-            }}
+            // v835: tap-to-pause is dead. The disk button's onClick is
+            // a no-op (stopPropagation only). Pause now lives on
+            // hold-the-disk, handled at the canvas pointer level. The
+            // onToggle prop stays for type compatibility but is unused
+            // inside PlayControls now.
+            onToggle={handlePlayPause}
             // Dash 2026-04-28: prev/next track nav lives on swipe now.
             // The engine buttons repurposed to JOG ±15s within the
             // current track. Hold still triggers SKEEP fast-scrub
