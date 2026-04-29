@@ -569,8 +569,13 @@ const MomentCard = memo(({ moment, isOyed, onOye, isActive, isMuted, onToggleMut
   const initial = (moment.creator_name || moment.creator_username || '?')[0].toUpperCase();
   const creator = moment.creator_name || moment.creator_username || 'Unknown';
   const videoRef = useRef<HTMLVideoElement>(null);
-  const [videoAvailable, setVideoAvailable] = useState<boolean | null>(null);
   const [videoError, setVideoError] = useState(false);
+  // Tracks whether the static thumbnail <img> has finished decoding.
+  // While loading (or if it never loads), we keep it at opacity:0 so the
+  // browser's broken-image icon never paints — the dark amber container
+  // bg shows through instead. (Dash 2026-04-29 v829: "no placeholder
+  // image icon before video loads".)
+  const [thumbLoaded, setThumbLoaded] = useState(false);
   // Gates the cross-fade from thumbnail to video — only flips true once
   // the <video> element fires its `playing` event (i.e. real frames are
   // being decoded). Without this gate, the video element rendered at
@@ -581,33 +586,26 @@ const MomentCard = memo(({ moment, isOyed, onOye, isActive, isMuted, onToggleMut
 
   const videoUrl = `${VOYO_API}/r2/feed/${moment.source_id}`;
 
-  // Check if video exists in R2 on mount. AbortController so rapid
-  // swipes don't pile up in-flight /check fetches behind the active
-  // moment's <video> request — was blocking the 6-conn cap and
-  // delaying first-frame paint on the next moment.
+  // v829: dropped the /check round trip. Was a 100-300ms RTT to the
+  // edge worker BEFORE the <video> element even started loading —
+  // measurably the biggest snap-blocker on the feed. Now we mount
+  // the <video> optimistically; on 404/error it fires onError and
+  // we fall back to audio_cover or thumbnail. Wasted bandwidth on
+  // a non-video moment is ~one HEAD-equivalent 404 from the worker.
+  // Reset the error flag when the moment itself changes (different
+  // source_id) so a previous failure doesn't poison the new card.
   useEffect(() => {
-    const ctl = new AbortController();
-    setVideoAvailable(null);
     setVideoError(false);
-    fetch(`${videoUrl}/check`, { signal: ctl.signal })
-      .then(r => r.json())
-      .then(data => setVideoAvailable(data.exists === true))
-      .catch((e) => {
-        if (e?.name === 'AbortError') return;
-        setVideoAvailable(false);
-      });
-    return () => ctl.abort();
-  }, [moment.source_id, videoUrl]);
+    setThumbLoaded(false);
+  }, [moment.source_id]);
 
-  // Resolve presentation format based on priority:
-  // 1. R2 video (if available and no error)
-  // 2. Audio + cover composition (if linked to a track with parent_track_id)
-  // 3. Thumbnail static fallback
+  // Resolve presentation format. v829 grammar:
+  //   - default optimistically to r2_video (we'll let the element try)
+  //   - fall back to audio_cover when video errored AND we have a track
+  //   - else fall back to thumbnail
   const format: MomentFormat = (() => {
-    if (videoAvailable === true && !videoError) return 'r2_video';
-    // While R2 check is in-flight (null), don't commit to audio_cover yet —
-    // show thumbnail until we know for sure there's no video
-    if (videoAvailable === false && moment.parent_track_id) return 'audio_cover';
+    if (!videoError) return 'r2_video';
+    if (moment.parent_track_id) return 'audio_cover';
     return 'thumbnail';
   })();
 
@@ -673,9 +671,13 @@ const MomentCard = memo(({ moment, isOyed, onOye, isActive, isMuted, onToggleMut
             <img
               src={moment.thumbnail_url}
               alt=""
+              onLoad={() => setThumbLoaded(true)}
+              onError={() => setThumbLoaded(false)}
               style={{
                 ...S.thumb,
-                opacity: videoFramePainted ? 0 : 1,
+                // v829: gate visibility on thumbLoaded so the broken-image
+                // icon never paints during fetch / on 404.
+                opacity: videoFramePainted ? 0 : (thumbLoaded ? 1 : 0),
                 transition: 'opacity 400ms cubic-bezier(0.16, 1, 0.3, 1)',
               }}
               loading="lazy"
@@ -697,6 +699,10 @@ const MomentCard = memo(({ moment, isOyed, onOye, isActive, isMuted, onToggleMut
             style={{
               opacity: videoFramePainted ? 1 : 0,
               transition: 'opacity 400ms cubic-bezier(0.16, 1, 0.3, 1)',
+              // v829: black-amber bg on the video itself so even if the
+              // thumb fails AND frames haven't decoded, you see the cozy
+              // container color, not a white user-agent default.
+              backgroundColor: '#0B0703',
             }}
           />
         </>
@@ -724,7 +730,25 @@ const MomentCard = memo(({ moment, isOyed, onOye, isActive, isMuted, onToggleMut
       {/* === FORMAT: THUMBNAIL STATIC === */}
       {format === 'thumbnail' && (
         <>
-          {moment.thumbnail_url && <img src={moment.thumbnail_url} alt="" style={S.thumb} loading="lazy" decoding="async" draggable={false} />}
+          {/* v829: same broken-icon guard as the r2_video path — fade in
+              on load, stay invisible on error so the container bg shows
+              through. */}
+          {moment.thumbnail_url && (
+            <img
+              src={moment.thumbnail_url}
+              alt=""
+              onLoad={() => setThumbLoaded(true)}
+              onError={() => setThumbLoaded(false)}
+              style={{
+                ...S.thumb,
+                opacity: thumbLoaded ? 1 : 0,
+                transition: 'opacity 300ms ease-out',
+              }}
+              loading="lazy"
+              decoding="async"
+              draggable={false}
+            />
+          )}
         </>
       )}
 

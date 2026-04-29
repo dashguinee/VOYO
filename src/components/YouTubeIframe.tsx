@@ -29,6 +29,11 @@ const YT_STATES = {
   CUED: 5,
 };
 
+// Cloudflare Workers edge for R2 audio. Mirrors voyoStream.ts. Used by
+// the embed-error → R2 grace path (v829) to confirm when R2 lands so we
+// don't skip a track that's seconds away from playable audio.
+const R2_EDGE = 'https://voyo-edge.dash-webtv.workers.dev/audio';
+
 // Default position of the floating portrait player, relative to screen
 // center. Nudged 12px left so it stops masking the right edge of
 // "Discover" in the Portrait layout — at true center, the rounded
@@ -529,7 +534,7 @@ export const YouTubeIframe = memo(() => {
           }
 
           if (errorCode === 101 || errorCode === 150) {
-            // Embedding blocked (region / age-gate / embedding disabled).
+            // Embedding blocked (region / age-gate / embedding disabled / bot).
             // If audio is already flowing from another source, keep the music,
             // fall back to backdrop-only. Otherwise we have no choice but to skip.
             if (audioAlive) {
@@ -540,32 +545,77 @@ export const YouTubeIframe = memo(() => {
               // Do NOT mark as failed — the track is fine, it's just the embed
               return;
             }
-            // Audio source is iframe itself AND iframe blocked → nothing to play
-            devLog('[YouTubeIframe] Embed blocked, no alternative source:', videoId);
-            if (videoId) markTrackAsFailed(videoId, errorCode);
-            // Same re-check as the 100 path: hot-swap may have won the
-            // race during the 500ms delay. Don't skip a newly-ready
-            // track. Also trackId guard so a manual skip during the
-            // 500ms can't get the wrong track skipped. (audit-2 P1-IF-4)
-            setTimeout(() => {
-              const store = usePlayerStore.getState();
-              const ps = store.playbackSource;
-              if (ps === 'cached' || ps === 'r2') {
-                devLog('[YouTubeIframe] embed-blocked recovery skipped — hot-swap won');
-                return;
+            // Audio source is iframe itself AND iframe blocked. R2 extraction
+            // was already queued at p=10 via app.playTrack → ensureTrackReady,
+            // and yt-dlp on the VPS doesn't see the user's bot detection — so
+            // R2 will land in ~10-30s regardless of this iframe blocking.
+            //
+            // v829 (Dash 2026-04-29 "in those cases should still r2 extract
+            // right"): the previous 500ms grace was too short. R2 typically
+            // lands at 10-30s; we'd skip away from a perfectly-extractable
+            // track. Now we poll R2 HEAD up to 25s. If it lands, don't skip
+            // — useHotSwap moves us off iframe to R2 audio. If 25s elapses
+            // without R2, give up and skip (the track is genuinely dead).
+            devLog('[YouTubeIframe] Embed blocked — waiting for R2 (up to 25s):', videoId);
+            const blockedTrackId = videoId;
+            const blockedAt = Date.now();
+            const R2_GRACE_MS = 25_000;
+            const POLL_INTERVAL_MS = 2_000;
+            const r2Wait = async () => {
+              while (Date.now() - blockedAt < R2_GRACE_MS) {
+                const s = usePlayerStore.getState();
+                // Hot-swap won → playbackSource flipped to r2/cached. Done.
+                if (s.playbackSource === 'r2' || s.playbackSource === 'cached') {
+                  devLog('[YouTubeIframe] embed-blocked recovery — hot-swap won');
+                  return;
+                }
+                // User navigated away (skipped manually, picked another track).
+                // The new track owns its own lifecycle — don't pollute it.
+                const liveYtId = getYouTubeId(s.currentTrack?.trackId ?? '');
+                if (liveYtId !== blockedTrackId) {
+                  devLog('[YouTubeIframe] embed-blocked recovery — user moved on');
+                  return;
+                }
+                // HEAD probe R2. If hit, useHotSwap will pick it up on its
+                // next 2s tick (usually within ~2-3s of R2 going live). We
+                // don't need to do the swap here — just stop the skip path.
+                try {
+                  const res = await fetch(`${R2_EDGE}/${blockedTrackId}?q=high`, { method: 'HEAD' });
+                  if (res.ok) {
+                    devLog('[YouTubeIframe] embed-blocked recovery — R2 ready, hot-swap will land');
+                    logPlaybackEvent({
+                      event_type: 'trace',
+                      track_id: blockedTrackId || 'unknown',
+                      meta: {
+                        subtype: 'embed_blocked_r2_recovery',
+                        wait_ms: Date.now() - blockedAt,
+                        error_code: errorCode,
+                      },
+                    });
+                    return;
+                  }
+                } catch { /* transient — keep polling */ }
+                await new Promise(r => setTimeout(r, POLL_INTERVAL_MS));
               }
-              const liveYtId = getYouTubeId(store.currentTrack?.trackId ?? '');
-              if (liveYtId !== videoId) {
-                devLog('[YouTubeIframe] embed-blocked recovery skipped — user navigated away');
-                return;
-              }
+              // Timeout — R2 never landed. Confirm we're still on this track,
+              // mark failed, skip.
+              const sNow = usePlayerStore.getState();
+              if (sNow.playbackSource === 'r2' || sNow.playbackSource === 'cached') return;
+              const liveYtIdNow = getYouTubeId(sNow.currentTrack?.trackId ?? '');
+              if (liveYtIdNow !== blockedTrackId) return;
+              if (blockedTrackId) markTrackAsFailed(blockedTrackId, errorCode);
               logPlaybackEvent({
                 event_type: 'skip_auto',
-                track_id: videoId || 'unknown',
-                meta: { reason: 'yt_error_embed_blocked', error_code: errorCode },
+                track_id: blockedTrackId || 'unknown',
+                meta: {
+                  reason: 'yt_error_embed_blocked',
+                  error_code: errorCode,
+                  r2_wait_ms: Date.now() - blockedAt,
+                },
               });
               nextTrack();
-            }, 500);
+            };
+            void r2Wait();
             return;
           }
 
