@@ -550,7 +550,7 @@ function TabBar({
             <button
               key={tab.id}
               onClick={() => onTabChange(tab.id)}
-              className={`relative flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-xl font-medium text-sm transition-all active:scale-[0.98] min-h-[44px] ${
+              className={`relative flex-1 flex items-center justify-center gap-2 py-3.5 px-4 rounded-xl font-medium text-[15px] transition-all active:scale-[0.98] min-h-[48px] ${
                 isActive
                   ? 'text-white'
                   : 'text-white/45 hover:text-white/65'
@@ -595,11 +595,11 @@ function FriendItem({ friend, onClick }: { friend: Friend; onClick: () => void }
   return (
     <button
       onClick={onClick}
-      className="w-full flex items-center gap-4 p-4 rounded-2xl hover:bg-white/[0.03] transition-all group active:scale-[0.98] min-h-[72px]"
+      className="w-full flex items-center gap-4 p-4 rounded-2xl hover:bg-white/[0.03] transition-all group active:scale-[0.98] min-h-[80px]"
     >
-      {/* Avatar — bigger (56px) */}
+      {/* Avatar — 64px for native density (v900). */}
       <div className="relative flex-shrink-0">
-        <div className={`w-14 h-14 rounded-full overflow-hidden flex items-center justify-center font-semibold text-white ${
+        <div className={`w-16 h-16 rounded-full overflow-hidden flex items-center justify-center font-semibold text-white ${
           friend.avatar ? '' : 'bg-gradient-to-br from-purple-500/60 to-violet-600/60'
         } ${!isOnline ? 'opacity-50' : ''}`}>
           {friend.avatar ? (
@@ -656,13 +656,13 @@ function MessageItem({ convo, onClick }: { convo: Conversation; onClick: () => v
   return (
     <button
       onClick={onClick}
-      className={`w-full flex items-center gap-4 p-4 rounded-2xl transition-all active:scale-[0.98] min-h-[72px] ${
+      className={`w-full flex items-center gap-4 p-4 rounded-2xl transition-all active:scale-[0.98] min-h-[80px] ${
         hasUnread ? 'bg-purple-500/[0.08]' : 'hover:bg-white/[0.03]'
       }`}
     >
-      {/* Avatar — bigger (56px) */}
+      {/* Avatar — 64px for native density (v900). */}
       <div className="relative flex-shrink-0">
-        <div className={`w-14 h-14 rounded-full overflow-hidden flex items-center justify-center font-semibold text-white ${
+        <div className={`w-16 h-16 rounded-full overflow-hidden flex items-center justify-center font-semibold text-white ${
           convo.friend_avatar ? '' : 'bg-gradient-to-br from-purple-500/60 to-violet-600/60'
         }`}>
           {convo.friend_avatar ? (
@@ -739,9 +739,9 @@ function DashMemberItem({
 
   return (
     <div className="flex items-center gap-4 p-5 rounded-2xl bg-white/[0.02] border border-white/[0.04] animate-voyo-fade-in">
-      {/* Avatar with stacked service pile */}
+      {/* Avatar with stacked service pile — 64px (v900). */}
       <div className="relative flex-shrink-0">
-        <div className="w-14 h-14 rounded-full overflow-hidden flex items-center justify-center font-semibold text-white bg-gradient-to-br from-white/10 to-white/5 opacity-55">
+        <div className="w-16 h-16 rounded-full overflow-hidden flex items-center justify-center font-semibold text-white bg-gradient-to-br from-white/10 to-white/5 opacity-55">
           {member.avatar ? (
             <img src={member.avatar} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
           ) : (
@@ -1033,22 +1033,32 @@ export function Dahub({ userId, userName, userAvatar, coreId, appContext, onClos
   };
 
   return (
-    <div className="relative h-full flex flex-col overflow-hidden" style={{ background: '#08080a' }}>
-      {/* v806 (Dash 2026-04-29 "doesn't feel native"): warm atmospheric
-          fade behind the page so DaHub reads as a sister surface to the
-          VOYO portrait player instead of a flat solid block. Layered
-          fixed inside the page (not relying on the global AtmosphereLayer
-          which can't reach through opaque containers above z-1). */}
+    // v900 (Dash 2026-04-29 "I can only scroll messages"): the whole
+    // page is now one scroll surface — header, profile, notes,
+    // following, tab bar, content all share a single overflow-y-auto
+    // wrapper. Tab bar becomes sticky so the user can switch tabs
+    // without scrolling back up. Element sizes bumped throughout so
+    // it feels closer to native social-app density.
+    <div
+      className="relative h-full overflow-y-auto"
+      style={{
+        background: '#08080a',
+        // -webkit-overflow-scrolling: touch on iOS for inertial scroll.
+        WebkitOverflowScrolling: 'touch' as 'touch',
+      }}
+    >
+      {/* Atmospheric layers — moved inside the scroll surface but
+          fixed-positioned so they don't move with content. */}
       <div
         aria-hidden
-        className="absolute inset-0 pointer-events-none"
+        className="fixed inset-0 pointer-events-none z-0"
         style={{
           background: 'linear-gradient(to bottom, rgba(28,18,8,0.42) 0%, rgba(20,12,6,0.18) 28%, rgba(8,8,10,0) 60%)',
         }}
       />
       <div
         aria-hidden
-        className="absolute inset-x-0 bottom-0 h-1/3 pointer-events-none"
+        className="fixed inset-x-0 bottom-0 h-1/3 pointer-events-none z-0"
         style={{
           background: 'radial-gradient(ellipse at 50% 100%, rgba(212,160,83,0.06) 0%, transparent 70%)',
         }}
@@ -1056,9 +1066,10 @@ export function Dahub({ userId, userName, userAvatar, coreId, appContext, onClos
 
       {/* Header — safe-area-top so the title doesn't sit under the phone
           notch / status bar on installed PWAs. Keeps the same 20px
-          breathing-room on devices without an inset. */}
+          breathing-room on devices without an inset. Now scrolls
+          away with the rest (no longer flex-shrink-0). */}
       <div
-        className="relative flex-shrink-0 px-6 pb-3 z-10"
+        className="relative px-6 pb-4 z-10"
         style={{ paddingTop: 'max(20px, calc(env(safe-area-inset-top, 0px) + 12px))' }}
       >
         <div className="flex items-center justify-between">
@@ -1066,7 +1077,7 @@ export function Dahub({ userId, userName, userAvatar, coreId, appContext, onClos
             {/* DaHub wordmark — VOYO brand gradient (purple → bronze) so
                 it reads as native to the player ecosystem. */}
             <h1
-              className="text-2xl font-black tracking-tight"
+              className="text-3xl font-black tracking-tight"
               style={{
                 background: 'linear-gradient(135deg, #a78bfa 0%, #8b5cf6 50%, #D4A053 100%)',
                 WebkitBackgroundClip: 'text',
@@ -1120,17 +1131,26 @@ export function Dahub({ userId, userName, userAvatar, coreId, appContext, onClos
           {/* Following (Services, Stars, Brands) */}
           <FollowingSection />
 
-          {/* Tab Bar */}
-          <TabBar activeTab={activeTab} onTabChange={setActiveTab} friendCount={onlineCount} unreadCount={unreadCount} />
-
-          {/* Content — scroll area.
-                • When the MiniPlayer is floating (a track is loaded), reserve
-                  ~160px at the bottom so the last message/friend isn't hidden
-                  behind it.
-                • Otherwise, just the safe-area-bottom floor for gesture bars
-                  on Android/iOS. */}
+          {/* Tab Bar — sticky so it stays visible as the page scrolls.
+              v900: tab bar height is the only thing pinned; everything
+              above it scrolls out of view normally. */}
           <div
-            className="flex-1 overflow-y-auto px-6"
+            className="sticky z-20"
+            style={{
+              top: 'max(0px, env(safe-area-inset-top, 0px))',
+              background: 'linear-gradient(to bottom, #08080a 0%, #08080a 70%, rgba(8,8,10,0.85) 100%)',
+              backdropFilter: 'blur(8px)',
+              WebkitBackdropFilter: 'blur(8px)',
+            }}
+          >
+            <TabBar activeTab={activeTab} onTabChange={setActiveTab} friendCount={onlineCount} unreadCount={unreadCount} />
+          </div>
+
+          {/* Content — flows in the outer scroll surface now. Bottom
+              padding reserved when MiniPlayer is floating so the last
+              row isn't hidden behind it. */}
+          <div
+            className="px-6 relative z-10"
             style={{
               paddingBottom: miniPlayerActive
                 ? 'calc(160px + env(safe-area-inset-bottom, 0px))'
