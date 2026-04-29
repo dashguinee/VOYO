@@ -4921,26 +4921,50 @@ export const VoyoPortraitPlayer = ({
 
   // Quick controls - now using store (shuffleMode, repeatMode, toggleShuffle, cycleRepeat)
 
-  // Tutorial messages for DJ wake - rotates through different messages
-  const DJ_WAKE_MESSAGES = [
-    "Fiouuuh ✌🏾",
-    "Now Peace ✌🏾",
-    "DJ Mode Active ✌🏾",
-    "Let's gooo ✌🏾",
+  // v876 (Dash 2026-04-29 "make sure they are shown once only, with
+  // various delays like a slight reaction gap"). DJ wake pills:
+  //   - EACH MESSAGE shows AT MOST ONCE per session (after the
+  //     fourth DJ wake, silence — the user has discovered the
+  //     gesture, no more chatter)
+  //   - VARIABLE DELAY per message so the response feels reactive
+  //     rather than mechanical. The pause is the "system reading
+  //     your gesture" beat.
+  const DJ_WAKE_MESSAGES: Array<{ text: string; delay: number }> = [
+    { text: "Fiouuuh ✌🏾",       delay:  90 }, // quick exclaim
+    { text: "Let's gooo ✌🏾",    delay: 130 }, // energetic
+    { text: "Now Peace ✌🏾",     delay: 180 }, // settled
+    { text: "DJ Mode Active ✌🏾", delay: 230 }, // deliberate
   ];
+  const shownDJMessagesRef = useRef<Set<number>>(new Set());
 
   // Single tap counter for tutorial hint
   const singleTapCountRef = useRef(0);
   const hasShownHintRef = useRef(false);
 
   const showDJWakeToast = useCallback(() => {
-    const messageIndex = djWakeCountRef.current % DJ_WAKE_MESSAGES.length;
-    setDjWakeMessageText(DJ_WAKE_MESSAGES[messageIndex]);
-    setShowDJWakeMessage(true);
+    // Find the next unshown message. If all four are spent, no
+    // toast — the user has earned silence.
+    let pick = -1;
+    for (let i = 0; i < DJ_WAKE_MESSAGES.length; i++) {
+      if (!shownDJMessagesRef.current.has(i)) { pick = i; break; }
+    }
+    if (pick === -1) {
+      djWakeCountRef.current++;
+      singleTapCountRef.current = 0;
+      hasShownHintRef.current = true;
+      return;
+    }
+    shownDJMessagesRef.current.add(pick);
+    const { text, delay } = DJ_WAKE_MESSAGES[pick];
     djWakeCountRef.current++;
-    singleTapCountRef.current = 0; // Reset single tap counter
-    hasShownHintRef.current = true; // User has discovered DJ mode
-    setTimeout(() => setShowDJWakeMessage(false), 1500);
+    singleTapCountRef.current = 0;
+    hasShownHintRef.current = true;
+    // Reaction gap then show.
+    setTimeout(() => {
+      setDjWakeMessageText(text);
+      setShowDJWakeMessage(true);
+      setTimeout(() => setShowDJWakeMessage(false), 1500);
+    }, delay);
   }, []);
 
   // (showTutorialHint removed 2026-04-28 — never invoked. The
