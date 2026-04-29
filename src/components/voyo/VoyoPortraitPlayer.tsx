@@ -2081,10 +2081,14 @@ StreamCard.displayName = 'StreamCard';
 // BIG CENTER CARD (NOW PLAYING - Canva-style purple fade with premium typography)
 // TAP ALBUM ART FOR LYRICS VIEW | VIDEO HANDLED BY GLOBAL IFRAME
 // ============================================
-const BigCenterCard = memo(({ track, onExpandVideo, onShowLyrics, onLyricsArmed, hideThumb, isIframeAudio, isMiniPlayerActive = false, controlsActive = false }: {
+const BigCenterCard = memo(({ track, onExpandVideo, onShowLyrics, onLyricsArmed, onToggleMode, hideThumb, isIframeAudio, isMiniPlayerActive = false, controlsActive = false }: {
   track: Track;
   onExpandVideo?: () => void;
   onShowLyrics?: () => void;
+  /** v885 (Dash 2026-04-29): tap on artwork now toggles modes
+   *  (artwork ↔ floating movable iframe). Lyrics callback is parked
+   *  unused for now until a new trigger is decided. */
+  onToggleMode?: () => void;
   /** Fired when the 350ms hold-for-lyrics timer commits — parent uses this
    *  to cancel the canvas's 400ms DJ-mode hold so both don't fire from one
    *  gesture. (Dash 2026-04-29 v826 — fix for swipe-from-artwork interfering
@@ -2242,10 +2246,12 @@ const BigCenterCard = memo(({ track, onExpandVideo, onShowLyrics, onLyricsArmed,
       onPointerUp={() => {
         const heldFor = Date.now() - cardDownAt.current;
         if (cardDuckTimer.current) {
-          // Released before the 80ms duck → it's a TAP. Open lyrics.
+          // Released before the 80ms duck → it's a TAP.
+          // v885: TAP now toggles mode (artwork ↔ movable iframe).
+          // Lyrics path retired from this gesture; new trigger TBD.
           clearTimeout(cardDuckTimer.current);
           cardDuckTimer.current = null;
-          onShowLyrics?.();
+          onToggleMode?.();
         } else if (cardIsDucking.current) {
           // Was holding; restore volume regardless. If held >=350ms,
           // commit a real PAUSE on release.
@@ -5978,6 +5984,12 @@ export const VoyoPortraitPlayer = ({
               // "Take Out" — tapping Take Out enters system PiP via
               // pipService directly. Don't reroute this flow.
               onExpandVideo={() => setVideoTarget('portrait')}
+              // v885: card-tap toggles mode. Two states only —
+              //  • 'off'      → artwork card (default playing surface)
+              //  • 'portrait' → floating draggable iframe (movable)
+              // Lyrics overlay no longer triggered by tap; setter
+              // kept for future wire-up.
+              onToggleMode={() => setVideoTarget(videoTarget === 'portrait' ? 'off' : 'portrait')}
               onShowLyrics={() => setShowLyricsOverlay(true)}
               // v826: when lyrics arms, cancel the canvas DJ-mode 400ms
               // hold + mark the gesture as a hold so the trailing click
