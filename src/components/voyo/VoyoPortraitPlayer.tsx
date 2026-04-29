@@ -5844,11 +5844,13 @@ export const VoyoPortraitPlayer = ({
               : Math.max(isControlsRevealed ? 1 : 0, Math.min(1, Math.max(0, (0.4 - portalProgress) / 0.2))),
             pointerEvents: portalProgress >= 0.4 ? 'none' : (isControlsRevealed ? 'auto' : 'none'),
             transition: 'opacity 0.32s cubic-bezier(0.16, 1, 0.3, 1), transform 0.32s cubic-bezier(0.16, 1, 0.3, 1)',
-            // v868 — Dash flipped: rise was too prominent, lower it
-            // for subtlety. 12px → 24px = recedes a touch deeper
-            // below the artwork. Reads as background presence, not
-            // peer with the hero card.
-            transform: 'translateY(24px)',
+            // v870 — Dash: lower engine a tiny bit more, raise reactions
+            // by the same amount. 24px → 36px (engine drops 12 deeper).
+            // The reaction bar wrapper below picks up translateY(-12px)
+            // to mirror. Net: disk slips deeper into the HOT/Discover
+            // slot; reactions + chat pull up toward where the disk
+            // used to peek.
+            transform: 'translateY(36px)',
           }}
         >
           <PlayControls
@@ -5881,10 +5883,16 @@ export const VoyoPortraitPlayer = ({
           />
         </div>
 
-        {/* 3. OYÉ REACTIONS - Only takes space when visible */}
-        {/* Disappear mode + not revealed = no wrapper, no space (State 0) */}
+        {/* 3. OYÉ REACTIONS — only renders when visible.
+            v870: translateY(-12px) mirrors the engine's +12 drop so
+            the reactions + chat input rise toward where the disk
+            used to peek. Equal-and-opposite move keeps the visual
+            tension intact while compressing the gap. */}
         {(oyeBarBehavior === 'fade' || isControlsRevealed || isReactionsRevealed) && (
-          <div className="mt-3 min-h-[60px] flex items-center justify-center">
+          <div
+            className="mt-3 min-h-[60px] flex items-center justify-center"
+            style={{ transform: 'translateY(-12px)' }}
+          >
             <ReactionBar
             onReaction={handleReaction}
             isRevealed={isControlsRevealed || isReactionsRevealed}
