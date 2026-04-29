@@ -427,8 +427,9 @@ const NeonBillboardCard = memo(({
   const baseHex = palette === 'gronze' ? gronzeHex : purpleHex;
   const neon = isStarving ? neutralHex : (isFull ? goldHex : baseHex);
   const seedRgb = isFull ? '212,160,83' : (palette === 'gronze' ? '244,162,62' : '167,139,250');
-  const fillAlpha = isStarving ? 0 : 0.05 + barRatio * 0.18;
-  const ringAlpha = isStarving ? 0.10 : 0.25 + barRatio * 0.45;
+  // glowAlpha still drives the inner-content drop-shadows
+  // (corner brackets, text glow). Ring/fill alphas retired with the
+  // parent box-shadow path in v841.
   const glowAlpha = isStarving ? 0 : 0.18 + barRatio * 0.30;
   const glow = `rgba(${seedRgb},${glowAlpha})`;
 
@@ -465,14 +466,9 @@ const NeonBillboardCard = memo(({
     };
   }, [allTaglines.length, delay, timing.taglineDwell, isInView]);
 
-  // v840: state-coherent glow. ONE outer halo + ONE inset ring +
-  // ONE thin border. No five-layer maximalism. Intensity scales
-  // with the bar ratio so empty cards are quiet outlines and full
-  // cards bloom golden. Drop the white-core hotspot — it read as
-  // "Old Voyo arcade" rather than "New Voyo restraint".
-  const cardShadow = isStarving
-    ? `inset 0 0 0 1px rgba(255,255,255,0.09)`
-    : `inset 0 0 0 1px rgba(${seedRgb},${ringAlpha}), 0 0 ${10 + barRatio * 18}px ${glow}, 0 0 ${20 + barRatio * 26}px rgba(${seedRgb},${glowAlpha * 0.4})`;
+  // v841: cardShadow retired. Surface treatment moved to 3 absolute
+  // layers below; opacity crossfades between them based on state.
+  // GPU-composited, no repaint cascade, glitch-free.
 
   // (Startup flicker state removed 2026-04-28 — never read, dead code.)
 
@@ -523,21 +519,53 @@ const NeonBillboardCard = memo(({
         onClick?.();
       }}
       style={{
-        // v840: state-coherent surface. Empty = nearly black with a
-        // hairline border. Boost = palette tint rises in the gradient.
-        // Full = golden cap. boxShadow carries the ring + halo together
-        // so we keep ONE source of glow per card, not five layers.
-        background: isStarving
-          ? 'linear-gradient(135deg, rgba(255,255,255,0.02) 0%, rgba(8,8,12,0.96) 45%, rgba(3,3,5,0.99) 100%)'
-          : `linear-gradient(135deg, rgba(${seedRgb},${fillAlpha + 0.04}) 0%, rgba(8,8,12,0.96) 45%, rgba(3,3,5,0.99) 100%)`,
-        boxShadow: cardShadow,
-        opacity: isInView ? (isStarving ? 0.78 : (isActive ? 1 : 0.94)) : 0.3,
-        // Empty cards stay neutral — no grayscale filter, just a
-        // restrained outline. Saturation rises naturally as bars
-        // fill via the seedRgb shift to gold at full.
-        transition: 'opacity 600ms cubic-bezier(0.16, 1, 0.3, 1), background 800ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 600ms cubic-bezier(0.16, 1, 0.3, 1)',
+        // v841 (Dash 2026-04-29 "glitches a bit, can do better"): the
+        // parent no longer animates background + box-shadow together —
+        // those are repaint-heavy and were the source of the glitch.
+        // Three absolute layers below each carry a fixed treatment;
+        // we crossfade between them via opacity (GPU-composited,
+        // sub-frame smooth). Parent stays a quiet shell.
+        background: 'rgba(8,8,12,0.96)',
+        opacity: isInView ? (isActive ? 1 : 0.94) : 0.3,
+        transition: 'opacity 500ms cubic-bezier(0.16, 1, 0.3, 1)',
       }}
     >
+      {/* v841 SURFACE LAYERS — pure opacity crossfade. willChange:opacity
+          hints the compositor to keep these on their own GPU layer so
+          repaints don't cascade. The empty layer is always at 1 (the
+          baseline); boosted fades in on top with barRatio strength;
+          full fades in last to cap with the golden treatment. */}
+      <div
+        aria-hidden
+        className="absolute inset-0 rounded-lg pointer-events-none"
+        style={{
+          background: 'linear-gradient(135deg, rgba(255,255,255,0.025) 0%, rgba(8,8,12,0.96) 45%, rgba(3,3,5,0.99) 100%)',
+          boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.08)',
+          opacity: 1,
+        }}
+      />
+      <div
+        aria-hidden
+        className="absolute inset-0 rounded-lg pointer-events-none"
+        style={{
+          background: `linear-gradient(135deg, rgba(${seedRgb},0.22) 0%, rgba(8,8,12,0.96) 45%, rgba(3,3,5,0.99) 100%)`,
+          boxShadow: `inset 0 0 0 1px rgba(${seedRgb},0.55), 0 0 22px rgba(${seedRgb},0.32), 0 0 44px rgba(${seedRgb},0.14)`,
+          opacity: isFull ? 0 : (isStarving ? 0 : 0.45 + barRatio * 0.55),
+          transition: 'opacity 500ms cubic-bezier(0.16, 1, 0.3, 1)',
+          willChange: 'opacity',
+        }}
+      />
+      <div
+        aria-hidden
+        className="absolute inset-0 rounded-lg pointer-events-none"
+        style={{
+          background: 'linear-gradient(135deg, rgba(212,160,83,0.26) 0%, rgba(8,8,12,0.96) 45%, rgba(3,3,5,0.99) 100%)',
+          boxShadow: 'inset 0 0 0 1px rgba(212,160,83,0.7), 0 0 30px rgba(212,160,83,0.42), 0 0 56px rgba(212,160,83,0.18)',
+          opacity: isFull ? 1 : 0,
+          transition: 'opacity 600ms cubic-bezier(0.16, 1, 0.3, 1)',
+          willChange: 'opacity',
+        }}
+      />
 
       {/* TAP BURST - Flash effect on boost tap */}
       
