@@ -4872,99 +4872,15 @@ export const VoyoPortraitPlayer = ({
   const handleScrubStartRef = useRef<((dir: 'forward' | 'backward') => void) | null>(null);
   const handleScrubEndRef = useRef<(() => void) | null>(null);
 
-  // ===== CUBE DOCK — inline OYO DJ chat that expands from the carousel cube =====
-  // Hold the cube (~500ms) → footer expands → subtle chat dock slides in.
-  // Cube morphs into the animated orb form during the hold + while open.
-  // This is the side-companion mode anchored on the music control surface.
-  const [cubeDockOpen, setCubeDockOpen] = useState(false);
-  const [cubeHolding, setCubeHolding] = useState(false); // pulse during the press
-  const [cubeOyoLine, setCubeOyoLine] = useState<string | null>(null);
-  const [cubeOyoThinking, setCubeOyoThinking] = useState(false);
-  const [cubeInput, setCubeInput] = useState('');
-  const cubeHoldTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const cubeAutoCloseRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const cubeOyoLineFadeRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const armCubeAutoClose = useCallback(() => {
-    if (cubeAutoCloseRef.current) clearTimeout(cubeAutoCloseRef.current);
-    cubeAutoCloseRef.current = setTimeout(() => {
-      setCubeDockOpen(false);
-      setCubeOyoLine(null);
-    }, 12000);
-  }, []);
-
-  const openCubeDock = useCallback(() => {
-    setCubeDockOpen(true);
-    setCubeHolding(false);
-    haptics.medium();
-    armCubeAutoClose();
-  }, [armCubeAutoClose]);
-
-  const closeCubeDock = useCallback(() => {
-    setCubeDockOpen(false);
-    setCubeHolding(false);
-    setCubeOyoLine(null);
-    setCubeInput('');
-    if (cubeHoldTimerRef.current) clearTimeout(cubeHoldTimerRef.current);
-    if (cubeAutoCloseRef.current) clearTimeout(cubeAutoCloseRef.current);
-    if (cubeOyoLineFadeRef.current) clearTimeout(cubeOyoLineFadeRef.current);
-  }, []);
-
-  // v879 — cube hold-to-open RETIRED. Per Dash: "too many things
-  // activating the different oyo cube modes, make it only the tap
-  // to close section". The cube's pointer handlers no-op now. The
-  // cubeDock state is preserved (and the close path still works
-  // when something else opens it), but the entry point is gone.
-  const handleCubePointerDown = useCallback(() => {
-    // intentional no-op
-  }, []);
-  const handleCubePointerUpOrLeave = useCallback(() => {
-    if (cubeHoldTimerRef.current) {
-      clearTimeout(cubeHoldTimerRef.current);
-      cubeHoldTimerRef.current = null;
-    }
-    setCubeHolding(false);
-  }, []);
-
-  const submitCubePrompt = useCallback(async (text: string) => {
-    const message = text.trim();
-    if (!message || cubeOyoThinking) return;
-    setCubeInput('');
-    setCubeOyoThinking(true);
-    setCubeOyoLine(null);
-    armCubeAutoClose();
-    try {
-      const { oyo } = await import('../../oyo');
-      const out = await oyo.think({
-        userMessage: message,
-        surface: 'player',
-        explicit: false,
-        context: {
-          currentTrack: currentTrack
-            ? { trackId: currentTrack.id, title: currentTrack.title, artist: currentTrack.artist }
-            : undefined,
-        },
-      });
-      setCubeOyoLine(out.response);
-      // Fade the line after 6s but keep dock open in case user wants to follow up.
-      if (cubeOyoLineFadeRef.current) clearTimeout(cubeOyoLineFadeRef.current);
-      cubeOyoLineFadeRef.current = setTimeout(() => setCubeOyoLine(null), 6000);
-    } catch (err) {
-      devLog('[Cube Dock] OYO think failed', err);
-      setCubeOyoLine("My brain just lagged. Try again in a sec.");
-    } finally {
-      setCubeOyoThinking(false);
-    }
-  }, [armCubeAutoClose, cubeOyoThinking, currentTrack]);
-
-  // Cleanup cube timers on unmount
-  useEffect(() => {
-    return () => {
-      if (cubeHoldTimerRef.current) clearTimeout(cubeHoldTimerRef.current);
-      if (cubeAutoCloseRef.current) clearTimeout(cubeAutoCloseRef.current);
-      if (cubeOyoLineFadeRef.current) clearTimeout(cubeOyoLineFadeRef.current);
-    };
-  }, []);
+  // v880 — CUBE DOCK fully retired. Per Dash: "remove cube dock,
+  // don't even import". The OYO chat path collapses to the single
+  // ReactionBar chat (under the OYE bar). Future "presence"
+  // surface = full-screen overlay triggered by holding the VOYO
+  // button in the bottom navbar — separate build.
+  // Stub handlers kept (callers downstream still reference these
+  // names) but they're no-ops now; the JSX render is gone too.
+  const handleCubePointerDown = useCallback(() => { /* retired */ }, []);
+  const handleCubePointerUpOrLeave = useCallback(() => { /* retired */ }, []);
 
   // Quick controls - now using store (shuffleMode, repeatMode, toggleShuffle, cycleRepeat)
 
@@ -5811,9 +5727,7 @@ export const VoyoPortraitPlayer = ({
           // Locked baseline values from v803 sit near the middle of each
           // clamp band.
           height: `calc(100% - ${
-            cubeDockOpen
-              ? 'clamp(380px, 50dvh, 460px)'
-              : oyeBarBehavior === 'fade'
+            oyeBarBehavior === 'fade'
               ? 'clamp(280px, 36dvh, 340px)'
               : 'clamp(170px, 22dvh, 210px)'
           })`,
@@ -6294,7 +6208,7 @@ export const VoyoPortraitPlayer = ({
           // v805: min-h converted to clamp() so Layer B's bottom edge
           // stays put across viewport heights. Numbers track the Anchor
           // reservation above (28px buffer pattern preserved).
-          cubeDockOpen ? 'min-h-[clamp(352px,47dvh,432px)]' : oyeBarBehavior === 'fade' ? 'min-h-[clamp(252px,33dvh,312px)]' : ''
+          oyeBarBehavior === 'fade' ? 'min-h-[clamp(252px,33dvh,312px)]' : ''
         }`}
         style={{
           // Two-step Layer B fade.
@@ -6344,87 +6258,11 @@ export const VoyoPortraitPlayer = ({
           }}
         />
 
-        {/* ===== CUBE DOCK — inline OYO DJ chat space =====
-            Slides in above the rail when the cube is held. Subtle, contained,
-            does not take over the screen. Cube morphs into the orb form
-            (handled at the cube button itself). */}
-        <div
-          className="overflow-hidden transition-[max-height,opacity] duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]"
-          style={{
-            maxHeight: cubeDockOpen ? '160px' : '0px',
-            opacity: cubeDockOpen ? 1 : 0,
-          }}
-        >
-          <div className="px-5 pt-3 pb-2 relative">
-            {/* OYO line — bronze-glow text, no bubble */}
-            <div
-              className="text-center text-[12px] leading-snug min-h-[16px] mb-2 transition-opacity duration-500"
-              style={{
-                color: '#E6B865',
-                textShadow: '0 0 12px rgba(212,160,83,0.5)',
-                opacity: cubeOyoLine ? 1 : cubeOyoThinking ? 0.6 : 0.35,
-              }}
-            >
-              {cubeOyoLine || (cubeOyoThinking ? 'thinking…' : 'Talk to OYO — what\'s the vibe?')}
-            </div>
-
-            {/* Quick prompt chips — neutral glass with bronze tint, on-theme */}
-            <div className="flex flex-wrap justify-center gap-1.5 mb-2">
-              {['More like this', 'Switch it up', 'Slower', 'More energy'].map((p) => (
-                <button
-                  key={p}
-                  onClick={() => submitCubePrompt(p)}
-                  disabled={cubeOyoThinking}
-                  className="px-2.5 py-1 rounded-full text-[10px] text-white/70 active:scale-95 transition-transform"
-                  style={{
-                    background: 'rgba(212,160,83,0.06)',
-                    border: '1px solid rgba(212,160,83,0.18)',
-                  }}
-                >
-                  {p}
-                </button>
-              ))}
-            </div>
-
-            {/* Input row */}
-            <div className="flex items-center gap-2">
-              <input
-                type="text"
-                value={cubeInput}
-                onChange={(e) => setCubeInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') submitCubePrompt(cubeInput);
-                  if (e.key === 'Escape') closeCubeDock();
-                }}
-                onFocus={armCubeAutoClose}
-                placeholder="Ask OYO…"
-                disabled={cubeOyoThinking}
-                className="flex-1 px-3 py-2 rounded-full bg-white/5 border border-white/10 text-white text-[12px] placeholder:text-white/30 focus:outline-none focus:border-[rgba(212,160,83,0.42)]"
-              />
-              <button
-                onClick={() => submitCubePrompt(cubeInput)}
-                disabled={cubeOyoThinking || !cubeInput.trim()}
-                className="px-3 py-2 rounded-full text-[11px] font-semibold disabled:opacity-40 active:scale-95 transition-transform"
-                style={{
-                  background: 'linear-gradient(135deg, #D4A053, #B8862E)',
-                  color: '#0f0f16',
-                  boxShadow: '0 0 14px rgba(212,160,83,0.22)',
-                }}
-              >
-                Send
-              </button>
-              <button
-                onClick={closeCubeDock}
-                aria-label="Close OYO dock"
-                className="p-1.5 rounded-full text-white/40 hover:text-white/70 transition-colors"
-              >
-                <X size={14} />
-              </button>
-            </div>
-          </div>
-        </div>
-
-
+        {/* v880 — cube dock JSX retired entirely. The OYO chat path
+            collapses to the single ReactionBar chat (under the OYE
+            bar). Future "presence" surface will live as a fullscreen
+            overlay triggered by holding the VOYO button in the
+            bottom navbar — that build is its own session. */}
 
         {/* Stream Labels — HOT/Discover row.
             v873 (Dash 2026-04-29): disk-slot light reverted entirely.
@@ -6616,41 +6454,20 @@ export const VoyoPortraitPlayer = ({
                 (toy-orb effects: gradient ring, halo, pulse). */}
             <button
               onClick={() => {
-                // Suppress the click that comes after a long-press release
-                if (didHoldRef.current) {
-                  didHoldRef.current = false;
-                  return;
-                }
-                if (cubeDockOpen) {
-                  closeCubeDock();
-                  return;
-                }
+                if (didHoldRef.current) { didHoldRef.current = false; return; }
                 onVoyoFeed();
               }}
-              onPointerDown={handleCubePointerDown}
-              onPointerUp={handleCubePointerUpOrLeave}
-              onPointerLeave={handleCubePointerUpOrLeave}
-              onPointerCancel={handleCubePointerUpOrLeave}
               className="relative w-14 h-14 rounded-full flex flex-col items-center justify-center"
               style={{
                 background: 'radial-gradient(circle at center, #1a1a2e 0%, #0f0f16 100%)',
-                // All four states share the SAME 4-layer shadow stack
-                // (rust-side, bronze-side, purple-halo, inset-purple) so
-                // CSS can interpolate between them without snapping. Unused
-                // layers fade via alpha=0; restraint > stacking pseudo-orbs.
-                // Was 4 different stacks of 1-3 layers — Safari snapped on
-                // the cubeDockOpen → beltActive transition.
-                boxShadow: cubeDockOpen
-                  ? '-8px 0 25px rgba(181,74,46,0), 8px 0 25px rgba(212,160,83,0.25), 0 0 30px rgba(139,92,246,0.55), inset 0 0 20px rgba(139,92,246,0.15)'
-                  : cubeHolding
-                  ? '-8px 0 25px rgba(181,74,46,0), 8px 0 25px rgba(212,160,83,0.18), 0 0 22px rgba(139,92,246,0.45), inset 0 0 20px rgba(139,92,246,0)'
-                  : (isHotBeltActive || isDiscoveryBeltActive)
+                // v880 — cubeDockOpen / cubeHolding visual states retired.
+                // Belt-active state retained.
+                boxShadow: (isHotBeltActive || isDiscoveryBeltActive)
                   ? '-8px 0 25px rgba(181,74,46,0.5), 8px 0 25px rgba(212,160,83,0.5), 0 0 20px rgba(139,92,246,0.3), inset 0 0 20px rgba(139,92,246,0)'
                   : '-8px 0 25px rgba(181,74,46,0), 8px 0 25px rgba(212,160,83,0), 0 0 12px rgba(139,92,246,0.15), inset 0 0 20px rgba(139,92,246,0)',
-                transform: cubeDockOpen ? 'scale(1.08)' : cubeHolding ? 'scale(1.04)' : 'scale(1)',
-                transition: 'transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.4s ease',
+                transition: 'box-shadow 0.4s ease',
               }}
-              aria-label="VOYO — tap for feed, hold for OYO DJ"
+              aria-label="VOYO — tap for feed"
             >
               {/* Stale: VOYO brand gradient ring — purple + bronze (no pink) */}
               <div
