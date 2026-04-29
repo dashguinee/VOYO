@@ -176,7 +176,13 @@ const S = {
   // sees a horizontal edge. Same atmosphere, no box.
   topShade: css({
     position: 'absolute', top: 0, left: 0, right: 0, height: 132, zIndex: 27,
-    background: 'radial-gradient(ellipse 90% 60% at 50% 0%, rgba(28,18,52,0.12) 0%, rgba(48,32,90,0.06) 50%, transparent 100%)',
+    // v852 (Dash 2026-04-29 "I still see two like rectangles of fade
+    // emerging from the right"): radial widths tightened 90% → 65%
+    // so the top/bottom atmospheres stay CENTRAL and don't bleed
+    // into the corners. Side shades own the edges; tops/bottoms own
+    // the middle. No more rectangular bands at the right edge from
+    // top+side stacking.
+    background: 'radial-gradient(ellipse 65% 60% at 50% 0%, rgba(28,18,52,0.12) 0%, rgba(48,32,90,0.06) 50%, transparent 100%)',
     pointerEvents: 'none',
   }),
   // v849 BOTTOM GLOW — same radial approach. Phosphorescent violet
@@ -191,7 +197,7 @@ const S = {
     height: 'calc(120px + env(safe-area-inset-bottom, 0px))',
     paddingBottom: 'env(safe-area-inset-bottom, 0px)',
     zIndex: 4,
-    background: 'radial-gradient(ellipse 90% 70% at 50% 100%, rgba(139,92,246,0.16) 0%, rgba(167,139,250,0.07) 45%, transparent 100%)',
+    background: 'radial-gradient(ellipse 65% 70% at 50% 100%, rgba(139,92,246,0.16) 0%, rgba(167,139,250,0.07) 45%, transparent 100%)',
     pointerEvents: 'none',
     animation: 'voyo-bottom-glow-breathe 4.8s ease-in-out infinite',
     willChange: 'opacity, transform',
@@ -1710,17 +1716,35 @@ export const VoyoMoments: React.FC<VoyoMomentsProps> = ({ onPlayFullTrack, onArt
   const onTM = useCallback((e: React.TouchEvent) => {
     if (!touchStart.current) return;
     const t = e.touches[0];
-    if (Math.abs(t.clientX - touchStart.current.x) > 10 || Math.abs(t.clientY - touchStart.current.y) > 10) {
+    const dx = t.clientX - touchStart.current.x;
+    const dy = t.clientY - touchStart.current.y;
+    if (Math.abs(dx) > 10 || Math.abs(dy) > 10) {
       swiping.current = true;
       if (lpTimer.current) { clearTimeout(lpTimer.current); lpTimer.current = null; }
       if (starHoldTimer.current) { clearTimeout(starHoldTimer.current); starHoldTimer.current = null; }
     }
-    // v850 (Dash 2026-04-29 "for scroll up tho and the side ones keep
-    // our own original we had... before the tiny tweaks that made it
-    // feel like tiktok so we keep best of both worlds"). Live drag
-    // (v844) reverted. Card stays static during the gesture; on
-    // commit, FadeWrapper takes over with its own entry. Snappy
-    // again, no tiktok lag — atmospheric frame from v849 stays.
+    // v852 (Dash 2026-04-29 "horizontal keep 851 perfect, but vertical
+    // bring back the fade making everything smooth"). VERTICAL-ONLY
+    // live drag. Horizontal stays snappy (no tiktok lag on side
+    // swipes). When the gesture is dominantly vertical, the card
+    // translates with the finger and fades; the fade-on-start is
+    // exactly the smoothness Dash liked from v848/849.
+    const el = dragLayerRef.current;
+    if (el && swiping.current) {
+      const isVertical = Math.abs(dy) > Math.abs(dx);
+      if (isVertical) {
+        const yMag = Math.abs(dy);
+        const opacity = Math.max(0.42, 1 - yMag / 280);
+        el.style.transition = 'none';
+        el.style.transform = `translateY(${dy * 0.55}px)`;
+        el.style.opacity = String(opacity);
+      } else {
+        // Horizontal-dominant: stay completely snappy, no transform.
+        el.style.transition = 'none';
+        el.style.transform = '';
+        el.style.opacity = '';
+      }
+    }
   }, []);
 
   const handleOye = useCallback((momentId: string, x: number, y: number) => {
