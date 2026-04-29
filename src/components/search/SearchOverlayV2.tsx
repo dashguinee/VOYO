@@ -30,7 +30,7 @@ import { onSignal as oyaPlanSignal } from '../../services/oyoPlan';
 import { useBackGuard } from '../../hooks/useBackGuard';
 import { useR2KnownStore, markR2KnownMany } from '../../store/r2KnownStore';
 import { useWarmingStore, markWarming } from '../../store/warmingStore';
-import { formatTime as formatDuration, formatViews } from '../../utils/format';
+import { formatViews } from '../../utils/format';
 
 interface SearchOverlayProps {
   isOpen: boolean;
@@ -65,7 +65,6 @@ interface TrackItemProps {
   // Opens the DiscoExplainer overlay. Lifted to the parent so only one
   // overlay exists at a time no matter how many results render.
   onDiscoBadgeTap: () => void;
-  formatDuration: (seconds: number) => string;
   formatViews: (views: number) => string;
   isWarming?: boolean;
   showIframePlay?: boolean;
@@ -81,7 +80,6 @@ const TrackItem = memo(({
   onOye,
   onAddToDiscovery,
   onDiscoBadgeTap,
-  formatDuration,
   formatViews,
   isWarming,
   showIframePlay,
@@ -155,12 +153,13 @@ const TrackItem = memo(({
         </div>
         <p className="text-white/40 text-xs truncate">{result.artist}</p>
         <div className="flex items-center gap-2 text-[10px] text-white/25 mt-0.5">
-          <span>{formatDuration(result.duration)}</span>
+          {/* v838 (Dash 2026-04-29 "in search results it shows 00:00 for
+              all, remove that altogether"): YouTube search doesn't
+              return duration cheaply — the field comes back 0 for
+              every result, which renders as a flat 00:00. Dropped
+              the slot. View count carries the engagement signal. */}
           {result.views > 0 && (
-            <>
-              <span>·</span>
-              <span>{formatViews(result.views)}</span>
-            </>
+            <span>{formatViews(result.views)}</span>
           )}
         </div>
       </div>
@@ -1073,7 +1072,6 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap, onEnterVideoMode
                           onOye={handleOyeCommit}
                           onAddToDiscovery={handleAddToDiscovery}
                           onDiscoBadgeTap={() => setDiscoExplainerOpen(true)}
-                          formatDuration={formatDuration}
                           formatViews={formatViews}
                           isWarming={cardIsWarming(result.voyoId)}
                           showIframePlay={
