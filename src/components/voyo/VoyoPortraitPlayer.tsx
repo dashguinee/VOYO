@@ -4077,6 +4077,18 @@ export const VoyoPortraitPlayer = ({
   const videoTarget = usePlayerStore(s => s.videoTarget);
   const setVideoTarget = usePlayerStore(s => s.setVideoTarget);
 
+  // v890 (Dash 2026-04-29): on pause, always go back to poster.
+  // Locks "ON PAUSE we show the classic poster mode static" — without
+  // this the mini iframe vanishes (isPortraitMode gates on isPlaying)
+  // but videoTarget stays 'portrait', so play-resume snaps it back
+  // visibly. Resetting on pause keeps the surface coherent + resolves
+  // the tap-mode-toggle ↔ pause conflict.
+  useEffect(() => {
+    if (!isPlaying && videoTarget === 'portrait') {
+      setVideoTarget('hidden');
+    }
+  }, [isPlaying, videoTarget, setVideoTarget]);
+
   // Community-layer 5-rail needs Heart state at this scope (RightToolbar has
   // its own copy inside its memo). Subscribing here gives the rail direct
   // read+write without prop-drilling through the huge Layer C body.
