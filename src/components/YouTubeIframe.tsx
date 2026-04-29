@@ -928,19 +928,27 @@ export const YouTubeIframe = memo(() => {
       // the user gets visual confirmation they've picked it up.
       const dragScale = isDragging ? 1.18 : 1;
       const finalScale = compactScale * dragScale;
+      // v893: split transform into individual `translate` + `scale`
+      // properties so size always animates smoothly (grab grow, search
+      // shrink, idle dim) while position stays immediate during drag.
       return {
         position: 'fixed',
         overflow: 'hidden',
         background: '#000',
         top: '50%',
         left: '50%',
-        transform: `translate(calc(-50% + ${portraitPos.x}px), calc(-50% + ${portraitPos.y}px)) scale(${finalScale})`,
+        translate: `calc(-50% + ${portraitPos.x}px) calc(-50% + ${portraitPos.y}px)`,
+        scale: `${finalScale}`,
         width: `${MINI_SIZE}px`,
         height: `${MINI_SIZE}px`,
         borderRadius: '2rem',
         zIndex: 60,
         opacity: 1,
-        transition: dragStartRef.current ? 'none' : 'transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)',
+        // Scale always glides; translate only glides on release (instant
+        // during drag so the iframe tracks the finger).
+        transition: dragStartRef.current
+          ? 'scale 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)'
+          : 'translate 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), scale 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)',
         boxShadow: [
           '0 14px 48px rgba(0,0,0,0.65)',
           '0 0 0 1px rgba(255,255,255,0.08)',
