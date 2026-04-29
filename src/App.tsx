@@ -1146,12 +1146,20 @@ function App() {
                 opacity: feedHeaderHidden ? 0 : 1,
                 transform: feedHeaderHidden ? 'translateY(-8px)' : 'translateY(0)',
                 pointerEvents: feedHeaderHidden ? 'none' : 'auto',
-                // v894 (Dash 2026-04-29): top edge matches the PWA
-                // theme-color (#8b5cf6) exactly so the status bar
-                // bleeds into the page without a hard line. Fades
-                // through black to transparent so the rest of the
-                // canvas stays clean.
-                background: 'linear-gradient(180deg, #8b5cf6 0%, #000000 55%, transparent 100%)',
+                // v895 (Dash 2026-04-29 "a bit much and a bit harsh,
+                // make it blend"): same idea — top edge matches PWA
+                // theme-color #8b5cf6 — but stepped through plum and
+                // dim purple so there'\''s no abrupt black mid-band.
+                // Five stops walk hue + lightness + alpha together,
+                // which kills banding without a backdrop-filter.
+                background: [
+                  'linear-gradient(180deg,',
+                  '#8b5cf6 0%,',                          // status bar match
+                  'rgba(85, 50, 145, 0.92) 22%,',         // deepening purple
+                  'rgba(40, 22, 70, 0.70) 48%,',          // dark plum
+                  'rgba(12, 8, 22, 0.32) 75%,',           // near-black, low alpha
+                  'transparent 100%)'                     // dissolve into canvas
+                ].join(' '),
                 transition: [
                   'opacity 800ms cubic-bezier(0.16, 1, 0.3, 1)',
                   'transform 800ms cubic-bezier(0.16, 1, 0.3, 1)',
