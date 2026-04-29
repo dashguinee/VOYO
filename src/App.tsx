@@ -1132,7 +1132,7 @@ function App() {
                 flex-row goes with it. Both moves run on the same easing so the
                 retract reads as one motion. */}
             <header
-              className="relative flex items-center justify-between bg-transparent"
+              className="relative flex items-center justify-between"
               style={{
                 // z-50 so this stays above the fixed feed layer (z-10) for
                 // the 7s pre-retract window — header overlays the video
@@ -1146,6 +1146,12 @@ function App() {
                 opacity: feedHeaderHidden ? 0 : 1,
                 transform: feedHeaderHidden ? 'translateY(-8px)' : 'translateY(0)',
                 pointerEvents: feedHeaderHidden ? 'none' : 'auto',
+                // v894 (Dash 2026-04-29): top edge matches the PWA
+                // theme-color (#8b5cf6) exactly so the status bar
+                // bleeds into the page without a hard line. Fades
+                // through black to transparent so the rest of the
+                // canvas stays clean.
+                background: 'linear-gradient(180deg, #8b5cf6 0%, #000000 55%, transparent 100%)',
                 transition: [
                   'opacity 800ms cubic-bezier(0.16, 1, 0.3, 1)',
                   'transform 800ms cubic-bezier(0.16, 1, 0.3, 1)',
@@ -1170,12 +1176,11 @@ function App() {
                 </span>
               </div>
 
-              {/* Center: Dynamic Island Notifications + push opt-in.
-                  Both isolated in their own Safe boundary so any
-                  rendering hiccup here can't take down the header. */}
+              {/* Center: Dynamic Island Notifications. PushBell moved
+                  out of the header to bottom-right for ergonomic reach
+                  (v894 Dash). */}
               <div className="flex-1 flex justify-center items-center gap-2">
                 <Safe name="DynamicIsland"><DynamicIsland /></Safe>
-                <PushBell appCode="voyo" />
               </div>
 
               {/* v856 (Dash 2026-04-29 "remove profile icon in header and
@@ -1185,7 +1190,11 @@ function App() {
                   into the right edge where Profile used to live. Same
                   textured pill styling, just relocated. justify-end on the
                   cluster keeps the visual position anchored to the right. */}
-              <div className="flex items-center justify-end gap-2.5 pr-1">
+              {/* v894: search nudged ~10px down for thumb ergonomics.
+                  Header keeps its center-aligned siblings (Logo,
+                  DynamicIsland) at the original baseline; only the
+                  search cluster sits lower. */}
+              <div className="flex items-center justify-end gap-2.5 pr-1" style={{ marginTop: 10 }}>
                 <button
                   aria-label="Search"
                   onClick={() => setIsSearchOpen(true)}
@@ -1240,6 +1249,25 @@ function App() {
 
       {/* YouTube Iframe - GLOBAL for all modes (Classic needs it for streaming) */}
       <YouTubeIframe />
+
+      {/* v894 (Dash 2026-04-29): PushBell relocated from header center
+          to bottom-right floating chip. Thumb-ergonomic, out of the
+          attention path. Only renders in VOYO player mode. The bell's
+          internal reveal choreography (3s delay → fade → pulse → idle)
+          is preserved unchanged. */}
+      {appMode === 'voyo' && (
+        <div
+          style={{
+            position: 'fixed',
+            right: 'max(0.75rem, var(--safe-x))',
+            bottom: 'calc(env(safe-area-inset-bottom, 0px) + 0.75rem)',
+            zIndex: 55,
+            pointerEvents: 'auto',
+          }}
+        >
+          <PushBell appCode="voyo" />
+        </div>
+      )}
 
       {/* Search Overlay — when a result is tapped, openVideoOverlay flips
           videoTarget to 'landscape' so the global iframe renders BEHIND the
