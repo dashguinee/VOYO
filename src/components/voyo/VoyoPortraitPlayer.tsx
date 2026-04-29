@@ -22,7 +22,6 @@ import { usePreferenceStore } from '../../store/preferenceStore';
 import { getThumbnailUrl, getTrackThumbnailUrl } from '../../utils/thumbnail';
 import { Track, ReactionType } from '../../types';
 import { SmartImage } from '../ui/SmartImage';
-import { CubeGestureHint } from './CubeGestureHint';
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { unlockMobileAudio, isMobileDevice } from '../../utils/mobileAudioUnlock';
 import { useMobilePlay } from '../../hooks/useMobilePlay';
@@ -2082,14 +2081,10 @@ StreamCard.displayName = 'StreamCard';
 // BIG CENTER CARD (NOW PLAYING - Canva-style purple fade with premium typography)
 // TAP ALBUM ART FOR LYRICS VIEW | VIDEO HANDLED BY GLOBAL IFRAME
 // ============================================
-const BigCenterCard = memo(({ track, onExpandVideo, onShowLyrics, onLyricsArmed, onEnterVideoMode, hideThumb, isIframeAudio, isMiniPlayerActive = false, controlsActive = false }: {
+const BigCenterCard = memo(({ track, onExpandVideo, onShowLyrics, onLyricsArmed, hideThumb, isIframeAudio, isMiniPlayerActive = false, controlsActive = false }: {
   track: Track;
   onExpandVideo?: () => void;
   onShowLyrics?: () => void;
-  /** v891: tap on the bottom hint button = enter video mode. Mode
-   *  toggle moved off the canvas (which was triggering on every
-   *  off-card tap) onto a real button at the bottom of the cube. */
-  onEnterVideoMode?: () => void;
   /** Fired when the 350ms hold-for-lyrics timer commits — parent uses this
    *  to cancel the canvas's 400ms DJ-mode hold so both don't fire from one
    *  gesture. (Dash 2026-04-29 v826 — fix for swipe-from-artwork interfering
@@ -2359,7 +2354,7 @@ const BigCenterCard = memo(({ track, onExpandVideo, onShowLyrics, onLyricsArmed,
           improves legibility without "moving" anything. */}
       <div
         key={track.trackId}
-        className="absolute bottom-8 left-3 right-3 animate-[voyo-fade-in_0.4s_ease-out]"
+        className="absolute bottom-3 left-3 right-3 animate-[voyo-fade-in_0.4s_ease-out]"
       >
         <p
           className="text-white font-bold text-[15px] truncate pointer-events-none tracking-[0.005em]"
@@ -2385,16 +2380,10 @@ const BigCenterCard = memo(({ track, onExpandVideo, onShowLyrics, onLyricsArmed,
           <Mic2 size={14} className="text-white" />
         </div>
       )}
-      {/* v891: video-mode button at the bottom of the cube. Same slot
-          where the iframe shows "tap to close" — same component, same
-          position. Tapping toggles to video mode. */}
-      {!hideThumb && onEnterVideoMode && (
-        <CubeGestureHint
-          position="bottom"
-          label="tap to go video · drag to move"
-          onTap={onEnterVideoMode}
-        />
-      )}
+      {/* v892: "tap to go video" button retired — the cube auto-
+          promotes to iframe ~800ms after playback starts, so the
+          poster is just a brief loading state and never needs a
+          manual entry button. Iframe still shows "tap to close". */}
     </div>
 
     {/* Subtle vignette for depth */}
@@ -4103,6 +4092,22 @@ export const VoyoPortraitPlayer = ({
       setVideoTarget('hidden');
     }
   }, [isPlaying, videoTarget, setVideoTarget]);
+
+  // v892 (Dash 2026-04-29): auto-promote to iframe ~800ms after a
+  // track starts playing. The cube becomes the video as soon as it's
+  // ready → always draggable, unified surface, only "tap to close"
+  // matters. Re-fires on track change + play-resume cycles. User-
+  // initiated close stays closed until the next isPlaying transition.
+  useEffect(() => {
+    if (!isPlaying) return;
+    const t = setTimeout(() => {
+      const s = usePlayerStore.getState();
+      if (s.isPlaying && s.videoTarget === 'hidden') {
+        setVideoTarget('portrait');
+      }
+    }, 800);
+    return () => clearTimeout(t);
+  }, [isPlaying, currentTrack?.trackId, setVideoTarget]);
 
   // Community-layer 5-rail needs Heart state at this scope (RightToolbar has
   // its own copy inside its memo). Subscribing here gives the rail direct
@@ -6009,9 +6014,8 @@ export const VoyoPortraitPlayer = ({
               // "Take Out" — tapping Take Out enters system PiP via
               // pipService directly. Don't reroute this flow.
               onExpandVideo={() => setVideoTarget('portrait')}
-              // v891: video-mode button at bottom of cube triggers entry.
-              onEnterVideoMode={() => setVideoTarget('portrait')}
-              // v889: card tap = Lyrics (reverted from v885 mode-toggle).
+              // v892: cube auto-promotes to iframe ~800ms after play
+              // starts (see useEffect above). No manual entry button.
               onShowLyrics={() => setShowLyricsOverlay(true)}
               // v826: when lyrics arms, cancel the canvas DJ-mode 400ms
               // hold + mark the gesture as a hold so the trailing click
