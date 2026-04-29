@@ -313,8 +313,23 @@ function scoreMoment(m: Moment, ctx: RankContext): number {
  *   it busts the cap. The exploration slots prefer moments OUTSIDE
  *   the score top 30% so they're genuinely off-graph.
  */
-const EPSILON = 0.10; // 10% exploration budget
+// v861/v862 — exploration tuning per attention-science research.
+// EPSILON is the share of slots reserved for off-graph picks.
+// v862 adds a SESSION-AWARE bump: after 20min in-feed, exploration
+// rises from 0.10 → 0.18 (the "decreasing reward gradient" pattern
+// from Lembke 2021 / responsible-feed literature). The longer you
+// stay, the LESS hooky the feed gets — honest signal that we're
+// not optimizing for endless dwell.
+const EPSILON_BASE = 0.10;
+const EPSILON_LATE_SESSION = 0.18;
+const LATE_SESSION_MS = 20 * 60 * 1000;
 const TASTE_FLOOR_RATIO = 0.7; // upper 70% of scored is "in-taste"
+
+const sessionStartedAt = Date.now();
+function getEpsilon(): number {
+  const elapsed = Date.now() - sessionStartedAt;
+  return elapsed > LATE_SESSION_MS ? EPSILON_LATE_SESSION : EPSILON_BASE;
+}
 export function rankMoments(rows: Moment[], ctx: RankContext): Moment[] {
   if (!rows.length) return rows;
 
@@ -325,7 +340,8 @@ export function rankMoments(rows: Moment[], ctx: RankContext): Moment[] {
   }));
   scored.sort((a, b) => b.score - a.score);
 
-  const explorationSlots = Math.max(1, Math.round(ctx.take * EPSILON));
+  const epsilon = getEpsilon();
+  const explorationSlots = Math.max(1, Math.round(ctx.take * epsilon));
   const tasteSlots = ctx.take - explorationSlots;
 
   const out: Moment[] = [];
