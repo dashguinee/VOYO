@@ -903,6 +903,15 @@ function App() {
   // new component, no custom overlay, no gestures eaten.
   const openVideoOverlay = useCallback(() => {
     usePlayerStore.getState().setVideoTarget('portrait');
+    // v837 (Dash 2026-04-29 "after I click a track in search it takes
+    // me back to Home"): tapping a track was leaving the user on
+    // whatever surface they came from (Home/Library/Profile) with a
+    // floating mini-player. The expectation is "I picked this song,
+    // take me to the player". Switch to VOYO + close search so the
+    // user lands directly on the portrait player surface.
+    setVoyoTab('music');
+    setAppMode('voyo');
+    setIsSearchOpen(false);
   }, []);
   // v804 (Dash 2026-04-29 "tap to pause leak"): closeSearch no longer
   // forces videoTarget to 'hidden'. The previous behavior would tear

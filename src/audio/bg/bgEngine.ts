@@ -315,7 +315,13 @@ export function useBgEngine(params: UseBgEngineParams): BgEngineApi {
       if (!active) return;
       const now = performance.now();
       // Cadence gate — fire real work every ~4s regardless of tick rate.
-      if (now - lastTick < 4000) { mc.port2.postMessage(null); return; }
+      // v837 (Dash 2026-04-29 "on screen lock audio stops for like a brief
+      // brief second"): cadence dropped 4000 → 2000ms. AudioContext
+      // suspension on lock muted the Web Audio chain until the next tick
+      // resumed it. With 4s cadence the worst-case silence was ~4s; at
+      // 2s it's ~2s. MessageChannel isn't throttled in background so the
+      // tighter cadence costs us nothing in BG.
+      if (now - lastTick < 2000) { mc.port2.postMessage(null); return; }
       lastTick = now;
       pulseCounter++;
 
