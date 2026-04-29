@@ -208,7 +208,11 @@ const S = {
   // Bio react row — small react button below the bio
   bioReactRow: css({ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, paddingTop: 8, marginTop: 6, borderTop: '1px solid rgba(255,255,255,0.06)' }),
   bioReactBtn: css({ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 10px', borderRadius: 999, background: 'rgba(167,139,250,0.12)', border: '1px solid rgba(167,139,250,0.25)', fontSize: 11, fontWeight: 600, color: '#a78bfa', cursor: 'pointer', transition: 'all 0.2s ease', flexShrink: 0 }),
-  track: css({ fontSize: 11, color: 'rgba(255,255,255,0.5)', display: 'flex', alignItems: 'center', gap: 5, paddingLeft: 2 }),
+  // v830: bronze tint + tighter line-height — the play-track row is the
+  // bridge from a moment to the full song in the player. Was rgba/255/0.5
+  // grey, which read as "metadata" not "tap me". Bronze ties it to the
+  // VOYO heritage palette + signals an active affordance without shouting.
+  track: css({ fontSize: 11, color: 'rgba(230, 197, 138, 0.78)', display: 'flex', alignItems: 'center', gap: 5, paddingLeft: 2, lineHeight: 1.2 }),
 
   // ─── COMMENTS DRAWER ─────────────────────────────────────────
   // YouTube-Live-meets-bio-bar — slide-up drawer with glass + scrolling
@@ -857,7 +861,7 @@ const MomentCard = memo(({ moment, isOyed, onOye, isActive, isMuted, onToggleMut
                   style={{ ...S.track, cursor: onPlayTrack ? 'pointer' : 'default', flex: 1, minWidth: 0 }}
                   onClick={(e) => { if (onPlayTrack) { e.stopPropagation(); onPlayTrack(); } }}
                 >
-                  <Play size={10} style={{ color: 'rgba(255,255,255,0.5)', flexShrink: 0 }} />
+                  <Play size={10} style={{ color: 'rgba(230, 197, 138, 0.85)', flexShrink: 0 }} fill="rgba(230, 197, 138, 0.85)" />
                   <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     <span
                       onClick={(e) => {
@@ -1235,6 +1239,48 @@ export const VoyoMoments: React.FC<VoyoMomentsProps> = ({ onPlayFullTrack, onArt
     setShowComments(false);
   }, []);
 
+  // FIRST-SESSION GESTURE TEACH (Dash 2026-04-29 v830).
+  //
+  // The audit flagged onboarding as the highest-leverage gap — the
+  // hold-for-overlay, double-tap-OYE, and swipe-axis grammar are all
+  // designed but undiscoverable on first arrival. This is a restrained
+  // 3-hint sequence that fades through once per session, sessionStorage
+  // gated. Killed early if user takes any nav action (they got it).
+  //
+  // Stages: 0=pre-show / done, 1=swipe, 2=hold, 3=double-tap. Translucent
+  // bronze pill at bottom-center, ~12s total.
+  const TEACH_KEY = 'voyo-moments-teach-v1';
+  const [teachStage, setTeachStage] = useState<0 | 1 | 2 | 3>(0);
+  const teachTimers = useRef<Array<ReturnType<typeof setTimeout>>>([]);
+  const teachDoneRef = useRef(false);
+  const killTeach = useCallback(() => {
+    if (teachDoneRef.current) return;
+    teachDoneRef.current = true;
+    teachTimers.current.forEach(t => clearTimeout(t));
+    teachTimers.current = [];
+    setTeachStage(0);
+    try { sessionStorage.setItem(TEACH_KEY, '1'); } catch { /* private mode */ }
+  }, []);
+  // Kick off the sequence when the first moment paints — and never if
+  // the session flag is already set.
+  useEffect(() => {
+    if (teachDoneRef.current) return;
+    try { if (sessionStorage.getItem(TEACH_KEY)) { teachDoneRef.current = true; return; } } catch { /* ok */ }
+    if (!hookCurrentMoment) return;
+    // Mount-grace: let the moment paint + initial widget choreo run
+    // before the teach pill appears, so it doesn't fight other reveals.
+    teachTimers.current = [
+      setTimeout(() => setTeachStage(1), 1200),   // swipe
+      setTimeout(() => setTeachStage(2), 5200),   // hold
+      setTimeout(() => setTeachStage(3), 9200),   // double-tap
+      setTimeout(() => killTeach(),    13200),    // done — set flag
+    ];
+    return () => {
+      teachTimers.current.forEach(t => clearTimeout(t));
+      teachTimers.current = [];
+    };
+  }, [hookCurrentMoment, killTeach]);
+
   // STAGED WIDGET VISIBILITY — choreographed fade for immersion.
   //
   //   stage 0  full       = orb + name + title + bio body all visible
@@ -1547,8 +1593,13 @@ export const VoyoMoments: React.FC<VoyoMomentsProps> = ({ onPlayFullTrack, onArt
       }, STAR_HOLD_MS);
     }
 
-    lpTimer.current = setTimeout(() => { if (!swiping.current) setShowOverlay(true); }, LONG_PRESS_MS);
-  }, [currentMoment, setFeedNavDim, armDimTimer]);
+    lpTimer.current = setTimeout(() => {
+      if (!swiping.current) {
+        setShowOverlay(true);
+        killTeach();
+      }
+    }, LONG_PRESS_MS);
+  }, [currentMoment, setFeedNavDim, armDimTimer, killTeach]);
 
   const onTM = useCallback((e: React.TouchEvent) => {
     if (!touchStart.current) return;
@@ -1603,6 +1654,8 @@ export const VoyoMoments: React.FC<VoyoMomentsProps> = ({ onPlayFullTrack, onArt
       const velocity = distance / Math.max(duration, 1);
       // First swipe — fire the transition reveal (gold word + header fade chain)
       startTransition();
+      // Any genuine nav action retires the teach (they got it).
+      killTeach();
 
       if (Math.abs(dx) > Math.abs(dy)) {
         if (dx < 0) {
@@ -1629,6 +1682,7 @@ export const VoyoMoments: React.FC<VoyoMomentsProps> = ({ onPlayFullTrack, onArt
       // Double-tap detected — fire OYÉ immediately
       if (currentMoment) handleOye(currentMoment.id, t.clientX, t.clientY);
       lastTap.current = 0;
+      killTeach();
     } else {
       lastTap.current = now;
       tapTimer.current = setTimeout(() => {
@@ -1639,7 +1693,7 @@ export const VoyoMoments: React.FC<VoyoMomentsProps> = ({ onPlayFullTrack, onArt
         lastTap.current = 0;
       }, DOUBLE_TAP_MS);
     }
-  }, [showOverlay, showStarPanel, currentMoment, mixGoUp, mixGoDown, goLeft, goRight, nav, handleOye, wakeHeaderOnTap, startTransition]);
+  }, [showOverlay, showStarPanel, currentMoment, mixGoUp, mixGoDown, goLeft, goRight, nav, handleOye, wakeHeaderOnTap, startTransition, killTeach]);
 
   // ---- KEYBOARD (desktop) ----
 
@@ -1987,6 +2041,50 @@ export const VoyoMoments: React.FC<VoyoMomentsProps> = ({ onPlayFullTrack, onArt
           philosophy: subtract before add. */}
 
       <OyeAnimations floats={oyeFloats} />
+
+      {/* GESTURE TEACH (v830) — bronze translucent pill, bottom-center.
+          One-per-session, three rotating hints. Translucent enough to feel
+          ambient, not nagging. pointer-events:none so it never blocks the
+          gestures it's teaching. */}
+      {teachStage > 0 && hookCurrentMoment && (
+        <div
+          style={{
+            position: 'absolute',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            bottom: 'calc(env(safe-area-inset-bottom, 0px) + 96px)',
+            zIndex: 35,
+            pointerEvents: 'none',
+            padding: '7px 16px',
+            borderRadius: 999,
+            background: 'rgba(20, 12, 6, 0.62)',
+            backdropFilter: 'blur(10px)',
+            WebkitBackdropFilter: 'blur(10px)',
+            border: '1px solid rgba(212, 160, 83, 0.22)',
+            boxShadow: '0 4px 20px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.04)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            animation: 'voyo-teach-pulse 2.4s ease-in-out infinite',
+          }}
+        >
+          <span
+            key={teachStage}
+            style={{
+              fontSize: 11,
+              fontWeight: 500,
+              letterSpacing: 0.3,
+              color: 'rgba(230, 197, 138, 0.92)',
+              animation: 'voyo-fade-in 0.6s ease-out',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {teachStage === 1 && '↑ Swipe — pull up, drift down, retrace ←, discover →'}
+            {teachStage === 2 && 'Hold — see where you are'}
+            {teachStage === 3 && 'Double-tap to OYÉ ❤'}
+          </span>
+        </div>
+      )}
 
       {showVol && (
         <div style={S.volBadge} className="animate-[voyo-scale-in_0.15s_ease]">
