@@ -547,13 +547,43 @@ export function useMoments(): UseMomentsReturn {
   }, []);
 
   // ============================================
-  // NAVIGATION (Control vs Surrender)
+  // NAVIGATION (v862 grammar per Dash 2026-04-29:
+  //   "DOWN = forward feed, UP = more of this / previous,
+  //    LEFT/RIGHT = invisible drift through diversity")
   // ============================================
 
-  // UP = CONTROL: deeper in same category (deterministic)
-  const goUp = useCallback((velocity: number = 0) => {
-    pushTrail('up');
+  // UP = MORE OF THIS / REWIND. Steps backward through the trail
+  // (the moment the user just saw). When trail is empty, falls
+  // back to timeIndex - 1 in the current sub-cat. The "more of
+  // this" feeling is reinforced by the cross-surface seed +
+  // similarity boost (engine already scores parent_track + tags).
+  const goUp = useCallback((_velocity: number = 0) => {
     setNavAction('up');
+    consecutiveUpsRef.current = 0;
+
+    const trailEntries = trailRef.current;
+    if (trailEntries.length > 0) {
+      const entry = trailEntries.pop()!;
+      trailRef.current = [...trailEntries];
+      setTrail([...trailRef.current]);
+      // Return to the recent position from the trail.
+      setPosition({ categoryIndex: entry.categoryIndex, timeIndex: entry.timeIndex });
+      return;
+    }
+
+    // No trail — step back one in current sub-cat.
+    pushTrail('up');
+    setPosition(prev => ({ ...prev, timeIndex: Math.max(prev.timeIndex - 1, 0) }));
+  }, [pushTrail]);
+
+  // DOWN = FORWARD FEED. Next moment in the current sub-category.
+  // This is the default consumption gesture. Auto-paginates the
+  // category page when the user nears the end. Light auto-drift
+  // chance kicks in after long stretches in same lane to keep
+  // rotation organic without the user having to swipe sideways.
+  const goDown = useCallback((velocity: number = 0) => {
+    pushTrail('down');
+    setNavAction('down');
     consecutiveUpsRef.current += 1;
 
     setPosition(prev => {
@@ -562,7 +592,6 @@ export function useMoments(): UseMomentsReturn {
       const key = cacheKey(categoryAxis, cat);
       const categoryMoments = moments.get(key) || [];
 
-      // Velocity: fast swipe = skip 2-3, normal = skip 1
       const skip = velocity > 1.5 ? Math.min(Math.floor(velocity), 3) : 1;
       let newTimeIndex = Math.min(prev.timeIndex + skip, categoryMoments.length - 1);
       newTimeIndex = Math.max(newTimeIndex, 0);
@@ -572,7 +601,7 @@ export function useMoments(): UseMomentsReturn {
         fetchMomentsForCategory(categoryAxis, cat, categoryMoments.length);
       }
 
-      // Auto-drift check: after threshold consecutive UPs, chance to bleed
+      // Auto-drift after long stretches in same lane (subtle)
       if (consecutiveUpsRef.current > AUTO_DRIFT_THRESHOLD && Math.random() < AUTO_DRIFT_CHANCE) {
         const driftTarget = pickWeightedNeighbor(categoryAxis, cat, getRecentCategories());
         const driftIdx = cats.indexOf(driftTarget);
@@ -587,90 +616,41 @@ export function useMoments(): UseMomentsReturn {
     });
   }, [categoryAxis, moments, cacheKey, fetchMomentsForCategory, pushTrail, getRecentCategories]);
 
-  // DOWN = SURRENDER: bleed into adjacent category (organic)
-  const goDown = useCallback((velocity: number = 0) => {
-    pushTrail('down');
-    setNavAction('down');
+  // v862 LEFT/RIGHT = INVISIBLE DRIFT through adjacent sub-categories
+  // within the current top mode. Per Dash's "invisible drift" — the
+  // user doesn't see the lane change ticker; only TAP reveals
+  // current position. Both gestures use ADJACENCY-weighted random,
+  // they just differ in bias:
+  //   LEFT  : "familiar" drift — low exoticBias, prefers neighbors
+  //           similar to recent ones (still in the comfort zone)
+  //   RIGHT : "discover" drift — high exoticBias, prefers
+  //           less-recent neighbors (push outward into unknowns)
+  // pushTrail keeps the breadcrumbs so UP can rewind across drifts.
+  const goLeft = useCallback((velocity: number = 0) => {
+    pushTrail('left');
+    setNavAction('left');
     consecutiveUpsRef.current = 0;
 
     setPosition(prev => {
       const cats = CATEGORY_PRESETS[categoryAxis];
       const currentCat = cats[prev.categoryIndex] || '';
-
-      // Higher velocity = pick more exotic neighbor
-      const exoticBias = Math.min(velocity / 3, 1);
-      const targetCat = pickWeightedNeighbor(categoryAxis, currentCat, getRecentCategories(), exoticBias);
-      const targetIdx = cats.indexOf(targetCat);
-
-      if (targetIdx !== -1 && targetIdx !== prev.categoryIndex) {
-        const targetKey = cacheKey(categoryAxis, targetCat);
-        const targetMoments = moments.get(targetKey) || [];
-        fetchMomentsForCategory(categoryAxis, targetCat);
-
-        // Land at a random position in the target category
-        const randomTime = targetMoments.length > 0
-          ? Math.floor(Math.random() * targetMoments.length)
-          : 0;
-
-        return { categoryIndex: targetIdx, timeIndex: randomTime };
+      // Familiar drift — low exoticBias, gravitates toward recent.
+      const exoticBias = Math.max(0, 0.15 - velocity / 8);
+      const target = pickWeightedNeighbor(categoryAxis, currentCat, getRecentCategories(), exoticBias);
+      const idx = cats.indexOf(target);
+      if (idx !== -1 && idx !== prev.categoryIndex) {
+        fetchMomentsForCategory(categoryAxis, target);
+        return { categoryIndex: idx, timeIndex: 0 };
       }
-
-      // Fallback: go back in time in current category
-      return { ...prev, timeIndex: Math.max(prev.timeIndex - 1, 0) };
-    });
-  }, [categoryAxis, moments, cacheKey, fetchMomentsForCategory, pushTrail, getRecentCategories]);
-
-  // LEFT = MEMORY: retrace trail with fading precision
-  const goLeft = useCallback((_velocity: number = 0) => {
-    setNavAction('left');
-    consecutiveUpsRef.current = 0;
-
-    const trailEntries = trailRef.current;
-
-    if (trailEntries.length === 0) {
-      // No trail: wrap to previous category (original behavior)
-      pushTrail('left');
-      setPosition(prev => ({
-        categoryIndex: (prev.categoryIndex - 1 + categories.length) % categories.length,
+      // Fallback: previous in preset list.
+      return {
+        categoryIndex: (prev.categoryIndex - 1 + cats.length) % cats.length,
         timeIndex: 0,
-      }));
-      return;
-    }
+      };
+    });
+  }, [categoryAxis, fetchMomentsForCategory, pushTrail, getRecentCategories]);
 
-    // Pop from trail
-    const entry = trailEntries.pop()!;
-    trailRef.current = [...trailEntries];
-    setTrail([...trailRef.current]);
-
-    const depth = MAX_TRAIL - trailEntries.length; // how far back we're going
-    const cats = CATEGORY_PRESETS[categoryAxis];
-
-    if (depth <= 3) {
-      // EXACT: return to exact position
-      setPosition({ categoryIndex: entry.categoryIndex, timeIndex: entry.timeIndex });
-    } else if (depth <= 10) {
-      // FUZZY: same category, but time drifts
-      const key = cacheKey(entry.categoryAxis, entry.category);
-      const catMoments = moments.get(key) || [];
-      const drift = Math.floor((Math.random() - 0.5) * 4);
-      const fuzzedTime = Math.max(0, Math.min(entry.timeIndex + drift, catMoments.length - 1));
-      setPosition({ categoryIndex: entry.categoryIndex, timeIndex: fuzzedTime });
-    } else {
-      // APPROXIMATE: might land in adjacent category
-      if (Math.random() < 0.4) {
-        const adjCat = pickWeightedNeighbor(entry.categoryAxis, entry.category);
-        const adjIdx = cats.indexOf(adjCat);
-        if (adjIdx !== -1) {
-          fetchMomentsForCategory(categoryAxis, adjCat);
-          setPosition({ categoryIndex: adjIdx, timeIndex: 0 });
-          return;
-        }
-      }
-      setPosition({ categoryIndex: entry.categoryIndex, timeIndex: 0 });
-    }
-  }, [categoryAxis, categories.length, moments, cacheKey, fetchMomentsForCategory, pushTrail]);
-
-  // RIGHT = DRIFT: explore somewhere new (weighted, avoids recent)
+  // RIGHT = DISCOVER DRIFT — exotic-biased neighbor, pushes outward.
   const goRight = useCallback((velocity: number = 0) => {
     pushTrail('right');
     setNavAction('right');
