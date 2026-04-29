@@ -25,6 +25,7 @@ import {
   rankMoments,
   recordSessionPlay,
   recordSessionSkip,
+  getEngagedCreators,
   recordSessionStar,
   markShown,
 } from '../services/momentsEngine';
@@ -37,7 +38,23 @@ let _momentsBlocked = false;
 // TYPES
 // ============================================
 
-export type CategoryAxis = 'countries' | 'vibes' | 'genres';
+// v860 — Moments top-row redesign per Dash's spec:
+// "Top can be Vibes Right Now, Live, Friends".
+// The 3 modes each carry their own sub-categories AND their own
+// fetch grammar. The point is to break the locked-in feel of the
+// old countries/vibes/genres taxonomy — every mode pulls a
+// different SHAPE of moment, not the same data filtered three ways.
+//
+//   'vibes-now' : current emotional axes (dance/comedy/live/etc),
+//                 quality-weighted, biased by what you're playing.
+//   'live'      : time-window cuts (now / today / this week),
+//                 newest viral content, freshness > taste.
+//   'friends'   : creators you've starred + recently engaged with;
+//                 social graph view, not algorithmic.
+//
+// CategoryAxis name preserved so the prop chain doesn't break, but
+// the values shift. UI labels surface the friendly versions.
+export type CategoryAxis = 'vibes-now' | 'live' | 'friends';
 
 export interface MomentPosition {
   categoryIndex: number;
@@ -87,29 +104,47 @@ export interface UseMomentsReturn {
 // ============================================
 
 export const CATEGORY_PRESETS: Record<CategoryAxis, string[]> = {
-  countries: [
-    'nigeria', 'ghana', 'kenya', 'south africa', 'senegal',
-    'algeria', 'uk', 'usa', 'france', 'diaspora',
-  ],
-  vibes: [
+  // Vibes Right Now — emotional handles, quality-weighted, your default
+  // exploration mode. Same set of vibes the prior taxonomy used; it's
+  // the FETCH GRAMMAR + UI framing that changes, not the labels.
+  'vibes-now': [
     'dance', 'comedy', 'live', 'fashion', 'original', 'cover', 'reaction',
   ],
-  genres: [
-    '#music', '#afrobeats', '#amapiano', '#afrodance',
-    '#afrodaily', '#dance', '#dj', '#trending',
+  // v860 — Live = virality cuts (NOT time windows). Diagnostic on the
+  // live catalog: every moment was ingested in a single 22-minute
+  // burst 87 days ago. discovered_at is effectively static, so
+  // time-window filters return 0. virality_score IS the recency
+  // signal in this catalog. Cuts:
+  //   pulse   : top virality (highest 100, the absolute heat)
+  //   rising  : next tier (100-500, climbers)
+  //   gems    : long-tail viral (500+ rank, hidden bangers)
+  'live': [
+    'pulse', 'rising', 'gems',
+  ],
+  // Friends — followed creators (sessionStarred) + recently-OYEd authors.
+  // Single chip for v860; we'll add 'all' / 'starred' / 'newly followed'
+  // sub-cuts once the social graph fills out.
+  'friends': [
+    'all',
   ],
 };
 
 // Display names for UI (map internal keys to pretty labels)
 const DISPLAY_NAMES: Record<string, string> = {
-  'nigeria': 'Nigeria', 'ghana': 'Ghana', 'kenya': 'Kenya',
-  'south africa': 'South Africa', 'senegal': 'Senegal', 'algeria': 'Algeria',
-  'uk': 'UK', 'usa': 'USA', 'france': 'France', 'diaspora': 'Diaspora',
+  // Vibes Right Now sub-categories
   'dance': 'Dance', 'comedy': 'Comedy', 'live': 'Live', 'fashion': 'Fashion',
   'original': 'Original', 'cover': 'Cover', 'reaction': 'Reaction',
-  '#music': 'Music', '#afrobeats': 'Afrobeats', '#amapiano': 'Amapiano',
-  '#afrodance': 'Afro Dance', '#afrodaily': 'Afro Daily', '#dance': 'Dance',
-  '#dj': 'DJ', '#trending': 'Trending',
+  // Live sub-categories (virality cuts)
+  'pulse': 'Pulse', 'rising': 'Rising', 'gems': 'Gems',
+  // Friends sub-categories
+  'all': 'My Crew',
+};
+
+// v860 — labels for the 3 top modes (used by the axis-tab strip)
+export const TOP_MODE_LABELS: Record<CategoryAxis, string> = {
+  'vibes-now': 'Vibes Right Now',
+  'live':      'Live',
+  'friends':   'Friends',
 };
 
 const MOMENTS_PER_PAGE = 20;
@@ -136,20 +171,13 @@ const BLEED_THRESHOLD_RATIO = 0.6;
 // ADJACENCY MAPS (weighted neighbors for drift/bleed)
 // ============================================
 
+// v860 — adjacency now keyed by the new top-mode taxonomy. Drift
+// (left/right) traverses these weighted edges within the current
+// top mode. Friends has a single sub-cat ('all') so drift is a
+// no-op there — that's intentional, the social graph isn't a
+// taxonomy you wander, it's people you've chosen.
 const ADJACENCY: Record<CategoryAxis, Record<string, Record<string, number>>> = {
-  countries: {
-    'nigeria':      { 'ghana': 0.3, 'senegal': 0.2, 'uk': 0.15, 'diaspora': 0.15, 'usa': 0.1, 'south africa': 0.1 },
-    'ghana':        { 'nigeria': 0.3, 'senegal': 0.2, 'uk': 0.15, 'diaspora': 0.15, 'south africa': 0.1, 'kenya': 0.1 },
-    'kenya':        { 'south africa': 0.3, 'nigeria': 0.2, 'ghana': 0.15, 'diaspora': 0.15, 'uk': 0.1, 'usa': 0.1 },
-    'south africa': { 'kenya': 0.3, 'nigeria': 0.2, 'ghana': 0.15, 'diaspora': 0.15, 'uk': 0.1, 'usa': 0.1 },
-    'senegal':      { 'nigeria': 0.25, 'ghana': 0.2, 'france': 0.2, 'algeria': 0.15, 'diaspora': 0.1, 'uk': 0.1 },
-    'algeria':      { 'france': 0.3, 'senegal': 0.2, 'nigeria': 0.15, 'diaspora': 0.15, 'uk': 0.1, 'usa': 0.1 },
-    'uk':           { 'nigeria': 0.25, 'ghana': 0.2, 'diaspora': 0.2, 'france': 0.15, 'usa': 0.1, 'south africa': 0.1 },
-    'usa':          { 'diaspora': 0.3, 'nigeria': 0.2, 'uk': 0.2, 'ghana': 0.1, 'south africa': 0.1, 'france': 0.1 },
-    'france':       { 'senegal': 0.25, 'algeria': 0.25, 'diaspora': 0.2, 'uk': 0.15, 'nigeria': 0.1, 'ghana': 0.05 },
-    'diaspora':     { 'nigeria': 0.2, 'usa': 0.2, 'uk': 0.2, 'ghana': 0.15, 'south africa': 0.15, 'france': 0.1 },
-  },
-  vibes: {
+  'vibes-now': {
     'dance':    { 'live': 0.3, 'fashion': 0.2, 'original': 0.2, 'comedy': 0.15, 'cover': 0.1, 'reaction': 0.05 },
     'comedy':   { 'reaction': 0.3, 'live': 0.25, 'dance': 0.2, 'original': 0.15, 'cover': 0.1 },
     'live':     { 'dance': 0.3, 'comedy': 0.2, 'original': 0.2, 'cover': 0.15, 'fashion': 0.1, 'reaction': 0.05 },
@@ -158,15 +186,13 @@ const ADJACENCY: Record<CategoryAxis, Record<string, Record<string, number>>> = 
     'cover':    { 'original': 0.3, 'live': 0.25, 'dance': 0.2, 'reaction': 0.15, 'comedy': 0.1 },
     'reaction': { 'comedy': 0.3, 'cover': 0.2, 'live': 0.2, 'original': 0.15, 'dance': 0.1, 'fashion': 0.05 },
   },
-  genres: {
-    '#music':     { '#afrobeats': 0.25, '#trending': 0.2, '#dj': 0.2, '#amapiano': 0.15, '#afrodance': 0.1, '#afrodaily': 0.1 },
-    '#afrobeats': { '#amapiano': 0.25, '#afrodance': 0.2, '#music': 0.2, '#trending': 0.15, '#afrodaily': 0.1, '#dj': 0.1 },
-    '#amapiano':  { '#afrobeats': 0.25, '#afrodance': 0.25, '#dance': 0.2, '#dj': 0.15, '#music': 0.1, '#trending': 0.05 },
-    '#afrodance': { '#amapiano': 0.25, '#dance': 0.25, '#afrobeats': 0.2, '#trending': 0.15, '#music': 0.1, '#afrodaily': 0.05 },
-    '#afrodaily': { '#afrobeats': 0.25, '#music': 0.2, '#trending': 0.2, '#afrodance': 0.15, '#amapiano': 0.1, '#dance': 0.1 },
-    '#dance':     { '#afrodance': 0.3, '#amapiano': 0.25, '#dj': 0.2, '#trending': 0.15, '#afrobeats': 0.1 },
-    '#dj':        { '#dance': 0.25, '#amapiano': 0.2, '#music': 0.2, '#trending': 0.2, '#afrobeats': 0.1, '#afrodance': 0.05 },
-    '#trending':  { '#music': 0.2, '#afrobeats': 0.2, '#dance': 0.15, '#dj': 0.15, '#afrodance': 0.15, '#amapiano': 0.15 },
+  'live': {
+    'pulse':  { 'rising': 0.7, 'gems': 0.3 },
+    'rising': { 'pulse': 0.4, 'gems': 0.6 },
+    'gems':   { 'rising': 0.6, 'pulse': 0.4 },
+  },
+  'friends': {
+    'all': {},
   },
 };
 
@@ -204,7 +230,7 @@ function pickWeightedNeighbor(
 // ============================================
 
 export function useMoments(): UseMomentsReturn {
-  const [categoryAxis, setCategoryAxisState] = useState<CategoryAxis>('vibes');
+  const [categoryAxis, setCategoryAxisState] = useState<CategoryAxis>('vibes-now');
   const [position, setPosition] = useState<MomentPosition>({ categoryIndex: 0, timeIndex: 0 });
   const [moments, setMoments] = useState<Map<string, Moment[]>>(new Map());
   const [loading, setLoading] = useState(false);
@@ -261,8 +287,11 @@ export function useMoments(): UseMomentsReturn {
         // fixed. Combined: half quality / half fresh, ranked by engine.
         const HALF = Math.ceil((MOMENTS_PER_PAGE * FETCH_OVERSAMPLE) / 2);
 
+        // v860 — fetch grammar branches per TOP MODE, not just per
+        // axis filter. Each mode pulls a different SHAPE of moment
+        // so the surfaces feel genuinely different, not the same
+        // catalog filtered three ways.
         const buildQuery = (orderBy: 'virality' | 'recency') => {
-          // supabase already guarded at the top of fetchMomentsForCategory.
           let q = supabase!
             .from('voyo_moments')
             .select('*')
@@ -274,22 +303,67 @@ export function useMoments(): UseMomentsReturn {
             q = q.order('discovered_at', { ascending: false });
           }
           q = q.range(offset * FETCH_OVERSAMPLE, offset * FETCH_OVERSAMPLE + HALF - 1);
-          // Axis filter — same logic as before, applied to each pass.
-          if (axis === 'countries') {
-            q = q.contains('cultural_tags', [category]);
-          } else if (axis === 'vibes') {
+
+          if (axis === 'vibes-now') {
+            // Emotional axes — filter by content_type vibe label.
             q = q.eq('content_type', category);
-          } else {
-            q = q.contains('vibe_tags', [category]);
+          } else if (axis === 'live') {
+            // v860 — virality cuts (NOT time windows). The catalog
+            // is static (last ingest 87d ago per circulation
+            // diagnostic), so discovered_at filters return 0.
+            // virality_score IS the heat signal in this catalog.
+            //   pulse  : rank 1-100 (top 1.5%)
+            //   rising : rank 100-500 (top ~7%)
+            //   gems   : rank 500-2000 (mid-tier viral)
+            // Implemented via virality_score thresholds at p99/p95/p75.
+            const minViralityFor: Record<string, number> = {
+              'pulse':  120000, // ~p99 (4732 moments above 1000; p99 cuts to ~top 100)
+              'rising':  20000, // ~p95
+              'gems':     2500, // ~p75
+            };
+            const maxViralityFor: Record<string, number | null> = {
+              'pulse':  null,
+              'rising': 120000,
+              'gems':    20000,
+            };
+            const minV = minViralityFor[category] ?? 1000;
+            q = q.gte('virality_score', minV);
+            const maxV = maxViralityFor[category];
+            if (maxV !== null && maxV !== undefined) q = q.lt('virality_score', maxV);
+          } else if (axis === 'friends') {
+            // Social graph — moments by creators the user has
+            // engaged with. v860 v1: pull from sessionStarred +
+            // strong session-weight creators (getEngagedCreators).
+            // Future: hydrate from voyo_stars / voyo_signals tables.
+            const starred = Array.from(getEngagedCreators());
+            if (starred.length === 0) {
+              // Sentinel: friends empty. Caller skips the fetch.
+              return null;
+            }
+            q = q.in('creator_username', starred);
           }
           return q;
         };
 
-        const [viralRes, freshRes] = await Promise.all([
-          buildQuery('virality'),
-          buildQuery('recency'),
-        ]);
+        const viralQ = buildQuery('virality');
+        const freshQ = buildQuery('recency');
 
+        // v860: friends-empty sentinel. buildQuery returns null when
+        // the user has no engaged creators yet. We skip the fetch
+        // entirely (better UX hint than empty rows from DB) and
+        // surface an empty list — the UI's empty-state copy explains
+        // "follow some creators to fill this lane".
+        if (viralQ === null || freshQ === null) {
+          setMoments(prev => {
+            const next = new Map(prev);
+            if (offset === 0) next.set(key, []);
+            return next;
+          });
+          fetchedRef.current.add(key);
+          return;
+        }
+
+        const [viralRes, freshRes] = await Promise.all([viralQ, freshQ]);
         const error = viralRes.error || freshRes.error;
         if (error) {
           if (error.message?.includes('timeout') || error.message?.includes('statement')) {
@@ -365,9 +439,10 @@ export function useMoments(): UseMomentsReturn {
                 .order('virality_score', { ascending: false, nullsFirst: false })
                 .order('discovered_at', { ascending: false })
                 .range(0, MOMENTS_PER_PAGE * 2 - 1);
-              if (axis === 'countries') nq = nq.contains('cultural_tags', [nc]);
-              else if (axis === 'vibes') nq = nq.eq('content_type', nc);
-              else nq = nq.contains('vibe_tags', [nc]);
+              // v860 — bleed only applies to vibes-now; live and friends
+              // don't have neighbor-cat semantics in the new taxonomy.
+              if (axis === 'vibes-now') nq = nq.eq('content_type', nc);
+              else continue; // skip non-vibes-now bleed for now
               const { data: nd } = await nq;
               for (const m of (nd || []) as Moment[]) {
                 if (m?.id && !seenIds.has(m.id)) {

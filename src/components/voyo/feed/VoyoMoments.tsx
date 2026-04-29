@@ -13,7 +13,7 @@
 
 import React, { useState, useRef, useCallback, useEffect, memo } from 'react';
 import { Heart, Flame, MessageCircle, ExternalLink, Play, Volume2, VolumeX, X, Sparkles } from 'lucide-react';
-import { useMoments, CategoryAxis, NavAction, CATEGORY_PRESETS } from '../../../hooks/useMoments';
+import { useMoments, CategoryAxis, NavAction, CATEGORY_PRESETS, TOP_MODE_LABELS } from '../../../hooks/useMoments';
 import type { Moment } from '../../../types/moments';
 import { AnimatedArtCard } from './AnimatedArtCard';
 import { DynamicVignette } from './DynamicVignette';
@@ -1960,10 +1960,12 @@ export const VoyoMoments: React.FC<VoyoMomentsProps> = ({ onPlayFullTrack, onArt
           pointerEvents: (!hasInteracted || headerVisible) ? 'auto' : 'none',
         }}
       >
+        {/* v860 — three top modes (Vibes Right Now / Live / Friends).
+            Each carries its own fetch grammar + sub-categories. */}
         <div style={S.axisTabs}>
-          {(['countries', 'vibes', 'genres'] as CategoryAxis[]).map(a => (
+          {(['vibes-now', 'live', 'friends'] as CategoryAxis[]).map(a => (
             <div key={a} style={axisTab(categoryAxis === a)} onClick={e => { e.stopPropagation(); setCategoryAxis(a); }}>
-              {a.charAt(0).toUpperCase() + a.slice(1)}
+              {TOP_MODE_LABELS[a]}
             </div>
           ))}
         </div>

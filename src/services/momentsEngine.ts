@@ -87,6 +87,24 @@ export function markShown(momentId: string, creator?: string): void {
   }
 }
 
+// v860 — surface the social-graph creators for the Friends lane.
+// Currently sessionStarred only; track engaged-via-OYE separately
+// for the same view (recordSessionPlay already bumps creatorWeights
+// but doesn't add to a friend set — the threshold approach below
+// surfaces strong signals without the user explicitly starring).
+export function getEngagedCreators(): Set<string> {
+  const out = new Set<string>(sessionStarred);
+  // Heavy positive session-weight (>= 25) = "friend-equivalent" intent
+  // even without an explicit star (e.g. multiple OYEs / plays in a
+  // single session). Threshold tuned conservatively: a single play
+  // gives +8, OYE on its parent track flows in via the same channel,
+  // 25 ≈ 3 plays or 1 play + cross-surface taste match.
+  for (const [creator, weight] of creatorWeights.entries()) {
+    if (weight >= 25) out.add(creator);
+  }
+  return out;
+}
+
 // ── Scoring helpers ───────────────────────────────────────────────────────
 
 const RECENCY_FULL_DAYS = 7;
