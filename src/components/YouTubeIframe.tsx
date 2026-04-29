@@ -19,6 +19,7 @@ import { logPlaybackEvent } from '../services/telemetry';
 import { devLog } from '../utils/logger';
 import { pipService } from '../services/pipService';
 import { haptics } from '../utils/haptics';
+import { CubeGestureHint } from './voyo/CubeGestureHint';
 
 const YT_STATES = {
   UNSTARTED: -1,
@@ -35,15 +36,15 @@ const YT_STATES = {
 const R2_EDGE = 'https://voyo-edge.dash-webtv.workers.dev/audio';
 
 // Default position of the floating portrait player, relative to screen
-// center. Nudged left so it stops masking the right edge of
+// center. Nudged 12px left so it stops masking the right edge of
 // "Discover" in the Portrait layout — at true center, the rounded
 // corner was clipping the Discover shelf visually. Drag still overrides.
-// v887 (Dash 2026-04-29): mini player went from 216→280 ("bigger is
-// better"). Default x shifted left by half the size delta (-32) so the
-// right-edge clearance from idle stays the same (no false portal glow).
-const MINI_SIZE = 280;
+// v888 (Dash 2026-04-29): mini player sized to MATCH the artwork card
+// (BigCenterCard w-56 = 224) so the two surfaces feel like the same
+// cube in two states, not different objects. v887 went too big.
+const MINI_SIZE = 224;
 const MINI_HALF = MINI_SIZE / 2;
-const DEFAULT_PORTRAIT_POS = { x: -12 - 32, y: 0 };
+const DEFAULT_PORTRAIT_POS = { x: -12, y: 0 };
 
 function getYouTubeId(trackId: string): string {
   if (!trackId) return '';
@@ -902,12 +903,9 @@ export const YouTubeIframe = memo(() => {
 
     if (videoTarget === 'portrait' && isPlaying) {
       // Floating mini player — draggable. portraitPos offsets from center.
-      // v887: bumped from 216→280 ("bigger is better"). The mini now
-      // OVERTAKES the artwork card footprint instead of nesting under
-      // it — reads as a real takeover, the movable surface fills the
-      // attention. Default position shifted left by 32px so the right-
-      // edge clearance from idle stays the same as the 216-era default
-      // (no false portal-arm glow on mount).
+      // v888: sized to MATCH BigCenterCard's mobile footprint (224px =
+      // w-56). Reads as the same cube in two states (poster ↔ iframe),
+      // not different objects.
       //
       // Beam effect: boxShadow layers make the video feel lifted out of
       // the page. Shadow is rendered OUTSIDE the overflow:hidden clip so
@@ -1343,13 +1341,11 @@ export const YouTubeIframe = memo(() => {
         </div>
       )}
 
-      {/* Portrait: drag/tap hint */}
+      {/* Portrait: shared cube gesture hint (same component on the
+          poster artwork BigCenterCard) — visual proof both surfaces
+          are wired as one cube. */}
       {isPortraitMode && !showPortraitNextUp && (
-        <div style={{ position: 'absolute', bottom: 4, left: 0, right: 0, textAlign: 'center', zIndex: 15, pointerEvents: 'none' }}>
-          <p style={{ color: isDragging ? 'rgba(139,92,246,0.8)' : 'rgba(255,255,255,0.4)', fontSize: 8, transition: 'color 0.2s' }}>
-            {isDragging ? '📱 Rotate phone for FULL Vibes' : 'Drag to move • Tap to close'}
-          </p>
-        </div>
+        <CubeGestureHint position="bottom" highlighted={isDragging} />
       )}
 
       {/* Portrait: Full "Up Next" thumbnail takeover - covers YouTube suggestions intentionally */}

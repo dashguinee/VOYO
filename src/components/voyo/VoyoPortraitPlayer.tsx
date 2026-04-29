@@ -22,6 +22,7 @@ import { usePreferenceStore } from '../../store/preferenceStore';
 import { getThumbnailUrl, getTrackThumbnailUrl } from '../../utils/thumbnail';
 import { Track, ReactionType } from '../../types';
 import { SmartImage } from '../ui/SmartImage';
+import { CubeGestureHint } from './CubeGestureHint';
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { unlockMobileAudio, isMobileDevice } from '../../utils/mobileAudioUnlock';
 import { useMobilePlay } from '../../hooks/useMobilePlay';
@@ -2383,6 +2384,10 @@ const BigCenterCard = memo(({ track, onExpandVideo, onShowLyrics, onLyricsArmed,
           <Mic2 size={14} className="text-white" />
         </div>
       )}
+      {/* Shared cube gesture hint — same component lives on the
+          iframe mini player. Placing at top here since the bottom
+          is owned by title + artist. v888. */}
+      <CubeGestureHint position="top" />
     </div>
 
     {/* Subtle vignette for depth */}
