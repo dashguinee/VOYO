@@ -52,6 +52,18 @@ function formatCount(n: number): string {
   return String(n);
 }
 
+// v905 — OYÉ count seeded from REAL platform data (like_count from
+// the source-platform ingest). When the user OYÉs in-session, we
+// bump the displayed count by 1 optimistically. Falls back to
+// voyo_reactions if like_count is missing/zero. No fake numbers —
+// this is a real platform now.
+function seededOyeCount(moment: { like_count?: number; voyo_reactions?: number }, isOyed: boolean): number {
+  const seed = (moment.like_count && moment.like_count > 0)
+    ? moment.like_count
+    : (moment.voyo_reactions || 0);
+  return seed + (isOyed ? 1 : 0);
+}
+
 type SlideDir = 'up' | 'down' | 'left' | 'right' | null;
 
 // Dissolve-scroll wrapper — ONE signature gesture (per "premium =
@@ -860,7 +872,21 @@ const MomentCard = memo(({ moment, isOyed, onOye, isActive, isMuted, onToggleMut
           <div style={actIcon(isOyed)}>
             <Heart size={20} style={{ color: isOyed ? '#a78bfa' : '#fff', fill: isOyed ? '#a78bfa' : 'none', transition: 'all 0.2s ease' }} />
           </div>
-          <span style={{ ...S.actLbl, color: isOyed ? '#a78bfa' : 'rgba(255,255,255,0.6)' }}>OYE</span>
+          {/* v905 OYÉ count — real platform seed (like_count + 1 when
+              this user OYÉs). Reveal cycle: 0-2s nothing, 3s fade-in,
+              3s fade-out, hidden after. Re-fires on every moment
+              change via key={moment.id}. */}
+          <span
+            key={`oye-count-${moment.id}`}
+            style={{
+              ...S.actLbl,
+              color: isOyed ? '#a78bfa' : 'rgba(255,255,255,0.78)',
+              animation: 'voyo-oye-count-reveal 8s ease-in-out forwards',
+              opacity: 0,
+            }}
+          >
+            {formatCount(seededOyeCount(moment, isOyed))}
+          </span>
         </div>
         {/* Reactions — primary, ambient 85%. */}
         <div style={{ ...S.actBtn, opacity: 'var(--act-primary, 1)', transition: 'opacity 1s cubic-bezier(0.16, 1, 0.3, 1)' }}>

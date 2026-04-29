@@ -1344,3 +1344,14 @@ input[type="range"]:focus::-moz-range-thumb {
   background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.05) 50%, transparent 100%);
   animation: voyo-skeleton-shimmer 1.5s linear infinite;
 }
+
+/* v905 — OYÉ count reveal cycle on moment change.
+   0-2s   hidden (25% mark of 8s)
+   2-5s   fade in to 1
+   5-8s   fade out to 0
+   forwards keeps end-state at 0. */
+@keyframes voyo-oye-count-reveal {
+  0%, 25%   { opacity: 0; }
+  62.5%     { opacity: 1; }
+  100%      { opacity: 0; }
+}

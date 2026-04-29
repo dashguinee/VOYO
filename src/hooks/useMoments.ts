@@ -224,8 +224,13 @@ const MUSIC_SUB_LABELS: Record<string, string> = {
 
 const MOMENTS_PER_PAGE = 20;
 const MAX_TRAIL = 50;
-const AUTO_DRIFT_THRESHOLD = 5; // consecutive UPs before drift chance
-const AUTO_DRIFT_CHANCE = 0.3;
+// v905 (Dash 2026-04-29 "20 30 cards before drifts, and it keeps
+// spinning"): bumped from 5/0.3 → 25/0.5 so the user spends real
+// time in a lane (~25 cards in-vibe) before the engine starts mixing
+// adjacent sub-cats. Higher chance once threshold is crossed so the
+// drift actually fires when the user lingers.
+const AUTO_DRIFT_THRESHOLD = 25;
+const AUTO_DRIFT_CHANCE = 0.5;
 
 // v832-v859 — Moments Engine. The fetch oversampling factor controls
 // how many candidates the engine sees vs the page size. v859 bumped
