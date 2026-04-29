@@ -1,26 +1,27 @@
-import { memo, useEffect, useState } from 'react';
+import { memo, useEffect, useRef, useState } from 'react';
 
 /**
  * Shared cube gesture hint with session-scoped lifecycle.
  *
- * v898 (Dash 2026-04-29): "after 15s flash then disappear, again
- * at 45s and 5min, then gone forever". Replaces v897's slow 7s
- * fade with discrete blink-flashes at three timestamps. Hint
- * position nudged a touch lower on the cube.
+ * v899 (Dash 2026-04-29): "keep og normal text just flash it then
+ * fade flash gently 3 times". Reverted to plain white text from
+ * v897/v898 silver-metallic. Three scheduled gentle fade-flashes.
  *
  * Phases:
- *   visible  (0–15s)   — silver-metallic sheen, opacity 1
- *   flashing (1.5s ea) — keyframe blink: 0 → 1 → 0.4 → 1 → 0
- *   hidden   (between) — invisible
- *   dead     (5min+)   — gone forever for the rest of the session
+ *   visible    (0–15s)         steady white, opacity 1
+ *   flashing-* (1.2s each)     gentle CSS keyframe pulse
+ *   hidden     (between)       invisible
+ *   dead       (after 3rd)     gone forever (returns null)
  *
- * Schedule: flashes fire at 15s, 45s, 5min. After the 5min flash
- * the hint is permanently dead. Session start is module-level so
- * the timeline survives mount/unmount cycles.
+ * Two keyframes:
+ *   - voyo-flash-out   first flash transitions FROM visible (opacity 1)
+ *                       so it eases down with a soft dip-and-fade.
+ *   - voyo-flash-pulse subsequent flashes transition FROM hidden
+ *                       (opacity 0) — fade up, hold, fade out.
  */
 
 const SCHEDULE_MS = [15_000, 45_000, 300_000] as const; // 15s, 45s, 5min
-const FLASH_DURATION_MS = 1500;
+const FLASH_DURATION_MS = 1200;
 
 let sessionStart: number | null = null;
 const getSessionStart = () => {
@@ -33,10 +34,8 @@ type Phase = 'visible' | 'flashing' | 'hidden' | 'dead';
 const computeInitialPhase = (): Phase => {
   const elapsed = Date.now() - getSessionStart();
   if (elapsed < SCHEDULE_MS[0]) return 'visible';
-  // Past last flash + its window → dead.
   const lastFlashEnd = SCHEDULE_MS[SCHEDULE_MS.length - 1] + FLASH_DURATION_MS;
   if (elapsed > lastFlashEnd) return 'dead';
-  // Inside a flash window? (rare on remount mid-flash)
   for (const t of SCHEDULE_MS) {
     if (elapsed >= t && elapsed < t + FLASH_DURATION_MS) return 'flashing';
   }
@@ -55,23 +54,20 @@ export const CubeGestureHint = memo(({
   onTap?: () => void;
 }) => {
   const [phase, setPhase] = useState<Phase>(computeInitialPhase);
-  // Bump on every flash trigger so the CSS animation re-fires (keyed on
-  // a `--flash-key` custom property forces a fresh animation cycle even
-  // if the same phase value reappears).
   const [flashKey, setFlashKey] = useState(0);
+  const flashIndexRef = useRef(0); // 0 = first flash (from visible), 1+ = re-flash
 
-  // Schedule remaining flashes against session start. Runs once.
   useEffect(() => {
     const elapsed = Date.now() - getSessionStart();
     const timers: ReturnType<typeof setTimeout>[] = [];
 
     SCHEDULE_MS.forEach((flashAt, i) => {
       const isLast = i === SCHEDULE_MS.length - 1;
-      // Skip flashes whose window is already past.
       if (flashAt + FLASH_DURATION_MS <= elapsed) return;
 
       const startDelay = Math.max(0, flashAt - elapsed);
       timers.push(setTimeout(() => {
+        flashIndexRef.current = i;
         setPhase('flashing');
         setFlashKey(k => k + 1);
         timers.push(setTimeout(() => {
@@ -85,29 +81,18 @@ export const CubeGestureHint = memo(({
 
   if (phase === 'dead') return null;
 
-  // Silver metallic gradient — same as v897.
-  const sheenGradient = highlighted
-    ? 'linear-gradient(120deg, #b8a4ff 0%, #ffffff 50%, #b8a4ff 100%)'
-    : 'linear-gradient(120deg, #b8b8b8 0%, #ffffff 50%, #b8b8b8 100%)';
-
-  // Opacity strategy:
-  //   - visible  → 1 (steady)
-  //   - hidden   → 0 (steady)
-  //   - flashing → CSS animation owns it (forwards keeps end-state)
   const inlineOpacity =
     phase === 'visible' ? 1 :
     phase === 'hidden'  ? 0 :
-    undefined; // flashing — let the animation set it
+    undefined; // flashing — animation owns it
 
-  // Compose animations: sheen always runs (when not invisible); flash
-  // layers on top during 'flashing' phase. Different properties so
-  // they don't fight (sheen → background-position; flash → opacity).
-  const animations = [
-    'voyo-cube-hint-sheen 2.6s ease-in-out infinite',
+  // First flash (i=0) eases out from visible; later ones pulse from hidden.
+  const flashAnim =
     phase === 'flashing'
-      ? `voyo-cube-hint-flash ${FLASH_DURATION_MS}ms ease-out forwards`
-      : null,
-  ].filter(Boolean).join(', ');
+      ? (flashIndexRef.current === 0
+          ? `voyo-flash-out ${FLASH_DURATION_MS}ms ease-in-out forwards`
+          : `voyo-flash-pulse ${FLASH_DURATION_MS}ms ease-in-out forwards`)
+      : null;
 
   return (
     <div
@@ -119,8 +104,7 @@ export const CubeGestureHint = memo(({
       }}
       style={{
         position: 'absolute',
-        // v898: 4px lower than v897 (was 8). Sits a touch closer to
-        // the cube edge per Dash.
+        // v898: bottom-4 (was 8). Sits a touch closer to the cube edge.
         [position]: 4,
         left: 0,
         right: 0,
@@ -132,37 +116,33 @@ export const CubeGestureHint = memo(({
       }}
     >
       <p
-        // Re-mount the animation host on every flash so the keyframe
-        // restarts cleanly (same-name same-element animation re-triggers
-        // are fragile across browsers).
         key={`hint-${flashKey}`}
         style={{
+          color: highlighted ? 'rgba(139,92,246,0.85)' : 'rgba(255,255,255,0.55)',
           fontSize: 10,
           fontWeight: 500,
           letterSpacing: '0.04em',
+          textShadow: '0 1px 3px rgba(0,0,0,0.6)',
           margin: 0,
-          background: sheenGradient,
-          backgroundSize: '200% 100%',
-          WebkitBackgroundClip: 'text',
-          backgroundClip: 'text',
-          WebkitTextFillColor: 'transparent',
-          color: 'transparent',
-          animation: animations,
-          filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.6))',
+          transition: 'color 0.2s',
+          ...(flashAnim ? { animation: flashAnim } : {}),
         }}
       >
         {label}
       </p>
       <style>{`
-        @keyframes voyo-cube-hint-sheen {
-          0%, 100% { background-position: 0% 50%; }
-          50%      { background-position: 100% 50%; }
+        @keyframes voyo-flash-out {
+          0%   { opacity: 1; }
+          25%  { opacity: 0.45; }
+          50%  { opacity: 0.85; }
+          75%  { opacity: 0.30; }
+          100% { opacity: 0; }
         }
-        @keyframes voyo-cube-hint-flash {
+        @keyframes voyo-flash-pulse {
           0%   { opacity: 0; }
-          12%  { opacity: 1; }
-          32%  { opacity: 0.35; }
-          52%  { opacity: 1; }
+          25%  { opacity: 0.85; }
+          50%  { opacity: 0.40; }
+          75%  { opacity: 0.85; }
           100% { opacity: 0; }
         }
       `}</style>
