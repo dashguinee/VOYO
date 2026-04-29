@@ -136,27 +136,32 @@ const S = {
     pointerEvents: 'auto',
     transition: 'opacity 0.6s cubic-bezier(0.16, 1, 0.3, 1), transform 0.6s cubic-bezier(0.16, 1, 0.3, 1)',
   }),
-  // v845 (Dash 2026-04-29 "very nice but a bit too out and too visible,
-  // I want it more felt; can we inset some purple in the fade").
-  // Two changes from v842:
-  //   1) DEPTH dropped ~30% — felt instead of seen. Max alpha
-  //      0.58 → 0.40 on sides, 0.32 → 0.22 on top.
-  //   2) PURPLE TINT blended INTO the fade build-up. The deepest
-  //      stops shift from pure dark amber to a dusk navy-violet
-  //      (rgba(28,18,52)) — the proscenium reads as low-light dusk
-  //      instead of theatre curtain. Same warm amber tail at the
-  //      transparent end so it integrates with S.grad downstream.
-  //   3) Stops carry small intermediate violet hints (rgba(48,32,90))
-  //      so as the user scrolls the eye catches subtle motion in
-  //      the frame — the "light up but not" effect Dash described.
+  // v846 (Dash 2026-04-29 "make them at the top merge with the top
+  // fade, so it's unified, and keep everything controlled"). Side
+  // shades now stack TWO gradients:
+  //   - A top vertical fade matching the top shade's profile
+  //     (132px tall, dusk-violet, low alpha) — this is what makes
+  //     the top corners merge with the top shade into one continuous
+  //     frame instead of looking like three separate elements.
+  //   - The radial proscenium ellipse from v845 (concave inner
+  //     curve, dusk navy-violet tones).
+  // At the top corners, the two layers stack, deepening the corner
+  // exactly where the top shade also lives — they read as one
+  // unified frame. Center-of-side stays the same felt depth.
   sideShadowL: css({
     position: 'absolute', top: 0, bottom: 0, left: 0, width: 64, zIndex: 28,
-    background: 'radial-gradient(ellipse 70% 95% at 0% 50%, rgba(28,18,52,0.40) 0%, rgba(48,32,90,0.20) 28%, rgba(22,14,38,0.10) 60%, transparent 100%)',
+    background: `
+      linear-gradient(to bottom, rgba(28,18,52,0.30) 0%, rgba(48,32,90,0.14) 35%, transparent 132px),
+      radial-gradient(ellipse 70% 95% at 0% 50%, rgba(28,18,52,0.40) 0%, rgba(48,32,90,0.20) 28%, rgba(22,14,38,0.10) 60%, transparent 100%)
+    `,
     pointerEvents: 'none',
   }),
   sideShadowR: css({
     position: 'absolute', top: 0, bottom: 0, right: 0, width: 64, zIndex: 28,
-    background: 'radial-gradient(ellipse 70% 95% at 100% 50%, rgba(28,18,52,0.40) 0%, rgba(48,32,90,0.20) 28%, rgba(22,14,38,0.10) 60%, transparent 100%)',
+    background: `
+      linear-gradient(to bottom, rgba(28,18,52,0.30) 0%, rgba(48,32,90,0.14) 35%, transparent 132px),
+      radial-gradient(ellipse 70% 95% at 100% 50%, rgba(28,18,52,0.40) 0%, rgba(48,32,90,0.20) 28%, rgba(22,14,38,0.10) 60%, transparent 100%)
+    `,
     pointerEvents: 'none',
   }),
   topShade: css({
