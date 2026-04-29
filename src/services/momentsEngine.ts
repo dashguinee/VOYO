@@ -183,6 +183,49 @@ export function clearCooldownForMoment(momentId: string): void {
   if (cd.delete(momentId)) scheduleCooldownSave();
 }
 
+// v881 — track which parent_track_ids the user has navigated AWAY
+// from this session. Module-level (not React-scoped) so the data
+// survives VoyoMoments mount/unmount as the user switches tabs.
+// Used by the Music tab's auto-play guard so a song the user
+// skipped doesn't get re-imposed by another moment that happens
+// to share the same parent_track_id (Dash bug 2026-04-29: "I still
+// have Godfather from davido leaking in").
+const SKIPPED_TRACKS_KEY = 'voyo-moments-avoided-tracks-v1';
+const SKIPPED_MAX_SIZE = 200; // bound to keep the set small
+let _skippedTracks: Set<string> | null = null;
+function loadSkippedTracks(): Set<string> {
+  if (_skippedTracks) return _skippedTracks;
+  try {
+    const raw = sessionStorage.getItem(SKIPPED_TRACKS_KEY);
+    _skippedTracks = raw ? new Set(JSON.parse(raw) as string[]) : new Set();
+  } catch {
+    _skippedTracks = new Set();
+  }
+  return _skippedTracks;
+}
+function saveSkippedTracks(): void {
+  if (!_skippedTracks) return;
+  try {
+    // Trim to most recent SKIPPED_MAX_SIZE entries (oldest first
+    // dropped — Set preserves insertion order).
+    const arr = Array.from(_skippedTracks);
+    const trimmed = arr.slice(-SKIPPED_MAX_SIZE);
+    if (trimmed.length !== arr.length) {
+      _skippedTracks = new Set(trimmed);
+    }
+    sessionStorage.setItem(SKIPPED_TRACKS_KEY, JSON.stringify(trimmed));
+  } catch { /* private mode / quota */ }
+}
+export function markTrackMovedAway(trackId: string): void {
+  if (!trackId) return;
+  const s = loadSkippedTracks();
+  s.add(trackId);
+  saveSkippedTracks();
+}
+export function hasUserMovedAwayFromTrack(trackId: string): boolean {
+  return loadSkippedTracks().has(trackId);
+}
+
 // v860 — surface the social-graph creators for the Friends lane.
 // Currently sessionStarred only; track engaged-via-OYE separately
 // for the same view (recordSessionPlay already bumps creatorWeights

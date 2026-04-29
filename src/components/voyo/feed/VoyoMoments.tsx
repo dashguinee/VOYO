@@ -14,6 +14,7 @@
 import React, { useState, useRef, useCallback, useEffect, memo } from 'react';
 import { Heart, Flame, MessageCircle, ExternalLink, Play, Volume2, VolumeX, X, Sparkles } from 'lucide-react';
 import { useMoments, CategoryAxis, NavAction, CATEGORY_PRESETS, TOP_MODE_LABELS } from '../../../hooks/useMoments';
+import { markTrackMovedAway, hasUserMovedAwayFromTrack } from '../../../services/momentsEngine';
 import type { Moment } from '../../../types/moments';
 import { AnimatedArtCard } from './AnimatedArtCard';
 import { DynamicVignette } from './DynamicVignette';
@@ -1545,33 +1546,15 @@ export const VoyoMoments: React.FC<VoyoMomentsProps> = ({ onPlayFullTrack, onArt
   const volTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const starHoldTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // v878 (Dash 2026-04-29 "one song keeps taking over... next song
-  // plays a bit then boom it takes over again"). The Music tab
-  // dwell was re-asserting a parent_track that the user had ALREADY
-  // skipped — when scrolling forward through moments that shared
-  // the same parent_track, every new dwell re-played the song the
-  // user explicitly chose to leave.
-  //
-  // Two new defenses:
-  //   (a) skippedTracksThisSession ref — once a track has been
-  //       playing and the user navigates AWAY from it (currentTrack
-  //       changes), we record its ID. Music dwell SKIPS auto-play
-  //       for any moment whose parent_track_id is in this set.
-  //   (b) suspended-after-skip window (4s) — anywhere within 4
-  //       seconds of a track change, no Music auto-play fires.
-  //       Gives the new track room to settle before the feed can
-  //       attempt to override it.
-  // The user can still TAP a track row in the bio to play any track
-  // explicitly (that path bypasses the dwell hook entirely).
-  const skippedTracksRef = useRef<Set<string>>(new Set());
+  // v881 — moved skip-tracking from a per-component ref (v878) to
+  // the momentsEngine MODULE level (markTrackMovedAway /
+  // hasUserMovedAwayFromTrack). Now persistent across VoyoMoments
+  // mount/unmount + sessionStorage-backed so the set survives a
+  // tab switch. Fixes "Godfather from davido leaking in" — that
+  // song was a victim of the per-component ref resetting on
+  // remount.
   const lastTrackChangeAtRef = useRef<number>(0);
   const previousTrackIdRef = useRef<string | undefined>(undefined);
-  // Subscribe to currentTrack changes — when it switches, the
-  // OUTGOING track's id is recorded as "user moved on from this".
-  // Not perfect (natural completion isn't a skip), but the cost
-  // of false-positives is low: a song never auto-replays after
-  // it finishes playing, which is the desired default for a
-  // discovery feed anyway.
   useEffect(() => {
     const unsub = usePlayerStore.subscribe((state) => {
       const cur = state.currentTrack;
@@ -1580,7 +1563,7 @@ export const VoyoMoments: React.FC<VoyoMomentsProps> = ({ onPlayFullTrack, onArt
         || undefined;
       if (newId !== previousTrackIdRef.current) {
         if (previousTrackIdRef.current) {
-          skippedTracksRef.current.add(previousTrackIdRef.current);
+          markTrackMovedAway(previousTrackIdRef.current);
         }
         previousTrackIdRef.current = newId;
         lastTrackChangeAtRef.current = Date.now();
@@ -1603,9 +1586,10 @@ export const VoyoMoments: React.FC<VoyoMomentsProps> = ({ onPlayFullTrack, onArt
           || (usePlayerStore.getState().currentTrack as unknown as { id?: string })?.id;
         // (1) Same-track guard (v871) — no redundant reload.
         if (livePlayingId === moment.parent_track_id) return;
-        // (2) Skipped-this-session guard (v878) — don't re-impose
-        // a song the user has already moved on from.
-        if (skippedTracksRef.current.has(moment.parent_track_id)) return;
+        // (2) Skipped-this-session guard (v881) — don't re-impose
+        // a song the user has already moved on from. Module-level
+        // set, sessionStorage-backed.
+        if (hasUserMovedAwayFromTrack(moment.parent_track_id)) return;
         // (3) Recent-skip cooldown (v878) — 4s after any track
         // change, no auto-plays. Lets the new track settle without
         // the feed yanking it back.

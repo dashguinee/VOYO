@@ -1474,8 +1474,16 @@ const RightToolbar = memo(({ onSettingsClick }: { onSettingsClick: () => void })
             : 'border border-[#28282f] hover:border-white/20'
         }`}
         style={{
-          background: isLiked ? 'rgba(139, 92, 246, 0.25)' : 'rgba(28, 28, 35, 0.65)',
-          boxShadow: isLiked ? '0 0 14px rgba(139,92,246,0.35)' : undefined,
+          // v881 — soft pink cross-tint into the purple. Bg gradient
+          // tilts violet→rose; outer halo gains a pink companion to
+          // the dominant purple bloom. Tiny shade only — purple
+          // stays the primary signature.
+          background: isLiked
+            ? 'linear-gradient(135deg, rgba(139,92,246,0.28) 0%, rgba(244,114,182,0.18) 100%)'
+            : 'rgba(28, 28, 35, 0.65)',
+          boxShadow: isLiked
+            ? '0 0 14px rgba(139,92,246,0.35), 0 0 22px rgba(244,114,182,0.18)'
+            : undefined,
           animation: heartPulse ? 'voyo-heart-pulse 0.9s cubic-bezier(0.16, 1, 0.3, 1)' : undefined,
         }}
         aria-label={isLiked ? 'Unlike this track' : 'Like this track'}
@@ -4740,13 +4748,20 @@ export const VoyoPortraitPlayer = ({
     })()
   );
   const swipeLabelRef = useRef<HTMLDivElement>(null);
-  const setSwipeLabel = (text: string, color: string, alpha: number, dx = 0) => {
+  const setSwipeLabel = (text: string, color: string, alpha: number, dx = 0, accent?: string) => {
     const el = swipeLabelRef.current;
     if (!el) return;
     el.textContent = text;
     el.style.color = color;
-    el.style.textShadow = `0 0 10px ${color}, 0 0 18px ${color}`;
-    el.style.boxShadow = `0 0 22px ${color}33, 0 4px 16px rgba(0,0,0,0.45)`;
+    // v881 — optional ACCENT halo (cross-tone). For LIKE we mix in
+    // a soft purple so the pill reads unisex, not gendered pink.
+    if (accent) {
+      el.style.textShadow = `0 0 10px ${color}, 0 0 16px ${color}, 0 0 22px ${accent}`;
+      el.style.boxShadow = `0 0 22px ${color}33, 0 0 30px ${accent}28, 0 4px 16px rgba(0,0,0,0.45)`;
+    } else {
+      el.style.textShadow = `0 0 10px ${color}, 0 0 18px ${color}`;
+      el.style.boxShadow = `0 0 22px ${color}33, 0 4px 16px rgba(0,0,0,0.45)`;
+    }
     el.style.opacity = String(alpha);
     const scale = 0.9 + alpha * 0.14;
     const ty = 6 - alpha * 6;
@@ -4782,8 +4797,10 @@ export const VoyoPortraitPlayer = ({
         set(wallLikeRef, eased);
         // v877 — label evolves with familiarity. First 3 lifetime
         // likes read full ("I like this"); 4th onwards just "like".
+        // v881 — soft purple accent halo cross-bleeds into the
+        // pink, unisex feel.
         const likeLabel = likeCountRef.current < 3 ? 'I like this' : 'like';
-        setSwipeLabel(likeLabel, '#F472B6', eased, dx);
+        setSwipeLabel(likeLabel, '#F472B6', eased, dx, '#a78bfa');
       }
     } else if (dx < 0) {
       // v875 — Drift = LEFT quick (was "Skip", indigo glow now).
