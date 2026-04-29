@@ -153,6 +153,15 @@ function scoreMoment(m: Moment, ctx: RankContext): number {
   // Session dedup
   if (sessionShown.has(m.id)) s -= 100;
 
+  // v842 (Dash 2026-04-29 "why do I keep seeing the same videos and
+  // same order"): without a tiebreaker the score is fully
+  // deterministic — same fetch produces the same order forever.
+  // ±12 jitter is small enough that strong taste signals (favorite
+  // artist = +60, mood = +30) still dominate, but enough to shuffle
+  // close-scoring moments between fetches. Each fetch reroles the
+  // dice so the rail feels alive without losing the affinity logic.
+  s += (Math.random() - 0.5) * 24;
+
   return s;
 }
 

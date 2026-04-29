@@ -6888,12 +6888,10 @@ export const VoyoPortraitPlayer = ({
                 Mix Board
               </span>
               <span style={{ color: 'rgba(230,197,138,0.20)' }}>·</span>
-              {/* v839 (Dash 2026-04-29 "make your vibes text neutral"):
-                  was a Fraunces italic with dynamic vibesColor + glow
-                  driven by the user's boosted modes. Now matches the
-                  Mix Board cap's restrained bronze — no color shift,
-                  no halo. Italic + slightly heavier weight keeps the
-                  hierarchy ("Mix Board · Your Vibes"). */}
+              {/* v842 (Dash 2026-04-29 "fade your vibes text by 10%"):
+                  drop bronze alpha 0.62 → 0.56 (-10% relative). Keeps
+                  the hierarchy from sitting flush with the Mix Board
+                  cap; recedes a touch into supporting role. */}
               <span
                 style={{
                   fontFamily: "'Fraunces', 'Satoshi', system-ui, serif",
@@ -6901,7 +6899,7 @@ export const VoyoPortraitPlayer = ({
                   fontWeight: 500,
                   fontSize: 13,
                   letterSpacing: '0.005em',
-                  color: 'rgba(230,197,138,0.62)',
+                  color: 'rgba(230,197,138,0.56)',
                 }}
               >
                 Your Vibes

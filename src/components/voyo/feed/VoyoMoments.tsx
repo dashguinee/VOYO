@@ -122,21 +122,31 @@ const S = {
     pointerEvents: 'auto',
     transition: 'opacity 0.6s cubic-bezier(0.16, 1, 0.3, 1), transform 0.6s cubic-bezier(0.16, 1, 0.3, 1)',
   }),
-  // Side shadows — matured. One signature move (per restraint memo):
-  // a 44px multi-stop gradient with a subtle cool→warm tonal shift.
-  // Outer edge is deeper + cooler (#080503), pulls toward warm amber as
-  // it fades — reads as light bouncing off a curved glass edge, not a
-  // dark wash pasted on. z 25→28 so the edge sits cleanly above the
-  // video card (zIndex 2) and content rails, but below the topBar (30).
-  // No top/bottom fades, no vignettes, no blur — one gesture, refined.
+  // v842 (Dash 2026-04-29 "concave like ( ) but not as round, stabilized,
+  // feels like you entered a moment, temporal momentaneous"). Side shades
+  // are now radial ellipses pinned at the edge midpoint — light falls off
+  // from the inside-of-a-frame curve in BOTH axes, not just horizontally.
+  // The eye reads the result as the inner wall of a proscenium arch /
+  // passe-partout: darker at the mid-edge, tapering toward the corners.
+  // Backed by boundary-extension + center-bias attention research.
   sideShadowL: css({
-    position: 'absolute', top: 0, bottom: 0, left: 0, width: 44, zIndex: 28,
-    background: 'linear-gradient(to right, rgba(8,5,3,0.42) 0%, rgba(14,9,5,0.22) 35%, rgba(20,12,6,0.10) 65%, transparent 100%)',
+    position: 'absolute', top: 0, bottom: 0, left: 0, width: 64, zIndex: 28,
+    background: 'radial-gradient(ellipse 70% 95% at 0% 50%, rgba(6,4,2,0.58) 0%, rgba(14,9,5,0.30) 32%, rgba(20,12,6,0.10) 68%, transparent 100%)',
     pointerEvents: 'none',
   }),
   sideShadowR: css({
-    position: 'absolute', top: 0, bottom: 0, right: 0, width: 44, zIndex: 28,
-    background: 'linear-gradient(to left, rgba(8,5,3,0.42) 0%, rgba(14,9,5,0.22) 35%, rgba(20,12,6,0.10) 65%, transparent 100%)',
+    position: 'absolute', top: 0, bottom: 0, right: 0, width: 64, zIndex: 28,
+    background: 'radial-gradient(ellipse 70% 95% at 100% 50%, rgba(6,4,2,0.58) 0%, rgba(14,9,5,0.30) 32%, rgba(20,12,6,0.10) 68%, transparent 100%)',
+    pointerEvents: 'none',
+  }),
+  // v842 top shade — closes the proscenium frame at the top. Subtle
+  // (max 32% black) so the moment breathes; pairs with the bottom
+  // gradient + side shades to create a complete "you've entered a
+  // moment" cocoon. zIndex 27 sits below topBar(30) so axis tabs stay
+  // crisp on top.
+  topShade: css({
+    position: 'absolute', top: 0, left: 0, right: 0, height: 132, zIndex: 27,
+    background: 'linear-gradient(to bottom, rgba(8,5,3,0.32) 0%, rgba(14,9,5,0.18) 35%, rgba(20,12,6,0.06) 70%, transparent 100%)',
     pointerEvents: 'none',
   }),
   axisTabs: css({ display: 'flex', justifyContent: 'center', gap: 4, padding: '8px 16px 2px' }),
@@ -149,7 +159,10 @@ const S = {
   // doesn't eat the lower HALF of every video on tall portraits (iPhone Pro
   // Max ≈ 915 tall → 55% was ~503px wash). Cap at 360px so the gradient
   // reads as a footer halo, not a curtain.
-  grad: css({ position: 'absolute', bottom: 0, left: 0, right: 0, height: '55%', maxHeight: 360, background: 'linear-gradient(to top, rgba(20,12,6,0.62) 0%, rgba(20,12,6,0.22) 45%, transparent 100%)', zIndex: 2, pointerEvents: 'none' }),
+  // v842: smoother bottom fade — more stops along a softer curve so
+  // the dim → transparent ramp doesn't crease where caption text
+  // sits. Same overall depth (62% at base), just better-shaped.
+  grad: css({ position: 'absolute', bottom: 0, left: 0, right: 0, height: '55%', maxHeight: 360, background: 'linear-gradient(to top, rgba(20,12,6,0.62) 0%, rgba(20,12,6,0.42) 22%, rgba(20,12,6,0.22) 45%, rgba(20,12,6,0.08) 72%, transparent 100%)', zIndex: 2, pointerEvents: 'none' }),
   // CREATOR BLOCK — single container positioned on the LEFT side, vertically
   // aligned with the middle of the right-side action bar. Stacks the orb +
   // name on top, with a compact glass bio card below. Bio is collapsed by
@@ -1821,9 +1834,14 @@ export const VoyoMoments: React.FC<VoyoMomentsProps> = ({ onPlayFullTrack, onArt
       onTouchMove={onTM}
       onTouchEnd={onTE}
     >
-      {/* SIDE SHADOWS — frame the video with subtle vertical gradients */}
+      {/* v842 PROSCENIUM FRAME — concave side shades + top shade close
+          the moment into a "you've entered" cocoon. Backed by boundary-
+          extension and center-bias attention research. Side shades
+          carry the ( ) curve; top shade caps it; bottom S.grad already
+          carries the lower edge. */}
       <div style={S.sideShadowL} />
       <div style={S.sideShadowR} />
+      <div style={S.topShade} />
 
       {/* TOP BAR — unified gradient surface. Visible when uiPhase isn't
           immersive OR when headerVisible is true (set by tap-to-wake). */}
