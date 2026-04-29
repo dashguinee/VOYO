@@ -85,13 +85,27 @@ const FadeWrapper = memo(({ children, dir, role }: { children: React.ReactNode; 
     final   = { opacity: 1, transform: `translate${axis}(0%)` };
   }
 
+  // v843 (Dash 2026-04-29 "temporal framing — 200ms breath before paint,
+  // 300ms tail"). Each FadeWrapper now phases in/out, not crossfades:
+  //   OUTGOING: exits FAST (380ms) so it's gone in well under half a
+  //             second. The eye registers it leaving, marks an exit.
+  //   INCOMING: waits 220ms (the BREATH), then enters over 580ms. The
+  //             waiting gap is the cognitive "this is a new moment"
+  //             signal — same principle a film cut uses.
+  // Combined: ~600ms per moment of overlap-free phasing. Boundary
+  // extension research says this is the felt boundary that turns a
+  // continuous stream into a sequence of discrete remembered events.
+  const isOutgoing = role === 'outgoing';
+  const transitionDuration = isOutgoing ? 380 : 580;
+  const transitionDelay = isOutgoing ? 0 : 220;
+
   const live = phase === 'pre' ? initial : final;
   return (
     <div
       style={{
         ...live,
         position: 'absolute', inset: 0,
-        transition: 'opacity 600ms cubic-bezier(0.16, 1, 0.3, 1), transform 600ms cubic-bezier(0.16, 1, 0.3, 1)',
+        transition: `opacity ${transitionDuration}ms cubic-bezier(0.16, 1, 0.3, 1) ${transitionDelay}ms, transform ${transitionDuration}ms cubic-bezier(0.16, 1, 0.3, 1) ${transitionDelay}ms`,
         willChange: 'opacity, transform',
       }}
     >
@@ -1065,12 +1079,17 @@ CommentsDrawer.displayName = 'CommentsDrawer';
 // POSITION OVERLAY
 // ============================================
 
-const PositionOverlay = memo(({ position, categories, totalInCategory, onClose, displayName }: {
+const PositionOverlay = memo(({ position, categories, totalInCategory, onClose, displayName, isMuted, onToggleMute }: {
   position: { categoryIndex: number; timeIndex: number };
   categories: string[];
   totalInCategory: number;
   onClose: () => void;
   displayName: (key: string) => string;
+  /** v843: volume control on the hold-descriptive screen. Was on the
+   *  navbar slider (off-card 2nd-class affordance); now lives where
+   *  the user is already paused looking at the overlay. */
+  isMuted: boolean;
+  onToggleMute: () => void;
 }) => {
   const cur = categories[position.categoryIndex];
   const prev = categories[(position.categoryIndex - 1 + categories.length) % categories.length];
@@ -1089,6 +1108,36 @@ const PositionOverlay = memo(({ position, categories, totalInCategory, onClose, 
         </div>
         <div style={{ fontSize: 22, color: 'rgba(255,255,255,0.3)', margin: '4px 0' }}>|</div>
         <div style={S.posTime}>{totalInCategory > 0 ? `${position.timeIndex + 1} of ${totalInCategory} moments` : 'No moments yet'}</div>
+
+        {/* v843 — volume switch lives here. The user is already paused
+            looking at the overlay; the action is contextual + uncrowded.
+            Tap the chip toggles mute; bronze accent when sound is on. */}
+        <button
+          onClick={(e) => { e.stopPropagation(); onToggleMute(); }}
+          style={{
+            marginTop: 12,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            padding: '8px 14px',
+            borderRadius: 999,
+            background: isMuted ? 'rgba(255,255,255,0.06)' : 'rgba(212,160,83,0.14)',
+            border: `1px solid ${isMuted ? 'rgba(255,255,255,0.10)' : 'rgba(212,160,83,0.34)'}`,
+            color: isMuted ? 'rgba(255,255,255,0.78)' : 'rgba(230,197,138,0.95)',
+            fontSize: 12,
+            fontWeight: 500,
+            letterSpacing: 0.4,
+            cursor: 'pointer',
+            transition: 'background 220ms ease, border-color 220ms ease, color 220ms ease',
+          }}
+          aria-label={isMuted ? 'Unmute moment audio' : 'Mute moment audio'}
+        >
+          {isMuted
+            ? <VolumeX size={14} style={{ color: 'rgba(255,255,255,0.7)' }} />
+            : <Volume2 size={14} style={{ color: 'rgba(230,197,138,0.95)' }} />}
+          <span>{isMuted ? 'Sound off' : 'Sound on'}</span>
+        </button>
+
         <div style={S.posHint}>Tap anywhere to close</div>
       </div>
     </div>
@@ -2119,7 +2168,15 @@ export const VoyoMoments: React.FC<VoyoMomentsProps> = ({ onPlayFullTrack, onArt
       )}
 
       {showOverlay && (
-        <PositionOverlay position={position} categories={categories} totalInCategory={effectiveTotalInCategory} onClose={() => setShowOverlay(false)} displayName={displayName} />
+        <PositionOverlay
+          position={position}
+          categories={categories}
+          totalInCategory={effectiveTotalInCategory}
+          onClose={() => setShowOverlay(false)}
+          displayName={displayName}
+          isMuted={isMuted}
+          onToggleMute={() => { setIsMuted(p => !p); showVolBadge(); }}
+        />
       )}
 
       {/* STAR PANEL */}
