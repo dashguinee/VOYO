@@ -6075,10 +6075,36 @@ export const VoyoPortraitPlayer = ({
 
 
 
-        {/* Stream Labels - Enhanced Neon Style with Glow.
-            v801 (Dash 2026-04-29): mb-3 → mb-1 (12px → 4px) — labels sit
-            tighter to the cards row beneath, less dead air between them. */}
-        <div className="flex justify-between px-6 mb-1">
+        {/* Stream Labels — HOT/Discover row.
+            v801: mb-3 → mb-1 (12px → 4px). Labels sit tighter to the
+            cards row beneath.
+            v869 (Dash 2026-04-29 "light up the part where the disk
+            is and the disk width on tap, like the disk came out of
+            that"): a horizontal glow slot centered between HOT and
+            DISCOVER, exactly the disk's 80px width. Lights up when
+            isControlsRevealed (the on-tap overlay state) so the
+            disk reads as having emerged FROM that line. Pure
+            atmosphere — pointer-events: none. portalProgress fades
+            it out in step with the engine row. */}
+        <div className="relative flex justify-between px-6 mb-1">
+          <div
+            aria-hidden
+            style={{
+              position: 'absolute',
+              left: '50%',
+              top: '50%',
+              transform: 'translate(-50%, -50%)',
+              width: 84, // matches disk's w-20 (80) + 4px halo bleed
+              height: 3,
+              borderRadius: 999,
+              background: 'linear-gradient(90deg, transparent 0%, rgba(212,160,83,0.35) 18%, rgba(230,197,138,0.85) 50%, rgba(212,160,83,0.35) 82%, transparent 100%)',
+              boxShadow: '0 0 14px rgba(212,160,83,0.55), 0 0 28px rgba(167,139,250,0.30)',
+              opacity: isControlsRevealed && portalProgress < 0.4 ? 1 : 0,
+              transition: 'opacity 0.32s cubic-bezier(0.16, 1, 0.3, 1)',
+              pointerEvents: 'none',
+              zIndex: 6, // above the label row bg, below the labels' chrome
+            }}
+          />
           {/* HOT Label — deep rust ember (mature, aged, premium) */}
           <button
             onClick={handleToggleHotBelt}
