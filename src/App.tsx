@@ -1146,18 +1146,17 @@ function App() {
                 opacity: feedHeaderHidden ? 0 : 1,
                 transform: feedHeaderHidden ? 'translateY(-8px)' : 'translateY(0)',
                 pointerEvents: feedHeaderHidden ? 'none' : 'auto',
-                // v895 (Dash 2026-04-29 "a bit much and a bit harsh,
-                // make it blend"): same idea — top edge matches PWA
-                // theme-color #8b5cf6 — but stepped through plum and
-                // dim purple so there'\''s no abrupt black mid-band.
-                // Five stops walk hue + lightness + alpha together,
-                // which kills banding without a backdrop-filter.
+                // v896 (Dash 2026-04-29 "tone intensity down by 7%"):
+                // every alpha multiplied by 0.93. Top edge softened
+                // from solid #8b5cf6 to rgba 0.93 so the whole strip
+                // breathes a touch lighter while the same 5-stop walk
+                // keeps the no-band feel from v895.
                 background: [
                   'linear-gradient(180deg,',
-                  '#8b5cf6 0%,',                          // status bar match
-                  'rgba(85, 50, 145, 0.92) 22%,',         // deepening purple
-                  'rgba(40, 22, 70, 0.70) 48%,',          // dark plum
-                  'rgba(12, 8, 22, 0.32) 75%,',           // near-black, low alpha
+                  'rgba(139, 92, 246, 0.93) 0%,',         // PWA-match, 7% softer
+                  'rgba(85, 50, 145, 0.86) 22%,',         // deepening purple
+                  'rgba(40, 22, 70, 0.65) 48%,',          // dark plum
+                  'rgba(12, 8, 22, 0.30) 75%,',           // near-black, low alpha
                   'transparent 100%)'                     // dissolve into canvas
                 ].join(' '),
                 transition: [
