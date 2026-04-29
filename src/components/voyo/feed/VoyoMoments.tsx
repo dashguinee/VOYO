@@ -1501,6 +1501,9 @@ export const VoyoMoments: React.FC<VoyoMomentsProps> = ({ onPlayFullTrack, onArt
   const tapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const touchStart = useRef<{ x: number; y: number; time: number } | null>(null);
   const swiping = useRef(false);
+  // v844: live-drag ref for the active moment. onTM mutates style
+  // directly (no re-render) so the card tracks the finger 1:1.
+  const dragLayerRef = useRef<HTMLDivElement>(null);
   const volTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const starHoldTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -1674,10 +1677,29 @@ export const VoyoMoments: React.FC<VoyoMomentsProps> = ({ onPlayFullTrack, onArt
   const onTM = useCallback((e: React.TouchEvent) => {
     if (!touchStart.current) return;
     const t = e.touches[0];
-    if (Math.abs(t.clientX - touchStart.current.x) > 10 || Math.abs(t.clientY - touchStart.current.y) > 10) {
+    const dx = t.clientX - touchStart.current.x;
+    const dy = t.clientY - touchStart.current.y;
+    if (Math.abs(dx) > 10 || Math.abs(dy) > 10) {
       swiping.current = true;
       if (lpTimer.current) { clearTimeout(lpTimer.current); lpTimer.current = null; }
       if (starHoldTimer.current) { clearTimeout(starHoldTimer.current); starHoldTimer.current = null; }
+    }
+    // v844: live drag feedback — the active card translates with the
+    // finger 1:1 and fades as the gesture develops, so the user FEELS
+    // the moment receding. Mutated via ref to avoid a per-frame React
+    // re-render (the same pattern BigCenterCard uses on the audio
+    // side). Once committed, FadeWrapper takes over with its own
+    // entry animation; on cancel, the cleanup in onTE springs back.
+    const el = dragLayerRef.current;
+    if (el && swiping.current) {
+      const mag = Math.sqrt(dx * dx + dy * dy);
+      // Opacity falls 1 → 0.35 across a 220px gesture (felt range).
+      // We don't go below 0.35 — past that the card disappears
+      // before the user has committed, which feels lossy.
+      const opacity = Math.max(0.35, 1 - mag / 320);
+      el.style.transition = 'none';
+      el.style.transform = `translate(${dx * 0.6}px, ${dy * 0.6}px)`;
+      el.style.opacity = String(opacity);
     }
   }, []);
 
@@ -1726,6 +1748,19 @@ export const VoyoMoments: React.FC<VoyoMomentsProps> = ({ onPlayFullTrack, onArt
       startTransition();
       // Any genuine nav action retires the teach (they got it).
       killTeach();
+      // v844: COMMIT — clear the drag-layer overrides so the new
+      // moment's FadeWrapper takes over with a fresh entry animation.
+      // Use rAF so the clear happens AFTER React mounts the new card
+      // (otherwise we'd reset the transform on the wrong element).
+      const el = dragLayerRef.current;
+      if (el) {
+        requestAnimationFrame(() => {
+          if (!el) return;
+          el.style.transition = '';
+          el.style.transform = '';
+          el.style.opacity = '';
+        });
+      }
 
       if (Math.abs(dx) > Math.abs(dy)) {
         if (dx < 0) {
@@ -1741,6 +1776,19 @@ export const VoyoMoments: React.FC<VoyoMomentsProps> = ({ onPlayFullTrack, onArt
         }
       }
       return;
+    }
+
+    // v844: BELOW SWIPE_THRESHOLD — no commit. Spring the drag layer
+    // back to rest so the active card snaps home cleanly. The
+    // transition was disabled in onTM for finger-tracking; we re-arm
+    // it here for the spring.
+    {
+      const el = dragLayerRef.current;
+      if (el) {
+        el.style.transition = 'transform 380ms cubic-bezier(0.16, 1, 0.3, 1), opacity 380ms cubic-bezier(0.16, 1, 0.3, 1)';
+        el.style.transform = 'translate(0px, 0px)';
+        el.style.opacity = '1';
+      }
     }
 
     // Single tap = ping widgets back to visible (3s timer restart).
@@ -2022,29 +2070,48 @@ export const VoyoMoments: React.FC<VoyoMomentsProps> = ({ onPlayFullTrack, onArt
               />
             </FadeWrapper>
           )}
-          {/* Incoming — keyed by moment id so each new moment runs a
-              fresh enter from offset+0 opacity to 0+1 over 600ms. */}
-          <FadeWrapper key={`curr-${currentMoment.id}-${mKey}`} dir={transitionDir} role="incoming">
-            <MomentCard
-              moment={currentMoment}
-              isOyed={isOyed}
-              onOye={handleOyeBtn}
-              isActive={true}
-              isMuted={isMuted}
-              onToggleMute={showVolBadge}
-              onPlayTrack={currentMoment.parent_track_id && onPlayFullTrack ? () => onPlayFullTrack({
-                id: currentMoment.parent_track_id!,
-                title: currentMoment.parent_track_title || 'Unknown',
-                artist: currentMoment.parent_track_artist || 'Unknown Artist',
-              }) : undefined}
-              onArtistTap={onArtistTap}
-              onOpenComments={handleOpenComments}
-              showOrb={showOrb}
-              showName={showName}
-              showTitle={showTitle}
-              showBioBody={showBioBody}
-            />
-          </FadeWrapper>
+          {/* v844 DRAG LAYER (Dash 2026-04-29 "on scroll right my motion
+              must make the moment I am interacting with react... fade
+              transparent out so the other just blends in"). Wraps only
+              the active/incoming card; on touch move the parent's onTM
+              mutates this ref directly (no React per-frame) so the
+              card translates with the finger and fades as the gesture
+              develops. On commit → cleared, FadeWrapper takes over.
+              On cancel → springs back via transition. */}
+          <div
+            ref={dragLayerRef}
+            style={{
+              position: 'absolute', inset: 0,
+              willChange: 'transform, opacity',
+              // Transition only used for the spring-back / commit clear;
+              // pointer-move flips it off so the finger drives 1:1.
+              transition: 'transform 380ms cubic-bezier(0.16, 1, 0.3, 1), opacity 380ms cubic-bezier(0.16, 1, 0.3, 1)',
+            }}
+          >
+            {/* Incoming — keyed by moment id so each new moment runs a
+                fresh enter from offset+0 opacity to 0+1 over 600ms. */}
+            <FadeWrapper key={`curr-${currentMoment.id}-${mKey}`} dir={transitionDir} role="incoming">
+              <MomentCard
+                moment={currentMoment}
+                isOyed={isOyed}
+                onOye={handleOyeBtn}
+                isActive={true}
+                isMuted={isMuted}
+                onToggleMute={showVolBadge}
+                onPlayTrack={currentMoment.parent_track_id && onPlayFullTrack ? () => onPlayFullTrack({
+                  id: currentMoment.parent_track_id!,
+                  title: currentMoment.parent_track_title || 'Unknown',
+                  artist: currentMoment.parent_track_artist || 'Unknown Artist',
+                }) : undefined}
+                onArtistTap={onArtistTap}
+                onOpenComments={handleOpenComments}
+                showOrb={showOrb}
+                showName={showName}
+                showTitle={showTitle}
+                showBioBody={showBioBody}
+              />
+            </FadeWrapper>
+          </div>
 
           {/* Hidden preload — keeps the next moment's <video> mounted with
               preload="metadata" so the swipe-forward play() hits a warm
