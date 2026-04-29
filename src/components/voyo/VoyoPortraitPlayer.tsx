@@ -22,7 +22,6 @@ import { usePreferenceStore } from '../../store/preferenceStore';
 import { getThumbnailUrl, getTrackThumbnailUrl } from '../../utils/thumbnail';
 import { Track, ReactionType } from '../../types';
 import { SmartImage } from '../ui/SmartImage';
-import { CubeGestureHint } from './CubeGestureHint';
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { unlockMobileAudio, isMobileDevice } from '../../utils/mobileAudioUnlock';
 import { useMobilePlay } from '../../hooks/useMobilePlay';
@@ -2082,14 +2081,10 @@ StreamCard.displayName = 'StreamCard';
 // BIG CENTER CARD (NOW PLAYING - Canva-style purple fade with premium typography)
 // TAP ALBUM ART FOR LYRICS VIEW | VIDEO HANDLED BY GLOBAL IFRAME
 // ============================================
-const BigCenterCard = memo(({ track, onExpandVideo, onShowLyrics, onLyricsArmed, onToggleMode, hideThumb, isIframeAudio, isMiniPlayerActive = false, controlsActive = false }: {
+const BigCenterCard = memo(({ track, onExpandVideo, onShowLyrics, onLyricsArmed, hideThumb, isIframeAudio, isMiniPlayerActive = false, controlsActive = false }: {
   track: Track;
   onExpandVideo?: () => void;
   onShowLyrics?: () => void;
-  /** v885 (Dash 2026-04-29): tap on artwork now toggles modes
-   *  (artwork ↔ floating movable iframe). Lyrics callback is parked
-   *  unused for now until a new trigger is decided. */
-  onToggleMode?: () => void;
   /** Fired when the 350ms hold-for-lyrics timer commits — parent uses this
    *  to cancel the canvas's 400ms DJ-mode hold so both don't fire from one
    *  gesture. (Dash 2026-04-29 v826 — fix for swipe-from-artwork interfering
@@ -2247,12 +2242,13 @@ const BigCenterCard = memo(({ track, onExpandVideo, onShowLyrics, onLyricsArmed,
       onPointerUp={() => {
         const heldFor = Date.now() - cardDownAt.current;
         if (cardDuckTimer.current) {
-          // Released before the 80ms duck → it's a TAP.
-          // v885: TAP now toggles mode (artwork ↔ movable iframe).
-          // Lyrics path retired from this gesture; new trigger TBD.
+          // Released before the 80ms duck → it's a TAP. Open lyrics.
+          // v889: card-tap reverted to Lyrics per Dash — "tap on center
+          // of the card or card itself...mode change is actually for
+          // Lyrics". Mode toggle moved off the card onto canvas tap.
           clearTimeout(cardDuckTimer.current);
           cardDuckTimer.current = null;
-          onToggleMode?.();
+          onShowLyrics?.();
         } else if (cardIsDucking.current) {
           // Was holding; restore volume regardless. If held >=350ms,
           // commit a real PAUSE on release.
@@ -2384,10 +2380,6 @@ const BigCenterCard = memo(({ track, onExpandVideo, onShowLyrics, onLyricsArmed,
           <Mic2 size={14} className="text-white" />
         </div>
       )}
-      {/* Shared cube gesture hint — same component lives on the
-          iframe mini player. Placing at top here since the bottom
-          is owned by title + artist. v888. */}
-      <CubeGestureHint position="top" />
     </div>
 
     {/* Subtle vignette for depth */}
@@ -5261,17 +5253,13 @@ export const VoyoPortraitPlayer = ({
       return;
     }
 
-    // Single tap (canvas, non-card, no reactions open) → wake the
-    // controls/widgets overlay. No mode toggle, no chat, no lyrics.
-    const wasHidden = !isControlsRevealed;
-    setIsControlsRevealed(prev => !prev);
-    if (wasHidden) {
-      setShowOyoIsland(true);
-      haptics.light();
-    } else {
-      setShowOyoIsland(false);
-    }
-  }, [isControlsRevealed, isReactionsRevealed]);
+    // v889: single tap on canvas (NOT on card — card is Lyrics)
+    // toggles mode: poster ↔ video iframe ↔ poster. This was the
+    // pre-v879 spot Dash referenced as "the previous video mode".
+    const cur = usePlayerStore.getState().videoTarget;
+    setVideoTarget(cur === 'portrait' ? 'hidden' : 'portrait');
+    haptics.light();
+  }, [setVideoTarget]);
 
   // AUTO-HIDE controls + OyoIsland after 3s - encourages double-tap discovery
   const controlsHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -5989,14 +5977,8 @@ export const VoyoPortraitPlayer = ({
               // "Take Out" — tapping Take Out enters system PiP via
               // pipService directly. Don't reroute this flow.
               onExpandVideo={() => setVideoTarget('portrait')}
-              // v886: card-tap toggles mode. Two states only —
-              //  • 'hidden'   → artwork card (default playing surface)
-              //  • 'portrait' → floating draggable iframe (movable;
-              //                 has tap-to-close + right-edge-portal
-              //                 → Take Out / PiP, all in YouTubeIframe)
-              // Lyrics overlay no longer triggered by tap; setter
-              // kept for future wire-up.
-              onToggleMode={() => setVideoTarget(videoTarget === 'portrait' ? 'hidden' : 'portrait')}
+              // v889: card tap = Lyrics (reverted). Mode toggle moved
+              // to canvas single-tap (handleCanvasTap).
               onShowLyrics={() => setShowLyricsOverlay(true)}
               // v826: when lyrics arms, cancel the canvas DJ-mode 400ms
               // hold + mark the gesture as a hold so the trailing click

@@ -923,13 +923,18 @@ export const YouTubeIframe = memo(() => {
       // transform as translate/drag so the existing spring transition
       // interpolates size change + position change together.
       const compactScale = playerCompact ? 0.82 : 1;
+      // v889: drag = grow. Idle the cube sits at original size
+      // (matches BigCenterCard footprint). Grab + drag scales up so
+      // the user gets visual confirmation they've picked it up.
+      const dragScale = isDragging ? 1.18 : 1;
+      const finalScale = compactScale * dragScale;
       return {
         position: 'fixed',
         overflow: 'hidden',
         background: '#000',
         top: '50%',
         left: '50%',
-        transform: `translate(calc(-50% + ${portraitPos.x}px), calc(-50% + ${portraitPos.y}px)) scale(${compactScale})`,
+        transform: `translate(calc(-50% + ${portraitPos.x}px), calc(-50% + ${portraitPos.y}px)) scale(${finalScale})`,
         width: `${MINI_SIZE}px`,
         height: `${MINI_SIZE}px`,
         borderRadius: '2rem',

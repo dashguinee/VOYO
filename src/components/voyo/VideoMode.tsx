@@ -17,6 +17,7 @@
 import { useRef, useEffect, useCallback } from 'react';
 import { Play, Pause, SkipBack, SkipForward, X, Volume2, VolumeX, Heart } from 'lucide-react';
 import { VoyoCloseX } from '../ui/VoyoCloseX';
+import { CubeGestureHint } from './CubeGestureHint';
 import { usePlayerStore } from '../../store/playerStore';
 import { usePreferenceStore } from '../../store/preferenceStore';
 import { getYouTubeThumbnail } from '../../data/tracks';
@@ -236,8 +237,10 @@ export const VideoMode = ({ onExit }: VideoModeProps) => {
             <SkipForward className="w-8 h-8 text-white" fill="white" />
           </button>
         </div>
-        {/* Hint text removed — previously advertised swipe / double-tap /
-            triple-tap gestures that weren't actually implemented. */}
+        {/* Shared cube gesture hint — same component lives on the
+            iframe mini player. Visual proof both surfaces share the
+            same gesture grammar. v889. */}
+        <CubeGestureHint position="bottom" />
       </div>
     </div>
   );
