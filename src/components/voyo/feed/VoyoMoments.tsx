@@ -157,38 +157,33 @@ const S = {
   // radial ellipse naturally tapers to nothing at the top corners.
   // No more rectangle artifact. All four atmospheric edges are now
   // pure radials — symmetric language, ultimate version.
-  sideShadowL: css({
-    position: 'absolute', top: 0, bottom: 0, left: 0, width: 64, zIndex: 28,
-    background: 'radial-gradient(ellipse 70% 95% at 0% 50%, rgba(28,18,52,0.40) 0%, rgba(48,32,90,0.20) 28%, rgba(22,14,38,0.10) 60%, transparent 100%)',
+  // v853 (Dash 2026-04-29 "use everything from v845 to now, for the
+  // best final version with no errors or bleed or patch"). The
+  // canonical proscenium. ONE viewport-anchored element, three
+  // stacked radials. No 64px-wide column containers, no 132px-tall
+  // row containers — the rectangular bleed is gone by construction
+  // because the container IS the viewport.
+  //
+  //   left  : ellipse 70% 100% at 0% 50%   — proscenium L (dusk)
+  //   right : ellipse 70% 100% at 100% 50% — proscenium R (dusk)
+  //   top   : ellipse 65% 60% at 50% 0%    — central atmosphere
+  //
+  // Bottom phosphorescence stays in its own breathing element below
+  // (S.bottomGlow) so the animation is GPU-scoped — never repaints
+  // the static frame.
+  frame: css({
+    position: 'absolute', inset: 0, zIndex: 28,
+    background: `
+      radial-gradient(ellipse 70% 100% at 0% 50%, rgba(28,18,52,0.40) 0%, rgba(48,32,90,0.20) 18%, rgba(22,14,38,0.10) 38%, transparent 62%),
+      radial-gradient(ellipse 70% 100% at 100% 50%, rgba(28,18,52,0.40) 0%, rgba(48,32,90,0.20) 18%, rgba(22,14,38,0.10) 38%, transparent 62%),
+      radial-gradient(ellipse 65% 60% at 50% 0%, rgba(28,18,52,0.12) 0%, rgba(48,32,90,0.06) 50%, transparent 100%)
+    `,
     pointerEvents: 'none',
   }),
-  sideShadowR: css({
-    position: 'absolute', top: 0, bottom: 0, right: 0, width: 64, zIndex: 28,
-    background: 'radial-gradient(ellipse 70% 95% at 100% 50%, rgba(28,18,52,0.40) 0%, rgba(48,32,90,0.20) 28%, rgba(22,14,38,0.10) 60%, transparent 100%)',
-    pointerEvents: 'none',
-  }),
-  // v849 (Dash 2026-04-29 "I liked the fade effect, the two box thingy
-  // you removed have it, maybe just tone it a bit"). The previous
-  // topShade/bottomGlow read as rectangular slabs because they were
-  // FULL-WIDTH linear gradients. Switched to RADIAL ellipses pinned
-  // off-screen at the top-center and bottom-center — the dark/light
-  // falls off in BOTH axes, so the corners taper and the eye never
-  // sees a horizontal edge. Same atmosphere, no box.
-  topShade: css({
-    position: 'absolute', top: 0, left: 0, right: 0, height: 132, zIndex: 27,
-    // v852 (Dash 2026-04-29 "I still see two like rectangles of fade
-    // emerging from the right"): radial widths tightened 90% → 65%
-    // so the top/bottom atmospheres stay CENTRAL and don't bleed
-    // into the corners. Side shades own the edges; tops/bottoms own
-    // the middle. No more rectangular bands at the right edge from
-    // top+side stacking.
-    background: 'radial-gradient(ellipse 65% 60% at 50% 0%, rgba(28,18,52,0.12) 0%, rgba(48,32,90,0.06) 50%, transparent 100%)',
-    pointerEvents: 'none',
-  }),
-  // v849 BOTTOM GLOW — same radial approach. Phosphorescent violet
-  // wash centered at bottom-center, fading up AND toward the corners.
-  // Breathes for ambient magic. paddingBottom uses env() so PWA
-  // standalone home indicator gets the same atmosphere.
+  // v853 bottom phosphorescence — separate so the breathing
+  // animation is GPU-scoped and never invalidates the static frame.
+  // PWA-aware: padding-bottom uses env(safe-area-inset-bottom) so
+  // installed apps get the same magic across the home indicator.
   bottomGlow: css({
     position: 'absolute',
     bottom: 0,
@@ -197,7 +192,7 @@ const S = {
     height: 'calc(120px + env(safe-area-inset-bottom, 0px))',
     paddingBottom: 'env(safe-area-inset-bottom, 0px)',
     zIndex: 4,
-    background: 'radial-gradient(ellipse 65% 70% at 50% 100%, rgba(139,92,246,0.16) 0%, rgba(167,139,250,0.07) 45%, transparent 100%)',
+    background: 'radial-gradient(ellipse 65% 100% at 50% 100%, rgba(139,92,246,0.18) 0%, rgba(167,139,250,0.08) 45%, transparent 100%)',
     pointerEvents: 'none',
     animation: 'voyo-bottom-glow-breathe 4.8s ease-in-out infinite',
     willChange: 'opacity, transform',
@@ -1955,14 +1950,15 @@ export const VoyoMoments: React.FC<VoyoMomentsProps> = ({ onPlayFullTrack, onArt
       onTouchMove={onTM}
       onTouchEnd={onTE}
     >
-      {/* v849 PROSCENIUM. Side shades carry the ( ) curve. topShade
-          and bottomGlow are RADIAL ellipses now (v848 had them as
-          linear bars which read boxy). They taper toward the corners
-          so there's no horizontal edge — pure atmosphere. Tones
-          dialed lower than v847 to "just sets the atmosphere". */}
-      <div style={S.sideShadowL} />
-      <div style={S.sideShadowR} />
-      <div style={S.topShade} />
+      {/* v853 ULTIMATE PROSCENIUM. ONE viewport-anchored frame element
+          carries left + right + top in three stacked radials. Bottom
+          phosphorescence is its own breathing element so the
+          animation is scope-isolated. Backed by boundary-extension
+          + center-bias attention research; same family as cinema
+          vignetting and the theatre proscenium arch. No rectangular
+          containers anywhere — the bleed Dash spotted is gone by
+          construction. */}
+      <div style={S.frame} />
       <div style={S.bottomGlow} />
 
       {/* TOP BAR — unified gradient surface. Visible when uiPhase isn't
