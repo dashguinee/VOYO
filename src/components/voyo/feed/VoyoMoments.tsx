@@ -1718,27 +1718,23 @@ export const VoyoMoments: React.FC<VoyoMomentsProps> = ({ onPlayFullTrack, onArt
       if (lpTimer.current) { clearTimeout(lpTimer.current); lpTimer.current = null; }
       if (starHoldTimer.current) { clearTimeout(starHoldTimer.current); starHoldTimer.current = null; }
     }
-    // v852 (Dash 2026-04-29 "horizontal keep 851 perfect, but vertical
-    // bring back the fade making everything smooth"). VERTICAL-ONLY
-    // live drag. Horizontal stays snappy (no tiktok lag on side
-    // swipes). When the gesture is dominantly vertical, the card
-    // translates with the finger and fades; the fade-on-start is
-    // exactly the smoothness Dash liked from v848/849.
+    // v854 (Dash 2026-04-29 "v850 had good feels but remember those
+    // axis drifts we dont want those, but we want the reactiveness").
+    // REACTIVENESS WITHOUT DRIFT. Card stays anchored — no translate.
+    // Only opacity dips as the gesture develops, so the user FEELS
+    // the moment respond without watching it slide. v850's snappy
+    // commit grammar holds; v848/849's smoothness returns through
+    // the opacity-only channel. Best of both, no axis drift.
     const el = dragLayerRef.current;
     if (el && swiping.current) {
-      const isVertical = Math.abs(dy) > Math.abs(dx);
-      if (isVertical) {
-        const yMag = Math.abs(dy);
-        const opacity = Math.max(0.42, 1 - yMag / 280);
-        el.style.transition = 'none';
-        el.style.transform = `translateY(${dy * 0.55}px)`;
-        el.style.opacity = String(opacity);
-      } else {
-        // Horizontal-dominant: stay completely snappy, no transform.
-        el.style.transition = 'none';
-        el.style.transform = '';
-        el.style.opacity = '';
-      }
+      const mag = Math.max(Math.abs(dx), Math.abs(dy));
+      // Floor at 0.55 — the moment never feels lost mid-gesture.
+      // Linear taper across 240px because that's the felt range
+      // before commit threshold (50px) plus dwell (~190px room).
+      const opacity = Math.max(0.55, 1 - mag / 240);
+      el.style.transition = 'none';
+      el.style.transform = '';
+      el.style.opacity = String(opacity);
     }
   }, []);
 
