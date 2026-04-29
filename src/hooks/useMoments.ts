@@ -105,6 +105,46 @@ const MAX_TRAIL = 50;
 const AUTO_DRIFT_THRESHOLD = 5; // consecutive UPs before drift chance
 const AUTO_DRIFT_CHANCE = 0.3;
 
+// v831 — creator diversity (Dash 2026-04-29 "I was only seeing videos
+// from this 1 user"). The feed used to ORDER BY discovered_at DESC →
+// any creator with a recent posting burst dominated the category.
+// We now over-fetch 3x and round-robin interleave by creator with a
+// per-creator cap so no one creator can monopolise the slice.
+const FETCH_OVERSAMPLE = 3;        // fetch 3× page so we have diversity
+const MAX_PER_CREATOR = 2;          // hard cap per creator per page
+
+/**
+ * Round-robin interleave moments by creator with a per-creator cap.
+ * Preserves recency-ordered "best moment first" per creator (the input
+ * is already ORDER BY discovered_at DESC), then alternates across
+ * creators so the feed mixes voices instead of dumping everyone from
+ * one account.
+ */
+function interleaveByCreator(rows: Moment[], cap: number, take: number): Moment[] {
+  if (rows.length === 0) return rows;
+  // Group preserving order. Falls back to source_id when creator is missing
+  // so we still treat unknown-creator rows as their own bucket.
+  const buckets = new Map<string, Moment[]>();
+  for (const r of rows) {
+    const key = r.creator_username || r.creator_name || r.source_id || 'unknown';
+    const list = buckets.get(key) || [];
+    if (list.length < cap) list.push(r);
+    buckets.set(key, list);
+  }
+  // Round-robin: pop one from each bucket per pass until we hit `take`
+  // or all buckets are empty.
+  const out: Moment[] = [];
+  const queues = Array.from(buckets.values());
+  while (out.length < take && queues.some(q => q.length > 0)) {
+    for (const q of queues) {
+      if (out.length >= take) break;
+      const next = q.shift();
+      if (next) out.push(next);
+    }
+  }
+  return out;
+}
+
 // ============================================
 // ADJACENCY MAPS (weighted neighbors for drift/bleed)
 // ============================================
@@ -223,12 +263,16 @@ export function useMoments(): UseMomentsReturn {
       if (offset === 0) setLoading(true);
 
       try {
+        // Oversample by 3x so we have material to interleave across
+        // creators. Without this, a single creator with a recent
+        // burst dominates the category (Dash bug 2026-04-29 v831).
+        const fetchSize = MOMENTS_PER_PAGE * FETCH_OVERSAMPLE;
         let query = supabase
           .from('voyo_moments')
           .select('*')
           .eq('is_active', true)
           .order('discovered_at', { ascending: false })
-          .range(offset, offset + MOMENTS_PER_PAGE - 1);
+          .range(offset * FETCH_OVERSAMPLE, offset * FETCH_OVERSAMPLE + fetchSize - 1);
 
         // Apply filter based on which axis we are on
         if (axis === 'countries') {
@@ -255,7 +299,11 @@ export function useMoments(): UseMomentsReturn {
           return;
         }
 
-        const fetched = (data || []) as Moment[];
+        const raw = (data || []) as Moment[];
+        // v831: round-robin by creator, cap MAX_PER_CREATOR per page.
+        // Preserves recency within each creator's bucket while mixing
+        // voices across the slice the user actually scrolls.
+        const fetched = interleaveByCreator(raw, MAX_PER_CREATOR, MOMENTS_PER_PAGE);
 
         setMoments(prev => {
           const next = new Map(prev);
