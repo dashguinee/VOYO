@@ -151,7 +151,7 @@ const S = {
   sideShadowL: css({
     position: 'absolute', top: 0, bottom: 0, left: 0, width: 64, zIndex: 28,
     background: `
-      linear-gradient(to bottom, rgba(28,18,52,0.30) 0%, rgba(48,32,90,0.14) 35%, transparent 132px),
+      linear-gradient(to bottom, rgba(28,18,52,0.20) 0%, rgba(48,32,90,0.10) 45%, transparent 96px),
       radial-gradient(ellipse 70% 95% at 0% 50%, rgba(28,18,52,0.40) 0%, rgba(48,32,90,0.20) 28%, rgba(22,14,38,0.10) 60%, transparent 100%)
     `,
     pointerEvents: 'none',
@@ -159,15 +159,44 @@ const S = {
   sideShadowR: css({
     position: 'absolute', top: 0, bottom: 0, right: 0, width: 64, zIndex: 28,
     background: `
-      linear-gradient(to bottom, rgba(28,18,52,0.30) 0%, rgba(48,32,90,0.14) 35%, transparent 132px),
+      linear-gradient(to bottom, rgba(28,18,52,0.20) 0%, rgba(48,32,90,0.10) 45%, transparent 96px),
       radial-gradient(ellipse 70% 95% at 100% 50%, rgba(28,18,52,0.40) 0%, rgba(48,32,90,0.20) 28%, rgba(22,14,38,0.10) 60%, transparent 100%)
     `,
     pointerEvents: 'none',
   }),
+  // v847 (Dash 2026-04-29 "make the top 20% slightly fade out so it
+  // blends in but doesn't box things up"). topShade goes ambient:
+  //   - shorter (132 → 96px) — less framing, more ambient blend
+  //   - softer (0.22 → 0.14 max alpha) — felt, not bracketing
+  //   - smoother curve so the transition into the video is seamless
+  // The eye still gets the proscenium upper edge, but it reads as
+  // dusk-light spilling in rather than a curtain pulled half-down.
   topShade: css({
-    position: 'absolute', top: 0, left: 0, right: 0, height: 132, zIndex: 27,
-    background: 'linear-gradient(to bottom, rgba(28,18,52,0.22) 0%, rgba(48,32,90,0.12) 35%, rgba(22,14,38,0.04) 70%, transparent 100%)',
+    position: 'absolute', top: 0, left: 0, right: 0, height: 96, zIndex: 27,
+    background: 'linear-gradient(to bottom, rgba(28,18,52,0.14) 0%, rgba(48,32,90,0.07) 45%, transparent 100%)',
     pointerEvents: 'none',
+  }),
+  // v847 BOTTOM GLOW (Dash "since it's a pwa, identify the exact
+  // bottom edge, I want like a subtle rising light there as things
+  // scroll down there it lights up for no reason haha").
+  // Phosphorescent violet wash sitting on the safe-area bottom edge
+  // — pure magic, no function. Breathes via voyo-bottom-glow-breathe
+  // keyframe (4.8s, 0.55 → 1.0 opacity + 2px lift). zIndex 4 sits
+  // above S.grad (z2) so the glow blooms in front of the bottom
+  // amber wash. paddingBottom uses env() so PWA standalone home
+  // indicator gets the same magic as in-browser.
+  bottomGlow: css({
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 'calc(72px + env(safe-area-inset-bottom, 0px))',
+    paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+    zIndex: 4,
+    background: 'linear-gradient(to top, rgba(139,92,246,0.20) 0%, rgba(167,139,250,0.10) 40%, rgba(139,92,246,0.04) 70%, transparent 100%)',
+    pointerEvents: 'none',
+    animation: 'voyo-bottom-glow-breathe 4.8s ease-in-out infinite',
+    willChange: 'opacity, transform',
   }),
   axisTabs: css({ display: 'flex', justifyContent: 'center', gap: 4, padding: '8px 16px 2px' }),
   compassArc: css({ position: 'relative', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', padding: '4px 0 10px', overflow: 'hidden', minHeight: 44 }),
@@ -1690,21 +1719,20 @@ export const VoyoMoments: React.FC<VoyoMomentsProps> = ({ onPlayFullTrack, onArt
       if (lpTimer.current) { clearTimeout(lpTimer.current); lpTimer.current = null; }
       if (starHoldTimer.current) { clearTimeout(starHoldTimer.current); starHoldTimer.current = null; }
     }
-    // v844: live drag feedback — the active card translates with the
-    // finger 1:1 and fades as the gesture develops, so the user FEELS
-    // the moment receding. Mutated via ref to avoid a per-frame React
-    // re-render (the same pattern BigCenterCard uses on the audio
-    // side). Once committed, FadeWrapper takes over with its own
-    // entry animation; on cancel, the cleanup in onTE springs back.
+    // v844: live drag feedback — card translates with the finger and
+    // fades as the gesture develops.
+    // v847 (Dash 2026-04-29 "the motion thing on scroll moves too much,
+    // limit it mostly to up down not full 4 direction"): X movement
+    // dialed way down (0.6 → 0.12) so left/right swipes barely
+    // translate. Vertical stays at 0.55 — UP/DOWN remains the
+    // primary felt axis. Opacity now keys off |dy| primarily so
+    // horizontal swipes don't fade the card much either.
     const el = dragLayerRef.current;
     if (el && swiping.current) {
-      const mag = Math.sqrt(dx * dx + dy * dy);
-      // Opacity falls 1 → 0.35 across a 220px gesture (felt range).
-      // We don't go below 0.35 — past that the card disappears
-      // before the user has committed, which feels lossy.
-      const opacity = Math.max(0.35, 1 - mag / 320);
+      const yMag = Math.abs(dy);
+      const opacity = Math.max(0.42, 1 - yMag / 280);
       el.style.transition = 'none';
-      el.style.transform = `translate(${dx * 0.6}px, ${dy * 0.6}px)`;
+      el.style.transform = `translate(${dx * 0.12}px, ${dy * 0.55}px)`;
       el.style.opacity = String(opacity);
     }
   }, []);
@@ -1941,10 +1969,12 @@ export const VoyoMoments: React.FC<VoyoMomentsProps> = ({ onPlayFullTrack, onArt
           the moment into a "you've entered" cocoon. Backed by boundary-
           extension and center-bias attention research. Side shades
           carry the ( ) curve; top shade caps it; bottom S.grad already
-          carries the lower edge. */}
+          carries the lower edge. v847 adds bottomGlow — phosphorescent
+          violet wash on the PWA bottom edge, breathes for no reason. */}
       <div style={S.sideShadowL} />
       <div style={S.sideShadowR} />
       <div style={S.topShade} />
+      <div style={S.bottomGlow} />
 
       {/* TOP BAR — unified gradient surface. Visible when uiPhase isn't
           immersive OR when headerVisible is true (set by tap-to-wake). */}

@@ -580,6 +580,16 @@ body {
   50%      { transform: scale(1.05); opacity: 1; }
 }
 
+/* v847 — Moments bottom-edge phosphorescent rising light. Subtle violet
+   wash that breathes (4.8s) at the very bottom of the feed surface,
+   sitting on the PWA safe-area-inset-bottom. Pure ambient — no function,
+   just the magic detail Dash asked for ("lights up for no reason haha").
+   Lift via translateY paired with opacity gives the "rising" feel. */
+@keyframes voyo-bottom-glow-breathe {
+  0%, 100% { opacity: 0.55; transform: translateY(2px); }
+  50%      { opacity: 1.0;  transform: translateY(-2px); }
+}
+
 @keyframes ambient-breathe {
   0%, 100% {
     transform: scale(1);
