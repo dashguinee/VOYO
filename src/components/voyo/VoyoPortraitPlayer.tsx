@@ -6084,59 +6084,11 @@ export const VoyoPortraitPlayer = ({
 
 
         {/* Stream Labels — HOT/Discover row.
-            v870/v871: tightened spacing.
-            v872 (Dash 2026-04-29 "fade the disk light, more realistic,
-            one layer behind, faint shade up, ergonomic natural light"):
-            two-layer atmospheric. Layer 1 (z 3) is an UPWARD AMBIENT
-            SHADE — soft bronze that spills upward from the slot
-            position toward the artwork, like light through a curtain
-            slit. Layer 2 (z 4) is the line itself, faded ~50% from
-            v869 so it reads as the slot's edge, not a neon underline.
-            Both still sit BEHIND the labels (which carry their own
-            higher z) so the labels stay crisp on top. */}
-        <div className="relative flex justify-between px-6 mb-1">
-          {/* Layer 1 — upward ambient shade. Anchored at the line,
-              bleeds 64px upward, very low alpha, slight blur for the
-              diffuse "natural light through a slot" feel. */}
-          <div
-            aria-hidden
-            style={{
-              position: 'absolute',
-              left: '50%',
-              bottom: '50%',
-              transform: 'translateX(-50%)',
-              width: 110,
-              height: 64,
-              borderRadius: '50%',
-              background: 'radial-gradient(ellipse 50% 100% at 50% 100%, rgba(212,160,83,0.18) 0%, rgba(212,160,83,0.08) 35%, transparent 70%)',
-              filter: 'blur(2px)',
-              opacity: isControlsRevealed && portalProgress < 0.4 ? 1 : 0,
-              transition: 'opacity 0.42s cubic-bezier(0.16, 1, 0.3, 1)',
-              pointerEvents: 'none',
-              zIndex: 3,
-            }}
-          />
-          {/* Layer 2 — the line itself, faded. Half v869's intensity,
-              softer outer glow, no violet halo. Reads as ambient
-              backlight, not neon. */}
-          <div
-            aria-hidden
-            style={{
-              position: 'absolute',
-              left: '50%',
-              top: '50%',
-              transform: 'translate(-50%, -50%)',
-              width: 84,
-              height: 2,
-              borderRadius: 999,
-              background: 'linear-gradient(90deg, transparent 0%, rgba(212,160,83,0.20) 18%, rgba(230,197,138,0.45) 50%, rgba(212,160,83,0.20) 82%, transparent 100%)',
-              boxShadow: '0 0 8px rgba(212,160,83,0.28)',
-              opacity: isControlsRevealed && portalProgress < 0.4 ? 1 : 0,
-              transition: 'opacity 0.32s cubic-bezier(0.16, 1, 0.3, 1)',
-              pointerEvents: 'none',
-              zIndex: 4,
-            }}
-          />
+            v873 (Dash 2026-04-29): disk-slot light reverted entirely.
+            v869's bronze line + v872's two-layer atmospheric shade
+            both removed. Row is back to the v868 baseline — labels
+            only, no ambient slot. */}
+        <div className="flex justify-between px-6 mb-1">
           {/* HOT Label — deep rust ember (mature, aged, premium) */}
           <button
             onClick={handleToggleHotBelt}
