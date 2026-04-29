@@ -316,11 +316,10 @@ interface CommunityPunch {
 const NeonBillboardCard = memo(({
   title,
   taglines,
-  neon,
-  glow,
   delay = 0,
   mood = 'energetic',
   textAnimation = 'bounce',
+  palette = 'purple',
   onClick,
   onDragToQueue, // Callback when card is dragged up to queue
   onDoubleTap, // NEW: Double-tap to create reaction
@@ -334,11 +333,12 @@ const NeonBillboardCard = memo(({
 }: {
   title: string;
   taglines: string[];
-  neon: string;
-  glow: string;
   delay?: number;
   mood?: PlaylistMood;
   textAnimation?: TextAnimation;
+  /** v840: card color language. 'purple' is the unified VOYO default;
+   *  'gronze' (bronze-orange-gold) is reserved for Heating Up RN. */
+  palette?: 'purple' | 'gronze';
   onClick?: () => void;
   onDragToQueue?: () => void; // "Give me this vibe NOW" - drag to add matching tracks
   onDoubleTap?: () => void; // Double-tap = reaction to community
@@ -401,6 +401,36 @@ const NeonBillboardCard = memo(({
   // STARVING LOGIC: 0 bars = dying, 6 bars = BLAZING
   const isStarving = boostLevel === 0;
   const barRatio = boostLevel / 6; // 0-1 scale
+  const isFull = boostLevel >= 6;
+
+  // v840 (Dash 2026-04-29 "I dont think I like the effect on the mix
+  // boards card... they match Old Voyo not the New"). New language:
+  //   - boost 0  : contoured / outlined card, neutral grey, transparent
+  //   - boost 1+ : palette tint rises with the bar — purple by default,
+  //                bronze-gold ("gronze") for Heating Up RN
+  //   - boost 6  : GOLDEN. Out of shadow → glow → flow → boom golden.
+  // Replaces the 5-layer neon halo per card with a single coherent
+  // state-driven treatment so the whole rail reads as one rhythm
+  // instead of six different colors fighting for attention.
+  //
+  // `neon` stays a hex string (the rest of the card concatenates
+  // `${neon}40` alpha-suffix tricks for inner effects); `glow` is a
+  // hex+alpha string built from the same seed. The state machine
+  // chooses the seed:
+  //   starving → neutral grey
+  //   1-5      → palette base (purple or gronze)
+  //   6        → bronze-gold accent (the "boom golden" peak)
+  const purpleHex = '#a78bfa';
+  const gronzeHex = '#F4A23E';
+  const goldHex   = '#D4A053';
+  const neutralHex = '#9a9aa8';
+  const baseHex = palette === 'gronze' ? gronzeHex : purpleHex;
+  const neon = isStarving ? neutralHex : (isFull ? goldHex : baseHex);
+  const seedRgb = isFull ? '212,160,83' : (palette === 'gronze' ? '244,162,62' : '167,139,250');
+  const fillAlpha = isStarving ? 0 : 0.05 + barRatio * 0.18;
+  const ringAlpha = isStarving ? 0.10 : 0.25 + barRatio * 0.45;
+  const glowAlpha = isStarving ? 0 : 0.18 + barRatio * 0.30;
+  const glow = `rgba(${seedRgb},${glowAlpha})`;
 
   // Adjust timing based on energy level - starving = slow, boosted = fast
   const baseTiming = moodTimings[mood];
@@ -435,23 +465,14 @@ const NeonBillboardCard = memo(({
     };
   }, [allTaglines.length, delay, timing.taglineDwell, isInView]);
 
-  // 5-Layer Neon Glow System (research: Z2, Z10)
-  // Layer 1: White-hot core (tight)
-  // Layer 2: Inner bloom (color)
-  // Layer 3: Mid bloom (softer color)
-  // Layer 4: Outer bloom (ambient)
-  // Layer 5: Inward glow (inset)
-  const createNeonGlow = (intensity: number) => {
-    const i = intensity;
-    return `
-      inset 0 0 ${4 * i}px ${glow},
-      inset 0 0 0 ${1.5 * i}px ${neon},
-      0 0 ${5 * i}px rgba(255,255,255,0.3),
-      0 0 ${10 * i}px ${glow},
-      0 0 ${20 * i}px ${glow},
-      0 0 ${35 * i}px ${glow}
-    `.trim();
-  };
+  // v840: state-coherent glow. ONE outer halo + ONE inset ring +
+  // ONE thin border. No five-layer maximalism. Intensity scales
+  // with the bar ratio so empty cards are quiet outlines and full
+  // cards bloom golden. Drop the white-core hotspot — it read as
+  // "Old Voyo arcade" rather than "New Voyo restraint".
+  const cardShadow = isStarving
+    ? `inset 0 0 0 1px rgba(255,255,255,0.09)`
+    : `inset 0 0 0 1px rgba(${seedRgb},${ringAlpha}), 0 0 ${10 + barRatio * 18}px ${glow}, 0 0 ${20 + barRatio * 26}px rgba(${seedRgb},${glowAlpha * 0.4})`;
 
   // (Startup flicker state removed 2026-04-28 — never read, dead code.)
 
@@ -502,33 +523,21 @@ const NeonBillboardCard = memo(({
         onClick?.();
       }}
       style={{
-        // (per Dash) Subtle neon-tinted base instead of pure black so each
-        // board carries its mood color into the surface itself, not just
-        // the glow. Active boards push more saturation; idle ones stay
-        // calm. Outer opacity drops slightly at rest so the rail reads as
-        // a calm cluster — boards "wake" when engaged rather than all
-        // shouting at once.
-        background: `linear-gradient(135deg, ${neon}14 0%, rgba(8,8,12,0.96) 45%, rgba(3,3,5,0.99) 100%)`,
-        opacity: isInView ? (isStarving ? 0.5 : (isActive ? 1 : 0.88)) : 0.3,
-        filter: isStarving ? 'grayscale(60%) brightness(0.6)' : 'grayscale(0%) brightness(1)',
-        transition: 'opacity 600ms cubic-bezier(0.16, 1, 0.3, 1), background 800ms cubic-bezier(0.16, 1, 0.3, 1)',
+        // v840: state-coherent surface. Empty = nearly black with a
+        // hairline border. Boost = palette tint rises in the gradient.
+        // Full = golden cap. boxShadow carries the ring + halo together
+        // so we keep ONE source of glow per card, not five layers.
+        background: isStarving
+          ? 'linear-gradient(135deg, rgba(255,255,255,0.02) 0%, rgba(8,8,12,0.96) 45%, rgba(3,3,5,0.99) 100%)'
+          : `linear-gradient(135deg, rgba(${seedRgb},${fillAlpha + 0.04}) 0%, rgba(8,8,12,0.96) 45%, rgba(3,3,5,0.99) 100%)`,
+        boxShadow: cardShadow,
+        opacity: isInView ? (isStarving ? 0.78 : (isActive ? 1 : 0.94)) : 0.3,
+        // Empty cards stay neutral — no grayscale filter, just a
+        // restrained outline. Saturation rises naturally as bars
+        // fill via the seedRgb shift to gold at full.
+        transition: 'opacity 600ms cubic-bezier(0.16, 1, 0.3, 1), background 800ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 600ms cubic-bezier(0.16, 1, 0.3, 1)',
       }}
     >
-      {/* 5-Layer Neon Glow - Intensity based on bars (research: Z2, Z10) */}
-      <div
-        className="absolute inset-0 rounded-lg pointer-events-none"
-        style={{
-          boxShadow: createNeonGlow(isStarving ? glowIntensity * 0.3 : glowIntensity),
-        }}
-      />
-
-      {/* Scanline effect - subtle CRT feel */}
-      <div
-        className="absolute inset-0 opacity-10 pointer-events-none"
-        style={{
-          background: `repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(255,255,255,0.015) 2px, rgba(255,255,255,0.015) 4px)`,
-          }}
-      />
 
       {/* TAP BURST - Flash effect on boost tap */}
       
@@ -6895,8 +6904,7 @@ export const VoyoPortraitPlayer = ({
             <NeonBillboardCard
               title="Heating Up RN"
               taglines={["Asambe! 🔥", "Lagos to Accra!", "E Choke! 💥", "Fire on Fire!", "No Wahala!"]}
-              neon="#F4A23E"
-              glow="rgba(244,162,62,0.5)"
+              palette="gronze"
               delay={0}
               mood="energetic"
               textAnimation="bounce"
@@ -6915,8 +6923,6 @@ export const VoyoPortraitPlayer = ({
             <NeonBillboardCard
               title="Chill Vibes"
               taglines={["It's Your Eazi...", "Slow Wine Time", "Easy Does It", "Float Away~", "Pon Di Ting"]}
-              neon="#c4b5fd"
-              glow="rgba(196,181,253,0.4)"
               delay={1}
               mood="chill"
               textAnimation="slideUp"
@@ -6935,8 +6941,6 @@ export const VoyoPortraitPlayer = ({
             <NeonBillboardCard
               title="Party Mode"
               taglines={["Another One! 🎉", "We The Best!", "Ku Lo Sa!", "Turn Up! 🔊", "Major Vibes Only"]}
-              neon="#a78bfa"
-              glow="rgba(167,139,250,0.45)"
               delay={2}
               mood="hype"
               textAnimation="scaleIn"
@@ -6955,8 +6959,6 @@ export const VoyoPortraitPlayer = ({
             <NeonBillboardCard
               title="Late Night"
               taglines={["Midnight Moods", "After Hours...", "Vibes & Chill", "3AM Sessions", "Lost in Sound"]}
-              neon="#8b5cf6"
-              glow="rgba(139,92,246,0.5)"
               delay={3}
               mood="mysterious"
               textAnimation="rotateIn"
@@ -6975,8 +6977,6 @@ export const VoyoPortraitPlayer = ({
             <NeonBillboardCard
               title="Workout"
               taglines={["Beast Mode! 💪", "Pump It Up!", "No Pain No Gain", "Go Harder!", "Maximum Effort!"]}
-              neon="#7c3aed"
-              glow="rgba(124,58,237,0.55)"
               delay={4}
               mood="intense"
               textAnimation="bounce"
@@ -6998,8 +6998,6 @@ export const VoyoPortraitPlayer = ({
             <NeonBillboardCard
               title="Ask OYO DJ"
               taglines={["What's the vibe?", "Spin me something...", "Curate for me 🔮", "Read the room", "Build my playlist"]}
-              neon="#b388ff"
-              glow="rgba(179,136,255,0.55)"
               delay={5}
               mood="mysterious"
               textAnimation="scaleIn"
