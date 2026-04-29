@@ -157,17 +157,14 @@ const S = {
   // radial ellipse naturally tapers to nothing at the top corners.
   // No more rectangle artifact. All four atmospheric edges are now
   // pure radials — symmetric language, ultimate version.
-  // v855 (Dash 2026-04-29 "back to 845, cherry pick 2-3 things to
-  // enhance and immerse it, but we don't fight that version").
-  // CANONICAL v845 frame restored:
-  //   - sideShadowL/R: radial proscenium ellipses, dusk navy-violet
-  //     (rgba(28,18,52) base, rgba(48,32,90) intermediate). The exact
-  //     v845 anointed values, no later modifications.
-  //   - S.grad: warm amber bottom (unchanged since v845).
-  //   - NO topShade — v845 had none, we don't reintroduce it.
-  // The cherry-picks layered on top are additive, never replacing
-  // anything in v845: bottomGlow (magic phosphorescence on PWA edge)
-  // sits in its own element so it can never bleed into the frame.
+  // v856 (Dash 2026-04-29 "so 855 + what you havent done yet" — final).
+  // Frame stack:
+  //   - sideShadowL/R   : v845 base, dusk-violet radials (untouched)
+  //   - topShade        : v851 radial, the wider form (what you liked
+  //                       before v852 tightened it to 65%)
+  //   - bottomGlow      : v849 breathing phosphorescence
+  // S.grad warm amber floor stays. No live drag (v851 had none —
+  // what you actually liked was the v843 temporal-framing breath).
   sideShadowL: css({
     position: 'absolute', top: 0, bottom: 0, left: 0, width: 64, zIndex: 28,
     background: 'radial-gradient(ellipse 70% 95% at 0% 50%, rgba(28,18,52,0.40) 0%, rgba(48,32,90,0.20) 28%, rgba(22,14,38,0.10) 60%, transparent 100%)',
@@ -176,6 +173,14 @@ const S = {
   sideShadowR: css({
     position: 'absolute', top: 0, bottom: 0, right: 0, width: 64, zIndex: 28,
     background: 'radial-gradient(ellipse 70% 95% at 100% 50%, rgba(28,18,52,0.40) 0%, rgba(48,32,90,0.20) 28%, rgba(22,14,38,0.10) 60%, transparent 100%)',
+    pointerEvents: 'none',
+  }),
+  // v856: v851 topShade returns. Radial 90% × 60% at 50% 0% — wider
+  // than v852's 65% so the dusk reaches softly to the corners,
+  // closing the proscenium upper edge without boxing.
+  topShade: css({
+    position: 'absolute', top: 0, left: 0, right: 0, height: 132, zIndex: 27,
+    background: 'radial-gradient(ellipse 90% 60% at 50% 0%, rgba(28,18,52,0.12) 0%, rgba(48,32,90,0.06) 50%, transparent 100%)',
     pointerEvents: 'none',
   }),
   // v855 cherry-pick #3: bottom phosphorescence. Separate element so
@@ -1717,24 +1722,12 @@ export const VoyoMoments: React.FC<VoyoMomentsProps> = ({ onPlayFullTrack, onArt
       if (lpTimer.current) { clearTimeout(lpTimer.current); lpTimer.current = null; }
       if (starHoldTimer.current) { clearTimeout(starHoldTimer.current); starHoldTimer.current = null; }
     }
-    // v854 (Dash 2026-04-29 "v850 had good feels but remember those
-    // axis drifts we dont want those, but we want the reactiveness").
-    // REACTIVENESS WITHOUT DRIFT. Card stays anchored — no translate.
-    // Only opacity dips as the gesture develops, so the user FEELS
-    // the moment respond without watching it slide. v850's snappy
-    // commit grammar holds; v848/849's smoothness returns through
-    // the opacity-only channel. Best of both, no axis drift.
-    const el = dragLayerRef.current;
-    if (el && swiping.current) {
-      const mag = Math.max(Math.abs(dx), Math.abs(dy));
-      // Floor at 0.55 — the moment never feels lost mid-gesture.
-      // Linear taper across 240px because that's the felt range
-      // before commit threshold (50px) plus dwell (~190px room).
-      const opacity = Math.max(0.55, 1 - mag / 240);
-      el.style.transition = 'none';
-      el.style.transform = '';
-      el.style.opacity = String(opacity);
-    }
+    // v856: NO live-gesture reactiveness. v851 had none — the
+    // smoothness Dash liked was the v843 temporal-framing breath
+    // on COMMIT, not finger-tracked feedback. Card stays static
+    // during the gesture; FadeWrapper takes over on commit.
+    // dragLayerRef wrapper kept in source so we can wire selectively
+    // later if needed.
   }, []);
 
   const handleOye = useCallback((momentId: string, x: number, y: number) => {
@@ -1945,15 +1938,16 @@ export const VoyoMoments: React.FC<VoyoMomentsProps> = ({ onPlayFullTrack, onArt
       onTouchMove={onTM}
       onTouchEnd={onTE}
     >
-      {/* v855 v845 BASELINE + 3 CHERRY-PICKS (Dash anointed).
-          Frame: pure v845 — side proscenium radials, no top shade,
-          no consolidation, no fighting. S.grad keeps the warm
-          amber floor. Cherry-picks live in their own scopes:
-            #1 temporal framing → FadeWrapper (v843, IG-Stories grammar)
-            #2 opacity reactiveness → onTM dragLayerRef (v854, TikTok ack)
-            #3 bottom phosphorescence → S.bottomGlow (v849, magic detail) */}
+      {/* v856 FINAL FRAME = v845 base + v851 additions.
+            sideShadowL/R : v845 dusk-violet proscenium radials
+            topShade      : v851 radial (the wider one Dash liked)
+            bottomGlow    : v849 breathing phosphorescence (PWA-aware)
+          Plus the temporal-framing breath on transitions (v843,
+          inside FadeWrapper) — that's what Dash's "scroll up feel
+          from v851" actually was. No live drag. */}
       <div style={S.sideShadowL} />
       <div style={S.sideShadowR} />
+      <div style={S.topShade} />
       <div style={S.bottomGlow} />
 
       {/* TOP BAR — unified gradient surface. Visible when uiPhase isn't

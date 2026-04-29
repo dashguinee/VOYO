@@ -11,7 +11,7 @@
 
 import { useState, useEffect, useRef, useCallback, lazy, Suspense, Component } from 'react';
 import type { ReactNode, ErrorInfo } from 'react';
-import { User, Search } from 'lucide-react';
+import { Search } from 'lucide-react';
 import { usePlayerStore } from './store/playerStore';
 import { app } from './services/oyo';
 import { getYouTubeThumbnail } from './data/tracks';
@@ -1155,17 +1155,14 @@ function App() {
                 <PushBell appCode="voyo" />
               </div>
 
-              {/* Right cluster — search is a textured pill (grey→purple fade,
-                  inset highlight + lift shadow) that reads as a real button
-                  without shouting. Profile is smaller, more faded, with a
-                  very soft bronze-ivory ambient dot behind — it reads as
-                  the corner glow of a named person, not a glyph.
-                  V00 (DashAuthBadge) removed — identity surfaces inside
-                  the AccountMenu now, not as a badge. */}
-              <div className="flex items-center gap-2.5 pr-1">
-                {/* Search — textured pill. Visual icon stays 17px; hit-area is
-                    bumped to the 44×44 floor via min-w/min-h + flex centering
-                    so the tap zone matches Apple HIG and Android M3 minimums. */}
+              {/* v856 (Dash 2026-04-29 "remove profile icon in header and
+                  place the search where profile icon was"). Profile button
+                  retired from the header — identity already surfaces inside
+                  the AccountMenu, no need to gate it from here. Search slides
+                  into the right edge where Profile used to live. Same
+                  textured pill styling, just relocated. justify-end on the
+                  cluster keeps the visual position anchored to the right. */}
+              <div className="flex items-center justify-end gap-2.5 pr-1">
                 <button
                   aria-label="Search"
                   onClick={() => setIsSearchOpen(true)}
@@ -1181,24 +1178,6 @@ function App() {
                   }}
                 >
                   <Search className="w-[17px] h-[17px] text-white/75" strokeWidth={2} />
-                </button>
-
-                {/* Profile — smaller + faded + ambient bronze-ivory dot.
-                    Hit-area bumped to 44×44; visual glyph stays 15px. */}
-                <button
-                  className="relative p-1.5 rounded-full active:scale-95 transition-transform inline-flex items-center justify-center min-w-[44px] min-h-[44px]"
-                  aria-label="Profile"
-                  onClick={() => setIsProfileOpen(true)}
-                >
-                  <span
-                    aria-hidden
-                    className="absolute inset-[-2px] rounded-full pointer-events-none"
-                    style={{
-                      background: 'radial-gradient(circle at 50% 50%, rgba(240,220,190,0.18) 0%, rgba(240,220,190,0.05) 45%, transparent 72%)',
-                      filter: 'blur(2px)',
-                    }}
-                  />
-                  <User className="relative w-[15px] h-[15px] text-white/45" strokeWidth={1.6} />
                 </button>
               </div>
             </header>
