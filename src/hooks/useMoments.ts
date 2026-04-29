@@ -26,6 +26,7 @@ import {
   recordSessionPlay,
   recordSessionSkip,
   getEngagedCreators,
+  clearCooldownForMoment,
   recordSessionStar,
   markShown,
 } from '../services/momentsEngine';
@@ -748,6 +749,9 @@ export function useMoments(): UseMomentsReturn {
   }, [moments]);
 
   const recordOye = useCallback(async (momentId: string) => {
+    // v861: OYE'd moments are EXEMPT from cooldown — love can
+    // resurface. Removes from the cross-session 48h penalty.
+    clearCooldownForMoment(momentId);
     // C2 fanout — feed the taste graph from Moments OYEs too.
     // Find the moment's parent_track_id by walking the fetched-moments map.
     // Cheap: Map is at most a few hundred rows in practice.
