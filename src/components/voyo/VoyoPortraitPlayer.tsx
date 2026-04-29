@@ -2517,24 +2517,17 @@ const PlayControls = memo(({
           }}
         />
 
-        {/* Spinning Vinyl Disk */}
-        {/* v835 (Dash 2026-04-29 "kill the pause, pause becomes holding
-            the disk it stops like the retro way"): tap on the disk is
-            DEAD. Hold (≥150ms, no movement) puts your finger on the
-            spinning vinyl — audio pauses, disk freezes mid-rotation.
-            Release = audio resumes, disk spins back up. Pure physical
-            metaphor. The hold detection lives in handleCanvasPointer*
-            in the parent — it sees [data-disk-hold] on the gesture
-            target and arms the timer alongside the existing canvas
-            swipe. data-canvas-passthrough still in place so drags
-            from the disk drive the card swipe (v833).
-            onClick = stopPropagation only — kills the canvas-level
-            mode toggle that would otherwise fire on bare disk taps. */}
+        {/* Spinning Vinyl Disk. v867: data-disk-hold removed (vinyl-
+            finger pause retired); data-canvas-passthrough kept so
+            drags-from-disk don't get filtered by didOriginateOnInteractive
+            (currently moot — there are no drag actions left, but the
+            attribute is harmless and future-proofs). onClick stops
+            propagation so a bare disk tap doesn't bubble into the
+            mode-toggle on the surrounding center card. */}
         <button
           data-canvas-passthrough
-          data-disk-hold
           className="absolute inset-0 rounded-full overflow-hidden border-2 border-white/20 shadow-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-500/50 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0a0a0c]"
-          aria-label="Hold to pause"
+          aria-label="Vinyl"
           onClick={(e) => { e.stopPropagation(); }}
           style={{
             background: isPlaying || isScrubbing
@@ -2578,26 +2571,12 @@ const PlayControls = memo(({
           )}
           
 
-          {/* v836: SKEEP zone — LEFT half of the disk. Hold here to
-              fast-scrub backward (2x → 4x → 8x escalation, with the
-              existing pulse + bronze trail animation on the visual
-              jog button). z-15 sits above the album art / spin layer
-              but below the center hole (z-10 → bumped to z-20 below).
-              The overlay is invisible — pure pointer-event capture.
-              Won't fire pause: handleCanvasPointerDown checks for
-              [data-disk-skeep] FIRST and stops there. */}
-          <div
-            data-disk-skeep="backward"
-            aria-hidden
-            className="absolute left-0 top-0 w-1/2 h-full"
-            style={{ pointerEvents: 'auto', zIndex: 15 }}
-          />
+          {/* v867: disk skeep overlay removed. SKEEP now lives on
+              the left/right SCREEN edges. Center hole z-10 (no
+              overlay to compete with anymore). */}
 
-          {/* Center hole (vinyl style) — z-20 keeps it above the skeep
-              overlay (which is z-15) so the play/pause icon at dead
-              center is still pointer-targetable, even though that
-              tiny region falls within the left skeep zone bounds. */}
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-[#0a0a0f] border border-white/30 z-20 flex items-center justify-center">
+          {/* Center hole (vinyl style) */}
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-[#0a0a0f] border border-white/30 z-10 flex items-center justify-center">
             {/* Play/Pause icon in center */}
             {isPlaying ? (
               <Pause size={10} className="text-white/70" />
@@ -4698,189 +4677,22 @@ export const VoyoPortraitPlayer = ({
   const lastTapRef = useRef<number>(0);
   const didHoldRef = useRef(false);
   const djWakeCountRef = useRef(0); // Track how many times DJ mode was activated
-  // v835 (Dash 2026-04-29): retro vinyl-finger pause. When the gesture
-  // started on [data-disk-hold] AND stayed put for 150ms, audio pauses
-  // and the disk freezes mid-rotation. Release fires resume — the
-  // music picks up exactly where it stopped (sync-resume). Cancelled
-  // by movement >8px (drag mode wins).
-  const diskHoldTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const diskHoldFiredRef = useRef(false);
-  const DISK_HOLD_MS = 150;
-  // v836: skeep on disk's left half. Hold the LEFT space of the
-  // spinning vinyl → backward fast-scrub with the existing
-  // 2x→4x→8x escalation animation. Same gesture grammar as the
-  // left jog button hold (which still works as a fallback). Skeep
-  // wins over pause when the gesture starts on the left zone — same
-  // movement-cancel rule (drag >8px aborts). Refs hold the latest
-  // handleScrub* so this callback can fire them despite being
-  // declared earlier in source order than the handlers themselves.
+  // v867 — gesture refs, streamlined. Swipe vocabulary, vinyl-finger
+  // pause, side-wall light shows, swipe-action launcher all retired
+  // (~280 lines of dead code stripped). Only refs that survive:
+  //   - swipeStartRef / swipeFiredRef : tap-vs-drag detection
+  //   - cardWrapRef                   : DOM ref kept for legacy
+  //                                     consumers; nothing drives it
+  //   - diskSkeepActiveRef            : tracks whether the screen-edge
+  //                                     skeep is currently engaged
+  //   - handleScrubStart/EndRef       : bridge to the scrub callbacks
+  //                                     declared later in the file
+  const swipeStartRef = useRef<{ x: number; y: number; t: number } | null>(null);
+  const swipeFiredRef = useRef(false);
+  const cardWrapRef = useRef<HTMLDivElement>(null);
   const diskSkeepActiveRef = useRef(false);
   const handleScrubStartRef = useRef<((dir: 'forward' | 'backward') => void) | null>(null);
   const handleScrubEndRef = useRef<(() => void) | null>(null);
-  // GLOBAL DRAG: touch ANYWHERE on the app surface and the central card
-  // follows your finger. Release past the commit threshold (120px) OR
-  // with enough velocity launches the card off-screen + fires prev/next.
-  // Below threshold, card springs back to center.
-  //
-  // Implementation: the card wrapper ref is mutated directly on pointer
-  // move (no React re-render per frame — would be catastrophic). React
-  // state is only involved for the final animation back / out.
-  //
-  // swipeFiredRef keeps the subsequent click from triggering tap/lyrics.
-  const swipeStartRef = useRef<{ x: number; y: number; t: number } | null>(null);
-  const swipeFiredRef = useRef(false);
-  const hasCrossedThresholdRef = useRef(false); // haptic on threshold cross
-  const cardWrapRef = useRef<HTMLDivElement>(null);
-  // Hold-swipe precision gate (Dash 2026-04-28 v785 grammar). The 200ms
-  // pause-before-move flag arms the "upgraded" variant on either side:
-  // hold-then-LEFT = "Less" (taste-negative skip), hold-then-RIGHT =
-  // "Discover" (off-path exploration). Quick swipes still fire — they
-  // just bind to the lighter actions: LEFT-quick = Skip (slow drift from
-  // vibe), RIGHT-quick = Like (stamp, no skip). 200ms is below the
-  // 400ms DJ-mode hold timer so they don't collide.
-  const holdSwipeReadyRef = useRef(false);
-  const holdSwipeReadyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Side-wall-of-light affordance — four variants, one per gesture. Each
-  // wall has its own color so the user learns the grammar: pink right =
-  // Like, bronze right = Discover, steel left = Skip, deep blue left =
-  // Less. Driven imperatively (no React re-render) from setSideWallGlow.
-  const wallLikeRef     = useRef<HTMLDivElement>(null); // R quick, pink
-  const wallDiscoverRef = useRef<HTMLDivElement>(null); // R hold,  bronze
-  const wallSkipRef     = useRef<HTMLDivElement>(null); // L quick, steel
-  const wallLessRef     = useRef<HTMLDivElement>(null); // L hold,  deep blue
-  // Neon teaching label — fades in mid-swipe with the active gesture
-  // name above the BigCenterCard. Premium type, glow shadow tinted by
-  // the action's color. Pedagogy: users learn the grammar by seeing it
-  // spell itself out as they move.
-  const swipeLabelRef = useRef<HTMLDivElement>(null);
-  const setSwipeLabel = (text: string, color: string, alpha: number, dx = 0) => {
-    const el = swipeLabelRef.current;
-    if (!el) return;
-    el.textContent = text;
-    el.style.color = color;
-    el.style.textShadow = `0 0 12px ${color}, 0 0 22px ${color}`;
-    el.style.boxShadow = `0 0 26px ${color}40, 0 4px 18px rgba(0,0,0,0.5)`;
-    el.style.opacity = String(alpha);
-    const scale = 0.96 + alpha * 0.08;
-    const ty = 8 - alpha * 8;
-    // Pill drifts AWAY from the wall side — Dash 2026-04-28 v787:
-    // LEFT swipe (wall on left) → pill nudges RIGHT (~+34px)
-    // RIGHT swipe (wall on right) → pill nudges LEFT (~−34px)
-    // Visual breathing room so the pill and the wall don't compete on
-    // the same edge. Magnitude scales with swipe depth.
-    const tx = dx === 0 ? 0 : (dx > 0 ? -34 : 34) * alpha;
-    el.style.transform = `translate(${tx}px, ${ty}px) scale(${scale})`;
-  };
-  const clearSwipeLabel = () => {
-    const el = swipeLabelRef.current;
-    if (!el) return;
-    el.style.opacity = '0';
-    el.style.transform = 'translate(0, 8px) scale(0.96)';
-    el.style.boxShadow = '0 0 0 rgba(0,0,0,0)';
-  };
-  const setSideWallGlow = (dx: number) => {
-    const COMMIT = 120; // mirrors COMMIT_THRESHOLD
-    const norm = Math.min(1, Math.abs(dx) / COMMIT);
-    const eased = norm * norm * (3 - 2 * norm);
-    const set = (ref: React.RefObject<HTMLDivElement | null>, opacity: number) => {
-      if (ref.current) ref.current.style.opacity = String(opacity);
-    };
-    // Hide all walls first, then light only the active variant.
-    set(wallLikeRef, 0); set(wallDiscoverRef, 0);
-    set(wallSkipRef, 0); set(wallLessRef, 0);
-
-    const isHold = holdSwipeReadyRef.current;
-    if (dx > 0) {
-      if (isHold) {
-        set(wallDiscoverRef, eased);
-        setSwipeLabel('Discover', '#E6C58A', eased, dx);
-      } else {
-        set(wallLikeRef, eased);
-        setSwipeLabel('Like', '#F472B6', eased, dx);
-      }
-    } else if (dx < 0) {
-      if (isHold) {
-        set(wallLessRef, eased);
-        setSwipeLabel('Less', '#5B7FBE', eased, dx);
-      } else {
-        set(wallSkipRef, eased);
-        setSwipeLabel('Skip', '#E8EEF7', eased, dx);
-      }
-    } else {
-      clearSwipeLabel();
-    }
-  };
-  const clearSideWallGlow = () => {
-    [wallLikeRef, wallDiscoverRef, wallSkipRef, wallLessRef].forEach(r => {
-      if (r.current) r.current.style.opacity = '0';
-    });
-    clearSwipeLabel();
-  };
-
-  // Apply a transform + opacity to the card wrapper directly. Called from
-  // pointermove. Zero re-renders.
-  const applyCardTransform = (dx: number, dragging: boolean) => {
-    const el = cardWrapRef.current;
-    if (!el) return;
-    const tilt = Math.max(-14, Math.min(14, dx / 18)); // ±14deg max
-    const opacity = Math.max(0.55, 1 - Math.min(0.45, Math.abs(dx) / 600));
-    el.style.transition = dragging ? 'none' : 'transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.3s ease-out';
-    el.style.transform = `translateX(${dx}px) rotate(${tilt}deg)`;
-    el.style.opacity = String(opacity);
-    el.style.willChange = dragging ? 'transform, opacity' : 'auto';
-  };
-
-  // Launch the card off-screen in the direction of the swipe and fire
-  // the action. After the action, the new track (if any) mounts and we
-  // reset the wrapper's transform instantly so it's ready for the next
-  // gesture. v785 grammar (Dash 2026-04-28):
-  //   left  + quick = SKIP (slow drift from this vibe — keep planned next)
-  //   left  + hold  = LESS  (taste-negative + skip)
-  //   right + quick = LIKE  (stamp the current track, no skip — flourish only)
-  //   right + hold  = DISCOVER (refresh discover pool from current + play)
-  type SwipeAction = 'skip' | 'less' | 'like' | 'discover';
-  const launchCardWithAction = (dx: number, action: SwipeAction) => {
-    const el = cardWrapRef.current;
-    const dir = dx > 0 ? 1 : -1;
-
-    // LIKE — stamp + snap back (the song stays). Brief scale pop, no
-    // fly-off, then spring to center. Pink wall + label already up.
-    if (action === 'like') {
-      app.like();
-      if (el) {
-        el.style.transition = 'transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.18s ease-out';
-        el.style.transform = `translateX(${dx * 0.3}px) rotate(${dir * 4}deg) scale(1.04)`;
-        el.style.opacity = '1';
-        setTimeout(() => {
-          if (!el) return;
-          el.style.transition = 'transform 0.42s cubic-bezier(0.34, 1.56, 0.64, 1)';
-          el.style.transform = 'translateX(0) rotate(0deg) scale(1)';
-        }, 180);
-      }
-      return;
-    }
-
-    // SKIP / LESS / DISCOVER — fly off + advance track.
-    if (el) {
-      el.style.transition = 'transform 0.28s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.24s ease-out';
-      el.style.transform = `translateX(${dir * window.innerWidth}px) rotate(${dir * 28}deg)`;
-      el.style.opacity = '0';
-    }
-    setTimeout(() => {
-      if (action === 'less')         app.less();
-      else if (action === 'discover') app.drift();
-      else                            app.skip(); // 'skip'
-      setTimeout(() => {
-        const el2 = cardWrapRef.current;
-        if (!el2) return;
-        el2.style.transition = 'none';
-        el2.style.transform = 'translateX(0) rotate(0deg)';
-        el2.style.opacity = '1';
-        el2.offsetHeight;
-        el2.style.transition = 'transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.3s ease-out';
-      }, 40);
-    }, 200);
-  };
 
   // ===== CUBE DOCK — inline OYO DJ chat that expands from the carousel cube =====
   // Hold the cube (~500ms) → footer expands → subtle chat dock slides in.
@@ -5060,46 +4872,32 @@ export const VoyoPortraitPlayer = ({
   //
   // Interactive children (buttons, inputs, scrollable rails) are excluded
   // via didOriginateOnInteractive so they keep their own event handling.
+  // v867 (Dash 2026-04-29 "move x2/x8 motion to hold right/left side
+  // of screen, remove hold-pause and slide-right-to-skip nonsense").
+  // Simplified gesture grammar:
+  //   • Tap BigCenterCard       → toggle mode (poster ↔ video)
+  //   • Hold LEFT screen edge   → SKEEP backward (handleScrubStart)
+  //   • Hold RIGHT screen edge  → SKEEP forward
+  //   • Hold center 400ms       → DJ mode reveal (kept)
+  //
+  // RIPPED:
+  //   • Swipe vocabulary (skip/less/like/discover) — gone
+  //   • Card drag transform — gone
+  //   • Vinyl-finger pause (v835 disk-hold) — gone
+  //   • Disk-skeep zone (v836) — moved to screen edges
+  //   • Drift-arm 200ms gate — gone with the swipe vocabulary
   const handleCanvasPointerDown = useCallback((e: React.PointerEvent) => {
     if (didOriginateOnInteractive(e)) return;
-    // v804: bail when SearchOverlay is open (playerCompact === true).
-    // SearchOverlay's z-50 backdrop should already block taps from
-    // reaching here, but in some browsers a stray touch can leak
-    // through during the close transition. Belt-and-suspenders.
     if (usePlayerStore.getState().playerCompact) return;
-    // Also skip if the pointer started on a scrollable rail (history/queue
-    // card belts have their own horizontal drag — we don't want to double-
-    // handle). They're marked with data-no-canvas-swipe.
     const target = e.target as HTMLElement | null;
     if (target?.closest?.('[data-no-canvas-swipe]')) return;
 
     didHoldRef.current = false;
     swipeFiredRef.current = false;
-    hasCrossedThresholdRef.current = false;
-    holdSwipeReadyRef.current = false;
     swipeStartRef.current = { x: e.clientX, y: e.clientY, t: Date.now() };
 
-    // Arm the drift gate: if the user holds still for 200ms BEFORE moving,
-    // a left-swipe will commit drift on release. If they move before 200ms,
-    // the timer is cancelled in pointermove and left swipe will spring back.
-    if (holdSwipeReadyTimer.current) clearTimeout(holdSwipeReadyTimer.current);
-    holdSwipeReadyTimer.current = setTimeout(() => {
-      holdSwipeReadyRef.current = true;
-      holdSwipeReadyTimer.current = null;
-      haptics.light(); // tactile "drift armed"
-    }, 200);
-
-    // Reset card wrapper for a clean take-over. If we're rapid-tapping
-    // after a skip, the wrapper may still be mid-transition. Force it
-    // to the at-rest state so pointermove has a consistent 0 baseline.
-    const el = cardWrapRef.current;
-    if (el) {
-      el.style.transition = 'none';
-      el.style.transform = 'translateX(0px) rotate(0deg)';
-      el.style.opacity = '1';
-    }
-
-    // Start hold timer (400ms to trigger DJ mode)
+    // DJ-mode hold (400ms). Kept — long-press anywhere reveals
+    // controls/reactions + plays the wake toast.
     holdTimerRef.current = setTimeout(() => {
       didHoldRef.current = true;
       setIsControlsRevealed(true);
@@ -5108,180 +4906,59 @@ export const VoyoPortraitPlayer = ({
       haptics.medium();
     }, 400);
 
-    // v836: SKEEP on left-disk-hold takes priority over the v835
-    // pause. handleScrubStart already runs its own 200ms gate before
-    // engaging skeep mode, so quick taps on the left zone are a no-op
-    // (the timer is cancelled in handleScrubEnd / pointercancel).
-    const skeepZone = target?.closest?.('[data-disk-skeep]') as HTMLElement | null;
+    // v867 — SCREEN-EDGE SKEEP. Hold a left/right screen edge zone
+    // → handleScrubStart fires (with its own 200ms internal gate, so
+    // taps on the edge are a no-op). The 2x→4x→8x escalation lives
+    // entirely inside handleScrubStart / handleScrubEnd — moving
+    // the trigger surface doesn't change the visual chain.
+    const skeepZone = target?.closest?.('[data-screen-skeep]') as HTMLElement | null;
     if (skeepZone) {
-      const direction = (skeepZone.getAttribute('data-disk-skeep') as 'forward' | 'backward') || 'backward';
+      const direction = (skeepZone.getAttribute('data-screen-skeep') as 'forward' | 'backward') || 'backward';
       handleScrubStartRef.current?.(direction);
       diskSkeepActiveRef.current = true;
-    } else if (target?.closest?.('[data-disk-hold]')) {
-      // v835: retro disk-hold pause (only on non-skeep zones of the
-      // disk). 150ms timer, audio pauses, disk freezes mid-rotation.
-      // Release fires resume.
-      if (diskHoldTimerRef.current) clearTimeout(diskHoldTimerRef.current);
-      diskHoldFiredRef.current = false;
-      diskHoldTimerRef.current = setTimeout(() => {
-        diskHoldTimerRef.current = null;
-        if (usePlayerStore.getState().isPlaying) {
-          diskHoldFiredRef.current = true;
-          handlePlayPause();
-          haptics.light();
-        }
-      }, DISK_HOLD_MS);
     }
-  }, [showDJWakeToast, handlePlayPause]);
+  }, [showDJWakeToast]);
 
-  // POINTER MOVE: drag the central card with the finger. The card wrapper
-  // transforms 1:1 with horizontal delta (plus a subtle tilt and opacity
-  // fade). A haptic "click" fires the moment the user crosses the commit
-  // threshold so they know they've armed the skip — release there and
-  // the card launches off-screen. Release short of it and it springs back.
-  const COMMIT_THRESHOLD = 120; // px — the "will skip on release" line
-  const HORIZONTAL_BIAS = 1.4;  // horizontal must dominate vertical
+  // v867 — POINTER MOVE. With swipe vocabulary gone, this only does
+  // two things: cancel the DJ-mode hold timer if the user moves
+  // meaningfully (it's a drag, not a hold), and cancel skeep on
+  // movement (the user was holding an edge but their finger drifted).
+  // No card transforms, no commit threshold, no side-wall glow.
   const handleCanvasPointerMove = useCallback((e: React.PointerEvent) => {
     const start = swipeStartRef.current;
     if (!start) return;
 
     const dx = e.clientX - start.x;
     const dy = e.clientY - start.y;
+    const moved = Math.abs(dx) > 8 || Math.abs(dy) > 8;
 
-    // If the gesture looks vertical (scrolling the portal layer), leave
-    // the card alone — don't fight the native scroll. ALSO cancel the
-    // hold timer — otherwise a vertical scroll held for 400ms would
-    // falsely trigger DJ mode.
-    if (Math.abs(dy) > Math.abs(dx) * HORIZONTAL_BIAS && Math.abs(dy) > 20) {
+    if (moved) {
       if (holdTimerRef.current) {
         clearTimeout(holdTimerRef.current);
         holdTimerRef.current = null;
       }
-      // v835: vertical-scroll cancels the disk-hold too.
-      if (diskHoldTimerRef.current) {
-        clearTimeout(diskHoldTimerRef.current);
-        diskHoldTimerRef.current = null;
-      }
-      // v836: vertical-scroll cancels skeep too.
       if (diskSkeepActiveRef.current) {
         handleScrubEndRef.current?.();
         diskSkeepActiveRef.current = false;
       }
-      return;
-    }
-
-    // Once we've moved meaningfully horizontally, cancel the hold timers
-    // (this is a drag, not a DJ-mode hold). The drift-arm timer is
-    // cancelled here too — if user moves before the 200ms gate fires,
-    // holdSwipeReadyRef stays false and a left swipe will spring back.
-    if (Math.abs(dx) > 8) {
-      if (holdTimerRef.current) {
-        clearTimeout(holdTimerRef.current);
-        holdTimerRef.current = null;
-      }
-      if (holdSwipeReadyTimer.current) {
-        clearTimeout(holdSwipeReadyTimer.current);
-        holdSwipeReadyTimer.current = null;
-      }
-      // v835: drag mode wins over disk-hold. If the user starts on
-      // the disk but ends up swiping, kill the pending vinyl-pause
-      // so we don't pause the audio mid-swipe.
-      if (diskHoldTimerRef.current) {
-        clearTimeout(diskHoldTimerRef.current);
-        diskHoldTimerRef.current = null;
-      }
-      // v836: same for active skeep — drag overrides scrubbing.
-      if (diskSkeepActiveRef.current) {
-        handleScrubEndRef.current?.();
-        diskSkeepActiveRef.current = false;
-      }
-      swipeFiredRef.current = true; // eat the trailing click
-    }
-
-    // Drive the card wrapper transform directly — no React re-render.
-    applyCardTransform(dx, true);
-    // Mirror to the side-wall glow — same imperative pattern, no re-render.
-    setSideWallGlow(dx);
-
-    // Fire haptic on threshold cross — tactile "armed" feedback.
-    const crossed = Math.abs(dx) >= COMMIT_THRESHOLD;
-    if (crossed && !hasCrossedThresholdRef.current) {
-      hasCrossedThresholdRef.current = true;
-      haptics.light();
+      swipeFiredRef.current = true; // eat the trailing click on real drag
     }
   }, []);
 
-  const handleCanvasPointerUp = useCallback((e: React.PointerEvent) => {
-    // Cancel hold timer
+  // v867 POINTER UP. Cancel DJ hold + release skeep. No swipe
+  // commits. The trailing click handler (handleCanvasTap) does
+  // mode-toggle if no drag happened.
+  const handleCanvasPointerUp = useCallback((_e: React.PointerEvent) => {
     if (holdTimerRef.current) {
       clearTimeout(holdTimerRef.current);
       holdTimerRef.current = null;
     }
-
-    // v835: retro disk-hold release. If the user actually held long
-    // enough to fire the pause (diskHoldFiredRef true), release the
-    // finger from the vinyl → audio resumes from the same position.
-    if (diskHoldTimerRef.current) {
-      clearTimeout(diskHoldTimerRef.current);
-      diskHoldTimerRef.current = null;
-    }
-    if (diskHoldFiredRef.current) {
-      diskHoldFiredRef.current = false;
-      if (!usePlayerStore.getState().isPlaying) {
-        handlePlayPause();
-        haptics.light();
-      }
-    }
-    // v836: release skeep on pointerup. handleScrubEnd is idempotent
-    // and clears its own internal hold timer if 200ms hadn't fired.
     if (diskSkeepActiveRef.current) {
       handleScrubEndRef.current?.();
       diskSkeepActiveRef.current = false;
     }
-
-    const start = swipeStartRef.current;
     swipeStartRef.current = null;
-    if (!start) return;
-
-    const dx = e.clientX - start.x;
-    const elapsed = Date.now() - start.t;
-    const velocity = Math.abs(dx) / Math.max(1, elapsed); // px/ms
-
-    // COMMIT if crossed threshold OR fast flick (velocity > 0.6 px/ms
-    // ≈ 600px/sec). Fast flicks count even if they didn't travel the
-    // full 120px — matches the feel of flicking away a card.
-    const shouldCommit = Math.abs(dx) > COMMIT_THRESHOLD || (velocity > 0.6 && Math.abs(dx) > 40);
-
-    // v785 grammar — every committed swipe fires SOMETHING:
-    //   left  + quick = SKIP        (slow drift from this vibe)
-    //   left  + hold  = LESS         (taste-negative skip)
-    //   right + quick = LIKE         (stamp + flourish, no skip)
-    //   right + hold  = DISCOVER     (refresh discover pool + play)
-    // The hold gate (200ms pause-before-move) selects the "upgraded"
-    // variant on either side. Quick swipes are the default actions.
-    const isLeft = dx < 0;
-    const isHold = holdSwipeReadyRef.current;
-
-    if (shouldCommit) {
-      haptics.medium();
-      let action: 'skip' | 'less' | 'like' | 'discover';
-      if (isLeft && isHold)        action = 'less';
-      else if (isLeft)             action = 'skip';
-      else if (!isLeft && isHold)  action = 'discover';
-      else                         action = 'like';
-      launchCardWithAction(dx, action);
-      setTimeout(clearSideWallGlow, 240);
-    } else {
-      // Didn't reach threshold — spring back, no action.
-      applyCardTransform(0, false);
-      clearSideWallGlow();
-    }
-    if (holdSwipeReadyTimer.current) {
-      clearTimeout(holdSwipeReadyTimer.current);
-      holdSwipeReadyTimer.current = null;
-    }
-    holdSwipeReadyRef.current = false;
-  }, [handlePlayPause]);
+  }, []);
 
   // Dedicated pointer-CANCEL handler. Distinct from pointer-UP because
   // cancel means "the gesture was interrupted" — finger left viewport,
@@ -5290,6 +4967,7 @@ export const VoyoPortraitPlayer = ({
   // pointer-up logic here would read the last known position and could
   // fire an accidental skip if the user's finger happened to be past
   // threshold at the moment of cancellation.
+  // v867 POINTER CANCEL. Forget the gesture cleanly.
   const handleCanvasPointerCancel = useCallback(() => {
     if (holdTimerRef.current) {
       clearTimeout(holdTimerRef.current);
@@ -5297,36 +4975,11 @@ export const VoyoPortraitPlayer = ({
     }
     swipeStartRef.current = null;
     swipeFiredRef.current = false;
-    hasCrossedThresholdRef.current = false;
-    // Spring back regardless of where the finger was — cancel means
-    // "forget this gesture happened".
-    applyCardTransform(0, false);
-    clearSideWallGlow();
-    if (holdSwipeReadyTimer.current) {
-      clearTimeout(holdSwipeReadyTimer.current);
-      holdSwipeReadyTimer.current = null;
-    }
-    holdSwipeReadyRef.current = false;
-    // v835: cancel ≠ release. The finger left the viewport / app
-    // backgrounded — we should still resume audio if a vinyl-pause
-    // had fired, otherwise the song stays silently paused with no
-    // affordance to recover.
-    if (diskHoldTimerRef.current) {
-      clearTimeout(diskHoldTimerRef.current);
-      diskHoldTimerRef.current = null;
-    }
-    if (diskHoldFiredRef.current) {
-      diskHoldFiredRef.current = false;
-      if (!usePlayerStore.getState().isPlaying) {
-        handlePlayPause();
-      }
-    }
-    // v836: cancel skeep too — same "forget this gesture" semantics.
     if (diskSkeepActiveRef.current) {
       handleScrubEndRef.current?.();
       diskSkeepActiveRef.current = false;
     }
-  }, [handlePlayPause]);
+  }, []);
 
   const handleCanvasTap = useCallback((e: React.MouseEvent) => {
     // v804: bail when SearchOverlay is open — same belt-and-suspenders
@@ -5690,121 +5343,49 @@ export const VoyoPortraitPlayer = ({
       onPointerCancel={handleCanvasPointerCancel}
     >
 
-      {/* SIDE-WALLS OF LIGHT — four variants, one per gesture (v785 grammar,
-          Dash 2026-04-28). Each side carries its own color so the user
-          learns the language: pink right = Like, bronze right = Discover,
-          steel left = Skip, deep blue left = Less. Imperative opacity in
-          setSideWallGlow — no re-renders. mix-blend-mode: screen for the
-          atmospheric "wall of light" feel against dark canvas. */}
-      {/* RIGHT — LIKE (quick) */}
+      {/* v867 — Side-walls-of-light + swipe label pill removed. The
+          swipe vocabulary they decorated (skip/less/like/discover)
+          is retired. SKEEP zones below take their place — they're
+          functional (capture pointer for the scrub gesture) rather
+          than decorative.
+
+          SCREEN-EDGE SKEEP ZONES. Hold the left edge → backward
+          fast-scrub (2x→4x→8x escalation in handleScrubStart);
+          right edge → forward. ~22% width each so the center 56%
+          stays free for the BigCenterCard tap-to-mode gesture.
+          Vertical inset so the top-bar (axis tabs / wheel) and
+          bottom navbar stay tappable. */}
       <div
-        ref={wallLikeRef}
+        data-screen-skeep="backward"
         aria-hidden
         style={{
           position: 'fixed',
-          top: 0, right: 0, bottom: 0,
-          width: '40vw', maxWidth: '320px',
-          pointerEvents: 'none', opacity: 0,
-          background: 'linear-gradient(to left, rgba(236,72,153,0.42) 0%, rgba(236,72,153,0.18) 35%, rgba(236,72,153,0) 100%)',
-          mixBlendMode: 'screen',
-          transition: 'opacity 220ms cubic-bezier(0.16, 1, 0.3, 1)',
-          zIndex: 60,
+          left: 0,
+          top: 'calc(env(safe-area-inset-top, 0px) + 88px)',
+          bottom: 'calc(env(safe-area-inset-bottom, 0px) + 92px)',
+          width: '22%',
+          maxWidth: 120,
+          pointerEvents: 'auto',
+          zIndex: 12,
+          // Invisible — pure pointer-event capture. Future visual
+          // affordance (subtle bronze edge tick on hold) lands when
+          // we wire the scrub-active glow.
         }}
       />
-      {/* RIGHT — DISCOVER (hold) */}
       <div
-        ref={wallDiscoverRef}
+        data-screen-skeep="forward"
         aria-hidden
         style={{
           position: 'fixed',
-          top: 0, right: 0, bottom: 0,
-          width: '40vw', maxWidth: '320px',
-          pointerEvents: 'none', opacity: 0,
-          background: 'linear-gradient(to left, rgba(212,160,83,0.42) 0%, rgba(212,160,83,0.18) 35%, rgba(212,160,83,0) 100%)',
-          mixBlendMode: 'screen',
-          transition: 'opacity 220ms cubic-bezier(0.16, 1, 0.3, 1)',
-          zIndex: 60,
+          right: 0,
+          top: 'calc(env(safe-area-inset-top, 0px) + 88px)',
+          bottom: 'calc(env(safe-area-inset-bottom, 0px) + 92px)',
+          width: '22%',
+          maxWidth: 120,
+          pointerEvents: 'auto',
+          zIndex: 12,
         }}
       />
-      {/* LEFT — SKIP (quick). Neutral silver — "just moving on", no
-          judgment. Distinct from LESS so the two left variants don't
-          read as the same color (Dash 2026-04-28 v786). */}
-      <div
-        ref={wallSkipRef}
-        aria-hidden
-        style={{
-          position: 'fixed',
-          top: 0, left: 0, bottom: 0,
-          width: '40vw', maxWidth: '320px',
-          pointerEvents: 'none', opacity: 0,
-          background: 'linear-gradient(to right, rgba(220,230,250,0.42) 0%, rgba(220,230,250,0.16) 35%, rgba(220,230,250,0) 100%)',
-          mixBlendMode: 'screen',
-          transition: 'opacity 220ms cubic-bezier(0.16, 1, 0.3, 1)',
-          zIndex: 60,
-        }}
-      />
-      {/* LEFT — LESS (hold). Saturated indigo-blue — committed taste-
-          negative feedback. Distinct hue + heavier opacity from SKIP. */}
-      <div
-        ref={wallLessRef}
-        aria-hidden
-        style={{
-          position: 'fixed',
-          top: 0, left: 0, bottom: 0,
-          width: '40vw', maxWidth: '320px',
-          pointerEvents: 'none', opacity: 0,
-          background: 'linear-gradient(to right, rgba(74,103,180,0.62) 0%, rgba(74,103,180,0.26) 35%, rgba(74,103,180,0) 100%)',
-          mixBlendMode: 'screen',
-          transition: 'opacity 220ms cubic-bezier(0.16, 1, 0.3, 1)',
-          zIndex: 60,
-        }}
-      />
-      {/* SWIPE LABEL PILL — VOYO signature transparent glass pill, sits
-          low on the viewport (above the safe-area bottom), fades in
-          mid-swipe with the active gesture name. Color tint set
-          imperatively in setSwipeLabel via CSS custom prop on the pill.
-          Smoothened via a slight scale-in + longer ease (Dash 2026-04-28
-          "transparent pill, low, smoothen it"). */}
-      <div
-        aria-hidden
-        style={{
-          position: 'fixed',
-          left: 0, right: 0,
-          bottom: 'calc(env(safe-area-inset-bottom, 0px) + 22%)',
-          display: 'flex',
-          justifyContent: 'center',
-          pointerEvents: 'none',
-          zIndex: 65,
-        }}
-      >
-        <div
-          ref={swipeLabelRef}
-          aria-hidden
-          style={{
-            // pill chrome — VOYO glass language
-            background: 'rgba(15,15,22,0.58)',
-            backdropFilter: 'blur(18px) saturate(140%)',
-            WebkitBackdropFilter: 'blur(18px) saturate(140%)',
-            border: '1px solid rgba(255,255,255,0.10)',
-            borderRadius: 999,
-            padding: '8px 18px',
-            // typography
-            fontFamily: "'Fraunces', 'Satoshi', system-ui, serif",
-            fontStyle: 'italic',
-            fontSize: 16,
-            fontWeight: 600,
-            letterSpacing: '0.06em',
-            // motion — smoothened
-            opacity: 0,
-            transform: 'translateY(8px) scale(0.96)',
-            transition: 'opacity 240ms cubic-bezier(0.16, 1, 0.3, 1), transform 360ms cubic-bezier(0.16, 1, 0.3, 1), color 220ms ease, box-shadow 240ms ease',
-            // text glow inherits color set by setSwipeLabel
-            textShadow: '0 0 12px currentColor, 0 0 20px currentColor',
-            // soft outer halo — color is set inline by setSwipeLabel
-            boxShadow: '0 0 0 rgba(0,0,0,0)',
-          }}
-        />
-      </div>
 
       {/* FULLSCREEN BACKGROUND - Album art with dark overlay for floating effect.
           Auto-shows when videoBlocked (region-restricted embeds → graceful fallback). */}
