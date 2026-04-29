@@ -57,25 +57,28 @@ let _momentsBlocked = false;
 //   'friends'   : creators you've starred + session-engaged.
 //                 Social graph view, empties shows the follow hint.
 //
-// v903 — Travel filtering uses the static artistTiers map. Builds
-// a country → creator-handle list at module-load. Best-effort: if
-// the moments table's creator_username doesn't match a canonical
-// artist name, that country lane will look thin until ingest pulls
-// these creators or we add a creator-country column.
+// v909 — Travel filtering. Diagnostic on the live catalog showed
+// voyo_moments.creator_username is Instagram-handle-shaped
+// (`burnaboygram`, `officialwizkid` etc) so the v903 strict
+// .in(creator_username, [canonical names]) approach hit ~zero rows
+// and Travel always fell through to broad-rescue ("fallback feel").
+// Switched to fuzzy: per country, take the first-token of each
+// canonical artist name as a 3+ char fragment (e.g. "Burna Boy" →
+// "burna") and match creator_username with case-insensitive ilike
+// wildcards. Now `burnaboygram`, `_burna_boy_`, `realburna` all
+// resolve to Nigeria.
 import { getAllVerifiedArtists } from '../knowledge/artistTiers';
 
-const COUNTRY_CREATOR_MAP: Record<string, string[]> = (() => {
+const COUNTRY_CREATOR_FRAGMENTS: Record<string, string[]> = (() => {
   const map: Record<string, string[]> = {};
   for (const a of getAllVerifiedArtists()) {
     const country = a.country.toLowerCase();
+    // First token of the canonical name. Strip non-alnum and lowercase.
+    // Skip fragments < 3 chars (false positives explode at 1-2 chars).
+    const fragment = a.name.toLowerCase().replace(/[^a-z0-9 ]/g, '').split(' ')[0];
+    if (fragment.length < 3) continue;
     if (!map[country]) map[country] = [];
-    // Push both the canonical name and a normalized lowercase form;
-    // dedup at the end. Real creator_usernames in the data are
-    // lowercase Instagram-handle-shaped, so the lowercase variant
-    // is the one most likely to hit.
-    map[country].push(a.name);
-    map[country].push(a.name.toLowerCase().replace(/\s+/g, ''));
-    map[country].push(a.name.toLowerCase().replace(/\s+/g, '_'));
+    map[country].push(fragment);
   }
   for (const k of Object.keys(map)) {
     map[k] = Array.from(new Set(map[k]));
@@ -418,14 +421,18 @@ export function useMoments(): UseMomentsReturn {
               q = q.eq('content_type', category);
             }
           } else if (axis === 'travel') {
-            // v903 Travel — filter creator_username against the static
-            // country→creators list (built from artistTiers at module
-            // load). Empty list → null sentinel so the UI shows the
-            // "no moments yet" empty state instead of an unfiltered
-            // pour.
-            const creators = COUNTRY_CREATOR_MAP[category];
-            if (!creators || creators.length === 0) return null;
-            q = q.in('creator_username', creators);
+            // v909 Travel — fuzzy creator_username match. Each country's
+            // artist names contribute their first-token fragment; we
+            // build an .or() of ilike wildcards so creator handles
+            // built around the artist name (e.g. burnaboygram for
+            // Burna Boy) actually hit. Empty fragments list → null
+            // sentinel.
+            const fragments = COUNTRY_CREATOR_FRAGMENTS[category];
+            if (!fragments || fragments.length === 0) return null;
+            const orClause = fragments
+              .map(f => `creator_username.ilike.*${f}*`)
+              .join(',');
+            q = q.or(orClause);
           } else if (axis === 'live') {
             // v860 — virality cuts (NOT time windows). The catalog
             // is static (last ingest 87d ago per circulation
@@ -581,9 +588,12 @@ export function useMoments(): UseMomentsReturn {
               } else if (axis === 'vibes') {
                 nq = nq.not('parent_track_id', 'is', null).eq('content_type', nc);
               } else if (axis === 'travel') {
-                const creators = COUNTRY_CREATOR_MAP[nc];
-                if (!creators || creators.length === 0) continue;
-                nq = nq.in('creator_username', creators);
+                const fragments = COUNTRY_CREATOR_FRAGMENTS[nc];
+                if (!fragments || fragments.length === 0) continue;
+                const orClause = fragments
+                  .map(f => `creator_username.ilike.*${f}*`)
+                  .join(',');
+                nq = nq.or(orClause);
               } else if (axis === 'live') {
                 const liveMin: Record<string, number> = { 'pulse': 120000, 'rising': 20000, 'gems': 2500 };
                 const liveMax: Record<string, number | null> = { 'pulse': null, 'rising': 120000, 'gems': 20000 };

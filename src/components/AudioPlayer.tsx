@@ -43,8 +43,13 @@ const YT_ART   = 'https://i.ytimg.com/vi';
 // Circuit breaker — 3 errors within 10s on the same session = tear down
 // and rebuild instead of looping el.src assignments. Module-scope so it
 // survives re-renders of the AudioPlayer component.
-const ERROR_BURST_WINDOW_MS = 10_000;
-const ERROR_BURST_LIMIT     = 3;
+// v909 (Dash 2026-04-29 "tracks are skipping"): loosened the
+// circuit breaker. 3 errors in 10s was twitchy on slow networks /
+// transient R2 cache misses — one bad re-buffer could cascade into
+// an auto-skip. 5 errors / 15s gives the audio element more room
+// to recover before the user's track gets yanked.
+const ERROR_BURST_WINDOW_MS = 15_000;
+const ERROR_BURST_LIMIT     = 5;
 let errorBurst: number[] = [];
 
 // How long a `waiting` event must persist before it counts as a real stall

@@ -1526,7 +1526,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       const current = loadPersistedState();
       savePersistedState({
         ...current,
-        history: state.history.slice(-50).filter(h => h.track).map(h => ({
+        history: state.history.slice(-200).filter(h => h.track).map(h => ({
           trackId: h.track.trackId || h.track.id,
           title: h.track.title,
           artist: h.track.artist,
@@ -2011,7 +2011,7 @@ if (typeof window !== 'undefined') {
           addedAt: q.addedAt,
           source: q.source,
         })),
-        history: state.history.slice(-50).filter(h => h.track).map(h => ({
+        history: state.history.slice(-200).filter(h => h.track).map(h => ({
           trackId: h.track.trackId || h.track.id,
           title: h.track.title,
           artist: h.track.artist,
