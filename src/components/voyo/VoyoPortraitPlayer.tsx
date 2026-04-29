@@ -4677,19 +4677,137 @@ export const VoyoPortraitPlayer = ({
   const lastTapRef = useRef<number>(0);
   const didHoldRef = useRef(false);
   const djWakeCountRef = useRef(0); // Track how many times DJ mode was activated
-  // v867 — gesture refs, streamlined. Swipe vocabulary, vinyl-finger
-  // pause, side-wall light shows, swipe-action launcher all retired
-  // (~280 lines of dead code stripped). Only refs that survive:
-  //   - swipeStartRef / swipeFiredRef : tap-vs-drag detection
-  //   - cardWrapRef                   : DOM ref kept for legacy
-  //                                     consumers; nothing drives it
-  //   - diskSkeepActiveRef            : tracks whether the screen-edge
-  //                                     skeep is currently engaged
-  //   - handleScrubStart/EndRef       : bridge to the scrub callbacks
-  //                                     declared later in the file
+  // v874 (Dash 2026-04-29 "bring the swipe motions back, just refine
+  // the text and positionings"). Swipe vocabulary returns:
+  //   LEFT  + quick = SKIP        (slow drift from this vibe)
+  //   LEFT  + hold  = LESS        (taste-negative skip)
+  //   RIGHT + quick = LOVED       (stamp + flourish, no skip)
+  //   RIGHT + hold  = DISCOVER    (refresh discover pool + play)
+  // 200ms drift gate selects "hold" variant; quick swipes default.
   const swipeStartRef = useRef<{ x: number; y: number; t: number } | null>(null);
   const swipeFiredRef = useRef(false);
+  const hasCrossedThresholdRef = useRef(false);
   const cardWrapRef = useRef<HTMLDivElement>(null);
+  const holdSwipeReadyRef = useRef(false);
+  const holdSwipeReadyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Side-walls — light up on swipe to teach the gesture grammar.
+  const wallLikeRef     = useRef<HTMLDivElement>(null);
+  const wallDiscoverRef = useRef<HTMLDivElement>(null);
+  const wallSkipRef     = useRef<HTMLDivElement>(null);
+  const wallLessRef     = useRef<HTMLDivElement>(null);
+  // v874 REFINED gesture pill. Repositioned from bottom 22% (where
+  // the user's hand was) to TOP-26% (in the eye-line above the
+  // artwork). Cleaner labels (Loved instead of Like for the commit
+  // feel; "Less of this" instead of bare "Less" for clarity), and
+  // counter-swipe drift so the pill stays visible while finger pulls.
+  const swipeLabelRef = useRef<HTMLDivElement>(null);
+  const setSwipeLabel = (text: string, color: string, alpha: number, dx = 0) => {
+    const el = swipeLabelRef.current;
+    if (!el) return;
+    el.textContent = text;
+    el.style.color = color;
+    el.style.textShadow = `0 0 10px ${color}, 0 0 18px ${color}`;
+    el.style.boxShadow = `0 0 22px ${color}33, 0 4px 16px rgba(0,0,0,0.45)`;
+    el.style.opacity = String(alpha);
+    const scale = 0.92 + alpha * 0.12; // larger pop for visibility
+    const ty = 4 - alpha * 4;
+    // Pill drifts AWAY from the wall — counter-swipe motion keeps it
+    // legible while the finger pulls toward the wall.
+    const tx = dx === 0 ? 0 : (dx > 0 ? -28 : 28) * alpha;
+    el.style.transform = `translate(${tx}px, ${ty}px) scale(${scale})`;
+  };
+  const clearSwipeLabel = () => {
+    const el = swipeLabelRef.current;
+    if (!el) return;
+    el.style.opacity = '0';
+    el.style.transform = 'translate(0, 4px) scale(0.92)';
+    el.style.boxShadow = '0 0 0 rgba(0,0,0,0)';
+  };
+  const setSideWallGlow = (dx: number) => {
+    const COMMIT = 120;
+    const norm = Math.min(1, Math.abs(dx) / COMMIT);
+    const eased = norm * norm * (3 - 2 * norm);
+    const set = (ref: React.RefObject<HTMLDivElement | null>, opacity: number) => {
+      if (ref.current) ref.current.style.opacity = String(opacity);
+    };
+    set(wallLikeRef, 0); set(wallDiscoverRef, 0);
+    set(wallSkipRef, 0); set(wallLessRef, 0);
+
+    const isHold = holdSwipeReadyRef.current;
+    if (dx > 0) {
+      if (isHold) { set(wallDiscoverRef, eased); setSwipeLabel('Discover', '#E6C58A', eased, dx); }
+      else        { set(wallLikeRef, eased);     setSwipeLabel('Loved', '#F472B6', eased, dx); }
+    } else if (dx < 0) {
+      if (isHold) { set(wallLessRef, eased);     setSwipeLabel('Less of this', '#5B7FBE', eased, dx); }
+      else        { set(wallSkipRef, eased);     setSwipeLabel('Skip', '#E8EEF7', eased, dx); }
+    } else {
+      clearSwipeLabel();
+    }
+  };
+  const clearSideWallGlow = () => {
+    [wallLikeRef, wallDiscoverRef, wallSkipRef, wallLessRef].forEach(r => {
+      if (r.current) r.current.style.opacity = '0';
+    });
+    clearSwipeLabel();
+  };
+
+  // Card transform — follows finger 1:1 while dragging, springs back
+  // on release-without-commit.
+  const applyCardTransform = (dx: number, dragging: boolean) => {
+    const el = cardWrapRef.current;
+    if (!el) return;
+    const tilt = Math.max(-14, Math.min(14, dx / 18));
+    const opacity = Math.max(0.55, 1 - Math.min(0.45, Math.abs(dx) / 600));
+    el.style.transition = dragging ? 'none' : 'transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.3s ease-out';
+    el.style.transform = `translateX(${dx}px) rotate(${tilt}deg)`;
+    el.style.opacity = String(opacity);
+    el.style.willChange = dragging ? 'transform, opacity' : 'auto';
+  };
+
+  // Commit a swipe action.
+  type SwipeAction = 'skip' | 'less' | 'like' | 'discover';
+  const launchCardWithAction = (dx: number, action: SwipeAction) => {
+    const el = cardWrapRef.current;
+    const dir = dx > 0 ? 1 : -1;
+
+    if (action === 'like') {
+      app.like();
+      if (el) {
+        el.style.transition = 'transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.18s ease-out';
+        el.style.transform = `translateX(${dx * 0.3}px) rotate(${dir * 4}deg) scale(1.04)`;
+        el.style.opacity = '1';
+        setTimeout(() => {
+          if (!el) return;
+          el.style.transition = 'transform 0.42s cubic-bezier(0.34, 1.56, 0.64, 1)';
+          el.style.transform = 'translateX(0) rotate(0deg) scale(1)';
+        }, 180);
+      }
+      return;
+    }
+
+    if (el) {
+      el.style.transition = 'transform 0.28s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.24s ease-out';
+      el.style.transform = `translateX(${dir * window.innerWidth}px) rotate(${dir * 28}deg)`;
+      el.style.opacity = '0';
+    }
+    setTimeout(() => {
+      if (action === 'less')          app.less();
+      else if (action === 'discover') app.drift();
+      else                             app.skip();
+      setTimeout(() => {
+        const el2 = cardWrapRef.current;
+        if (!el2) return;
+        el2.style.transition = 'none';
+        el2.style.transform = 'translateX(0) rotate(0deg)';
+        el2.style.opacity = '1';
+        el2.offsetHeight;
+        el2.style.transition = 'transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.3s ease-out';
+      }, 40);
+    }, 200);
+  };
+
+  // Skeep + scrub bridge refs, declared earlier in source than the
+  // scrub callbacks (TDZ workaround).
   const diskSkeepActiveRef = useRef(false);
   const handleScrubStartRef = useRef<((dir: 'forward' | 'backward') => void) | null>(null);
   const handleScrubEndRef = useRef<(() => void) | null>(null);
@@ -4894,10 +5012,28 @@ export const VoyoPortraitPlayer = ({
 
     didHoldRef.current = false;
     swipeFiredRef.current = false;
+    hasCrossedThresholdRef.current = false;
+    holdSwipeReadyRef.current = false;
     swipeStartRef.current = { x: e.clientX, y: e.clientY, t: Date.now() };
 
-    // DJ-mode hold (400ms). Kept — long-press anywhere reveals
-    // controls/reactions + plays the wake toast.
+    // 200ms drift gate — if the user holds still 200ms before swiping,
+    // it commits the "hold" variant on release (LESS / DISCOVER).
+    if (holdSwipeReadyTimer.current) clearTimeout(holdSwipeReadyTimer.current);
+    holdSwipeReadyTimer.current = setTimeout(() => {
+      holdSwipeReadyRef.current = true;
+      holdSwipeReadyTimer.current = null;
+      haptics.light();
+    }, 200);
+
+    // Reset card wrapper for clean takeover.
+    const el = cardWrapRef.current;
+    if (el) {
+      el.style.transition = 'none';
+      el.style.transform = 'translateX(0px) rotate(0deg)';
+      el.style.opacity = '1';
+    }
+
+    // DJ-mode hold (400ms).
     holdTimerRef.current = setTimeout(() => {
       didHoldRef.current = true;
       setIsControlsRevealed(true);
@@ -4906,11 +5042,7 @@ export const VoyoPortraitPlayer = ({
       haptics.medium();
     }, 400);
 
-    // v867 — SCREEN-EDGE SKEEP. Hold a left/right screen edge zone
-    // → handleScrubStart fires (with its own 200ms internal gate, so
-    // taps on the edge are a no-op). The 2x→4x→8x escalation lives
-    // entirely inside handleScrubStart / handleScrubEnd — moving
-    // the trigger surface doesn't change the visual chain.
+    // SCREEN-EDGE SKEEP — kept from v867.
     const skeepZone = target?.closest?.('[data-screen-skeep]') as HTMLElement | null;
     if (skeepZone) {
       const direction = (skeepZone.getAttribute('data-screen-skeep') as 'forward' | 'backward') || 'backward';
@@ -4919,45 +5051,93 @@ export const VoyoPortraitPlayer = ({
     }
   }, [showDJWakeToast]);
 
-  // v867 — POINTER MOVE. With swipe vocabulary gone, this only does
-  // two things: cancel the DJ-mode hold timer if the user moves
-  // meaningfully (it's a drag, not a hold), and cancel skeep on
-  // movement (the user was holding an edge but their finger drifted).
-  // No card transforms, no commit threshold, no side-wall glow.
+  // v874 POINTER MOVE — swipe vocabulary restored. Drives card
+  // translation, side-wall glow, label pill, threshold haptic.
+  const COMMIT_THRESHOLD = 120;
+  const HORIZONTAL_BIAS = 1.4;
   const handleCanvasPointerMove = useCallback((e: React.PointerEvent) => {
     const start = swipeStartRef.current;
     if (!start) return;
 
     const dx = e.clientX - start.x;
     const dy = e.clientY - start.y;
-    const moved = Math.abs(dx) > 8 || Math.abs(dy) > 8;
 
-    if (moved) {
-      if (holdTimerRef.current) {
-        clearTimeout(holdTimerRef.current);
-        holdTimerRef.current = null;
+    // Vertical-dominant: skip card drag, kill hold timers.
+    if (Math.abs(dy) > Math.abs(dx) * HORIZONTAL_BIAS && Math.abs(dy) > 20) {
+      if (holdTimerRef.current) { clearTimeout(holdTimerRef.current); holdTimerRef.current = null; }
+      if (diskSkeepActiveRef.current) {
+        handleScrubEndRef.current?.();
+        diskSkeepActiveRef.current = false;
+      }
+      return;
+    }
+
+    // Horizontal drag — cancel hold timers, mark swipe.
+    if (Math.abs(dx) > 8) {
+      if (holdTimerRef.current) { clearTimeout(holdTimerRef.current); holdTimerRef.current = null; }
+      if (holdSwipeReadyTimer.current) {
+        clearTimeout(holdSwipeReadyTimer.current);
+        holdSwipeReadyTimer.current = null;
       }
       if (diskSkeepActiveRef.current) {
         handleScrubEndRef.current?.();
         diskSkeepActiveRef.current = false;
       }
-      swipeFiredRef.current = true; // eat the trailing click on real drag
+      swipeFiredRef.current = true;
+    }
+
+    // Card follows finger 1:1 + side-wall light + pill label.
+    applyCardTransform(dx, true);
+    setSideWallGlow(dx);
+
+    // Haptic on commit-threshold cross.
+    const crossed = Math.abs(dx) >= COMMIT_THRESHOLD;
+    if (crossed && !hasCrossedThresholdRef.current) {
+      hasCrossedThresholdRef.current = true;
+      haptics.light();
     }
   }, []);
 
-  // v867 POINTER UP. Cancel DJ hold + release skeep. No swipe
-  // commits. The trailing click handler (handleCanvasTap) does
-  // mode-toggle if no drag happened.
-  const handleCanvasPointerUp = useCallback((_e: React.PointerEvent) => {
-    if (holdTimerRef.current) {
-      clearTimeout(holdTimerRef.current);
-      holdTimerRef.current = null;
-    }
+  // v874 POINTER UP — commits swipe action if past threshold/velocity,
+  // springs card back otherwise. Releases skeep if engaged.
+  const handleCanvasPointerUp = useCallback((e: React.PointerEvent) => {
+    if (holdTimerRef.current) { clearTimeout(holdTimerRef.current); holdTimerRef.current = null; }
     if (diskSkeepActiveRef.current) {
       handleScrubEndRef.current?.();
       diskSkeepActiveRef.current = false;
     }
+
+    const start = swipeStartRef.current;
     swipeStartRef.current = null;
+    if (!start) return;
+
+    const dx = e.clientX - start.x;
+    const elapsed = Date.now() - start.t;
+    const velocity = Math.abs(dx) / Math.max(1, elapsed);
+    const shouldCommit = Math.abs(dx) > COMMIT_THRESHOLD || (velocity > 0.6 && Math.abs(dx) > 40);
+
+    const isLeft = dx < 0;
+    const isHold = holdSwipeReadyRef.current;
+
+    if (shouldCommit) {
+      haptics.medium();
+      let action: 'skip' | 'less' | 'like' | 'discover';
+      if (isLeft && isHold)        action = 'less';
+      else if (isLeft)             action = 'skip';
+      else if (!isLeft && isHold)  action = 'discover';
+      else                         action = 'like';
+      launchCardWithAction(dx, action);
+      setTimeout(clearSideWallGlow, 240);
+    } else {
+      applyCardTransform(0, false);
+      clearSideWallGlow();
+    }
+
+    if (holdSwipeReadyTimer.current) {
+      clearTimeout(holdSwipeReadyTimer.current);
+      holdSwipeReadyTimer.current = null;
+    }
+    holdSwipeReadyRef.current = false;
   }, []);
 
   // Dedicated pointer-CANCEL handler. Distinct from pointer-UP because
@@ -4967,14 +5147,19 @@ export const VoyoPortraitPlayer = ({
   // pointer-up logic here would read the last known position and could
   // fire an accidental skip if the user's finger happened to be past
   // threshold at the moment of cancellation.
-  // v867 POINTER CANCEL. Forget the gesture cleanly.
+  // v874 POINTER CANCEL — forget the gesture, spring card back, kill walls.
   const handleCanvasPointerCancel = useCallback(() => {
-    if (holdTimerRef.current) {
-      clearTimeout(holdTimerRef.current);
-      holdTimerRef.current = null;
-    }
+    if (holdTimerRef.current) { clearTimeout(holdTimerRef.current); holdTimerRef.current = null; }
     swipeStartRef.current = null;
     swipeFiredRef.current = false;
+    hasCrossedThresholdRef.current = false;
+    applyCardTransform(0, false);
+    clearSideWallGlow();
+    if (holdSwipeReadyTimer.current) {
+      clearTimeout(holdSwipeReadyTimer.current);
+      holdSwipeReadyTimer.current = null;
+    }
+    holdSwipeReadyRef.current = false;
     if (diskSkeepActiveRef.current) {
       handleScrubEndRef.current?.();
       diskSkeepActiveRef.current = false;
@@ -5343,18 +5528,110 @@ export const VoyoPortraitPlayer = ({
       onPointerCancel={handleCanvasPointerCancel}
     >
 
-      {/* v867 — Side-walls-of-light + swipe label pill removed. The
-          swipe vocabulary they decorated (skip/less/like/discover)
-          is retired. SKEEP zones below take their place — they're
-          functional (capture pointer for the scrub gesture) rather
-          than decorative.
+      {/* v874 — Side-walls of light, four variants (one per gesture).
+          Each side carries its own color so the user learns the grammar:
+            RIGHT pink     = LOVED (quick)
+            RIGHT bronze   = DISCOVER (hold)
+            LEFT  silver   = SKIP (quick)
+            LEFT  indigo   = LESS (hold)
+          mix-blend-mode: screen for atmospheric "wall of light" feel.
+          z 60 — above the canvas content, below modals. */}
+      <div
+        ref={wallLikeRef}
+        aria-hidden
+        style={{
+          position: 'fixed', top: 0, right: 0, bottom: 0,
+          width: '40vw', maxWidth: 320,
+          pointerEvents: 'none', opacity: 0,
+          background: 'linear-gradient(to left, rgba(244,114,182,0.42) 0%, rgba(244,114,182,0.18) 35%, rgba(244,114,182,0) 100%)',
+          mixBlendMode: 'screen',
+          transition: 'opacity 220ms cubic-bezier(0.16, 1, 0.3, 1)',
+          zIndex: 60,
+        }}
+      />
+      <div
+        ref={wallDiscoverRef}
+        aria-hidden
+        style={{
+          position: 'fixed', top: 0, right: 0, bottom: 0,
+          width: '40vw', maxWidth: 320,
+          pointerEvents: 'none', opacity: 0,
+          background: 'linear-gradient(to left, rgba(230,197,138,0.42) 0%, rgba(230,197,138,0.18) 35%, rgba(230,197,138,0) 100%)',
+          mixBlendMode: 'screen',
+          transition: 'opacity 220ms cubic-bezier(0.16, 1, 0.3, 1)',
+          zIndex: 60,
+        }}
+      />
+      <div
+        ref={wallSkipRef}
+        aria-hidden
+        style={{
+          position: 'fixed', top: 0, left: 0, bottom: 0,
+          width: '40vw', maxWidth: 320,
+          pointerEvents: 'none', opacity: 0,
+          background: 'linear-gradient(to right, rgba(232,238,247,0.40) 0%, rgba(232,238,247,0.16) 35%, rgba(232,238,247,0) 100%)',
+          mixBlendMode: 'screen',
+          transition: 'opacity 220ms cubic-bezier(0.16, 1, 0.3, 1)',
+          zIndex: 60,
+        }}
+      />
+      <div
+        ref={wallLessRef}
+        aria-hidden
+        style={{
+          position: 'fixed', top: 0, left: 0, bottom: 0,
+          width: '40vw', maxWidth: 320,
+          pointerEvents: 'none', opacity: 0,
+          background: 'linear-gradient(to right, rgba(91,127,190,0.55) 0%, rgba(91,127,190,0.22) 35%, rgba(91,127,190,0) 100%)',
+          mixBlendMode: 'screen',
+          transition: 'opacity 220ms cubic-bezier(0.16, 1, 0.3, 1)',
+          zIndex: 60,
+        }}
+      />
 
-          SCREEN-EDGE SKEEP ZONES. Hold the left edge → backward
-          fast-scrub (2x→4x→8x escalation in handleScrubStart);
-          right edge → forward. ~22% width each so the center 56%
-          stays free for the BigCenterCard tap-to-mode gesture.
-          Vertical inset so the top-bar (axis tabs / wheel) and
-          bottom navbar stay tappable. */}
+      {/* v874 GESTURE PILL — refined. Repositioned from old bottom 22%
+          to TOP region (above the BigCenterCard, in the natural
+          eye-line). Drifts counter-swipe so it stays visible while
+          the finger pulls the wall side. Glass language preserved. */}
+      <div
+        aria-hidden
+        style={{
+          position: 'fixed',
+          left: 0, right: 0,
+          top: 'calc(env(safe-area-inset-top, 0px) + 14%)',
+          display: 'flex',
+          justifyContent: 'center',
+          pointerEvents: 'none',
+          zIndex: 65,
+        }}
+      >
+        <div
+          ref={swipeLabelRef}
+          aria-hidden
+          style={{
+            background: 'rgba(15,15,22,0.62)',
+            backdropFilter: 'blur(20px) saturate(150%)',
+            WebkitBackdropFilter: 'blur(20px) saturate(150%)',
+            border: '1px solid rgba(255,255,255,0.10)',
+            borderRadius: 999,
+            padding: '7px 18px',
+            fontFamily: "'Fraunces', 'Satoshi', system-ui, serif",
+            fontStyle: 'italic',
+            fontSize: 15,
+            fontWeight: 600,
+            letterSpacing: '0.05em',
+            opacity: 0,
+            transform: 'translate(0, 4px) scale(0.92)',
+            transition: 'opacity 220ms cubic-bezier(0.16, 1, 0.3, 1), transform 320ms cubic-bezier(0.16, 1, 0.3, 1), color 200ms ease, box-shadow 220ms ease',
+            textShadow: '0 0 10px currentColor, 0 0 18px currentColor',
+            boxShadow: '0 0 0 rgba(0,0,0,0)',
+            whiteSpace: 'nowrap',
+          }}
+        />
+      </div>
+
+      {/* SCREEN-EDGE SKEEP zones (kept from v867). 22% width with
+          safe-area insets so topBar / navbar stay tappable. */}
       <div
         data-screen-skeep="backward"
         aria-hidden
@@ -5363,13 +5640,8 @@ export const VoyoPortraitPlayer = ({
           left: 0,
           top: 'calc(env(safe-area-inset-top, 0px) + 88px)',
           bottom: 'calc(env(safe-area-inset-bottom, 0px) + 92px)',
-          width: '22%',
-          maxWidth: 120,
-          pointerEvents: 'auto',
-          zIndex: 12,
-          // Invisible — pure pointer-event capture. Future visual
-          // affordance (subtle bronze edge tick on hold) lands when
-          // we wire the scrub-active glow.
+          width: '22%', maxWidth: 120,
+          pointerEvents: 'auto', zIndex: 12,
         }}
       />
       <div
@@ -5380,10 +5652,8 @@ export const VoyoPortraitPlayer = ({
           right: 0,
           top: 'calc(env(safe-area-inset-top, 0px) + 88px)',
           bottom: 'calc(env(safe-area-inset-bottom, 0px) + 92px)',
-          width: '22%',
-          maxWidth: 120,
-          pointerEvents: 'auto',
-          zIndex: 12,
+          width: '22%', maxWidth: 120,
+          pointerEvents: 'auto', zIndex: 12,
         }}
       />
 
