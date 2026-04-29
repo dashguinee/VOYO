@@ -237,10 +237,9 @@ export const VideoMode = ({ onExit }: VideoModeProps) => {
             <SkipForward className="w-8 h-8 text-white" fill="white" />
           </button>
         </div>
-        {/* Shared cube gesture hint — same component lives on the
-            iframe mini player. Visual proof both surfaces share the
-            same gesture grammar. v889. */}
-        <CubeGestureHint position="bottom" />
+        {/* Shared cube gesture hint — visual indicator only;
+            VoyoCloseX in the corner handles the actual exit. */}
+        <CubeGestureHint position="bottom" label="tap to close · drag to move" />
       </div>
     </div>
   );

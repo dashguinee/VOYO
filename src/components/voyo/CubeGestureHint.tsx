@@ -1,29 +1,43 @@
 import { memo } from 'react';
 
 /**
- * Shared gesture hint for cube surfaces (poster artwork + iframe mini).
- * Same component on both = same grammar = visual confirmation that the
- * two surfaces are wired together as one cube in two states.
+ * Shared gesture hint / mode-toggle button for cube surfaces.
+ * Same component on poster, iframe mini, and full-screen video.
  *
- * v888 (Dash 2026-04-29): "make sure all the cubes have it so I am
- * sure you are connecting the same thing".
+ * v891 (Dash 2026-04-29): the bottom hint becomes the *video-mode
+ * button*. Tap = toggle mode. On the iframe the iframe's own
+ * drag layer already handles tap-to-close, so onTap is optional —
+ * pass it where the hint needs to be the actual trigger (poster).
  */
 export const CubeGestureHint = memo(({
   position = 'bottom',
   highlighted = false,
+  label = 'tap to change mode · drag to move',
+  onTap,
 }: {
   position?: 'top' | 'bottom';
   highlighted?: boolean;
+  label?: string;
+  onTap?: () => void;
 }) => (
   <div
+    // Stop pointerDown so the parent card's pointerDown handlers
+    // (lyrics duck/pause grammar) don't compete with this button.
+    onPointerDown={(e) => { if (onTap) e.stopPropagation(); }}
+    onClick={(e) => {
+      if (!onTap) return;
+      e.stopPropagation();
+      onTap();
+    }}
     style={{
       position: 'absolute',
       [position]: 8,
       left: 0,
       right: 0,
       textAlign: 'center',
-      zIndex: 15,
-      pointerEvents: 'none',
+      zIndex: 20,
+      pointerEvents: onTap ? 'auto' : 'none',
+      cursor: onTap ? 'pointer' : 'default',
     }}
   >
     <p
@@ -39,7 +53,7 @@ export const CubeGestureHint = memo(({
         margin: 0,
       }}
     >
-      tap to change mode · drag to move
+      {label}
     </p>
   </div>
 ));

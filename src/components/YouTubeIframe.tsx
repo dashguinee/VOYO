@@ -1346,11 +1346,15 @@ export const YouTubeIframe = memo(() => {
         </div>
       )}
 
-      {/* Portrait: shared cube gesture hint (same component on the
-          poster artwork BigCenterCard) — visual proof both surfaces
-          are wired as one cube. */}
+      {/* Portrait cube hint = "tap to close" button. The iframe's own
+          drag layer (above) handles the tap-to-close, so onTap is
+          omitted — the hint is the visual indicator only. */}
       {isPortraitMode && !showPortraitNextUp && (
-        <CubeGestureHint position="bottom" highlighted={isDragging} />
+        <CubeGestureHint
+          position="bottom"
+          highlighted={isDragging}
+          label="tap to close · drag to move"
+        />
       )}
 
       {/* Portrait: Full "Up Next" thumbnail takeover - covers YouTube suggestions intentionally */}
