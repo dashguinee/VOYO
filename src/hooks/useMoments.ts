@@ -20,6 +20,7 @@ import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { devWarn } from '../utils/logger';
 import type { Moment } from '../types/moments';
 import { getInsights as getOyoInsights, hydrateFromSignals } from '../services/oyoDJ';
+import { usePlayerStore } from '../store/playerStore';
 import {
   rankMoments,
   recordSessionPlay,
@@ -245,45 +246,48 @@ export function useMoments(): UseMomentsReturn {
       if (offset === 0) setLoading(true);
 
       try {
-        // Oversample by 3x so we have material to interleave across
-        // creators. Without this, a single creator with a recent
-        // burst dominates the category (Dash bug 2026-04-29 v831).
-        const fetchSize = MOMENTS_PER_PAGE * FETCH_OVERSAMPLE;
-        // v857 (Dash 2026-04-29 "why only ichievoodoo plays, we have 8k+
-        // content"). The bug: ORDER BY discovered_at DESC concentrates
-        // the fetch on whichever creator has been on a posting tear.
-        // ichievoodoo holds 473 of the 1000 most recent moments — and
-        // 100% of the most-recent 60 in dance/comedy/original. Engine
-        // creator-cap can't help when the fetched batch is monoculture.
+        // v858 MULTI-PASS FETCH. Two queries run in parallel for the
+        // same category: one ordered by virality_score (the quality
+        // backbone — eliminates the recent-creator monoculture from
+        // v857's diagnosis), one ordered by discovered_at (the freshness
+        // top-up). Results merged + de-duped on the client.
         //
-        // Fix: order by virality_score (with recency as tiebreaker).
-        // For the dance category alone, this jumps unique-creator count
-        // from 1 → 20 in the first 60 rows. Diversity built into the
-        // FETCH instead of fighting it in the rank.
-        let query = supabase
-          .from('voyo_moments')
-          .select('*')
-          .eq('is_active', true)
-          .order('virality_score', { ascending: false, nullsFirst: false })
-          .order('discovered_at', { ascending: false })
-          .range(offset * FETCH_OVERSAMPLE, offset * FETCH_OVERSAMPLE + fetchSize - 1);
+        // Why both: virality_score alone underweights brand-new posts
+        // (no engagement signal yet). Recency alone is the bug we just
+        // fixed. Combined: half quality / half fresh, ranked by engine.
+        const HALF = Math.ceil((MOMENTS_PER_PAGE * FETCH_OVERSAMPLE) / 2);
 
-        // Apply filter based on which axis we are on
-        if (axis === 'countries') {
-          query = query.contains('cultural_tags', [category]);
-        } else if (axis === 'vibes') {
-          // Vibes filter by content_type column (dance, comedy, live, etc.)
-          query = query.eq('content_type', category);
-        } else {
-          // Genres filter by vibe_tags array (hashtags like #afrobeats)
-          query = query.contains('vibe_tags', [category]);
-        }
+        const buildQuery = (orderBy: 'virality' | 'recency') => {
+          // supabase already guarded at the top of fetchMomentsForCategory.
+          let q = supabase!
+            .from('voyo_moments')
+            .select('*')
+            .eq('is_active', true);
+          if (orderBy === 'virality') {
+            q = q.order('virality_score', { ascending: false, nullsFirst: false })
+                 .order('discovered_at', { ascending: false });
+          } else {
+            q = q.order('discovered_at', { ascending: false });
+          }
+          q = q.range(offset * FETCH_OVERSAMPLE, offset * FETCH_OVERSAMPLE + HALF - 1);
+          // Axis filter — same logic as before, applied to each pass.
+          if (axis === 'countries') {
+            q = q.contains('cultural_tags', [category]);
+          } else if (axis === 'vibes') {
+            q = q.eq('content_type', category);
+          } else {
+            q = q.contains('vibe_tags', [category]);
+          }
+          return q;
+        };
 
-        const { data, error } = await query;
+        const [viralRes, freshRes] = await Promise.all([
+          buildQuery('virality'),
+          buildQuery('recency'),
+        ]);
 
+        const error = viralRes.error || freshRes.error;
         if (error) {
-          // DB statement timeout = missing index on voyo_moments. Block future
-          // requests so the console isn't spammed with repeated 500s.
           if (error.message?.includes('timeout') || error.message?.includes('statement')) {
             _momentsBlocked = true;
             devWarn('[useMoments] DB timeout — moments queries disabled until next reload');
@@ -293,7 +297,24 @@ export function useMoments(): UseMomentsReturn {
           return;
         }
 
-        const raw = (data || []) as Moment[];
+        // Merge + dedup the two passes by moment id.
+        const seen = new Set<string>();
+        const raw: Moment[] = [];
+        for (const list of [viralRes.data || [], freshRes.data || []]) {
+          for (const m of list as Moment[]) {
+            if (m?.id && !seen.has(m.id)) {
+              seen.add(m.id);
+              raw.push(m);
+            }
+          }
+        }
+        // v858: cross-surface seed — pull the currently-playing track's
+        // mode/artist/tags from the player store. Moments matching
+        // them rank higher so the feed "drops near the vibe of what's
+        // playing" (Dash's groundbreaking-logic spec). Read from the
+        // store at fetch time, not closure-bind, so seed reflects the
+        // latest track without re-mounting the hook.
+        const seedTrack = usePlayerStore.getState().currentTrack;
         // v832: rank by taste + session affinity + engagement priors.
         // favoriteArtists / favoriteMoods come from getOyoInsights() —
         // the same hydrated taste graph the audio HotPool reads, so a
@@ -305,6 +326,13 @@ export function useMoments(): UseMomentsReturn {
           favoriteMoods: new Set(insights.favoriteMoods.map(m => m.toLowerCase())),
           take: MOMENTS_PER_PAGE,
           maxPerCreator: MAX_PER_CREATOR,
+          // v858 cross-surface seed
+          seedMode: (seedTrack as unknown as { detectedMode?: string })?.detectedMode,
+          seedArtist: seedTrack?.artist,
+          seedTags: [
+            ...((seedTrack as unknown as { tags?: string[] })?.tags ?? []),
+            ...((seedTrack as unknown as { vibeTags?: string[] })?.vibeTags ?? []),
+          ].filter(Boolean),
         });
 
         setMoments(prev => {
@@ -584,7 +612,9 @@ export function useMoments(): UseMomentsReturn {
       if (hit) { creator = hit.creator_username || hit.creator_name; break; }
     }
     recordSessionPlay(creator);
-    markShown(momentId);
+    // v858: pass creator into markShown so the engine's last-N
+    // ring buffer learns who's been on screen recently.
+    markShown(momentId, creator);
 
     if (!supabase || !isSupabaseConfigured) return;
     try {

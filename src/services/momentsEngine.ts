@@ -40,6 +40,11 @@ import type { Moment } from '../types/moments';
 const sessionShown = new Set<string>();
 const creatorWeights = new Map<string, number>();
 const sessionStarred = new Set<string>();
+// v858: ring buffer of the last N creators shown. Used to penalize
+// back-to-back appearances — even if a creator earns the slot, we
+// don't want to see them twice in 3 swipes. Rhythm > raw score.
+const RECENT_CREATOR_WINDOW = 5;
+const recentCreators: string[] = [];
 
 /**
  * Bump creator affinity (positive). Called when the user dwells ≥1.5s
@@ -73,8 +78,13 @@ export function recordSessionStar(creator: string | undefined): void {
   creatorWeights.set(creator, Math.min(60, cur + 30));
 }
 
-export function markShown(momentId: string): void {
+export function markShown(momentId: string, creator?: string): void {
   sessionShown.add(momentId);
+  // v858: keep last N creators for back-to-back penalty.
+  if (creator) {
+    recentCreators.push(creator);
+    if (recentCreators.length > RECENT_CREATOR_WINDOW) recentCreators.shift();
+  }
 }
 
 // ── Scoring helpers ───────────────────────────────────────────────────────
@@ -115,6 +125,15 @@ export interface RankContext {
   take: number;
   /** Hard cap for any single creator in the returned slice. */
   maxPerCreator: number;
+  /** v858 — cross-surface seed. The currently-playing track's
+   *  detected mode (e.g. "dance", "afrobeats") and parent artist.
+   *  Moments matching either get a +35 / +20 boost so the feed
+   *  drops near the vibe of what's playing in the player.
+   *  This is the "vibe of the last song that was playing" Dash
+   *  described as the natural entry point. */
+  seedMode?: string;
+  seedArtist?: string;
+  seedTags?: string[];
 }
 
 interface ScoredMoment {
@@ -131,7 +150,7 @@ interface ScoredMoment {
 function scoreMoment(m: Moment, ctx: RankContext): number {
   let s = 0;
 
-  // Affinity
+  // Cross-session taste affinity (oyoDJ insights).
   const artist = (m.parent_track_artist || '').toLowerCase();
   if (artist && ctx.favoriteArtists.has(artist)) s += 60;
 
@@ -139,9 +158,33 @@ function scoreMoment(m: Moment, ctx: RankContext): number {
     s += 30;
   }
 
+  // v858 cross-surface seed — the vibe of what's currently playing
+  // in the audio player should bias what shows up in Moments.
+  if (ctx.seedArtist && artist === ctx.seedArtist.toLowerCase()) s += 20;
+  if (ctx.seedMode) {
+    const mLow = ctx.seedMode.toLowerCase();
+    if ((m.content_type || '').toLowerCase() === mLow) s += 35;
+    if (m.vibe_tags?.some(t => String(t).toLowerCase().includes(mLow))) s += 18;
+  }
+  if (ctx.seedTags?.length) {
+    const seedSet = new Set(ctx.seedTags.map(t => t.toLowerCase()));
+    if (m.vibe_tags?.some(t => seedSet.has(String(t).toLowerCase()))) s += 12;
+    if (m.cultural_tags?.some(t => seedSet.has(String(t).toLowerCase()))) s += 12;
+  }
+
   const creator = m.creator_username || m.creator_name || '';
   if (creator && sessionStarred.has(creator)) s += 25;
   if (creator) s += creatorWeights.get(creator) ?? 0;
+
+  // v858 — last-N creator rhythm penalty. If the same creator has
+  // appeared in the last 5 moments, drop their score so the immediate
+  // scroll varies even when one creator is winning the global rank.
+  if (creator && recentCreators.includes(creator)) {
+    // Count occurrences for graduated penalty (-12 per appearance,
+    // capped at -36 so we don't fully blacklist).
+    const occurrences = recentCreators.filter(c => c === creator).length;
+    s -= Math.min(36, occurrences * 12);
+  }
 
   // Engagement priors
   s += popularityBoost(m.view_count);
@@ -153,13 +196,7 @@ function scoreMoment(m: Moment, ctx: RankContext): number {
   // Session dedup
   if (sessionShown.has(m.id)) s -= 100;
 
-  // v842 (Dash 2026-04-29 "why do I keep seeing the same videos and
-  // same order"): without a tiebreaker the score is fully
-  // deterministic — same fetch produces the same order forever.
-  // ±12 jitter is small enough that strong taste signals (favorite
-  // artist = +60, mood = +30) still dominate, but enough to shuffle
-  // close-scoring moments between fetches. Each fetch reroles the
-  // dice so the rail feels alive without losing the affinity logic.
+  // v842 jitter — breaks deterministic ordering between fetches.
   s += (Math.random() - 0.5) * 24;
 
   return s;
@@ -168,16 +205,14 @@ function scoreMoment(m: Moment, ctx: RankContext): number {
 /**
  * Rank + dedup + diversify a freshly-fetched batch of moments.
  *
- * Algorithm:
- *   1. Score every row in isolation (pure function over the row + ctx).
+ * v858 algorithm:
+ *   1. Score every row (taste + seed + rhythm + recency + jitter).
  *   2. Sort high → low.
- *   3. Walk down the sorted list, accepting moments that don't bust
- *      the per-creator cap. This is round-robin BY SCORE — better
- *      than naive RR because high-score moments anchor the slice
- *      while low-score creators fill the gaps.
- *   4. If we underfill (catalogue too small), fill the remainder
- *      from the leftover sorted list ignoring the cap, so the user
- *      never sees a half-empty page.
+ *   3. Walk the sorted list, taking moments that don't bust the
+ *      per-creator cap. HARD CAP — no underfill bypass. Better to
+ *      return fewer diverse moments than a page of one creator;
+ *      useMoments handles the underfill case by widening the fetch
+ *      (multi-pass / cross-category bleed).
  */
 export function rankMoments(rows: Moment[], ctx: RankContext): Moment[] {
   if (!rows.length) return rows;
@@ -191,25 +226,13 @@ export function rankMoments(rows: Moment[], ctx: RankContext): Moment[] {
 
   const out: Moment[] = [];
   const perCreator = new Map<string, number>();
-  const leftover: ScoredMoment[] = [];
 
   for (const s of scored) {
     if (out.length >= ctx.take) break;
     const used = perCreator.get(s.creatorKey) ?? 0;
-    if (used >= ctx.maxPerCreator) {
-      leftover.push(s);
-      continue;
-    }
+    if (used >= ctx.maxPerCreator) continue; // HARD cap, no underfill drain
     out.push(s.moment);
     perCreator.set(s.creatorKey, used + 1);
-  }
-
-  // Underfill — drain leftover (ignore cap, preserve sort order).
-  if (out.length < ctx.take) {
-    for (const s of leftover) {
-      if (out.length >= ctx.take) break;
-      out.push(s.moment);
-    }
   }
 
   return out;
