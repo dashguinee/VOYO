@@ -559,6 +559,29 @@ function App() {
     // if our heartbeats still aren't enough, this tells us it's the OS
     // not our code. Also powers the future LowBatteryEffect visual.
     initBatteryMonitor().catch(() => {});
+
+    // Site-wide media protection (v882): block right-click context menu
+    // on images/videos/canvases, and any image-drag operation. CSS
+    // already kills the iOS long-press save menu via -webkit-touch-callout.
+    const blockMediaContextMenu = (e: MouseEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (!t) return;
+      if (t instanceof HTMLImageElement || t instanceof HTMLVideoElement || t instanceof HTMLCanvasElement) {
+        e.preventDefault();
+      }
+    };
+    const blockImageDrag = (e: DragEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (t instanceof HTMLImageElement) {
+        e.preventDefault();
+      }
+    };
+    document.addEventListener('contextmenu', blockMediaContextMenu, { capture: true });
+    document.addEventListener('dragstart', blockImageDrag, { capture: true });
+    return () => {
+      document.removeEventListener('contextmenu', blockMediaContextMenu, true);
+      document.removeEventListener('dragstart', blockImageDrag, true);
+    };
   }, []);
 
   // DASH AUTH: Handle callback from Command Center (simple, synchronous)

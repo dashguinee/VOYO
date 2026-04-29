@@ -130,6 +130,33 @@
   select {
     font-size: max(16px, 1rem);
   }
+
+  /* Site-wide media protection (v882 Dash 2026-04-29):
+     no image select, no drag-out, no iOS long-press "Save Image"
+     menu, no native context menu on media. */
+  img,
+  video,
+  canvas,
+  picture,
+  [data-bg-image] {
+    -webkit-user-drag: none;
+    -khtml-user-drag: none;
+    -moz-user-drag: none;
+    -o-user-drag: none;
+    user-drag: none;
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  /* Inputs/textareas must remain selectable (body has user-select:none). */
+  input,
+  textarea,
+  [contenteditable="true"] {
+    -webkit-user-select: text;
+    user-select: text;
+    -webkit-touch-callout: default;
+  }
 }
 
 html, body, #root {
