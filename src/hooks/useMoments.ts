@@ -525,7 +525,8 @@ export function useMoments(): UseMomentsReturn {
             ...((seedTrack as unknown as { vibeTags?: string[] })?.vibeTags ?? []),
           ].filter(Boolean),
         };
-        let fetched = rankMoments(raw, rankCtx);
+        // (Initial single-pass rank moved into the v904 fill block
+        //  below — see Phase A / Phase B / final rank.)
 
         // v859 CROSS-CATEGORY BLEED. If the hard cap left the page
         // short (catalog too monoculture), pull from adjacent
@@ -534,16 +535,32 @@ export function useMoments(): UseMomentsReturn {
         // moments compete fairly with the primary category's. User
         // never sees a half-empty feed even when the chosen vibe is
         // dominated by one creator.
-        if (fetched.length < Math.floor(MOMENTS_PER_PAGE * BLEED_THRESHOLD_RATIO)) {
-          const seenIds = new Set(fetched.map(m => m.id));
-          // Pull the top 3 weighted neighbors of this category.
+        // v904 — TWO-PHASE FILL when the primary query came up short.
+        // Phase A: bleed from neighbor sub-cats within the same axis
+        //   (trends content-type lenses, vibes content-type lenses,
+        //    travel neighboring countries, live neighboring virality
+        //    cuts). Friends stays narrow on purpose.
+        // Phase B: if STILL short, broad-rescue with NO axis filter.
+        //   Pulls the top virality-ranked moments site-wide and
+        //   supplements. Re-rank gives them a fair shake; primary
+        //   matches still bubble to the top via the seed/taste signals.
+        // Net effect: every lane reaches MOMENTS_PER_PAGE in practice
+        // — the cube never sits half-empty even when a country / cut
+        // / sub-cat is sparse in the active catalog.
+        const seenIds = new Set(raw.map(m => m.id));
+        const filledRaw: Moment[] = [...raw];
+
+        const tooShort = () =>
+          filledRaw.length < Math.floor(MOMENTS_PER_PAGE * BLEED_THRESHOLD_RATIO);
+
+        if (tooShort()) {
+          // Phase A — neighbor-cat bleed.
           const neighbours = ADJACENCY[axis]?.[category] || {};
           const neighborCats = Object.entries(neighbours)
             .sort((a, b) => b[1] - a[1])
             .slice(0, 3)
             .map(([cat]) => cat);
 
-          const bleedRaw: Moment[] = [...raw];
           for (const nc of neighborCats) {
             try {
               let nq = supabase!
@@ -553,22 +570,63 @@ export function useMoments(): UseMomentsReturn {
                 .order('virality_score', { ascending: false, nullsFirst: false })
                 .order('discovered_at', { ascending: false })
                 .range(0, MOMENTS_PER_PAGE * 2 - 1);
-              // v902 — bleed applies to Trends content-type lenses only.
-              // Live/friends/vibes/travel don't have neighbor-cat
-              // bleed semantics in the new taxonomy.
-              if (axis === 'trends' && nc !== 'all') nq = nq.eq('content_type', nc);
-              else continue; // skip non-trends bleed
+
+              if (axis === 'trends' && nc !== 'all') {
+                nq = nq.eq('content_type', nc);
+              } else if (axis === 'vibes') {
+                nq = nq.not('parent_track_id', 'is', null).eq('content_type', nc);
+              } else if (axis === 'travel') {
+                const creators = COUNTRY_CREATOR_MAP[nc];
+                if (!creators || creators.length === 0) continue;
+                nq = nq.in('creator_username', creators);
+              } else if (axis === 'live') {
+                const liveMin: Record<string, number> = { 'pulse': 120000, 'rising': 20000, 'gems': 2500 };
+                const liveMax: Record<string, number | null> = { 'pulse': null, 'rising': 120000, 'gems': 20000 };
+                nq = nq.gte('virality_score', liveMin[nc] ?? 1000);
+                const mx = liveMax[nc];
+                if (mx !== null && mx !== undefined) nq = nq.lt('virality_score', mx);
+              } else {
+                continue; // friends — no bleed
+              }
+
               const { data: nd } = await nq;
               for (const m of (nd || []) as Moment[]) {
                 if (m?.id && !seenIds.has(m.id)) {
                   seenIds.add(m.id);
-                  bleedRaw.push(m);
+                  filledRaw.push(m);
                 }
               }
             } catch { /* one neighbor failing shouldn't stall the page */ }
           }
-          fetched = rankMoments(bleedRaw, rankCtx);
         }
+
+        // Phase B — broad rescue. Friends excluded (the private-space
+        // contract is to stay strictly engaged-creator-only, and an
+        // empty Friends lane signals "follow some creators" instead of
+        // pouring in random content).
+        if (tooShort() && axis !== 'friends') {
+          try {
+            const broadQ = supabase!
+              .from('voyo_moments')
+              .select('*')
+              .eq('is_active', true)
+              .order('virality_score', { ascending: false, nullsFirst: false })
+              .order('discovered_at', { ascending: false })
+              .range(0, MOMENTS_PER_PAGE * 3 - 1);
+            const { data: broadData } = await broadQ;
+            for (const m of (broadData || []) as Moment[]) {
+              if (m?.id && !seenIds.has(m.id)) {
+                seenIds.add(m.id);
+                filledRaw.push(m);
+              }
+            }
+          } catch { /* broad-rescue failure leaves whatever Phase A pulled */ }
+        }
+
+        // Final rank over the unified pool (primary + bleed + rescue).
+        // filledRaw === raw when both phases were no-ops, so this is
+        // also the canonical single-pass rank for healthy lanes.
+        const fetched = rankMoments(filledRaw, rankCtx);
 
         setMoments(prev => {
           const next = new Map(prev);
