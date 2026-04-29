@@ -4696,11 +4696,20 @@ export const VoyoPortraitPlayer = ({
   const wallSkipRef     = useRef<HTMLDivElement>(null);
   const wallLessRef     = useRef<HTMLDivElement>(null);
   // v875 GESTURE LABEL — Take Out style. Pill rides INSIDE the active
-  // glow zone, NOT centered. dx<0 → label at left ~16% (in the
-  // indigo/silver wall); dx>0 → label at right ~16% (in the pink/
-  // bronze wall). Reads as part of the glow, not floating chrome.
-  // Also a translateY ramp so the label settles in vertically as
-  // alpha rises — matches the wall fade-in feel.
+  // glow zone, NOT centered.
+  // v877 (Dash 2026-04-29 "I like this first 3 times, then like"):
+  // RIGHT-quick label evolves with familiarity. First 3 lifetime
+  // commits show "I like this" (the full sentence reads tentative,
+  // first-time-ish); after that it shortens to "like" (familiar
+  // shorthand). Counter persisted in localStorage so the
+  // progression carries across sessions.
+  const LIKE_COUNT_KEY = 'voyo-like-count-v1';
+  const likeCountRef = useRef<number>(
+    (() => {
+      try { return parseInt(localStorage.getItem(LIKE_COUNT_KEY) || '0', 10) || 0; }
+      catch { return 0; }
+    })()
+  );
   const swipeLabelRef = useRef<HTMLDivElement>(null);
   const setSwipeLabel = (text: string, color: string, alpha: number, dx = 0) => {
     const el = swipeLabelRef.current;
@@ -4740,7 +4749,13 @@ export const VoyoPortraitPlayer = ({
     const isHold = holdSwipeReadyRef.current;
     if (dx > 0) {
       if (isHold) { set(wallDiscoverRef, eased); setSwipeLabel('Discover', '#E6C58A', eased, dx); }
-      else        { set(wallLikeRef, eased);     setSwipeLabel('Loved', '#F472B6', eased, dx); }
+      else        {
+        set(wallLikeRef, eased);
+        // v877 — label evolves with familiarity. First 3 lifetime
+        // likes read full ("I like this"); 4th onwards just "like".
+        const likeLabel = likeCountRef.current < 3 ? 'I like this' : 'like';
+        setSwipeLabel(likeLabel, '#F472B6', eased, dx);
+      }
     } else if (dx < 0) {
       // v875 — Drift = LEFT quick (was "Skip", indigo glow now).
       // Less of this = LEFT hold (silver glow). Per Dash: "skip is
@@ -4782,6 +4797,12 @@ export const VoyoPortraitPlayer = ({
 
     if (action === 'like') {
       app.like();
+      // v877: increment lifetime like counter. After 3 the label
+      // shortens from "I like this" to "like" on subsequent
+      // gestures (handled in setSwipeLabel via likeCountRef).
+      likeCountRef.current += 1;
+      try { localStorage.setItem(LIKE_COUNT_KEY, String(likeCountRef.current)); }
+      catch { /* private mode / quota */ }
       if (el) {
         el.style.transition = 'transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.18s ease-out';
         el.style.transform = `translateX(${dx * 0.3}px) rotate(${dir * 4}deg) scale(1.04)`;
