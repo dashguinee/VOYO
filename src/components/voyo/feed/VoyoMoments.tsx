@@ -1468,16 +1468,27 @@ export const VoyoMoments: React.FC<VoyoMomentsProps> = ({ onPlayFullTrack, onArt
     ];
   }, []);
 
+  // v906 — frame pulse counter. Bumped from wakeHeaderOnTap when the
+  // user taps while the header is hidden ("entered a lane"). The
+  // counter drives a key remount on the frame-light overlay, which
+  // re-fires its 2s CSS animation each time.
+  const [framePulseKey, setFramePulseKey] = useState(0);
+
   // Tap-only header restore. Never called from scroll/swipe handlers.
   // Restores the modes widget (axis tabs + compass arc) and auto-hides
   // again after 5s. ALSO calls pingWidgets so the orb/title/bio come back
   // along with the header for a coherent reveal.
+  // v906: when the tap happens while the header was already hidden,
+  // this is the "entered a lane" gesture — fire the 2s frame pulse.
   const wakeHeaderOnTap = useCallback(() => {
+    if (!headerVisible) {
+      setFramePulseKey(k => k + 1);
+    }
     setHeaderVisible(true);
     pingWidgets();
     if (headerHideTimer.current) clearTimeout(headerHideTimer.current);
     headerHideTimer.current = setTimeout(() => setHeaderVisible(false), 5000);
-  }, [pingWidgets]);
+  }, [pingWidgets, headerVisible]);
 
   // Auto-fade on entering immersive phase, and on every new moment
   useEffect(() => {
@@ -2044,6 +2055,28 @@ export const VoyoMoments: React.FC<VoyoMomentsProps> = ({ onPlayFullTrack, onArt
       <div style={S.sideShadowR} />
       <div style={S.topShade} />
       <div style={S.bottomGlow} />
+
+      {/* v906 — Frame light pulse. Fires for 2s every time the user
+          taps while the header was hidden ("you entered a lane").
+          Key change re-mounts the element so the CSS animation
+          restarts cleanly. pointerEvents: none so it never blocks
+          gestures underneath. */}
+      <div
+        key={`frame-pulse-${framePulseKey}`}
+        aria-hidden
+        style={{
+          position: 'absolute',
+          inset: 0,
+          pointerEvents: 'none',
+          borderRadius: 'inherit',
+          zIndex: 6,
+          opacity: framePulseKey > 0 ? 1 : 0,
+          animation: framePulseKey > 0 ? 'voyo-frame-pulse 2s ease-out forwards' : 'none',
+          // The actual visible glow lives in the inset shadow so it
+          // hugs the cube edge without clipping.
+          boxShadow: 'inset 0 0 0 2px rgba(212,160,83,0.55), inset 0 0 36px rgba(212,160,83,0.32)',
+        }}
+      />
 
       {/* TOP BAR — unified gradient surface. Visible when uiPhase isn't
           immersive OR when headerVisible is true (set by tap-to-wake). */}

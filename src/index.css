@@ -1355,3 +1355,13 @@ input[type="range"]:focus::-moz-range-thumb {
   62.5%     { opacity: 1; }
   100%      { opacity: 0; }
 }
+
+/* v906 — Lane-entered frame pulse. 2s gold glow that fades out
+   after the user taps the moments cube while header was hidden.
+   forwards keeps end-state at opacity 0. */
+@keyframes voyo-frame-pulse {
+  0%   { opacity: 0; }
+  15%  { opacity: 1; }
+  60%  { opacity: 0.6; }
+  100% { opacity: 0; }
+}
