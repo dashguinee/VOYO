@@ -4695,11 +4695,12 @@ export const VoyoPortraitPlayer = ({
   const wallDiscoverRef = useRef<HTMLDivElement>(null);
   const wallSkipRef     = useRef<HTMLDivElement>(null);
   const wallLessRef     = useRef<HTMLDivElement>(null);
-  // v874 REFINED gesture pill. Repositioned from bottom 22% (where
-  // the user's hand was) to TOP-26% (in the eye-line above the
-  // artwork). Cleaner labels (Loved instead of Like for the commit
-  // feel; "Less of this" instead of bare "Less" for clarity), and
-  // counter-swipe drift so the pill stays visible while finger pulls.
+  // v875 GESTURE LABEL — Take Out style. Pill rides INSIDE the active
+  // glow zone, NOT centered. dx<0 → label at left ~16% (in the
+  // indigo/silver wall); dx>0 → label at right ~16% (in the pink/
+  // bronze wall). Reads as part of the glow, not floating chrome.
+  // Also a translateY ramp so the label settles in vertically as
+  // alpha rises — matches the wall fade-in feel.
   const swipeLabelRef = useRef<HTMLDivElement>(null);
   const setSwipeLabel = (text: string, color: string, alpha: number, dx = 0) => {
     const el = swipeLabelRef.current;
@@ -4709,18 +4710,21 @@ export const VoyoPortraitPlayer = ({
     el.style.textShadow = `0 0 10px ${color}, 0 0 18px ${color}`;
     el.style.boxShadow = `0 0 22px ${color}33, 0 4px 16px rgba(0,0,0,0.45)`;
     el.style.opacity = String(alpha);
-    const scale = 0.92 + alpha * 0.12; // larger pop for visibility
-    const ty = 4 - alpha * 4;
-    // Pill drifts AWAY from the wall — counter-swipe motion keeps it
-    // legible while the finger pulls toward the wall.
-    const tx = dx === 0 ? 0 : (dx > 0 ? -28 : 28) * alpha;
+    const scale = 0.9 + alpha * 0.14;
+    const ty = 6 - alpha * 6;
+    // Take-Out style: label rides INTO the active wall side. Big
+    // horizontal shift puts it inside the glow zone (~16% from
+    // viewport edge). Magnitude scales with eased alpha so it
+    // emerges with the wall, not slammed in pre-commit.
+    const sideShift = (window.innerWidth ? window.innerWidth : 360) * 0.34;
+    const tx = dx === 0 ? 0 : (dx > 0 ? sideShift : -sideShift) * alpha;
     el.style.transform = `translate(${tx}px, ${ty}px) scale(${scale})`;
   };
   const clearSwipeLabel = () => {
     const el = swipeLabelRef.current;
     if (!el) return;
     el.style.opacity = '0';
-    el.style.transform = 'translate(0, 4px) scale(0.92)';
+    el.style.transform = 'translate(0, 6px) scale(0.9)';
     el.style.boxShadow = '0 0 0 rgba(0,0,0,0)';
   };
   const setSideWallGlow = (dx: number) => {
@@ -4738,8 +4742,14 @@ export const VoyoPortraitPlayer = ({
       if (isHold) { set(wallDiscoverRef, eased); setSwipeLabel('Discover', '#E6C58A', eased, dx); }
       else        { set(wallLikeRef, eased);     setSwipeLabel('Loved', '#F472B6', eased, dx); }
     } else if (dx < 0) {
-      if (isHold) { set(wallLessRef, eased);     setSwipeLabel('Less of this', '#5B7FBE', eased, dx); }
-      else        { set(wallSkipRef, eased);     setSwipeLabel('Skip', '#E8EEF7', eased, dx); }
+      // v875 — Drift = LEFT quick (was "Skip", indigo glow now).
+      // Less of this = LEFT hold (silver glow). Per Dash: "skip is
+      // drift, signal to redirect the flow; indigo for drift, silver
+      // for less". The wallSkipRef and wallLessRef render colors
+      // were swapped in JSX accordingly — refs kept their names so
+      // the rest of the chain doesn't churn.
+      if (isHold) { set(wallLessRef, eased);     setSwipeLabel('Less of this', '#E8EEF7', eased, dx); }
+      else        { set(wallSkipRef, eased);     setSwipeLabel('Drift', '#5B7FBE', eased, dx); }
     } else {
       clearSwipeLabel();
     }
@@ -5562,6 +5572,10 @@ export const VoyoPortraitPlayer = ({
           zIndex: 60,
         }}
       />
+      {/* v875 — color swap: wallSkipRef now renders the INDIGO glow
+          for DRIFT (was silver), wallLessRef renders SILVER for LESS
+          (was indigo). Indigo = signal of redirection; silver =
+          neutral move-on. */}
       <div
         ref={wallSkipRef}
         aria-hidden
@@ -5569,7 +5583,7 @@ export const VoyoPortraitPlayer = ({
           position: 'fixed', top: 0, left: 0, bottom: 0,
           width: '40vw', maxWidth: 320,
           pointerEvents: 'none', opacity: 0,
-          background: 'linear-gradient(to right, rgba(232,238,247,0.40) 0%, rgba(232,238,247,0.16) 35%, rgba(232,238,247,0) 100%)',
+          background: 'linear-gradient(to right, rgba(91,127,190,0.55) 0%, rgba(91,127,190,0.22) 35%, rgba(91,127,190,0) 100%)',
           mixBlendMode: 'screen',
           transition: 'opacity 220ms cubic-bezier(0.16, 1, 0.3, 1)',
           zIndex: 60,
@@ -5582,7 +5596,7 @@ export const VoyoPortraitPlayer = ({
           position: 'fixed', top: 0, left: 0, bottom: 0,
           width: '40vw', maxWidth: 320,
           pointerEvents: 'none', opacity: 0,
-          background: 'linear-gradient(to right, rgba(91,127,190,0.55) 0%, rgba(91,127,190,0.22) 35%, rgba(91,127,190,0) 100%)',
+          background: 'linear-gradient(to right, rgba(232,238,247,0.40) 0%, rgba(232,238,247,0.16) 35%, rgba(232,238,247,0) 100%)',
           mixBlendMode: 'screen',
           transition: 'opacity 220ms cubic-bezier(0.16, 1, 0.3, 1)',
           zIndex: 60,
