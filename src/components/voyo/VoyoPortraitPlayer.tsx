@@ -2102,20 +2102,24 @@ const BigCenterCard = memo(({ track, onExpandVideo, onShowLyrics, onLyricsArmed,
     return () => clearTimeout(t);
   }, [track?.trackId, hideThumb]);
 
-  // v826 (Dash 2026-04-29): hold-for-lyrics on artwork. Was previously
-  // wrapped in stopPropagation, which made the artwork a DEAD ZONE for
-  // canvas swipes — drags starting on artwork did nothing, and the
-  // trailing click toggled video mode. Now we LET the canvas pointer
-  // handlers run alongside this one. To avoid double-fire (lyrics @
-  // 350ms + DJ mode @ 400ms from one hold), onLyricsArmed cancels the
-  // canvas hold when our timer commits. Movement > 8px cancels the
-  // lyrics timer so a drag-from-artwork is treated as a swipe, not a
-  // hold.
-  const lyricsHoldTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const lyricsHoldStart = useRef<{ x: number; y: number } | null>(null);
+  // v879 (Dash 2026-04-29 "card tap = open lyrics, hold = pause
+  // natural with volume duck to 7%, release after hold = pause").
+  // The artwork now carries TWO gestures with one pointer chain:
+  //   • Quick TAP (release < 80ms before duck timer fires) → lyrics
+  //   • HOLD release < 350ms → un-duck (no pause; was just a "shh")
+  //   • HOLD release >= 350ms → pause + un-duck
+  // Volume ducks to 7% as soon as the duck timer fires (80ms after
+  // pointerdown). Quick taps never trigger the duck (they release
+  // before the timer). The user's previous volume is captured on
+  // pointerdown and restored on release / pause.
+  const cardDuckTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cardDownAt = useRef<number>(0);
+  const cardIsDucking = useRef<boolean>(false);
+  const cardPreDuckVolume = useRef<number>(100);
+  const cardHoldStart = useRef<{ x: number; y: number } | null>(null);
   useEffect(() => {
     return () => {
-      if (lyricsHoldTimer.current) clearTimeout(lyricsHoldTimer.current);
+      if (cardDuckTimer.current) clearTimeout(cardDuckTimer.current);
     };
   }, []);
 
@@ -2186,58 +2190,83 @@ const BigCenterCard = memo(({ track, onExpandVideo, onShowLyrics, onLyricsArmed,
       backfaceVisibility: 'hidden',
     }}
   >
-    {/* THUMBNAIL — v826: hold-to-show-lyrics, but DOES NOT stop
-        propagation. Canvas pointer handlers run alongside so swipes
-        starting on the artwork drag the card normally; tap-to-mode
-        still works on release. onLyricsArmed cancels the canvas
-        DJ-mode hold so both don't fire on a single hold gesture.
-        Movement > 8px cancels the lyrics timer (it's a drag, not a
-        hold). */}
+    {/* THUMBNAIL — v879. Tap = lyrics. Hold = volume duck → release
+        decides pause vs un-duck. Stops propagation on pointerdown so
+        the canvas swipe doesn't fight us; the card-area gesture is
+        owned here exclusively. */}
     <div
+      data-card-tap
       onPointerDown={(e) => {
-        // No stopPropagation — let canvas drag handlers run.
-        if (lyricsHoldTimer.current) clearTimeout(lyricsHoldTimer.current);
-        lyricsHoldStart.current = { x: e.clientX, y: e.clientY };
-        lyricsHoldTimer.current = setTimeout(() => {
-          onShowLyrics?.();
-          // Tell parent to cancel its 400ms DJ hold — we own this gesture.
-          onLyricsArmed?.();
-          lyricsHoldTimer.current = null;
-        }, 350);
+        e.stopPropagation();
+        if (cardDuckTimer.current) clearTimeout(cardDuckTimer.current);
+        cardDownAt.current = Date.now();
+        cardHoldStart.current = { x: e.clientX, y: e.clientY };
+        cardIsDucking.current = false;
+        // Capture pre-duck volume so we can restore on release.
+        cardPreDuckVolume.current = usePlayerStore.getState().volume;
+        // 80ms gate: faster than this and it's a tap, not a hold.
+        cardDuckTimer.current = setTimeout(() => {
+          cardDuckTimer.current = null;
+          cardIsDucking.current = true;
+          usePlayerStore.getState().setVolume(7);
+          haptics.light();
+        }, 80);
       }}
       onPointerMove={(e) => {
-        const start = lyricsHoldStart.current;
-        if (!start || !lyricsHoldTimer.current) return;
+        const start = cardHoldStart.current;
+        if (!start) return;
         const dx = e.clientX - start.x;
         const dy = e.clientY - start.y;
-        // Same 8px threshold the canvas swipe uses to switch from
-        // tap/hold mode into drag mode. Once crossed, lyrics is off
-        // the table for this gesture — let the canvas swipe own it.
+        // Movement > 8px → cancel the gesture entirely. Restore
+        // volume if duck already fired.
         if (Math.abs(dx) > 8 || Math.abs(dy) > 8) {
-          clearTimeout(lyricsHoldTimer.current);
-          lyricsHoldTimer.current = null;
+          if (cardDuckTimer.current) {
+            clearTimeout(cardDuckTimer.current);
+            cardDuckTimer.current = null;
+          }
+          if (cardIsDucking.current) {
+            usePlayerStore.getState().setVolume(cardPreDuckVolume.current);
+            cardIsDucking.current = false;
+          }
+          cardHoldStart.current = null;
         }
       }}
       onPointerUp={() => {
-        if (lyricsHoldTimer.current) {
-          clearTimeout(lyricsHoldTimer.current);
-          lyricsHoldTimer.current = null;
+        const heldFor = Date.now() - cardDownAt.current;
+        if (cardDuckTimer.current) {
+          // Released before the 80ms duck → it's a TAP. Open lyrics.
+          clearTimeout(cardDuckTimer.current);
+          cardDuckTimer.current = null;
+          onShowLyrics?.();
+        } else if (cardIsDucking.current) {
+          // Was holding; restore volume regardless. If held >=350ms,
+          // commit a real PAUSE on release.
+          usePlayerStore.getState().setVolume(cardPreDuckVolume.current);
+          cardIsDucking.current = false;
+          if (heldFor >= 350 && usePlayerStore.getState().isPlaying) {
+            // Trigger pause via store (no handlePlayPause access here;
+            // setIsPlaying false is the canonical pause path).
+            usePlayerStore.getState().setIsPlaying(false);
+            haptics.medium();
+          }
         }
-        lyricsHoldStart.current = null;
+        cardHoldStart.current = null;
       }}
       onPointerLeave={() => {
-        if (lyricsHoldTimer.current) {
-          clearTimeout(lyricsHoldTimer.current);
-          lyricsHoldTimer.current = null;
+        if (cardDuckTimer.current) { clearTimeout(cardDuckTimer.current); cardDuckTimer.current = null; }
+        if (cardIsDucking.current) {
+          usePlayerStore.getState().setVolume(cardPreDuckVolume.current);
+          cardIsDucking.current = false;
         }
-        lyricsHoldStart.current = null;
+        cardHoldStart.current = null;
       }}
       onPointerCancel={() => {
-        if (lyricsHoldTimer.current) {
-          clearTimeout(lyricsHoldTimer.current);
-          lyricsHoldTimer.current = null;
+        if (cardDuckTimer.current) { clearTimeout(cardDuckTimer.current); cardDuckTimer.current = null; }
+        if (cardIsDucking.current) {
+          usePlayerStore.getState().setVolume(cardPreDuckVolume.current);
+          cardIsDucking.current = false;
         }
-        lyricsHoldStart.current = null;
+        cardHoldStart.current = null;
       }}
       // v826b: NO role="button" / aria-label here. didOriginateOnInteractive
       // matches [role="button"] and made handleCanvasPointerDown bail out
@@ -4881,17 +4910,14 @@ export const VoyoPortraitPlayer = ({
     if (cubeOyoLineFadeRef.current) clearTimeout(cubeOyoLineFadeRef.current);
   }, []);
 
+  // v879 — cube hold-to-open RETIRED. Per Dash: "too many things
+  // activating the different oyo cube modes, make it only the tap
+  // to close section". The cube's pointer handlers no-op now. The
+  // cubeDock state is preserved (and the close path still works
+  // when something else opens it), but the entry point is gone.
   const handleCubePointerDown = useCallback(() => {
-    if (cubeDockOpen) return; // already open, normal click flow handles dismiss
-    didHoldRef.current = false;
-    setCubeHolding(true);
-    if (cubeHoldTimerRef.current) clearTimeout(cubeHoldTimerRef.current);
-    cubeHoldTimerRef.current = setTimeout(() => {
-      didHoldRef.current = true;
-      openCubeDock();
-    }, 500);
-  }, [cubeDockOpen, openCubeDock]);
-
+    // intentional no-op
+  }, []);
   const handleCubePointerUpOrLeave = useCallback(() => {
     if (cubeHoldTimerRef.current) {
       clearTimeout(cubeHoldTimerRef.current);
@@ -5221,38 +5247,41 @@ export const VoyoPortraitPlayer = ({
     }
   }, []);
 
+  // v879 — canvas tap simplified.
+  //   • Tap on the CARD (data-card-tap) — handled by the artwork
+  //     itself (lyrics open). The artwork stops propagation on
+  //     pointerdown so this canvas handler shouldn't see card taps,
+  //     but the closest() check is a belt-and-suspenders.
+  //   • Single tap elsewhere → reveal controls/widgets (overlay).
+  //   • Double-tap anywhere → open the chat (the ReactionBar one).
+  // Mode toggle (poster ↔ video) RETIRED — was tied to single tap
+  // before; now tap is the universal "wake widgets" gesture.
   const handleCanvasTap = useCallback((e: React.MouseEvent) => {
-    // v804: bail when SearchOverlay is open — same belt-and-suspenders
-    // guard as handleCanvasPointerDown. Prevents the tap-to-pause leak
-    // Dash spotted from canvas taps that "leaked through" search.
     if (usePlayerStore.getState().playerCompact) return;
-    // Skip clicks that came from real interactive elements (player
-    // buttons, inputs, etc.) — those have their own onClick already.
     if (didOriginateOnInteractive(e)) return;
-    // If a swipe just fired, eat the click. The click event fires after
-    // pointerup, so a swipe-to-skip would otherwise also toggle controls
-    // or open lyrics (if started on BigCenterCard). Clear the flag so the
-    // NEXT genuine tap still works.
+    // Drag fired: eat trailing click.
     if (swipeFiredRef.current) {
       swipeFiredRef.current = false;
       e.stopPropagation();
       return;
     }
-    // Skip if this was a hold
+    // DJ-mode hold fired: don't fire tap on top.
     if (didHoldRef.current) {
       didHoldRef.current = false;
       return;
     }
+    // Card-zone tap is owned by the card's own pointer handlers
+    // (lyrics open). Don't double-handle here.
+    const target = e.target as HTMLElement | null;
+    if (target?.closest?.('[data-card-tap]')) return;
 
     const now = Date.now();
     const timeSinceLastTap = now - lastTapRef.current;
     lastTapRef.current = now;
-
-    // DOUBLE-TAP (under 300ms) → Wazzguan direct input (chat widget in reactions bar)
     const isDoubleTap = timeSinceLastTap < 300;
 
     if (isDoubleTap) {
-      // Double-tap opens Wazzguan direct input
+      // Double-tap anywhere → open the chat (under the OYE bar).
       setIsControlsRevealed(true);
       setIsReactionsRevealed(true);
       setActivateChatTrigger(prev => prev + 1);
@@ -5260,9 +5289,7 @@ export const VoyoPortraitPlayer = ({
       return;
     }
 
-    // Single tap when reactions/OYE discussion is open → CLOSE IT.
-    // Previously this was a no-op (the `if (!isReactionsRevealed)` guard
-    // skipped everything), leaving the user stuck until the 4s auto-hide.
+    // Single tap when reactions are open → close them.
     if (isReactionsRevealed) {
       setIsReactionsRevealed(false);
       setIsControlsRevealed(false);
@@ -5270,21 +5297,8 @@ export const VoyoPortraitPlayer = ({
       return;
     }
 
-    // v819 (Dash 2026-04-29 "tap should also be the mode change,
-    //  tap>tap>tap poster>video>poster, hold remains lyrics clean"):
-    //  single tap now cycles videoTarget between 'portrait' (mini
-    //  player visible) and 'hidden' (poster). The hold-for-lyrics
-    //  gesture (artwork onPointerDown 350ms) still works — lyrics
-    //  fires before this tap handler, and stopPropagation on the
-    //  artwork keeps the canvas swipe/DJ-mode hold out. Mini Player
-    //  chip on the artwork still works too as a parallel affordance.
-    if (videoTarget === 'portrait') {
-      setVideoTarget('hidden');
-    } else {
-      setVideoTarget('portrait');
-    }
-    // Preserve the controls/OyoIsland reveal cascade so tap also surfaces
-    // the engine row + chat trigger like before.
+    // Single tap (canvas, non-card, no reactions open) → wake the
+    // controls/widgets overlay. No mode toggle, no chat, no lyrics.
     const wasHidden = !isControlsRevealed;
     setIsControlsRevealed(prev => !prev);
     if (wasHidden) {
@@ -5293,7 +5307,7 @@ export const VoyoPortraitPlayer = ({
     } else {
       setShowOyoIsland(false);
     }
-  }, [isControlsRevealed, isReactionsRevealed, showDJWakeToast, videoTarget, setVideoTarget]);
+  }, [isControlsRevealed, isReactionsRevealed]);
 
   // AUTO-HIDE controls + OyoIsland after 3s - encourages double-tap discovery
   const controlsHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
