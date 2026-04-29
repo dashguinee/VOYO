@@ -164,36 +164,31 @@ const S = {
     `,
     pointerEvents: 'none',
   }),
-  // v847 (Dash 2026-04-29 "make the top 20% slightly fade out so it
-  // blends in but doesn't box things up"). topShade goes ambient:
-  //   - shorter (132 → 96px) — less framing, more ambient blend
-  //   - softer (0.22 → 0.14 max alpha) — felt, not bracketing
-  //   - smoother curve so the transition into the video is seamless
-  // The eye still gets the proscenium upper edge, but it reads as
-  // dusk-light spilling in rather than a curtain pulled half-down.
+  // v849 (Dash 2026-04-29 "I liked the fade effect, the two box thingy
+  // you removed have it, maybe just tone it a bit"). The previous
+  // topShade/bottomGlow read as rectangular slabs because they were
+  // FULL-WIDTH linear gradients. Switched to RADIAL ellipses pinned
+  // off-screen at the top-center and bottom-center — the dark/light
+  // falls off in BOTH axes, so the corners taper and the eye never
+  // sees a horizontal edge. Same atmosphere, no box.
   topShade: css({
-    position: 'absolute', top: 0, left: 0, right: 0, height: 96, zIndex: 27,
-    background: 'linear-gradient(to bottom, rgba(28,18,52,0.14) 0%, rgba(48,32,90,0.07) 45%, transparent 100%)',
+    position: 'absolute', top: 0, left: 0, right: 0, height: 132, zIndex: 27,
+    background: 'radial-gradient(ellipse 90% 60% at 50% 0%, rgba(28,18,52,0.12) 0%, rgba(48,32,90,0.06) 50%, transparent 100%)',
     pointerEvents: 'none',
   }),
-  // v847 BOTTOM GLOW (Dash "since it's a pwa, identify the exact
-  // bottom edge, I want like a subtle rising light there as things
-  // scroll down there it lights up for no reason haha").
-  // Phosphorescent violet wash sitting on the safe-area bottom edge
-  // — pure magic, no function. Breathes via voyo-bottom-glow-breathe
-  // keyframe (4.8s, 0.55 → 1.0 opacity + 2px lift). zIndex 4 sits
-  // above S.grad (z2) so the glow blooms in front of the bottom
-  // amber wash. paddingBottom uses env() so PWA standalone home
-  // indicator gets the same magic as in-browser.
+  // v849 BOTTOM GLOW — same radial approach. Phosphorescent violet
+  // wash centered at bottom-center, fading up AND toward the corners.
+  // Breathes for ambient magic. paddingBottom uses env() so PWA
+  // standalone home indicator gets the same atmosphere.
   bottomGlow: css({
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
-    height: 'calc(72px + env(safe-area-inset-bottom, 0px))',
+    height: 'calc(120px + env(safe-area-inset-bottom, 0px))',
     paddingBottom: 'env(safe-area-inset-bottom, 0px)',
     zIndex: 4,
-    background: 'linear-gradient(to top, rgba(139,92,246,0.20) 0%, rgba(167,139,250,0.10) 40%, rgba(139,92,246,0.04) 70%, transparent 100%)',
+    background: 'radial-gradient(ellipse 90% 70% at 50% 100%, rgba(139,92,246,0.16) 0%, rgba(167,139,250,0.07) 45%, transparent 100%)',
     pointerEvents: 'none',
     animation: 'voyo-bottom-glow-breathe 4.8s ease-in-out infinite',
     willChange: 'opacity, transform',
@@ -1965,14 +1960,15 @@ export const VoyoMoments: React.FC<VoyoMomentsProps> = ({ onPlayFullTrack, onArt
       onTouchMove={onTM}
       onTouchEnd={onTE}
     >
-      {/* v848 (Dash 2026-04-29 "two weird fade boxes, the rest is
-          perfect"): topShade and bottomGlow read as rectangular slabs
-          even at low alpha. Side shades carry the proscenium alone —
-          their corner-merge top fade extension (v846) still darkens
-          the top corners, and S.grad keeps the warm bottom edge.
-          The frame survives without the two horizontal bars. */}
+      {/* v849 PROSCENIUM. Side shades carry the ( ) curve. topShade
+          and bottomGlow are RADIAL ellipses now (v848 had them as
+          linear bars which read boxy). They taper toward the corners
+          so there's no horizontal edge — pure atmosphere. Tones
+          dialed lower than v847 to "just sets the atmosphere". */}
       <div style={S.sideShadowL} />
       <div style={S.sideShadowR} />
+      <div style={S.topShade} />
+      <div style={S.bottomGlow} />
 
       {/* TOP BAR — unified gradient surface. Visible when uiPhase isn't
           immersive OR when headerVisible is true (set by tap-to-wake). */}
