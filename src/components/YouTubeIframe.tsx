@@ -35,10 +35,15 @@ const YT_STATES = {
 const R2_EDGE = 'https://voyo-edge.dash-webtv.workers.dev/audio';
 
 // Default position of the floating portrait player, relative to screen
-// center. Nudged 12px left so it stops masking the right edge of
+// center. Nudged left so it stops masking the right edge of
 // "Discover" in the Portrait layout — at true center, the rounded
 // corner was clipping the Discover shelf visually. Drag still overrides.
-const DEFAULT_PORTRAIT_POS = { x: -12, y: 0 };
+// v887 (Dash 2026-04-29): mini player went from 216→280 ("bigger is
+// better"). Default x shifted left by half the size delta (-32) so the
+// right-edge clearance from idle stays the same (no false portal glow).
+const MINI_SIZE = 280;
+const MINI_HALF = MINI_SIZE / 2;
+const DEFAULT_PORTRAIT_POS = { x: -12 - 32, y: 0 };
 
 function getYouTubeId(trackId: string): string {
   if (!trackId) return '';
@@ -897,10 +902,12 @@ export const YouTubeIframe = memo(() => {
 
     if (videoTarget === 'portrait' && isPlaying) {
       // Floating mini player — draggable. portraitPos offsets from center.
-      // Sized to nest under BigCenterCard (w-56 h-56 = 224×224 on mobile)
-      // — 216px is 8px shy, so the video sits "inside" the card footprint
-      // and reads as a living version of the counterpart art, not an
-      // overlay cover.
+      // v887: bumped from 216→280 ("bigger is better"). The mini now
+      // OVERTAKES the artwork card footprint instead of nesting under
+      // it — reads as a real takeover, the movable surface fills the
+      // attention. Default position shifted left by 32px so the right-
+      // edge clearance from idle stays the same as the 216-era default
+      // (no false portal-arm glow on mount).
       //
       // Beam effect: boxShadow layers make the video feel lifted out of
       // the page. Shadow is rendered OUTSIDE the overflow:hidden clip so
@@ -925,8 +932,8 @@ export const YouTubeIframe = memo(() => {
         top: '50%',
         left: '50%',
         transform: `translate(calc(-50% + ${portraitPos.x}px), calc(-50% + ${portraitPos.y}px)) scale(${compactScale})`,
-        width: '216px',
-        height: '216px',
+        width: `${MINI_SIZE}px`,
+        height: `${MINI_SIZE}px`,
         borderRadius: '2rem',
         zIndex: 60,
         opacity: 1,
@@ -987,7 +994,7 @@ export const YouTubeIframe = memo(() => {
   const PORTAL_ARM = 0.85;
   const computePortalGlow = (posX: number) => {
     const vw = window.innerWidth;
-    const iframeRightEdge = vw / 2 + posX + 108; // half of 216
+    const iframeRightEdge = vw / 2 + posX + MINI_HALF;
     const distance = vw - iframeRightEdge;
     return Math.max(0, Math.min(1, (120 - distance) / 100));
   };
