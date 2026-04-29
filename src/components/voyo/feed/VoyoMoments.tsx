@@ -1886,6 +1886,15 @@ export const VoyoMoments: React.FC<VoyoMomentsProps> = ({ onPlayFullTrack, onArt
       // back if Dash wants tiktok feel for a specific axis later.
 
       if (Math.abs(dx) > Math.abs(dy)) {
+        // v906 lane gate. Left/right = lane drift. When the header is
+        // hidden ("screen off"), the user has to tap first to enter a
+        // lane — horizontal swipe alone does NOT switch sub-cat. The
+        // tap fires the gold frame pulse (v906 visual cue) and wakes
+        // the header. Up/down (consumption) stays free regardless.
+        if (!headerVisible) {
+          wakeHeaderOnTap();
+          return;
+        }
         if (dx < 0) {
           nav('left', () => goRight(velocity));
         } else {
