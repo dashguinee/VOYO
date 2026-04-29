@@ -2356,6 +2356,7 @@ const PlayControls = memo(({
   trackId,
   scrubDirection,
   skeepLevel,
+  isFirstScreen,
 }: {
   isPlaying: boolean;
   onToggle: () => void;
@@ -2368,12 +2369,29 @@ const PlayControls = memo(({
   trackId?: string;
   scrubDirection: 'forward' | 'backward' | null;
   skeepLevel: number; // 1=2x, 2=4x, 3=8x
+  /** First-screen spin gate (Dash 2026-04-29 v834 "make it spin on
+   *  the first screen only"). True when portalProgress < 0.3 in the
+   *  parent — once the user scrolls into Frame, rotation stops so it
+   *  doesn't distract from the feed. */
+  isFirstScreen?: boolean;
 }) => {
   // Convert skeepLevel to display speed
   const displaySpeed = skeepLevel === 1 ? 2 : skeepLevel === 2 ? 4 : 8;
 
-  // (getSpinAnimation removed 2026-04-28 — never invoked; vinyl spin is
-  //  driven by CSS keyframes on the disk element directly.)
+  // v834 — restore the spinning vinyl, exactly how the original
+  // getSpinAnimation defined it (8304753 baseline):
+  //   - Normal playback : 3s linear infinite
+  //   - Scrubbing       : 3 / displaySpeed seconds (= 1.5s @ 2x,
+  //                       0.75s @ 4x, 0.375s @ 8x — visibly faster)
+  //   - Paused          : no animation
+  // Driven via the existing `spin-vinyl` keyframe in src/index.css.
+  // Gated on isFirstScreen so the disk is still as the user scrolls
+  // into the discovery layer.
+  const spinDurationS = isScrubbing ? (3 / displaySpeed) : 3;
+  const shouldSpin = !!isFirstScreen && (isPlaying || isScrubbing);
+  const spinStyle: React.CSSProperties = shouldSpin
+    ? { animation: `spin-vinyl ${spinDurationS}s linear infinite`, willChange: 'transform' }
+    : {};
 
   return (
     <div className="relative flex items-center justify-center w-full mb-3 z-30">
@@ -2456,7 +2474,15 @@ const PlayControls = memo(({
         />
 
         {/* Spinning Vinyl Disk */}
+        {/* v833 (Dash 2026-04-29 "add the swipe motion to the pause button
+            also"): data-canvas-passthrough opts this button INTO the
+            canvas drag gesture even though it's <button>. The disk
+            is positioned right where the user's thumb naturally
+            rests, so dragging from here should swipe the card just
+            like dragging from the artwork. handlePlayPause itself
+            already gates with swipeFiredRef in the parent. */}
         <button
+          data-canvas-passthrough
           className="absolute inset-0 rounded-full overflow-hidden border-2 border-white/20 shadow-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-500/50 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0a0a0c]"
           aria-label={isPlaying ? 'Pause' : 'Play'}
           onClick={() => {
@@ -2491,6 +2517,7 @@ const PlayControls = memo(({
           {trackArt && (
             <div
               className="absolute inset-2 w-[calc(100%-16px)] h-[calc(100%-16px)] rounded-full overflow-hidden"
+              style={spinStyle}
             >
               <SmartImage
                 src={trackArt}
@@ -4924,6 +4951,13 @@ export const VoyoPortraitPlayer = ({
     const t = e.target as HTMLElement | null;
     if (!t) return false;
     if (typeof t.closest !== 'function') return false;
+    // v833 — explicit canvas passthrough escape hatch. Surfaces marked
+    // with data-canvas-passthrough opt INTO the canvas swipe even
+    // though they're <button>. The artwork uses no role="button" for
+    // the same reason; the pause vinyl needs the attr because it IS
+    // a real button (single-tap toggles play). Drag from anywhere on
+    // the canvas — including the pause disk — should drive the card.
+    if (t.closest('[data-canvas-passthrough]')) return false;
     return !!t.closest(
       'button, [role="button"], input, textarea, a, label, select, ' +
       '[role="link"], [role="menuitem"], [role="menuitemradio"], ' +
@@ -6054,7 +6088,24 @@ export const VoyoPortraitPlayer = ({
         >
           <PlayControls
             isPlaying={isPlaying}
-            onToggle={handlePlayPause}
+            // v834: the disk only spins on first screen — once the user
+            // scrolls into Frame (HOT/Discover/Mix Board), rotation stops.
+            // 0.3 matches the engine opacity ramp threshold above so the
+            // visual effect ends together with the engine row's reveal.
+            isFirstScreen={portalProgress < 0.3}
+            // v833: gate the button click — if a canvas swipe just fired
+            // (drag-from-disk), eat the click so we don't ALSO toggle
+            // play/pause. The button's onClick fires before
+            // handleCanvasTap (target-first event order), so we read
+            // swipeFiredRef directly. Swallow + clear so the next genuine
+            // tap still pauses normally.
+            onToggle={() => {
+              if (swipeFiredRef.current) {
+                swipeFiredRef.current = false;
+                return;
+              }
+              handlePlayPause();
+            }}
             // Dash 2026-04-28: prev/next track nav lives on swipe now.
             // The engine buttons repurposed to JOG ±15s within the
             // current track. Hold still triggers SKEEP fast-scrub
