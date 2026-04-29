@@ -1545,15 +1545,13 @@ export const VoyoMoments: React.FC<VoyoMomentsProps> = ({ onPlayFullTrack, onArt
   const volTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const starHoldTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Record play after 1.5s dwell — rapid swipes don't inflate voyo_plays.
-  // v832: also fires a soft skip signal when the user navigates away
-  // before the dwell completes.
-  // v866: when in Music mode AND the moment has a parent_track_id,
-  // ALSO auto-play the parent track on dwell. The audio plays
-  // through the existing global player; the moment video remains
-  // visual companion (muted by default in feed). Scrolling Music =
-  // walking through tracks. Only fires when categoryAxis === 'music'
-  // so other tabs don't hijack the player on dwell.
+  // Record play after 1.5s dwell.
+  // v871 (Dash 2026-04-29 "two audio playing same time"): GUARD the
+  // Music auto-play against re-firing for the same track. Without
+  // the guard, every Music dwell calls onPlayFullTrack — even on
+  // moments whose parent_track is ALREADY playing — which kicks off
+  // a fresh load while the existing audio is still going, so two
+  // streams overlap during the swap window.
   useEffect(() => {
     if (!currentMoment) return;
     const id = currentMoment.id;
@@ -1563,11 +1561,18 @@ export const VoyoMoments: React.FC<VoyoMomentsProps> = ({ onPlayFullTrack, onArt
       recordPlay(id);
       recorded = true;
       if (categoryAxis === 'music' && moment.parent_track_id && onPlayFullTrack) {
-        onPlayFullTrack({
-          id: moment.parent_track_id,
-          title: moment.parent_track_title || 'Unknown',
-          artist: moment.parent_track_artist || 'Unknown Artist',
-        });
+        const livePlayingId = usePlayerStore.getState().currentTrack?.trackId
+          || (usePlayerStore.getState().currentTrack as unknown as { id?: string })?.id;
+        // Only kick a track switch if the parent_track ISN'T already
+        // the one playing. Same-track dwells become a no-op — no
+        // overlap, no needless reload.
+        if (livePlayingId !== moment.parent_track_id) {
+          onPlayFullTrack({
+            id: moment.parent_track_id,
+            title: moment.parent_track_title || 'Unknown',
+            artist: moment.parent_track_artist || 'Unknown Artist',
+          });
+        }
       }
     }, 1500);
     return () => {
@@ -2126,7 +2131,10 @@ export const VoyoMoments: React.FC<VoyoMomentsProps> = ({ onPlayFullTrack, onArt
                 isOyed={isOyed}
                 onOye={handleOyeBtn}
                 isActive={true}
-                isMuted={isMuted}
+                // v871: in Music mode the parent_track plays via the
+                // global player — force the moment video MUTED so the
+                // moment's own clip audio doesn't layer on top.
+                isMuted={categoryAxis === 'music' ? true : isMuted}
                 onToggleMute={showVolBadge}
                 onPlayTrack={currentMoment.parent_track_id && onPlayFullTrack ? () => onPlayFullTrack({
                   id: currentMoment.parent_track_id!,
