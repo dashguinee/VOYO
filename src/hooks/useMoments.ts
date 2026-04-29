@@ -57,6 +57,32 @@ let _momentsBlocked = false;
 //   'friends'   : creators you've starred + session-engaged.
 //                 Social graph view, empties shows the follow hint.
 //
+// v903 — Travel filtering uses the static artistTiers map. Builds
+// a country → creator-handle list at module-load. Best-effort: if
+// the moments table's creator_username doesn't match a canonical
+// artist name, that country lane will look thin until ingest pulls
+// these creators or we add a creator-country column.
+import { getAllVerifiedArtists } from '../knowledge/artistTiers';
+
+const COUNTRY_CREATOR_MAP: Record<string, string[]> = (() => {
+  const map: Record<string, string[]> = {};
+  for (const a of getAllVerifiedArtists()) {
+    const country = a.country.toLowerCase();
+    if (!map[country]) map[country] = [];
+    // Push both the canonical name and a normalized lowercase form;
+    // dedup at the end. Real creator_usernames in the data are
+    // lowercase Instagram-handle-shaped, so the lowercase variant
+    // is the one most likely to hit.
+    map[country].push(a.name);
+    map[country].push(a.name.toLowerCase().replace(/\s+/g, ''));
+    map[country].push(a.name.toLowerCase().replace(/\s+/g, '_'));
+  }
+  for (const k of Object.keys(map)) {
+    map[k] = Array.from(new Set(map[k]));
+  }
+  return map;
+})();
+
 // CategoryAxis — v902 (Dash 2026-04-29): top-bar reorg.
 //   trends   the TikTok-style "For You" explore feed (broadest pool)
 //   travel   geo-organized social-media explore (country sub-cats)
@@ -121,12 +147,13 @@ export const CATEGORY_PRESETS: Record<CategoryAxis, string[]> = {
   'trends': [
     'all', 'dance', 'comedy', 'fashion', 'reaction',
   ],
-  // v902 — Travel: explore-the-world social-media surface. Sub-cats
-  // are countries. Filtering by country needs a backend column on
-  // moments or a creator-country join — until that lands the lane
-  // returns empty (UI shell present, content waits for tagging).
+  // v903 — Travel: explore-the-world social-media surface. Sub-cats
+  // align to keys in src/knowledge/artistTiers.ts so we can filter
+  // moments by creator country via the static artist→country map.
+  // West-Africa-first per VOYO market priority; expand once tagging
+  // data gets richer.
   'travel': [
-    'senegal', 'cote-divoire', 'guinea', 'mali', 'nigeria',
+    'nigeria', 'senegal', 'ivory-coast', 'guinea', 'mali', 'ghana',
   ],
   // v860 — Live = virality cuts (NOT time windows). Diagnostic on the
   // live catalog: every moment was ingested in a single 22-minute
@@ -164,12 +191,13 @@ const DISPLAY_NAMES: Record<string, string> = {
   'all': 'For You',
   // Live sub-categories (virality cuts)
   'pulse': 'Pulse', 'rising': 'Rising', 'gems': 'Gems',
-  // Travel countries (v902)
-  'senegal':       'Sénégal',
-  'cote-divoire':  'Côte d’Ivoire',
-  'guinea':        'Guinée',
-  'mali':          'Mali',
-  'nigeria':       'Nigeria',
+  // Travel countries (v903 — keys aligned to artistTiers)
+  'nigeria':     'Nigeria',
+  'senegal':     'Sénégal',
+  'ivory-coast': 'Côte d’Ivoire',
+  'guinea':      'Guinée',
+  'mali':        'Mali',
+  'ghana':       'Ghana',
 };
 
 // v902 — labels for the 5 top modes. Trends leads as the explore
@@ -231,14 +259,16 @@ const ADJACENCY: Record<CategoryAxis, Record<string, Record<string, number>>> = 
     'fashion':  { 'all': 0.4, 'dance': 0.3, 'reaction': 0.2, 'comedy': 0.1 },
     'reaction': { 'all': 0.4, 'comedy': 0.3, 'dance': 0.2, 'fashion': 0.1 },
   },
-  // Travel — country drift. Equal weights for now until backend
-  // tagging gives us actual content-volume signals to weight by.
+  // Travel — country drift. West-Africa cluster + Nigeria. Weights
+  // approximate cultural/musical proximity until tagging volume gives
+  // us a data-driven lift.
   'travel': {
-    'senegal':       { 'cote-divoire': 0.4, 'guinea': 0.3, 'mali': 0.2, 'nigeria': 0.1 },
-    'cote-divoire':  { 'senegal': 0.35, 'guinea': 0.25, 'mali': 0.2, 'nigeria': 0.2 },
-    'guinea':        { 'senegal': 0.35, 'cote-divoire': 0.3, 'mali': 0.25, 'nigeria': 0.1 },
-    'mali':          { 'senegal': 0.3, 'guinea': 0.3, 'cote-divoire': 0.25, 'nigeria': 0.15 },
-    'nigeria':       { 'cote-divoire': 0.4, 'senegal': 0.3, 'guinea': 0.15, 'mali': 0.15 },
+    'nigeria':     { 'ghana': 0.45, 'ivory-coast': 0.25, 'senegal': 0.15, 'guinea': 0.1, 'mali': 0.05 },
+    'senegal':     { 'ivory-coast': 0.3, 'guinea': 0.3, 'mali': 0.2, 'ghana': 0.1, 'nigeria': 0.1 },
+    'ivory-coast': { 'senegal': 0.3, 'guinea': 0.25, 'ghana': 0.2, 'mali': 0.15, 'nigeria': 0.1 },
+    'guinea':      { 'senegal': 0.4, 'mali': 0.3, 'ivory-coast': 0.2, 'ghana': 0.05, 'nigeria': 0.05 },
+    'mali':        { 'guinea': 0.35, 'senegal': 0.3, 'ivory-coast': 0.2, 'ghana': 0.1, 'nigeria': 0.05 },
+    'ghana':       { 'nigeria': 0.4, 'ivory-coast': 0.3, 'senegal': 0.15, 'mali': 0.1, 'guinea': 0.05 },
   },
   'live': {
     'pulse':  { 'rising': 0.7, 'gems': 0.3 },
@@ -383,11 +413,14 @@ export function useMoments(): UseMomentsReturn {
               q = q.eq('content_type', category);
             }
           } else if (axis === 'travel') {
-            // v902 Travel — geo-organized explore. Backend tagging
-            // for country isn't live yet, so this lane returns empty
-            // until it lands. Sentinel via the same null-pattern that
-            // 'friends' uses when there's no engaged-creator list.
-            return null;
+            // v903 Travel — filter creator_username against the static
+            // country→creators list (built from artistTiers at module
+            // load). Empty list → null sentinel so the UI shows the
+            // "no moments yet" empty state instead of an unfiltered
+            // pour.
+            const creators = COUNTRY_CREATOR_MAP[category];
+            if (!creators || creators.length === 0) return null;
+            q = q.in('creator_username', creators);
           } else if (axis === 'live') {
             // v860 — virality cuts (NOT time windows). The catalog
             // is static (last ingest 87d ago per circulation
