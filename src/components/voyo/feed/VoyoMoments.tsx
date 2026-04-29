@@ -1965,16 +1965,14 @@ export const VoyoMoments: React.FC<VoyoMomentsProps> = ({ onPlayFullTrack, onArt
       onTouchMove={onTM}
       onTouchEnd={onTE}
     >
-      {/* v842 PROSCENIUM FRAME — concave side shades + top shade close
-          the moment into a "you've entered" cocoon. Backed by boundary-
-          extension and center-bias attention research. Side shades
-          carry the ( ) curve; top shade caps it; bottom S.grad already
-          carries the lower edge. v847 adds bottomGlow — phosphorescent
-          violet wash on the PWA bottom edge, breathes for no reason. */}
+      {/* v848 (Dash 2026-04-29 "two weird fade boxes, the rest is
+          perfect"): topShade and bottomGlow read as rectangular slabs
+          even at low alpha. Side shades carry the proscenium alone —
+          their corner-merge top fade extension (v846) still darkens
+          the top corners, and S.grad keeps the warm bottom edge.
+          The frame survives without the two horizontal bars. */}
       <div style={S.sideShadowL} />
       <div style={S.sideShadowR} />
-      <div style={S.topShade} />
-      <div style={S.bottomGlow} />
 
       {/* TOP BAR — unified gradient surface. Visible when uiPhase isn't
           immersive OR when headerVisible is true (set by tap-to-wake). */}
