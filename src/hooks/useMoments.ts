@@ -231,7 +231,9 @@ function pickWeightedNeighbor(
 // ============================================
 
 export function useMoments(): UseMomentsReturn {
-  const [categoryAxis, setCategoryAxisState] = useState<CategoryAxis>('vibes-now');
+  // v864 — default landing on Live. Cold-start needs no taste graph;
+  // returning users can swipe to Vibes Right Now in one tap.
+  const [categoryAxis, setCategoryAxisState] = useState<CategoryAxis>('live');
   const [position, setPosition] = useState<MomentPosition>({ categoryIndex: 0, timeIndex: 0 });
   const [moments, setMoments] = useState<Map<string, Moment[]>>(new Map());
   const [loading, setLoading] = useState(false);

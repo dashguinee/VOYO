@@ -1960,10 +1960,14 @@ export const VoyoMoments: React.FC<VoyoMomentsProps> = ({ onPlayFullTrack, onArt
           pointerEvents: (!hasInteracted || headerVisible) ? 'auto' : 'none',
         }}
       >
-        {/* v860 — three top modes (Vibes Right Now / Live / Friends).
-            Each carries its own fetch grammar + sub-categories. */}
+        {/* v864 — Live / Vibes Right Now / Friends order. Per Dash's
+            call: Live first because cold-start has no taste graph,
+            and the catalog is heaviest on viral content. Vibes-now
+            is the personal "home base" that earns its place as
+            the engagement graph fills. Friends sits last because
+            it's empty for new users (encourages star/OYE flow). */}
         <div style={S.axisTabs}>
-          {(['vibes-now', 'live', 'friends'] as CategoryAxis[]).map(a => (
+          {(['live', 'vibes-now', 'friends'] as CategoryAxis[]).map(a => (
             <div key={a} style={axisTab(categoryAxis === a)} onClick={e => { e.stopPropagation(); setCategoryAxis(a); }}>
               {TOP_MODE_LABELS[a]}
             </div>
