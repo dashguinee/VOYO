@@ -136,31 +136,32 @@ const S = {
     pointerEvents: 'auto',
     transition: 'opacity 0.6s cubic-bezier(0.16, 1, 0.3, 1), transform 0.6s cubic-bezier(0.16, 1, 0.3, 1)',
   }),
-  // v842 (Dash 2026-04-29 "concave like ( ) but not as round, stabilized,
-  // feels like you entered a moment, temporal momentaneous"). Side shades
-  // are now radial ellipses pinned at the edge midpoint — light falls off
-  // from the inside-of-a-frame curve in BOTH axes, not just horizontally.
-  // The eye reads the result as the inner wall of a proscenium arch /
-  // passe-partout: darker at the mid-edge, tapering toward the corners.
-  // Backed by boundary-extension + center-bias attention research.
+  // v845 (Dash 2026-04-29 "very nice but a bit too out and too visible,
+  // I want it more felt; can we inset some purple in the fade").
+  // Two changes from v842:
+  //   1) DEPTH dropped ~30% — felt instead of seen. Max alpha
+  //      0.58 → 0.40 on sides, 0.32 → 0.22 on top.
+  //   2) PURPLE TINT blended INTO the fade build-up. The deepest
+  //      stops shift from pure dark amber to a dusk navy-violet
+  //      (rgba(28,18,52)) — the proscenium reads as low-light dusk
+  //      instead of theatre curtain. Same warm amber tail at the
+  //      transparent end so it integrates with S.grad downstream.
+  //   3) Stops carry small intermediate violet hints (rgba(48,32,90))
+  //      so as the user scrolls the eye catches subtle motion in
+  //      the frame — the "light up but not" effect Dash described.
   sideShadowL: css({
     position: 'absolute', top: 0, bottom: 0, left: 0, width: 64, zIndex: 28,
-    background: 'radial-gradient(ellipse 70% 95% at 0% 50%, rgba(6,4,2,0.58) 0%, rgba(14,9,5,0.30) 32%, rgba(20,12,6,0.10) 68%, transparent 100%)',
+    background: 'radial-gradient(ellipse 70% 95% at 0% 50%, rgba(28,18,52,0.40) 0%, rgba(48,32,90,0.20) 28%, rgba(22,14,38,0.10) 60%, transparent 100%)',
     pointerEvents: 'none',
   }),
   sideShadowR: css({
     position: 'absolute', top: 0, bottom: 0, right: 0, width: 64, zIndex: 28,
-    background: 'radial-gradient(ellipse 70% 95% at 100% 50%, rgba(6,4,2,0.58) 0%, rgba(14,9,5,0.30) 32%, rgba(20,12,6,0.10) 68%, transparent 100%)',
+    background: 'radial-gradient(ellipse 70% 95% at 100% 50%, rgba(28,18,52,0.40) 0%, rgba(48,32,90,0.20) 28%, rgba(22,14,38,0.10) 60%, transparent 100%)',
     pointerEvents: 'none',
   }),
-  // v842 top shade — closes the proscenium frame at the top. Subtle
-  // (max 32% black) so the moment breathes; pairs with the bottom
-  // gradient + side shades to create a complete "you've entered a
-  // moment" cocoon. zIndex 27 sits below topBar(30) so axis tabs stay
-  // crisp on top.
   topShade: css({
     position: 'absolute', top: 0, left: 0, right: 0, height: 132, zIndex: 27,
-    background: 'linear-gradient(to bottom, rgba(8,5,3,0.32) 0%, rgba(14,9,5,0.18) 35%, rgba(20,12,6,0.06) 70%, transparent 100%)',
+    background: 'linear-gradient(to bottom, rgba(28,18,52,0.22) 0%, rgba(48,32,90,0.12) 35%, rgba(22,14,38,0.04) 70%, transparent 100%)',
     pointerEvents: 'none',
   }),
   axisTabs: css({ display: 'flex', justifyContent: 'center', gap: 4, padding: '8px 16px 2px' }),
