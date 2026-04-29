@@ -249,10 +249,22 @@ export function useMoments(): UseMomentsReturn {
         // creators. Without this, a single creator with a recent
         // burst dominates the category (Dash bug 2026-04-29 v831).
         const fetchSize = MOMENTS_PER_PAGE * FETCH_OVERSAMPLE;
+        // v857 (Dash 2026-04-29 "why only ichievoodoo plays, we have 8k+
+        // content"). The bug: ORDER BY discovered_at DESC concentrates
+        // the fetch on whichever creator has been on a posting tear.
+        // ichievoodoo holds 473 of the 1000 most recent moments — and
+        // 100% of the most-recent 60 in dance/comedy/original. Engine
+        // creator-cap can't help when the fetched batch is monoculture.
+        //
+        // Fix: order by virality_score (with recency as tiebreaker).
+        // For the dance category alone, this jumps unique-creator count
+        // from 1 → 20 in the first 60 rows. Diversity built into the
+        // FETCH instead of fighting it in the rank.
         let query = supabase
           .from('voyo_moments')
           .select('*')
           .eq('is_active', true)
+          .order('virality_score', { ascending: false, nullsFirst: false })
           .order('discovered_at', { ascending: false })
           .range(offset * FETCH_OVERSAMPLE, offset * FETCH_OVERSAMPLE + fetchSize - 1);
 
