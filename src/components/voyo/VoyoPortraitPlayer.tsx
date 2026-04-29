@@ -3188,23 +3188,35 @@ const ReactionBar = memo(({
           // reserved for the OYÉ gateway only, all other buttons share a
           // single neutral-glass scale (sleep → lit). No per-reaction
           // gradients, no bright purple, no kid-style. Restraint = premium.
+          //
+          // v884 (2026-04-29): OYÉ filled gets a touch of metal — vertical
+          // bronze gradient + top sheen + slight forward lean. Texture
+          // dialed below the home hero-play disk; just enough for "made
+          // of something."
           const sizeCls = isGateway
             ? 'min-h-[44px] h-11 px-6 text-sm z-10'
             : 'min-h-[38px] h-[38px] px-4 text-xs';
           const palette = isGateway
             ? (isLit
-                ? 'bg-[rgba(212,160,83,0.18)] border border-[rgba(212,160,83,0.42)] text-[#E6C58A]'
+                ? 'border border-[rgba(212,160,83,0.50)] text-[#F0D29A]'
                 : 'bg-[rgba(212,160,83,0.08)] border border-[rgba(212,160,83,0.22)] text-[#D4A053]/70')
             : (isLit
                 ? 'bg-white/[0.07] border border-white/15 text-white/85'
                 : 'bg-white/[0.03] border border-white/[0.08] text-white/45');
+
+          // Vertical bronze gradient for filled OYÉ — top catches a hint
+          // of light, bottom sits in shadow. Keeps the surface readable
+          // as bronze (not flat) without going full brushed-metal.
+          const gatewayLitBg = isGateway && isLit
+            ? 'linear-gradient(180deg, rgba(232,193,128,0.32) 0%, rgba(212,160,83,0.22) 45%, rgba(154,114,52,0.26) 100%)'
+            : undefined;
 
           return (
             <button
               key={r.type}
               className={`
                 relative rounded-full font-medium flex items-center gap-1.5
-                backdrop-blur-sm transition-colors duration-300
+                backdrop-blur-sm transition-all duration-300
                 ${sizeCls}
                 ${palette}
               `}
@@ -3214,11 +3226,33 @@ const ReactionBar = memo(({
                   : isFadeGhosted
                     ? (isGateway ? 0.35 : 0.25)
                     : (isChatMode ? 0.6 : (isLit ? 1 : (isGateway ? 0.9 : 0.5))),
-                // ONE signature element: a soft bronze halo on OYÉ when lit.
-                // Other buttons stay un-shadowed — restraint is premium
-                // (memory/feedback-voyo-premium-less-is-more).
+                // Filled OYÉ: vertical bronze fill (replaces the flat
+                // tinted bg). Other buttons keep their tailwind bg.
+                background: gatewayLitBg,
+                // Stack three signals on filled OYÉ:
+                //  1. soft bronze halo (signature glow)
+                //  2. inset 1px ring (defines the metal edge)
+                //  3. inset top sheen (1px specular highlight, gives the
+                //     "lit from above" feel without going glossy)
+                //  + outer drop-shadow so the pill *floats* a touch.
                 boxShadow: isGateway && isLit
-                  ? '0 0 14px rgba(212,160,83,0.22), inset 0 0 0 1px rgba(212,160,83,0.18)'
+                  ? [
+                      '0 0 16px rgba(212,160,83,0.24)',
+                      '0 2px 8px rgba(0,0,0,0.32)',
+                      'inset 0 1px 0 0 rgba(255,228,178,0.32)',
+                      'inset 0 -1px 0 0 rgba(60,38,12,0.30)',
+                      'inset 0 0 0 1px rgba(212,160,83,0.22)',
+                    ].join(', ')
+                  : undefined,
+                // Tiny forward lean: rises 1.5px and scales just past 1
+                // when filled. Not a bounce — just "leaning in."
+                transform: isGateway && isLit
+                  ? 'translateY(-1.5px) scale(1.025)'
+                  : undefined,
+                // Subtle text emboss on the filled label so the bronze
+                // letters read as carved into the surface.
+                textShadow: isGateway && isLit
+                  ? '0 1px 0 rgba(80,52,16,0.55), 0 0 6px rgba(212,160,83,0.18)'
                   : undefined,
               }}
               onMouseDown={() => handlePressStart(r.type)}
