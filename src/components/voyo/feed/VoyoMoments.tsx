@@ -1198,7 +1198,7 @@ export const VoyoMoments: React.FC<VoyoMomentsProps> = ({ onPlayFullTrack, onArt
   const {
     currentMoment: hookCurrentMoment, position, categoryAxis, categories, currentCategory, displayName,
     goUp, goDown, goLeft, goRight, setCategoryAxis, jumpToCategory,
-    loading, totalInCategory, navAction, recordPlay, recordOye, recordStar,
+    loading, totalInCategory, navAction, recordPlay, recordOye, recordStar, recordSkip,
     moments, fetchMomentsForCategory, cacheKey,
   } = useMoments();
 
@@ -1442,13 +1442,21 @@ export const VoyoMoments: React.FC<VoyoMomentsProps> = ({ onPlayFullTrack, onArt
   const volTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const starHoldTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Record play after 1.5s dwell — rapid swipes don't inflate voyo_plays
+  // Record play after 1.5s dwell — rapid swipes don't inflate voyo_plays.
+  // v832: also fires a soft skip signal when the user navigates away
+  // before the dwell completes — feeds the moments engine so the next
+  // page can slightly de-prioritise creators that consistently get
+  // skipped past in this session.
   useEffect(() => {
     if (!currentMoment) return;
     const id = currentMoment.id;
-    const t = window.setTimeout(() => recordPlay(id), 1500);
-    return () => window.clearTimeout(t);
-  }, [currentMoment?.id, recordPlay]);
+    let recorded = false;
+    const t = window.setTimeout(() => { recordPlay(id); recorded = true; }, 1500);
+    return () => {
+      window.clearTimeout(t);
+      if (!recorded) recordSkip(id);
+    };
+  }, [currentMoment?.id, recordPlay, recordSkip]);
 
   // Navigate with animation direction
   // Nav-fade signal — VoyoBottomNav fades to 30% (orb to 50%) when this

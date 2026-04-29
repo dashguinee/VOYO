@@ -19,6 +19,14 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { devWarn } from '../utils/logger';
 import type { Moment } from '../types/moments';
+import { getInsights as getOyoInsights, hydrateFromSignals } from '../services/oyoDJ';
+import {
+  rankMoments,
+  recordSessionPlay,
+  recordSessionSkip,
+  recordSessionStar,
+  markShown,
+} from '../services/momentsEngine';
 
 // Circuit breaker: voyo_moments queries time out when table lacks indexes.
 // After first timeout, stop making requests to prevent repeated 500s in console.
@@ -68,6 +76,9 @@ export interface UseMomentsReturn {
   recordPlay: (momentId: string) => void;
   recordOye: (momentId: string) => void;
   recordStar: (momentId: string, creatorUsername: string, stars: number) => void;
+  /** v832 — fire when the user navigates away before the 1.5s dwell.
+   *  Soft-negative on the creator's session weight. */
+  recordSkip: (momentId: string) => void;
   fetchMomentsForCategory: (axis: CategoryAxis, category: string, offset?: number) => Promise<void>;
   cacheKey: (axis: CategoryAxis, cat: string) => string;
 }
@@ -105,45 +116,16 @@ const MAX_TRAIL = 50;
 const AUTO_DRIFT_THRESHOLD = 5; // consecutive UPs before drift chance
 const AUTO_DRIFT_CHANCE = 0.3;
 
-// v831 — creator diversity (Dash 2026-04-29 "I was only seeing videos
-// from this 1 user"). The feed used to ORDER BY discovered_at DESC →
-// any creator with a recent posting burst dominated the category.
-// We now over-fetch 3x and round-robin interleave by creator with a
-// per-creator cap so no one creator can monopolise the slice.
-const FETCH_OVERSAMPLE = 3;        // fetch 3× page so we have diversity
+// v832 — Moments Engine (Dash 2026-04-29 "I want a real feed powered
+// by our system and vision, perhaps something like the audio").
+// The flat ORDER BY discovered_at DESC is now a candidate set the
+// engine RE-RANKS by user taste (favoriteArtists / favoriteMoods from
+// oyoDJ, the same signal source the audio HotPool uses), session
+// affinity (creator weights from plays/oyes/skips/stars in this
+// session), and engagement priors (views, reactions, recency curve).
+// Per-creator diversity is enforced inside rankMoments — see service.
+const FETCH_OVERSAMPLE = 3;        // fetch 3× page so the engine has material to rank
 const MAX_PER_CREATOR = 2;          // hard cap per creator per page
-
-/**
- * Round-robin interleave moments by creator with a per-creator cap.
- * Preserves recency-ordered "best moment first" per creator (the input
- * is already ORDER BY discovered_at DESC), then alternates across
- * creators so the feed mixes voices instead of dumping everyone from
- * one account.
- */
-function interleaveByCreator(rows: Moment[], cap: number, take: number): Moment[] {
-  if (rows.length === 0) return rows;
-  // Group preserving order. Falls back to source_id when creator is missing
-  // so we still treat unknown-creator rows as their own bucket.
-  const buckets = new Map<string, Moment[]>();
-  for (const r of rows) {
-    const key = r.creator_username || r.creator_name || r.source_id || 'unknown';
-    const list = buckets.get(key) || [];
-    if (list.length < cap) list.push(r);
-    buckets.set(key, list);
-  }
-  // Round-robin: pop one from each bucket per pass until we hit `take`
-  // or all buckets are empty.
-  const out: Moment[] = [];
-  const queues = Array.from(buckets.values());
-  while (out.length < take && queues.some(q => q.length > 0)) {
-    for (const q of queues) {
-      if (out.length >= take) break;
-      const next = q.shift();
-      if (next) out.push(next);
-    }
-  }
-  return out;
-}
 
 // ============================================
 // ADJACENCY MAPS (weighted neighbors for drift/bleed)
@@ -300,10 +282,18 @@ export function useMoments(): UseMomentsReturn {
         }
 
         const raw = (data || []) as Moment[];
-        // v831: round-robin by creator, cap MAX_PER_CREATOR per page.
-        // Preserves recency within each creator's bucket while mixing
-        // voices across the slice the user actually scrolls.
-        const fetched = interleaveByCreator(raw, MAX_PER_CREATOR, MOMENTS_PER_PAGE);
+        // v832: rank by taste + session affinity + engagement priors.
+        // favoriteArtists / favoriteMoods come from getOyoInsights() —
+        // the same hydrated taste graph the audio HotPool reads, so a
+        // user who loves Burna Boy on the music side will see Burna's
+        // moments rise to the top here too.
+        const insights = getOyoInsights();
+        const fetched = rankMoments(raw, {
+          favoriteArtists: new Set(insights.favoriteArtists.map(a => a.toLowerCase())),
+          favoriteMoods: new Set(insights.favoriteMoods.map(m => m.toLowerCase())),
+          take: MOMENTS_PER_PAGE,
+          maxPerCreator: MAX_PER_CREATOR,
+        });
 
         setMoments(prev => {
           const next = new Map(prev);
@@ -329,6 +319,15 @@ export function useMoments(): UseMomentsReturn {
     },
     [cacheKey]
   );
+
+  // v832: hydrate the cross-session taste graph from voyo_signals once
+  // per session so favoriteArtists / favoriteMoods are populated before
+  // the first ranking pass runs. Idempotent inside oyoDJ — safe to call
+  // multiple times. The audio side already calls this on its own boot
+  // path; this is a belt-and-suspenders for the Moments-first user.
+  useEffect(() => {
+    void hydrateFromSignals();
+  }, []);
 
   // Fetch current category on mount and when axis/category changes
   useEffect(() => {
@@ -563,6 +562,18 @@ export function useMoments(): UseMomentsReturn {
   // ============================================
 
   const recordPlay = useCallback(async (momentId: string) => {
+    // v832: feed the engine — bumps the creator's session weight so
+    // their next moment rises in the next page. markShown adds the
+    // momentId to the dedup set so we don't surface it twice in the
+    // same session even if it stays on a freshly-fetched page.
+    let creator: string | undefined;
+    for (const list of moments.values()) {
+      const hit = list.find(m => m.id === momentId);
+      if (hit) { creator = hit.creator_username || hit.creator_name; break; }
+    }
+    recordSessionPlay(creator);
+    markShown(momentId);
+
     if (!supabase || !isSupabaseConfigured) return;
     try {
       await supabase.rpc('record_moment_play', {
@@ -572,7 +583,7 @@ export function useMoments(): UseMomentsReturn {
     } catch {
       // Silent fail - engagement tracking is best-effort
     }
-  }, []);
+  }, [moments]);
 
   const recordOye = useCallback(async (momentId: string) => {
     // C2 fanout — feed the taste graph from Moments OYEs too.
@@ -633,6 +644,12 @@ export function useMoments(): UseMomentsReturn {
   }, [moments]);
 
   const recordStar = useCallback(async (momentId: string, creatorUsername: string, stars: number) => {
+    // v832: 1 star = follow, deliberate intent. Heavy positive in the
+    // engine's session memory so this creator's other moments climb
+    // immediately without waiting for the cross-session signals
+    // hydration to repick them up.
+    recordSessionStar(creatorUsername);
+
     if (!supabase || !isSupabaseConfigured) return;
     try {
       await supabase.from('voyo_stars').insert({
@@ -644,6 +661,19 @@ export function useMoments(): UseMomentsReturn {
       // Silent fail - engagement is best-effort
     }
   }, []);
+
+  // v832: dwell-incomplete = soft skip. Engine bumps creator weight
+  // down a touch so the next page slightly de-prioritises them. Not
+  // a hard ban — fast scrolls through familiar territory shouldn't
+  // poison good creators.
+  const recordSkip = useCallback((momentId: string) => {
+    let creator: string | undefined;
+    for (const list of moments.values()) {
+      const hit = list.find(m => m.id === momentId);
+      if (hit) { creator = hit.creator_username || hit.creator_name; break; }
+    }
+    recordSessionSkip(creator);
+  }, [moments]);
 
   const displayName = useCallback((key: string) => DISPLAY_NAMES[key] || key, []);
 
@@ -668,6 +698,7 @@ export function useMoments(): UseMomentsReturn {
     recordPlay,
     recordOye,
     recordStar,
+    recordSkip,
     fetchMomentsForCategory,
     cacheKey,
   };
