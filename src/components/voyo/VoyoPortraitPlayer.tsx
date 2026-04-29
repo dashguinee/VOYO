@@ -5984,12 +5984,14 @@ export const VoyoPortraitPlayer = ({
               // "Take Out" — tapping Take Out enters system PiP via
               // pipService directly. Don't reroute this flow.
               onExpandVideo={() => setVideoTarget('portrait')}
-              // v885: card-tap toggles mode. Two states only —
-              //  • 'off'      → artwork card (default playing surface)
-              //  • 'portrait' → floating draggable iframe (movable)
+              // v886: card-tap toggles mode. Two states only —
+              //  • 'hidden'   → artwork card (default playing surface)
+              //  • 'portrait' → floating draggable iframe (movable;
+              //                 has tap-to-close + right-edge-portal
+              //                 → Take Out / PiP, all in YouTubeIframe)
               // Lyrics overlay no longer triggered by tap; setter
               // kept for future wire-up.
-              onToggleMode={() => setVideoTarget(videoTarget === 'portrait' ? 'off' : 'portrait')}
+              onToggleMode={() => setVideoTarget(videoTarget === 'portrait' ? 'hidden' : 'portrait')}
               onShowLyrics={() => setShowLyricsOverlay(true)}
               // v826: when lyrics arms, cancel the canvas DJ-mode 400ms
               // hold + mark the gesture as a hold so the trailing click
