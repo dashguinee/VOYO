@@ -143,12 +143,16 @@ export interface UseMomentsReturn {
 // ============================================
 
 export const CATEGORY_PRESETS: Record<CategoryAxis, string[]> = {
-  // v902 — Trends: the TikTok-style For You explore feed. Sub-cats
-  // are content-type lenses ('all' = no filter, broadest pool).
-  // This is where the "traditional feed feel" lives — we go after
-  // the TikTok market here.
+  // v910 — Trends: the TikTok-style For You explore feed. Sub-cats
+  // calibrated to catalog volume (live diagnostic 2026-04-30):
+  //   all      6788 moments  (broadest pool)
+  //   dance    1040
+  //   comedy    410
+  //   fashion    68
+  // Dropped 'reaction' (only 11 moments — would always trigger
+  // broad-rescue; better to not surface a sub-cat that can't fill).
   'trends': [
-    'all', 'dance', 'comedy', 'fashion', 'reaction',
+    'all', 'dance', 'comedy', 'fashion',
   ],
   // v903 — Travel: explore-the-world social-media surface. Sub-cats
   // align to keys in src/knowledge/artistTiers.ts so we can filter
@@ -248,7 +252,10 @@ const MAX_PER_CREATOR = 2;          // hard cap per creator per page
 // v859: when engine ranking returns fewer than this fraction of the
 // target page, bleed in moments from adjacent-vibe categories so the
 // user sees a full feed even in a sparse category.
-const BLEED_THRESHOLD_RATIO = 0.6;
+// v910 — bumped 0.6 → 0.75. Bleed/rescue cascade fires earlier so
+// thin lanes (fashion 68, cover 51 etc) reach a full page reliably.
+// Healthy lanes are unaffected (they exceed both thresholds).
+const BLEED_THRESHOLD_RATIO = 0.75;
 
 // ============================================
 // ADJACENCY MAPS (weighted neighbors for drift/bleed)
@@ -260,12 +267,12 @@ const BLEED_THRESHOLD_RATIO = 0.6;
 const ADJACENCY: Record<CategoryAxis, Record<string, Record<string, number>>> = {
   // Trends — drift across content-type lenses. 'all' is the broadest
   // hub; specific lenses bleed into adjacent vibes.
+  // v910: 'reaction' edges removed (sub-cat retired).
   'trends': {
-    'all':      { 'dance': 0.3, 'comedy': 0.25, 'fashion': 0.2, 'reaction': 0.25 },
-    'dance':    { 'all': 0.4, 'fashion': 0.3, 'comedy': 0.2, 'reaction': 0.1 },
-    'comedy':   { 'all': 0.4, 'reaction': 0.3, 'dance': 0.2, 'fashion': 0.1 },
-    'fashion':  { 'all': 0.4, 'dance': 0.3, 'reaction': 0.2, 'comedy': 0.1 },
-    'reaction': { 'all': 0.4, 'comedy': 0.3, 'dance': 0.2, 'fashion': 0.1 },
+    'all':     { 'dance': 0.4, 'comedy': 0.35, 'fashion': 0.25 },
+    'dance':   { 'all': 0.45, 'fashion': 0.3, 'comedy': 0.25 },
+    'comedy':  { 'all': 0.5, 'dance': 0.3, 'fashion': 0.2 },
+    'fashion': { 'all': 0.5, 'dance': 0.3, 'comedy': 0.2 },
   },
   // Travel — country drift. West-Africa cluster + Nigeria. Weights
   // approximate cultural/musical proximity until tagging volume gives
