@@ -1707,29 +1707,17 @@ export const VoyoMoments: React.FC<VoyoMomentsProps> = ({ onPlayFullTrack, onArt
   const onTM = useCallback((e: React.TouchEvent) => {
     if (!touchStart.current) return;
     const t = e.touches[0];
-    const dx = t.clientX - touchStart.current.x;
-    const dy = t.clientY - touchStart.current.y;
-    if (Math.abs(dx) > 10 || Math.abs(dy) > 10) {
+    if (Math.abs(t.clientX - touchStart.current.x) > 10 || Math.abs(t.clientY - touchStart.current.y) > 10) {
       swiping.current = true;
       if (lpTimer.current) { clearTimeout(lpTimer.current); lpTimer.current = null; }
       if (starHoldTimer.current) { clearTimeout(starHoldTimer.current); starHoldTimer.current = null; }
     }
-    // v844: live drag feedback — card translates with the finger and
-    // fades as the gesture develops.
-    // v847 (Dash 2026-04-29 "the motion thing on scroll moves too much,
-    // limit it mostly to up down not full 4 direction"): X movement
-    // dialed way down (0.6 → 0.12) so left/right swipes barely
-    // translate. Vertical stays at 0.55 — UP/DOWN remains the
-    // primary felt axis. Opacity now keys off |dy| primarily so
-    // horizontal swipes don't fade the card much either.
-    const el = dragLayerRef.current;
-    if (el && swiping.current) {
-      const yMag = Math.abs(dy);
-      const opacity = Math.max(0.42, 1 - yMag / 280);
-      el.style.transition = 'none';
-      el.style.transform = `translate(${dx * 0.12}px, ${dy * 0.55}px)`;
-      el.style.opacity = String(opacity);
-    }
+    // v850 (Dash 2026-04-29 "for scroll up tho and the side ones keep
+    // our own original we had... before the tiny tweaks that made it
+    // feel like tiktok so we keep best of both worlds"). Live drag
+    // (v844) reverted. Card stays static during the gesture; on
+    // commit, FadeWrapper takes over with its own entry. Snappy
+    // again, no tiktok lag — atmospheric frame from v849 stays.
   }, []);
 
   const handleOye = useCallback((momentId: string, x: number, y: number) => {
@@ -1777,19 +1765,9 @@ export const VoyoMoments: React.FC<VoyoMomentsProps> = ({ onPlayFullTrack, onArt
       startTransition();
       // Any genuine nav action retires the teach (they got it).
       killTeach();
-      // v844: COMMIT — clear the drag-layer overrides so the new
-      // moment's FadeWrapper takes over with a fresh entry animation.
-      // Use rAF so the clear happens AFTER React mounts the new card
-      // (otherwise we'd reset the transform on the wrong element).
-      const el = dragLayerRef.current;
-      if (el) {
-        requestAnimationFrame(() => {
-          if (!el) return;
-          el.style.transition = '';
-          el.style.transform = '';
-          el.style.opacity = '';
-        });
-      }
+      // v850 — live-drag commit-clear retired with the rest of the
+      // v844 path. dragLayerRef is left intact so we can wire it
+      // back if Dash wants tiktok feel for a specific axis later.
 
       if (Math.abs(dx) > Math.abs(dy)) {
         if (dx < 0) {
@@ -1807,18 +1785,8 @@ export const VoyoMoments: React.FC<VoyoMomentsProps> = ({ onPlayFullTrack, onArt
       return;
     }
 
-    // v844: BELOW SWIPE_THRESHOLD — no commit. Spring the drag layer
-    // back to rest so the active card snaps home cleanly. The
-    // transition was disabled in onTM for finger-tracking; we re-arm
-    // it here for the spring.
-    {
-      const el = dragLayerRef.current;
-      if (el) {
-        el.style.transition = 'transform 380ms cubic-bezier(0.16, 1, 0.3, 1), opacity 380ms cubic-bezier(0.16, 1, 0.3, 1)';
-        el.style.transform = 'translate(0px, 0px)';
-        el.style.opacity = '1';
-      }
-    }
+    // v850 — spring-back path retired with the v844 live-drag.
+    // No transform was ever applied; nothing to spring.
 
     // Single tap = ping widgets back to visible (3s timer restart).
     // Double-tap = OYÉ (star/super-react). Once a user has OYÉd a moment,
