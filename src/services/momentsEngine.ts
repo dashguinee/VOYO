@@ -48,15 +48,48 @@ const recentCreators: string[] = [];
 
 // v861 — cross-session cooldown. localStorage-persisted map of
 // momentId → last-shown timestamp. Moments seen in the last 48h
-// are deprioritised (-60 score) so the user genuinely traverses
-// the catalog over days, not the same recent set on loop. Critical
-// because the catalog has ~6,800 active moments but only 4 creators
-// own 74% of them — without cooldown, the same set recirculates
-// every session. Backed by Netflix exposure-debiasing research +
-// epsilon-greedy literature (Sutton & Barto, RL).
+// are deprioritised so the user genuinely traverses the catalog
+// over days, not the same recent set on loop.
 const COOLDOWN_KEY = 'voyo-moments-cooldown-v1';
 const COOLDOWN_MS = 48 * 60 * 60 * 1000; // 48h
 let _cooldown: Map<string, number> | null = null;
+
+// v866 — HARD VIEW-COUNT CAP (Dash 2026-04-29 "never see the same
+// video more than twice, ever ever especially in Moments").
+// Persistent localStorage map of momentId → lifetime view count.
+// When a moment hits MAX_LIFETIME_VIEWS, it's permanently
+// excluded from ranking via -10000 score penalty. Stronger than
+// the 48h cooldown — this is forever. Same moment can resurface
+// once after 48h, but never a third time.
+const VIEW_COUNT_KEY = 'voyo-moments-view-counts-v1';
+const MAX_LIFETIME_VIEWS = 2;
+let _viewCounts: Map<string, number> | null = null;
+function loadViewCounts(): Map<string, number> {
+  if (_viewCounts) return _viewCounts;
+  try {
+    const raw = localStorage.getItem(VIEW_COUNT_KEY);
+    _viewCounts = raw ? new Map(Object.entries(JSON.parse(raw) as Record<string, number>)) : new Map();
+  } catch {
+    _viewCounts = new Map();
+  }
+  return _viewCounts;
+}
+function saveViewCounts(): void {
+  if (!_viewCounts) return;
+  try {
+    const obj: Record<string, number> = {};
+    _viewCounts.forEach((c, id) => { obj[id] = c; });
+    localStorage.setItem(VIEW_COUNT_KEY, JSON.stringify(obj));
+  } catch { /* private mode / quota */ }
+}
+let _viewSaveTimer: ReturnType<typeof setTimeout> | null = null;
+function scheduleViewSave(): void {
+  if (_viewSaveTimer) return;
+  _viewSaveTimer = setTimeout(() => {
+    _viewSaveTimer = null;
+    saveViewCounts();
+  }, 1500);
+}
 function loadCooldown(): Map<string, number> {
   if (_cooldown) return _cooldown;
   try {
@@ -130,11 +163,17 @@ export function markShown(momentId: string, creator?: string): void {
     recentCreators.push(creator);
     if (recentCreators.length > RECENT_CREATOR_WINDOW) recentCreators.shift();
   }
-  // v861: persist to localStorage cooldown. Debounced save so 20
-  // moments scrolling don't hit storage 20 times.
+  // v861: persist to localStorage cooldown.
   const cd = loadCooldown();
   cd.set(momentId, Date.now());
   scheduleCooldownSave();
+  // v866: increment lifetime view count. After MAX_LIFETIME_VIEWS
+  // the moment is permanently excluded — Dash's "never twice ever"
+  // rule. Both saves are debounced (1.5s) so a 20-card scroll
+  // batches into one localStorage write per channel.
+  const vc = loadViewCounts();
+  vc.set(momentId, (vc.get(momentId) ?? 0) + 1);
+  scheduleViewSave();
 }
 
 // v861 — exposed for OYE handler so OYE'd moments can be EXEMPTED
@@ -267,6 +306,15 @@ function scoreMoment(m: Moment, ctx: RankContext): number {
 
   // Recency
   s += recencyScore(m.discovered_at);
+
+  // v866: HARD lifetime cap. Moments seen twice are EXCLUDED.
+  // -10000 dwarfs every other signal so the ranker never picks
+  // them. Persisted across sessions via localStorage.
+  const vc = loadViewCounts();
+  const lifetimeViews = vc.get(m.id) ?? 0;
+  if (lifetimeViews >= MAX_LIFETIME_VIEWS) {
+    return -10000;
+  }
 
   // Session dedup (in-tab)
   if (sessionShown.has(m.id)) s -= 100;

@@ -1547,19 +1547,34 @@ export const VoyoMoments: React.FC<VoyoMomentsProps> = ({ onPlayFullTrack, onArt
 
   // Record play after 1.5s dwell — rapid swipes don't inflate voyo_plays.
   // v832: also fires a soft skip signal when the user navigates away
-  // before the dwell completes — feeds the moments engine so the next
-  // page can slightly de-prioritise creators that consistently get
-  // skipped past in this session.
+  // before the dwell completes.
+  // v866: when in Music mode AND the moment has a parent_track_id,
+  // ALSO auto-play the parent track on dwell. The audio plays
+  // through the existing global player; the moment video remains
+  // visual companion (muted by default in feed). Scrolling Music =
+  // walking through tracks. Only fires when categoryAxis === 'music'
+  // so other tabs don't hijack the player on dwell.
   useEffect(() => {
     if (!currentMoment) return;
     const id = currentMoment.id;
+    const moment = currentMoment;
     let recorded = false;
-    const t = window.setTimeout(() => { recordPlay(id); recorded = true; }, 1500);
+    const t = window.setTimeout(() => {
+      recordPlay(id);
+      recorded = true;
+      if (categoryAxis === 'music' && moment.parent_track_id && onPlayFullTrack) {
+        onPlayFullTrack({
+          id: moment.parent_track_id,
+          title: moment.parent_track_title || 'Unknown',
+          artist: moment.parent_track_artist || 'Unknown Artist',
+        });
+      }
+    }, 1500);
     return () => {
       window.clearTimeout(t);
       if (!recorded) recordSkip(id);
     };
-  }, [currentMoment?.id, recordPlay, recordSkip]);
+  }, [currentMoment?.id, recordPlay, recordSkip, categoryAxis, onPlayFullTrack, currentMoment]);
 
   // Navigate with animation direction
   // Nav-fade signal — VoyoBottomNav fades to 30% (orb to 50%) when this
