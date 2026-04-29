@@ -157,33 +157,32 @@ const S = {
   // radial ellipse naturally tapers to nothing at the top corners.
   // No more rectangle artifact. All four atmospheric edges are now
   // pure radials — symmetric language, ultimate version.
-  // v853 (Dash 2026-04-29 "use everything from v845 to now, for the
-  // best final version with no errors or bleed or patch"). The
-  // canonical proscenium. ONE viewport-anchored element, three
-  // stacked radials. No 64px-wide column containers, no 132px-tall
-  // row containers — the rectangular bleed is gone by construction
-  // because the container IS the viewport.
-  //
-  //   left  : ellipse 70% 100% at 0% 50%   — proscenium L (dusk)
-  //   right : ellipse 70% 100% at 100% 50% — proscenium R (dusk)
-  //   top   : ellipse 65% 60% at 50% 0%    — central atmosphere
-  //
-  // Bottom phosphorescence stays in its own breathing element below
-  // (S.bottomGlow) so the animation is GPU-scoped — never repaints
-  // the static frame.
-  frame: css({
-    position: 'absolute', inset: 0, zIndex: 28,
-    background: `
-      radial-gradient(ellipse 70% 100% at 0% 50%, rgba(28,18,52,0.40) 0%, rgba(48,32,90,0.20) 18%, rgba(22,14,38,0.10) 38%, transparent 62%),
-      radial-gradient(ellipse 70% 100% at 100% 50%, rgba(28,18,52,0.40) 0%, rgba(48,32,90,0.20) 18%, rgba(22,14,38,0.10) 38%, transparent 62%),
-      radial-gradient(ellipse 65% 60% at 50% 0%, rgba(28,18,52,0.12) 0%, rgba(48,32,90,0.06) 50%, transparent 100%)
-    `,
+  // v855 (Dash 2026-04-29 "back to 845, cherry pick 2-3 things to
+  // enhance and immerse it, but we don't fight that version").
+  // CANONICAL v845 frame restored:
+  //   - sideShadowL/R: radial proscenium ellipses, dusk navy-violet
+  //     (rgba(28,18,52) base, rgba(48,32,90) intermediate). The exact
+  //     v845 anointed values, no later modifications.
+  //   - S.grad: warm amber bottom (unchanged since v845).
+  //   - NO topShade — v845 had none, we don't reintroduce it.
+  // The cherry-picks layered on top are additive, never replacing
+  // anything in v845: bottomGlow (magic phosphorescence on PWA edge)
+  // sits in its own element so it can never bleed into the frame.
+  sideShadowL: css({
+    position: 'absolute', top: 0, bottom: 0, left: 0, width: 64, zIndex: 28,
+    background: 'radial-gradient(ellipse 70% 95% at 0% 50%, rgba(28,18,52,0.40) 0%, rgba(48,32,90,0.20) 28%, rgba(22,14,38,0.10) 60%, transparent 100%)',
     pointerEvents: 'none',
   }),
-  // v853 bottom phosphorescence — separate so the breathing
-  // animation is GPU-scoped and never invalidates the static frame.
-  // PWA-aware: padding-bottom uses env(safe-area-inset-bottom) so
-  // installed apps get the same magic across the home indicator.
+  sideShadowR: css({
+    position: 'absolute', top: 0, bottom: 0, right: 0, width: 64, zIndex: 28,
+    background: 'radial-gradient(ellipse 70% 95% at 100% 50%, rgba(28,18,52,0.40) 0%, rgba(48,32,90,0.20) 28%, rgba(22,14,38,0.10) 60%, transparent 100%)',
+    pointerEvents: 'none',
+  }),
+  // v855 cherry-pick #3: bottom phosphorescence. Separate element so
+  // the breathing animation is GPU-scoped and never invalidates the
+  // v845 frame. PWA-aware: padding-bottom uses env(safe-area-inset-
+  // bottom) so installed apps get the same magic across the home
+  // indicator. Dash: "lights up for no reason haha".
   bottomGlow: css({
     position: 'absolute',
     bottom: 0,
@@ -192,7 +191,7 @@ const S = {
     height: 'calc(120px + env(safe-area-inset-bottom, 0px))',
     paddingBottom: 'env(safe-area-inset-bottom, 0px)',
     zIndex: 4,
-    background: 'radial-gradient(ellipse 65% 100% at 50% 100%, rgba(139,92,246,0.18) 0%, rgba(167,139,250,0.08) 45%, transparent 100%)',
+    background: 'radial-gradient(ellipse 65% 100% at 50% 100%, rgba(139,92,246,0.16) 0%, rgba(167,139,250,0.07) 45%, transparent 100%)',
     pointerEvents: 'none',
     animation: 'voyo-bottom-glow-breathe 4.8s ease-in-out infinite',
     willChange: 'opacity, transform',
@@ -1946,15 +1945,15 @@ export const VoyoMoments: React.FC<VoyoMomentsProps> = ({ onPlayFullTrack, onArt
       onTouchMove={onTM}
       onTouchEnd={onTE}
     >
-      {/* v853 ULTIMATE PROSCENIUM. ONE viewport-anchored frame element
-          carries left + right + top in three stacked radials. Bottom
-          phosphorescence is its own breathing element so the
-          animation is scope-isolated. Backed by boundary-extension
-          + center-bias attention research; same family as cinema
-          vignetting and the theatre proscenium arch. No rectangular
-          containers anywhere — the bleed Dash spotted is gone by
-          construction. */}
-      <div style={S.frame} />
+      {/* v855 v845 BASELINE + 3 CHERRY-PICKS (Dash anointed).
+          Frame: pure v845 — side proscenium radials, no top shade,
+          no consolidation, no fighting. S.grad keeps the warm
+          amber floor. Cherry-picks live in their own scopes:
+            #1 temporal framing → FadeWrapper (v843, IG-Stories grammar)
+            #2 opacity reactiveness → onTM dragLayerRef (v854, TikTok ack)
+            #3 bottom phosphorescence → S.bottomGlow (v849, magic detail) */}
+      <div style={S.sideShadowL} />
+      <div style={S.sideShadowR} />
       <div style={S.bottomGlow} />
 
       {/* TOP BAR — unified gradient surface. Visible when uiPhase isn't
