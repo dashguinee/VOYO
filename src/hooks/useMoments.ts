@@ -117,16 +117,20 @@ const MAX_TRAIL = 50;
 const AUTO_DRIFT_THRESHOLD = 5; // consecutive UPs before drift chance
 const AUTO_DRIFT_CHANCE = 0.3;
 
-// v832 — Moments Engine (Dash 2026-04-29 "I want a real feed powered
-// by our system and vision, perhaps something like the audio").
-// The flat ORDER BY discovered_at DESC is now a candidate set the
-// engine RE-RANKS by user taste (favoriteArtists / favoriteMoods from
-// oyoDJ, the same signal source the audio HotPool uses), session
-// affinity (creator weights from plays/oyes/skips/stars in this
-// session), and engagement priors (views, reactions, recency curve).
-// Per-creator diversity is enforced inside rankMoments — see service.
-const FETCH_OVERSAMPLE = 3;        // fetch 3× page so the engine has material to rank
+// v832-v859 — Moments Engine. The fetch oversampling factor controls
+// how many candidates the engine sees vs the page size. v859 bumped
+// 3× → 8× because diagnostic showed entire fresh-half batches were
+// monoculture (e.g. comedy: 100% ichievoodoo recent), and the v858
+// hard cap was leaving pages short (8/20) when the candidate pool
+// itself was thin. With 8× oversample (~320 candidates per fetch),
+// even monoculture-heavy categories yield enough diverse creators
+// to fill a 20-slot page under the cap.
+const FETCH_OVERSAMPLE = 8;        // 8× page → ~320 candidates per fetch
 const MAX_PER_CREATOR = 2;          // hard cap per creator per page
+// v859: when engine ranking returns fewer than this fraction of the
+// target page, bleed in moments from adjacent-vibe categories so the
+// user sees a full feed even in a sparse category.
+const BLEED_THRESHOLD_RATIO = 0.6;
 
 // ============================================
 // ADJACENCY MAPS (weighted neighbors for drift/bleed)
@@ -321,19 +325,60 @@ export function useMoments(): UseMomentsReturn {
         // user who loves Burna Boy on the music side will see Burna's
         // moments rise to the top here too.
         const insights = getOyoInsights();
-        const fetched = rankMoments(raw, {
+        const rankCtx = {
           favoriteArtists: new Set(insights.favoriteArtists.map(a => a.toLowerCase())),
           favoriteMoods: new Set(insights.favoriteMoods.map(m => m.toLowerCase())),
           take: MOMENTS_PER_PAGE,
           maxPerCreator: MAX_PER_CREATOR,
-          // v858 cross-surface seed
           seedMode: (seedTrack as unknown as { detectedMode?: string })?.detectedMode,
           seedArtist: seedTrack?.artist,
           seedTags: [
             ...((seedTrack as unknown as { tags?: string[] })?.tags ?? []),
             ...((seedTrack as unknown as { vibeTags?: string[] })?.vibeTags ?? []),
           ].filter(Boolean),
-        });
+        };
+        let fetched = rankMoments(raw, rankCtx);
+
+        // v859 CROSS-CATEGORY BLEED. If the hard cap left the page
+        // short (catalog too monoculture), pull from adjacent
+        // categories using the existing weighted ADJACENCY map. The
+        // engine re-ranks the unified candidate pool so bled-in
+        // moments compete fairly with the primary category's. User
+        // never sees a half-empty feed even when the chosen vibe is
+        // dominated by one creator.
+        if (fetched.length < Math.floor(MOMENTS_PER_PAGE * BLEED_THRESHOLD_RATIO)) {
+          const seenIds = new Set(fetched.map(m => m.id));
+          // Pull the top 3 weighted neighbors of this category.
+          const neighbours = ADJACENCY[axis]?.[category] || {};
+          const neighborCats = Object.entries(neighbours)
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 3)
+            .map(([cat]) => cat);
+
+          const bleedRaw: Moment[] = [...raw];
+          for (const nc of neighborCats) {
+            try {
+              let nq = supabase!
+                .from('voyo_moments')
+                .select('*')
+                .eq('is_active', true)
+                .order('virality_score', { ascending: false, nullsFirst: false })
+                .order('discovered_at', { ascending: false })
+                .range(0, MOMENTS_PER_PAGE * 2 - 1);
+              if (axis === 'countries') nq = nq.contains('cultural_tags', [nc]);
+              else if (axis === 'vibes') nq = nq.eq('content_type', nc);
+              else nq = nq.contains('vibe_tags', [nc]);
+              const { data: nd } = await nq;
+              for (const m of (nd || []) as Moment[]) {
+                if (m?.id && !seenIds.has(m.id)) {
+                  seenIds.add(m.id);
+                  bleedRaw.push(m);
+                }
+              }
+            } catch { /* one neighbor failing shouldn't stall the page */ }
+          }
+          fetched = rankMoments(bleedRaw, rankCtx);
+        }
 
         setMoments(prev => {
           const next = new Map(prev);
