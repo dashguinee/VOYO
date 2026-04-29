@@ -148,20 +148,23 @@ const S = {
   // At the top corners, the two layers stack, deepening the corner
   // exactly where the top shade also lives — they read as one
   // unified frame. Center-of-side stays the same felt depth.
+  // v851 (Dash 2026-04-29 "remove the two rectangles fade that are top
+  // left and top right, add in the fade/shadow techniques to the
+  // current one for the ultimate version"). Dropped the linear-gradient
+  // top fades that v846 stacked into each side shade — they were
+  // necessary back when topShade was a flat bar, but now that the top
+  // is a radial centered at 50% 0% (v849), the side shades' own
+  // radial ellipse naturally tapers to nothing at the top corners.
+  // No more rectangle artifact. All four atmospheric edges are now
+  // pure radials — symmetric language, ultimate version.
   sideShadowL: css({
     position: 'absolute', top: 0, bottom: 0, left: 0, width: 64, zIndex: 28,
-    background: `
-      linear-gradient(to bottom, rgba(28,18,52,0.20) 0%, rgba(48,32,90,0.10) 45%, transparent 96px),
-      radial-gradient(ellipse 70% 95% at 0% 50%, rgba(28,18,52,0.40) 0%, rgba(48,32,90,0.20) 28%, rgba(22,14,38,0.10) 60%, transparent 100%)
-    `,
+    background: 'radial-gradient(ellipse 70% 95% at 0% 50%, rgba(28,18,52,0.40) 0%, rgba(48,32,90,0.20) 28%, rgba(22,14,38,0.10) 60%, transparent 100%)',
     pointerEvents: 'none',
   }),
   sideShadowR: css({
     position: 'absolute', top: 0, bottom: 0, right: 0, width: 64, zIndex: 28,
-    background: `
-      linear-gradient(to bottom, rgba(28,18,52,0.20) 0%, rgba(48,32,90,0.10) 45%, transparent 96px),
-      radial-gradient(ellipse 70% 95% at 100% 50%, rgba(28,18,52,0.40) 0%, rgba(48,32,90,0.20) 28%, rgba(22,14,38,0.10) 60%, transparent 100%)
-    `,
+    background: 'radial-gradient(ellipse 70% 95% at 100% 50%, rgba(28,18,52,0.40) 0%, rgba(48,32,90,0.20) 28%, rgba(22,14,38,0.10) 60%, transparent 100%)',
     pointerEvents: 'none',
   }),
   // v849 (Dash 2026-04-29 "I liked the fade effect, the two box thingy
