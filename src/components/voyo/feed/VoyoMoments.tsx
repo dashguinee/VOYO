@@ -394,14 +394,37 @@ const S = {
   volBadge: css({ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', zIndex: 20, background: 'rgba(0,0,0,0.6)', borderRadius: '50%', width: 56, height: 56, display: 'flex', alignItems: 'center', justifyContent: 'center' }),
 };
 
-const axisTab = (on: boolean): React.CSSProperties => ({
-  padding: '4px 14px', borderRadius: 16, fontSize: 11, fontWeight: on ? 700 : 500,
-  color: on ? '#fff' : 'rgba(255,255,255,0.45)',
-  background: on ? 'rgba(168,85,247,0.2)' : 'transparent',
-  backdropFilter: on ? 'blur(12px)' : 'none', WebkitBackdropFilter: on ? 'blur(12px)' : 'none',
-  border: on ? '1px solid rgba(168,85,247,0.3)' : '1px solid transparent',
-  cursor: 'pointer', transition: 'all 0.25s ease', letterSpacing: 0.8, textTransform: 'uppercase',
-});
+// v902 axisTab — gold-calm active state (was loud purple). Disabled
+// state for the Live tab (faded, no pointer). isVibes carries a
+// slightly warmer halo so the music-bridged tab reads as the home
+// surface without shouting.
+const axisTab = (on: boolean, opts: { disabled?: boolean; isVibes?: boolean } = {}): React.CSSProperties => {
+  const { disabled = false, isVibes = false } = opts;
+  if (disabled) {
+    return {
+      padding: '4px 12px', borderRadius: 16, fontSize: 11, fontWeight: 500,
+      color: 'rgba(255,255,255,0.22)',
+      background: 'transparent',
+      border: '1px solid transparent',
+      cursor: 'default', transition: 'all 0.25s ease',
+      letterSpacing: 0.8, textTransform: 'uppercase',
+      pointerEvents: 'none',
+    };
+  }
+  // Active palette is golden — calm, premium-restraint. Vibes nudges
+  // the alpha a touch higher so it reads as the home surface.
+  const goldBg = isVibes ? 'rgba(212,160,83,0.18)' : 'rgba(212,160,83,0.14)';
+  const goldBorder = isVibes ? 'rgba(212,160,83,0.34)' : 'rgba(212,160,83,0.26)';
+  return {
+    padding: '4px 12px', borderRadius: 16, fontSize: 11, fontWeight: on ? 700 : 500,
+    color: on ? '#F0D29A' : 'rgba(255,255,255,0.45)',
+    background: on ? goldBg : 'transparent',
+    backdropFilter: on ? 'blur(12px)' : 'none', WebkitBackdropFilter: on ? 'blur(12px)' : 'none',
+    border: on ? `1px solid ${goldBorder}` : '1px solid transparent',
+    cursor: 'pointer', transition: 'all 0.25s ease',
+    letterSpacing: 0.8, textTransform: 'uppercase',
+  };
+};
 
 // ============================================
 // COMPASS ARC — Spatial Category Navigation
@@ -1581,7 +1604,7 @@ export const VoyoMoments: React.FC<VoyoMomentsProps> = ({ onPlayFullTrack, onArt
     const t = window.setTimeout(() => {
       recordPlay(id);
       recorded = true;
-      if (categoryAxis === 'music' && moment.parent_track_id && onPlayFullTrack) {
+      if (categoryAxis === 'vibes' && moment.parent_track_id && onPlayFullTrack) {
         const livePlayingId = usePlayerStore.getState().currentTrack?.trackId
           || (usePlayerStore.getState().currentTrack as unknown as { id?: string })?.id;
         // (1) Same-track guard (v871) — no redundant reload.
@@ -2006,17 +2029,28 @@ export const VoyoMoments: React.FC<VoyoMomentsProps> = ({ onPlayFullTrack, onArt
           pointerEvents: (!hasInteracted || headerVisible) ? 'auto' : 'none',
         }}
       >
-        {/* v865 — Music / Live / Vibes Now / Friends. Music leads
-            because VOYO is music-first; Moments are an extension of
-            music discovery. Live next as cold-start strength. Vibes
-            Now is the personal home-base. Friends sits last (empty
-            for new users — encourages star/OYE flow). */}
+        {/* v902 — Trends / Travel / Live (faded, disabled) / Vibes / Friends.
+            Trends is the TikTok-style explore feed (the new home base
+            for the "traditional feed feel"). Travel is geo-organized
+            social-media exploration (countries as sub-cats). Live is
+            faded with no click for now. Vibes (renamed from Music) is
+            the golden music-bridged tab. Friends is the private engaged-
+            only space. */}
         <div style={S.axisTabs}>
-          {(['music', 'live', 'vibes-now', 'friends'] as CategoryAxis[]).map(a => (
-            <div key={a} style={axisTab(categoryAxis === a)} onClick={e => { e.stopPropagation(); setCategoryAxis(a); }}>
-              {TOP_MODE_LABELS[a]}
-            </div>
-          ))}
+          {(['trends', 'travel', 'live', 'vibes', 'friends'] as CategoryAxis[]).map(a => {
+            const disabled = a === 'live';
+            const isVibes = a === 'vibes';
+            return (
+              <div
+                key={a}
+                style={axisTab(categoryAxis === a, { disabled, isVibes })}
+                onClick={disabled ? undefined : e => { e.stopPropagation(); setCategoryAxis(a); }}
+                aria-disabled={disabled}
+              >
+                {TOP_MODE_LABELS[a]}
+              </div>
+            );
+          })}
         </div>
         <CompassArc
           categories={categories}
@@ -2160,7 +2194,7 @@ export const VoyoMoments: React.FC<VoyoMomentsProps> = ({ onPlayFullTrack, onArt
                 // v871: in Music mode the parent_track plays via the
                 // global player — force the moment video MUTED so the
                 // moment's own clip audio doesn't layer on top.
-                isMuted={categoryAxis === 'music' ? true : isMuted}
+                isMuted={categoryAxis === 'vibes' ? true : isMuted}
                 onToggleMute={showVolBadge}
                 onPlayTrack={currentMoment.parent_track_id && onPlayFullTrack ? () => onPlayFullTrack({
                   id: currentMoment.parent_track_id!,

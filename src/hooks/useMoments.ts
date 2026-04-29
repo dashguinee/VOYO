@@ -57,8 +57,14 @@ let _momentsBlocked = false;
 //   'friends'   : creators you've starred + session-engaged.
 //                 Social graph view, empties shows the follow hint.
 //
-// CategoryAxis name preserved so the prop chain doesn't break.
-export type CategoryAxis = 'music' | 'live' | 'vibes-now' | 'friends';
+// CategoryAxis — v902 (Dash 2026-04-29): top-bar reorg.
+//   trends   the TikTok-style "For You" explore feed (broadest pool)
+//   travel   geo-organized social-media explore (country sub-cats)
+//   live     virality cuts (currently faded/disabled in UI)
+//   vibes    music-bridged moments (was 'music')
+//   friends  engaged-creators only (private space)
+// 'vibes-now' retired — its content_type filtering folded into Trends.
+export type CategoryAxis = 'trends' | 'travel' | 'live' | 'vibes' | 'friends';
 
 export interface MomentPosition {
   categoryIndex: number;
@@ -108,24 +114,19 @@ export interface UseMomentsReturn {
 // ============================================
 
 export const CATEGORY_PRESETS: Record<CategoryAxis, string[]> = {
-  // v865 Music — moments WITH a parent_track_id, sub-bucketed by
-  // content_type. Songs (originals) is the largest pool; Dance/
-  // Performances/Covers carry the music-driven physical vibes.
-  // Drift here is between musical EXPRESSIONS, not between songs
-  // (we don't have reliable genre tags yet — vibe_tags carry mostly
-  // generic Instagram hashtags on this catalog. Genre-driven sub-
-  // cats become a v2 once tagging improves.)
-  // Note: 'cover' dropped (only 7 music-bridged moments, would
-  // exhaust the page in 3 swipes). Songs/Dance/Performances cover
-  // 1,363 of the 1,408 music-bridged catalog rows.
-  'music': [
-    'original', 'dance', 'live',
+  // v902 — Trends: the TikTok-style For You explore feed. Sub-cats
+  // are content-type lenses ('all' = no filter, broadest pool).
+  // This is where the "traditional feed feel" lives — we go after
+  // the TikTok market here.
+  'trends': [
+    'all', 'dance', 'comedy', 'fashion', 'reaction',
   ],
-  // Vibes Right Now — emotional handles, quality-weighted, your default
-  // exploration mode. Same set of vibes the prior taxonomy used; it's
-  // the FETCH GRAMMAR + UI framing that changes, not the labels.
-  'vibes-now': [
-    'dance', 'comedy', 'live', 'fashion', 'original', 'cover', 'reaction',
+  // v902 — Travel: explore-the-world social-media surface. Sub-cats
+  // are countries. Filtering by country needs a backend column on
+  // moments or a creator-country join — until that lands the lane
+  // returns empty (UI shell present, content waits for tagging).
+  'travel': [
+    'senegal', 'cote-divoire', 'guinea', 'mali', 'nigeria',
   ],
   // v860 — Live = virality cuts (NOT time windows). Diagnostic on the
   // live catalog: every moment was ingested in a single 22-minute
@@ -138,9 +139,17 @@ export const CATEGORY_PRESETS: Record<CategoryAxis, string[]> = {
   'live': [
     'pulse', 'rising', 'gems',
   ],
-  // Friends — followed creators (sessionStarred) + recently-OYEd authors.
-  // Single chip for v860; we'll add 'all' / 'starred' / 'newly followed'
-  // sub-cuts once the social graph fills out.
+  // v902 Vibes (renamed from 'music') — moments WITH a parent_track_id,
+  // bucketed by content_type. Songs (originals) is the largest pool;
+  // Dance/Performances carry the music-driven physical vibes. The
+  // golden tab in the moments header. Behavior unchanged from the old
+  // 'music' axis: dwell auto-plays the parent track.
+  'vibes': [
+    'original', 'dance', 'live',
+  ],
+  // Friends — private space for moments by creators the user has
+  // engaged with (sessionStarred + strong session-weight). Single
+  // chip until the social graph fills out.
   'friends': [
     'all',
   ],
@@ -148,28 +157,36 @@ export const CATEGORY_PRESETS: Record<CategoryAxis, string[]> = {
 
 // Display names for UI (map internal keys to pretty labels)
 const DISPLAY_NAMES: Record<string, string> = {
-  // Vibes Right Now sub-categories
+  // Content-type labels (used by Trends sub-cats too)
   'dance': 'Dance', 'comedy': 'Comedy', 'live': 'Live', 'fashion': 'Fashion',
   'original': 'Original', 'cover': 'Cover', 'reaction': 'Reaction',
+  // Trends 'all' chip
+  'all': 'For You',
   // Live sub-categories (virality cuts)
   'pulse': 'Pulse', 'rising': 'Rising', 'gems': 'Gems',
-  // Friends sub-categories
-  'all': 'My Crew',
+  // Travel countries (v902)
+  'senegal':       'Sénégal',
+  'cote-divoire':  'Côte d’Ivoire',
+  'guinea':        'Guinée',
+  'mali':          'Mali',
+  'nigeria':       'Nigeria',
 };
 
-// v865 — labels for the 4 top modes. Music leads (the product is
-// music-first; even Moments are an extension of music discovery).
+// v902 — labels for the 5 top modes. Trends leads as the explore
+// surface; Travel next as the geo-explore. Live faded (no click)
+// in the UI for now. Vibes is the golden music-bridged tab. Friends
+// is the private engaged-only lane.
 export const TOP_MODE_LABELS: Record<CategoryAxis, string> = {
-  'music':     'Music',
-  'live':      'Live',
-  'vibes-now': 'Vibes Now',
-  'friends':   'Friends',
+  'trends':  'Trends',
+  'travel':  'Travel',
+  'live':    'Live',
+  'vibes':   'Vibes',
+  'friends': 'Friends',
 };
 
-// v865 — when in Music mode, override DISPLAY_NAMES so 'live'
-// sub-cat reads as "Performances" (avoids label collision with
-// the top-mode 'Live' tab). Other content_types reuse the
-// existing labels (Dance / Original → 'Songs' / Cover → 'Covers').
+// When in Vibes mode (was Music), override DISPLAY_NAMES so 'live'
+// sub-cat reads as "Performances" (avoids label collision with the
+// top-mode 'Live' tab). Other content_types reuse existing labels.
 const MUSIC_SUB_LABELS: Record<string, string> = {
   'original': 'Songs',
   'dance':    'Dance',
@@ -205,27 +222,35 @@ const BLEED_THRESHOLD_RATIO = 0.6;
 // traverses these edges within the current top mode. Friends has
 // a single sub-cat ('all') so drift is a no-op there.
 const ADJACENCY: Record<CategoryAxis, Record<string, Record<string, number>>> = {
-  // Music sub-cats drift between musical expressions.
-  // Songs ↔ Performances are the closest (both heavy-music).
-  // Dance and Covers are the lighter neighbors.
-  'music': {
-    'original': { 'live': 0.55, 'dance': 0.45 },
-    'dance':    { 'original': 0.6, 'live': 0.4 },
-    'live':     { 'original': 0.65, 'dance': 0.35 },
+  // Trends — drift across content-type lenses. 'all' is the broadest
+  // hub; specific lenses bleed into adjacent vibes.
+  'trends': {
+    'all':      { 'dance': 0.3, 'comedy': 0.25, 'fashion': 0.2, 'reaction': 0.25 },
+    'dance':    { 'all': 0.4, 'fashion': 0.3, 'comedy': 0.2, 'reaction': 0.1 },
+    'comedy':   { 'all': 0.4, 'reaction': 0.3, 'dance': 0.2, 'fashion': 0.1 },
+    'fashion':  { 'all': 0.4, 'dance': 0.3, 'reaction': 0.2, 'comedy': 0.1 },
+    'reaction': { 'all': 0.4, 'comedy': 0.3, 'dance': 0.2, 'fashion': 0.1 },
   },
-  'vibes-now': {
-    'dance':    { 'live': 0.3, 'fashion': 0.2, 'original': 0.2, 'comedy': 0.15, 'cover': 0.1, 'reaction': 0.05 },
-    'comedy':   { 'reaction': 0.3, 'live': 0.25, 'dance': 0.2, 'original': 0.15, 'cover': 0.1 },
-    'live':     { 'dance': 0.3, 'comedy': 0.2, 'original': 0.2, 'cover': 0.15, 'fashion': 0.1, 'reaction': 0.05 },
-    'fashion':  { 'dance': 0.3, 'original': 0.25, 'live': 0.2, 'comedy': 0.1, 'cover': 0.1, 'reaction': 0.05 },
-    'original': { 'cover': 0.25, 'dance': 0.2, 'live': 0.2, 'fashion': 0.15, 'comedy': 0.1, 'reaction': 0.1 },
-    'cover':    { 'original': 0.3, 'live': 0.25, 'dance': 0.2, 'reaction': 0.15, 'comedy': 0.1 },
-    'reaction': { 'comedy': 0.3, 'cover': 0.2, 'live': 0.2, 'original': 0.15, 'dance': 0.1, 'fashion': 0.05 },
+  // Travel — country drift. Equal weights for now until backend
+  // tagging gives us actual content-volume signals to weight by.
+  'travel': {
+    'senegal':       { 'cote-divoire': 0.4, 'guinea': 0.3, 'mali': 0.2, 'nigeria': 0.1 },
+    'cote-divoire':  { 'senegal': 0.35, 'guinea': 0.25, 'mali': 0.2, 'nigeria': 0.2 },
+    'guinea':        { 'senegal': 0.35, 'cote-divoire': 0.3, 'mali': 0.25, 'nigeria': 0.1 },
+    'mali':          { 'senegal': 0.3, 'guinea': 0.3, 'cote-divoire': 0.25, 'nigeria': 0.15 },
+    'nigeria':       { 'cote-divoire': 0.4, 'senegal': 0.3, 'guinea': 0.15, 'mali': 0.15 },
   },
   'live': {
     'pulse':  { 'rising': 0.7, 'gems': 0.3 },
     'rising': { 'pulse': 0.4, 'gems': 0.6 },
     'gems':   { 'rising': 0.6, 'pulse': 0.4 },
+  },
+  // Vibes (renamed from music) — sub-cats drift between musical
+  // expressions. Songs ↔ Performances are closest (both heavy-music).
+  'vibes': {
+    'original': { 'live': 0.55, 'dance': 0.45 },
+    'dance':    { 'original': 0.6, 'live': 0.4 },
+    'live':     { 'original': 0.65, 'dance': 0.35 },
   },
   'friends': {
     'all': {},
@@ -266,12 +291,11 @@ function pickWeightedNeighbor(
 // ============================================
 
 export function useMoments(): UseMomentsReturn {
-  // v865 — default landing on Music. VOYO is music-first; even
-  // Moments are an extension of music discovery. The Music tab
-  // surfaces moments with a parent_track_id (the music-bridged
-  // 21% of the catalog). Live still in the next tab for cold-
-  // start fallback.
-  const [categoryAxis, setCategoryAxisState] = useState<CategoryAxis>('music');
+  // v902 — default landing on Vibes (renamed from 'music'). VOYO
+  // is music-first; the music-bridged moments (21% of catalog with
+  // a parent_track_id) feed the auto-play-on-dwell flow. Trends
+  // sits to the left for the broader explore feel.
+  const [categoryAxis, setCategoryAxisState] = useState<CategoryAxis>('vibes');
   const [position, setPosition] = useState<MomentPosition>({ categoryIndex: 0, timeIndex: 0 });
   const [moments, setMoments] = useState<Map<string, Moment[]>>(new Map());
   const [loading, setLoading] = useState(false);
@@ -345,15 +369,25 @@ export function useMoments(): UseMomentsReturn {
           }
           q = q.range(offset * FETCH_OVERSAMPLE, offset * FETCH_OVERSAMPLE + HALF - 1);
 
-          if (axis === 'music') {
-            // v865 Music mode — moments WITH a parent_track_id only,
-            // bucketed by content_type. The 79% of catalog without
-            // a parent_track is filtered out here so this lane is
-            // exclusively music-bridged.
+          if (axis === 'vibes') {
+            // v902 Vibes (renamed from 'music') — moments WITH a
+            // parent_track_id only, bucketed by content_type. The
+            // 79% of catalog without a parent_track is filtered out
+            // here so this lane is exclusively music-bridged.
             q = q.not('parent_track_id', 'is', null).eq('content_type', category);
-          } else if (axis === 'vibes-now') {
-            // Emotional axes — filter by content_type vibe label.
-            q = q.eq('content_type', category);
+          } else if (axis === 'trends') {
+            // v902 Trends — TikTok-style For You. 'all' = no
+            // content_type filter (broadest pool, virality-ranked).
+            // Specific sub-cats narrow to a content_type lens.
+            if (category !== 'all') {
+              q = q.eq('content_type', category);
+            }
+          } else if (axis === 'travel') {
+            // v902 Travel — geo-organized explore. Backend tagging
+            // for country isn't live yet, so this lane returns empty
+            // until it lands. Sentinel via the same null-pattern that
+            // 'friends' uses when there's no engaged-creator list.
+            return null;
           } else if (axis === 'live') {
             // v860 — virality cuts (NOT time windows). The catalog
             // is static (last ingest 87d ago per circulation
@@ -486,10 +520,11 @@ export function useMoments(): UseMomentsReturn {
                 .order('virality_score', { ascending: false, nullsFirst: false })
                 .order('discovered_at', { ascending: false })
                 .range(0, MOMENTS_PER_PAGE * 2 - 1);
-              // v860 — bleed only applies to vibes-now; live and friends
-              // don't have neighbor-cat semantics in the new taxonomy.
-              if (axis === 'vibes-now') nq = nq.eq('content_type', nc);
-              else continue; // skip non-vibes-now bleed for now
+              // v902 — bleed applies to Trends content-type lenses only.
+              // Live/friends/vibes/travel don't have neighbor-cat
+              // bleed semantics in the new taxonomy.
+              if (axis === 'trends' && nc !== 'all') nq = nq.eq('content_type', nc);
+              else continue; // skip non-trends bleed
               const { data: nd } = await nq;
               for (const m of (nd || []) as Moment[]) {
                 if (m?.id && !seenIds.has(m.id)) {
@@ -872,7 +907,7 @@ export function useMoments(): UseMomentsReturn {
   // Other sub-cats fall through to DISPLAY_NAMES.
   const displayName = useCallback(
     (key: string) => {
-      if (categoryAxis === 'music' && MUSIC_SUB_LABELS[key]) return MUSIC_SUB_LABELS[key];
+      if (categoryAxis === 'vibes' && MUSIC_SUB_LABELS[key]) return MUSIC_SUB_LABELS[key];
       return DISPLAY_NAMES[key] || key;
     },
     [categoryAxis],
