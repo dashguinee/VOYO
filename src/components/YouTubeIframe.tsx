@@ -995,9 +995,6 @@ export const YouTubeIframe = memo(() => {
   const dragStartRef = useRef<{ x: number; y: number; ox: number; oy: number } | null>(null);
   const [portraitPos, setPortraitPos] = useState(DEFAULT_PORTRAIT_POS);
   const portraitDraggedRef = useRef(false);
-  // v897: counter consumed by CubeGestureHint to trigger the 50%
-  // post-fade re-flash when the user taps the floating cube.
-  const [hintFlashTrigger, setHintFlashTrigger] = useState(0);
 
   // Right-edge "portal" — drag the mini player into it to Take Out (PiP).
   // Glow ramps from 0 (iframe far) → 1 (iframe right edge ≤ 20px from
@@ -1086,9 +1083,6 @@ export const YouTubeIframe = memo(() => {
             touchAction: 'none', // we handle ALL touch on this layer
           }}
           onPointerDown={(e) => {
-            // v897: bump hint flash counter so the silver hint can
-            // re-surface (50% rate, post-22s only).
-            setHintFlashTrigger(c => c + 1);
             portraitDraggedRef.current = false;
             dragStartRef.current = {
               x: e.clientX,
@@ -1362,14 +1356,13 @@ export const YouTubeIframe = memo(() => {
 
       {/* Portrait cube hint = "tap to close" button. Drag layer
           handles the actual tap-to-close; hint is the visual
-          indicator with its own session lifecycle (v897 silver
-          metallic, fade out at 15s, post-fade flash on 50% of taps). */}
+          indicator with its own session lifecycle (v898 silver
+          metallic, scheduled flashes at 15s/45s/5min then dead). */}
       {isPortraitMode && !showPortraitNextUp && (
         <CubeGestureHint
           position="bottom"
           highlighted={isDragging}
           label="tap to close · drag to move"
-          flashTrigger={hintFlashTrigger}
         />
       )}
 
