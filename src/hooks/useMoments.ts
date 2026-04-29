@@ -39,23 +39,26 @@ let _momentsBlocked = false;
 // TYPES
 // ============================================
 
-// v860 — Moments top-row redesign per Dash's spec:
-// "Top can be Vibes Right Now, Live, Friends".
-// The 3 modes each carry their own sub-categories AND their own
-// fetch grammar. The point is to break the locked-in feel of the
-// old countries/vibes/genres taxonomy — every mode pulls a
-// different SHAPE of moment, not the same data filtered three ways.
+// v860/v865 — Moments top-row. Four modes, each pulling a DIFFERENT
+// shape of content. Order is Music / Live / Vibes Now / Friends —
+// see TOP_MODE_LABELS below for the rationale.
 //
+//   'music'     : MUSIC-FIRST discovery. Filters to moments with a
+//                 parent_track_id (the 21% of the catalog that
+//                 actually bridges to a song). Sub-cats are
+//                 content_type within that subset (Songs / Dance /
+//                 Performances / Covers). The tab Dash calls
+//                 "moments through music".
+//   'live'      : virality cuts (pulse / rising / gems). Heat layer.
+//                 No fresh-ingest dependency — works on the static
+//                 catalog.
 //   'vibes-now' : current emotional axes (dance/comedy/live/etc),
 //                 quality-weighted, biased by what you're playing.
-//   'live'      : time-window cuts (now / today / this week),
-//                 newest viral content, freshness > taste.
-//   'friends'   : creators you've starred + recently engaged with;
-//                 social graph view, not algorithmic.
+//   'friends'   : creators you've starred + session-engaged.
+//                 Social graph view, empties shows the follow hint.
 //
-// CategoryAxis name preserved so the prop chain doesn't break, but
-// the values shift. UI labels surface the friendly versions.
-export type CategoryAxis = 'vibes-now' | 'live' | 'friends';
+// CategoryAxis name preserved so the prop chain doesn't break.
+export type CategoryAxis = 'music' | 'live' | 'vibes-now' | 'friends';
 
 export interface MomentPosition {
   categoryIndex: number;
@@ -105,6 +108,19 @@ export interface UseMomentsReturn {
 // ============================================
 
 export const CATEGORY_PRESETS: Record<CategoryAxis, string[]> = {
+  // v865 Music — moments WITH a parent_track_id, sub-bucketed by
+  // content_type. Songs (originals) is the largest pool; Dance/
+  // Performances/Covers carry the music-driven physical vibes.
+  // Drift here is between musical EXPRESSIONS, not between songs
+  // (we don't have reliable genre tags yet — vibe_tags carry mostly
+  // generic Instagram hashtags on this catalog. Genre-driven sub-
+  // cats become a v2 once tagging improves.)
+  // Note: 'cover' dropped (only 7 music-bridged moments, would
+  // exhaust the page in 3 swipes). Songs/Dance/Performances cover
+  // 1,363 of the 1,408 music-bridged catalog rows.
+  'music': [
+    'original', 'dance', 'live',
+  ],
   // Vibes Right Now — emotional handles, quality-weighted, your default
   // exploration mode. Same set of vibes the prior taxonomy used; it's
   // the FETCH GRAMMAR + UI framing that changes, not the labels.
@@ -141,11 +157,24 @@ const DISPLAY_NAMES: Record<string, string> = {
   'all': 'My Crew',
 };
 
-// v860 — labels for the 3 top modes (used by the axis-tab strip)
+// v865 — labels for the 4 top modes. Music leads (the product is
+// music-first; even Moments are an extension of music discovery).
 export const TOP_MODE_LABELS: Record<CategoryAxis, string> = {
-  'vibes-now': 'Vibes Right Now',
+  'music':     'Music',
   'live':      'Live',
+  'vibes-now': 'Vibes Now',
   'friends':   'Friends',
+};
+
+// v865 — when in Music mode, override DISPLAY_NAMES so 'live'
+// sub-cat reads as "Performances" (avoids label collision with
+// the top-mode 'Live' tab). Other content_types reuse the
+// existing labels (Dance / Original → 'Songs' / Cover → 'Covers').
+const MUSIC_SUB_LABELS: Record<string, string> = {
+  'original': 'Songs',
+  'dance':    'Dance',
+  'live':     'Performances',
+  'cover':    'Covers',
 };
 
 const MOMENTS_PER_PAGE = 20;
@@ -172,12 +201,18 @@ const BLEED_THRESHOLD_RATIO = 0.6;
 // ADJACENCY MAPS (weighted neighbors for drift/bleed)
 // ============================================
 
-// v860 — adjacency now keyed by the new top-mode taxonomy. Drift
-// (left/right) traverses these weighted edges within the current
-// top mode. Friends has a single sub-cat ('all') so drift is a
-// no-op there — that's intentional, the social graph isn't a
-// taxonomy you wander, it's people you've chosen.
+// v860/v865 — adjacency keyed by top-mode. Drift (left/right)
+// traverses these edges within the current top mode. Friends has
+// a single sub-cat ('all') so drift is a no-op there.
 const ADJACENCY: Record<CategoryAxis, Record<string, Record<string, number>>> = {
+  // Music sub-cats drift between musical expressions.
+  // Songs ↔ Performances are the closest (both heavy-music).
+  // Dance and Covers are the lighter neighbors.
+  'music': {
+    'original': { 'live': 0.55, 'dance': 0.45 },
+    'dance':    { 'original': 0.6, 'live': 0.4 },
+    'live':     { 'original': 0.65, 'dance': 0.35 },
+  },
   'vibes-now': {
     'dance':    { 'live': 0.3, 'fashion': 0.2, 'original': 0.2, 'comedy': 0.15, 'cover': 0.1, 'reaction': 0.05 },
     'comedy':   { 'reaction': 0.3, 'live': 0.25, 'dance': 0.2, 'original': 0.15, 'cover': 0.1 },
@@ -231,9 +266,12 @@ function pickWeightedNeighbor(
 // ============================================
 
 export function useMoments(): UseMomentsReturn {
-  // v864 — default landing on Live. Cold-start needs no taste graph;
-  // returning users can swipe to Vibes Right Now in one tap.
-  const [categoryAxis, setCategoryAxisState] = useState<CategoryAxis>('live');
+  // v865 — default landing on Music. VOYO is music-first; even
+  // Moments are an extension of music discovery. The Music tab
+  // surfaces moments with a parent_track_id (the music-bridged
+  // 21% of the catalog). Live still in the next tab for cold-
+  // start fallback.
+  const [categoryAxis, setCategoryAxisState] = useState<CategoryAxis>('music');
   const [position, setPosition] = useState<MomentPosition>({ categoryIndex: 0, timeIndex: 0 });
   const [moments, setMoments] = useState<Map<string, Moment[]>>(new Map());
   const [loading, setLoading] = useState(false);
@@ -307,7 +345,13 @@ export function useMoments(): UseMomentsReturn {
           }
           q = q.range(offset * FETCH_OVERSAMPLE, offset * FETCH_OVERSAMPLE + HALF - 1);
 
-          if (axis === 'vibes-now') {
+          if (axis === 'music') {
+            // v865 Music mode — moments WITH a parent_track_id only,
+            // bucketed by content_type. The 79% of catalog without
+            // a parent_track is filtered out here so this lane is
+            // exclusively music-bridged.
+            q = q.not('parent_track_id', 'is', null).eq('content_type', category);
+          } else if (axis === 'vibes-now') {
             // Emotional axes — filter by content_type vibe label.
             q = q.eq('content_type', category);
           } else if (axis === 'live') {
@@ -823,7 +867,16 @@ export function useMoments(): UseMomentsReturn {
     recordSessionSkip(creator);
   }, [moments]);
 
-  const displayName = useCallback((key: string) => DISPLAY_NAMES[key] || key, []);
+  // v865 — when Music mode is active, override the sub-cat label
+  // for 'live' so it reads "Performances" (not the top-mode "Live").
+  // Other sub-cats fall through to DISPLAY_NAMES.
+  const displayName = useCallback(
+    (key: string) => {
+      if (categoryAxis === 'music' && MUSIC_SUB_LABELS[key]) return MUSIC_SUB_LABELS[key];
+      return DISPLAY_NAMES[key] || key;
+    },
+    [categoryAxis],
+  );
 
   return {
     currentMoment,
