@@ -3109,12 +3109,19 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onNavVisibilityChange, onSwitc
         zIndex 5 sits above feed content (z 0-1) but below sticky header (z-10),
         bottom nav (z-50), AccountMenu (z-56), and DynamicIsland chrome. */}
     <div ref={rippleHostRef} style={{ position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 5 }} aria-hidden>
-      {/* Audio reactive ambient glow — radial pulse breathing with the music */}
+      {/* Audio reactive ambient glow — radial warm breath under the chrome.
+          v925: dropped from bottom:-80 → -200 so the bright core sits below
+          the MiniPlayer instead of behind it, and the mid-stop swapped from
+          purple → bronze. Old setup let the glow's purple tint bleed up
+          through the translucent MiniPlayer card and visually couple with
+          the (purple) seek bar — read as an accidental "audio-reactive
+          progress bar." Now the glow is a single warm signature, distinct
+          from the bar's purple. */}
       <div ref={audioGlowRef} style={{
-        position: 'fixed', bottom: '-80px', left: '50%',
+        position: 'fixed', bottom: '-200px', left: '50%',
         transform: 'translateX(-50%) scale(1)',
         width: '440px', height: '440px', borderRadius: '50%',
-        background: 'radial-gradient(circle at 50% 55%, rgba(212,160,83,0.95) 0%, rgba(139,92,246,0.4) 28%, transparent 60%)',
+        background: 'radial-gradient(circle at 50% 55%, rgba(212,160,83,0.95) 0%, rgba(212,160,83,0.35) 28%, transparent 60%)',
         opacity: '0', pointerEvents: 'none',
         willChange: 'transform, opacity',
         transition: 'opacity 0.55s ease, transform 0.45s ease',
