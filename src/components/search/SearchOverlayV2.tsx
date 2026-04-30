@@ -635,48 +635,51 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap, onEnterVideoMode
     const track = resultToTrack(result);
     addSearchResultsToPool([track]);
 
-    if (cachedSet.has(result.voyoId)) {
-      // R2 fast path — instant play, no queue step
+    // v935 — read both the local probed set AND r2KnownStore live. The
+    // batch probe (line 321-366) populates both, but if the user fast-taps
+    // a result before the probe round-trip, cachedSet is empty even when
+    // r2KnownStore has a hit from a prior session/probe. Old code took
+    // the cold path needlessly in that race; AudioPlayer's track-change
+    // already reads r2KnownStore correctly so the audio still hit fast,
+    // but the *UI* showed the warming pill for nothing.
+    const ytId = getYouTubeId(track.trackId);
+    const isCached =
+      cachedSet.has(result.voyoId) ||
+      useR2KnownStore.getState().known.has(ytId);
+
+    if (isCached) {
+      // R2 fast path — instant play, no queue/boost step.
       app.playTrack(track, 'search');
       oyaPlanSignal('search_play', track.artist ?? '');
       onEnterVideoMode?.();
       return;
     }
 
-    // Non-R2: tap = implicit Oye commit. Per Dash, "as soon as in R2 it
-    // should be the filled golden" — that requires explicitLike, which
-    // app.oyeCommit sets. oyeCommit also handles addToQueue (de-duped),
-    // boost, and signals — single canonical entry point.
+    // Cold path — v935: PLAY NOW. Don't gate on a second tap.
     //
-    // R2 EXTRACTION KICKED AT PRIORITY 10 RIGHT HERE. Without this, the
-    // server-side lane only sees the addToQueue-triggered ensureTrackReady
-    // at priority 7 — meaning the track sits at p=7 for the entire 10s
-    // warming + play_now window before AudioPlayer bumps it to p=10. With
-    // this call, the user's first tap signals "USER WANTS THIS NOW" → lane
-    // jumps it. By the time Play Now fires, R2 is much more likely to
-    // already be ready → instant clean playback, no iframe fallback needed.
+    // The old flow: oyeCommit + 3s "Warming up" → "Play now →" pill →
+    // user taps pill → app.playTrack. Three problems:
+    //  1. If user closed search before tapping, the track was committed
+    //     (boost fired, queue mutated, like flag set) but never played —
+    //     "added but never plays" was the most common reliability complaint.
+    //  2. The 3s wait felt like the app was deciding whether to play, not
+    //     fulfilling a tap.
+    //  3. Two taps for "make this song play" violated Dash's narralogy
+    //     ("tap = play, oye = commit"). Search-tap is a play gesture.
+    //
+    // New flow: oyeCommit fires (commit + warmup, same as before) AND
+    // app.playTrack fires immediately. Track lands on iframe, useHotSwap
+    // upgrades to direct R2 the moment R2 confirms — no UI seam, no extra
+    // tap. ensureTrackReady at priority 10 keeps the lane prioritization.
     void ensureTrackReady(track, null, { priority: 10 });
     app.oyeCommit(track);
-
     markWarming(track.trackId);
+    app.playTrack(track, 'search');
+    oyaPlanSignal('search_play', track.artist ?? '');
+    onEnterVideoMode?.();
 
+    // Non-blocking status pill — informational, no required interaction.
     showToast({ type: 'warming', trackTitle: track.title });
-    if (morphTimerRef.current) clearTimeout(morphTimerRef.current);
-    morphTimerRef.current = setTimeout(() => {
-      morphTimerRef.current = null;
-      showToast({
-        type: 'play_now',
-        trackTitle: track.title,
-        onPlayNow: () => {
-          app.playTrack(track, 'search');
-          oyaPlanSignal('search_play', track.artist ?? '');
-          setToast(null);
-          // Orange contour + purple Oye pulse stay — they only fade
-          // when r2KnownStore confirms the track has landed.
-          onEnterVideoMode?.();
-        },
-      });
-    }, 3000);
   }, [resultToTrack, onEnterVideoMode, cachedSet, showToast]);
 
 

@@ -36,7 +36,7 @@ import { getYouTubeId } from '../../utils/voyoId';
 import type { Track } from '../../types';
 
 export type OyeButtonSize = 'sm' | 'md' | 'lg';
-export type OyeVisualState = 'grey-faded' | 'bubbling' | 'gold-faded' | 'gold-filled';
+export type OyeVisualState = 'grey-faded' | 'bubbling' | 'gold-faded' | 'gold-filled' | 'failed-faded';
 
 const SIZE_MAP: Record<OyeButtonSize, { px: number; icon: number }> = {
   sm: { px: 28, icon: 14 },
@@ -107,6 +107,21 @@ const STYLE_BY_STATE: Record<OyeVisualState, {
     // No outline — the glow box-shadow already reads as the "aura."
     ring: 'none',
   },
+  'failed-faded': {
+    // Soft coral — "didn't land yet, tap to retry." Stays in the dark-glass
+    // family so it doesn't shout. Border + icon picked up the only-warm
+    // chromatic cue (~hue between gold-faded and a real error red) so the
+    // user reads "needs another nudge" without alarm. Tap re-fires
+    // app.oyeCommit → boostTrack, which (per downloadStore) does NOT
+    // short-circuit on 'failed' so the retry actually works.
+    background: 'rgba(28, 28, 35, 0.55)',
+    border: '1px solid rgba(220, 110, 100, 0.45)',
+    iconColor: 'rgba(220, 110, 100, 0.85)',
+    iconFill: 'none',
+    boxShadow: '0 0 6px rgba(220, 110, 100, 0.18)',
+    animation: 'none',
+    ring: '1px solid rgba(220, 110, 100, 0.20)',
+  },
 };
 
 /**
@@ -153,6 +168,13 @@ export function computeOyeState(
   if (isWarming && !inDisco) return 'bubbling';
   // In disco but no explicit commitment yet — e.g. auto-cached via play.
   if (inDisco) return 'gold-faded';
+  // v935 — boostTrack failed and we're not in R2. Old code fell through
+  // to grey-faded so the user couldn't tell the boost actually failed —
+  // they'd think nothing was queued and silently re-tap into the same
+  // failure loop. 'failed-faded' surfaces the state without alarming;
+  // tap re-fires oyeCommit → boostTrack (which doesn't short-circuit
+  // on 'failed') so the retry works.
+  if (downloadStatus === 'failed') return 'failed-faded';
   // Cold — "needs to Oye".
   return 'grey-faded';
 }
