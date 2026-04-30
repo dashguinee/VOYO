@@ -81,6 +81,10 @@ export function useMiniPiP() {
 
     video.addEventListener('leavepictureinpicture', () => {
       isActiveRef.current = false;
+      // v939 — broadcast inactive state so MiniPlayer's Takeout bubble
+      // (and any other surface) can revert from orange to purple when
+      // the user closes PiP from the system UI.
+      pipService.setActive(false);
       if (rafRef.current != null) {
         cancelAnimationFrame(rafRef.current);
         rafRef.current = null;
@@ -290,6 +294,9 @@ export function useMiniPiP() {
       await videoRef.current.play();
       await videoRef.current.requestPictureInPicture();
       isActiveRef.current = true;
+      // v939 — broadcast active state. MiniPlayer's Takeout bubble
+      // subscribes and renders orange while PiP is live.
+      pipService.setActive(true);
       // Kick off the live render loop.
       if (rafRef.current == null) {
         rafRef.current = requestAnimationFrame(renderFrame);

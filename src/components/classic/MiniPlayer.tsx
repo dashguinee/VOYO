@@ -56,26 +56,40 @@ export const MiniPlayer = ({ onOpenFull, variant = 'docked' }: MiniPlayerProps) 
   const [shouldScroll, setShouldScroll] = useState(false);
   const [showBubbles, setShowBubbles] = useState(false);
   const [showPlaylistModal, setShowPlaylistModal] = useState(false);
-  // Seek bar 4-phase choreography on tap (purple1 → bloom → purple2 → idle bronze)
-  type BarPhase = 'idle' | 'purple1' | 'bloom' | 'purple2';
-  const [barPhase, setBarPhase] = useState<BarPhase>('idle');
-  const phaseTimersRef = useRef<Array<ReturnType<typeof setTimeout>>>([]);
-  // Takeout bubble flips purple → orange on tap (confirms takeout armed).
-  // Resets when bubbles auto-hide so a fresh tap starts purple.
-  const [takenOut, setTakenOut] = useState(false);
+  // v939 — Seek bar reverted to the simple two-state model:
+  //   idle  → bronze (bass-reactive via --voyo-bass)
+  //   revealed → bold purple, 15s window after a tap, then ease back
+  // The purple→pink→orange morph that was here moved to the Takeout
+  // bubble where it belongs as a state-confirmation cue.
+  const [barRevealed, setBarRevealed] = useState(false);
+  const barRevealTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // v939 — Takeout bubble: subscribes to pipService active state so it
+  // shows orange whenever PiP is live (across bubble re-opens, and clears
+  // when user closes PiP from system UI). Local takeoutArming flag covers
+  // the brief window between tap and pipService.setActive callback.
+  const [pipActive, setPipActive] = useState<boolean>(() => pipService.isActive());
+  const [takeoutArming, setTakeoutArming] = useState(false);
+  const takenOut = pipActive || takeoutArming;
   const titleRef = useRef<HTMLParagraphElement>(null);
   const lastTapRef = useRef<number>(0);
 
   const revealBar = useCallback(() => {
-    phaseTimersRef.current.forEach(clearTimeout);
-    phaseTimersRef.current = [];
-    setBarPhase('purple1');
-    phaseTimersRef.current.push(setTimeout(() => setBarPhase('bloom'), 3000));
-    phaseTimersRef.current.push(setTimeout(() => setBarPhase('purple2'), 8000));
-    phaseTimersRef.current.push(setTimeout(() => setBarPhase('idle'), 15000));
+    setBarRevealed(true);
+    if (barRevealTimerRef.current) clearTimeout(barRevealTimerRef.current);
+    barRevealTimerRef.current = setTimeout(() => setBarRevealed(false), 15000);
   }, []);
   useEffect(() => () => {
-    phaseTimersRef.current.forEach(clearTimeout);
+    if (barRevealTimerRef.current) clearTimeout(barRevealTimerRef.current);
+  }, []);
+
+  // Live PiP-active subscription. When PiP enters → orange persists.
+  // When user closes PiP (system UI tap) → button reverts to purple.
+  useEffect(() => {
+    const unsub = pipService.subscribeActive((active) => {
+      setPipActive(active);
+      if (active) setTakeoutArming(false);
+    });
+    return unsub;
   }, []);
 
   // Double-tap detection. 200ms window — comfortably above human floor (~150ms),
@@ -128,14 +142,14 @@ export const MiniPlayer = ({ onOpenFull, variant = 'docked' }: MiniPlayerProps) 
     }
   }, [nextTrack, prevTrack]);
 
-  // Bubbles auto-hide. Reset takenOut when they go away so the next tap
-  // starts purple again.
+  // Bubbles auto-hide after 3s. Takeout state is driven by real PiP-active
+  // (subscribed above) so we don't reset it here — it persists exactly as
+  // long as PiP itself.
   useEffect(() => {
     if (showBubbles) {
       const timer = setTimeout(() => setShowBubbles(false), 3000);
       return () => clearTimeout(timer);
     }
-    setTakenOut(false);
   }, [showBubbles]);
 
   if (!currentTrack) return null;
@@ -191,18 +205,37 @@ export const MiniPlayer = ({ onOpenFull, variant = 'docked' }: MiniPlayerProps) 
             )}
           </button>
 
-          {/* Takeout — purple → orange on tap (PiP arm) */}
+          {/* Takeout — purple → pink → orange morph on tap, settles at orange
+              while PiP is active (subscribed via pipService.subscribeActive).
+              The morph plays during the takeoutArming window (request in
+              flight); pipActive=true takes over once PiP is confirmed and
+              keeps the orange persisting across bubble re-opens / until the
+              user closes PiP from system UI. */}
           <button
-            className={`w-12 h-12 rounded-full backdrop-blur-xl flex items-center justify-center shadow-lg active:scale-95 transition-all duration-300 border-2 ${
+            className={`w-12 h-12 rounded-full backdrop-blur-xl flex items-center justify-center shadow-lg active:scale-95 border-2 ${
               takenOut
-                ? 'bg-gradient-to-br from-orange-500/85 to-amber-600/85 border-orange-400'
-                : 'bg-gradient-to-br from-purple-500/80 to-violet-600/80 border-purple-400'
+                ? 'voyo-takeout-active border-orange-400'
+                : 'bg-gradient-to-br from-purple-500/80 to-violet-600/80 border-purple-400 transition-all duration-300'
             }`}
+            style={
+              takeoutArming
+                ? { animation: 'voyo-takeout-bloom 1000ms cubic-bezier(0.16, 1, 0.3, 1) forwards' }
+                : undefined
+            }
             aria-label={takenOut ? 'Taken Out — playing in floating cube' : 'Take Out — keep playing in floating cube'}
             onClick={(e) => {
               e.stopPropagation();
-              setTakenOut(true);
-              void pipService.enter().catch(() => { /* MediaSession is the fallback */ });
+              if (takenOut) {
+                // Already PiP-active → tap exits PiP.
+                void pipService.exit().catch(() => { /* swallow */ });
+                return;
+              }
+              setTakeoutArming(true);
+              void pipService.enter().catch(() => {
+                // Failed to enter PiP — drop the arming state so the button
+                // doesn't stay stuck mid-morph.
+                setTakeoutArming(false);
+              });
             }}
           >
             <PictureInPicture2 className="w-5 h-5 text-white" />
@@ -222,16 +255,16 @@ export const MiniPlayer = ({ onOpenFull, variant = 'docked' }: MiniPlayerProps) 
         onPointerUp={handleSwipeUp}
         onPointerCancel={() => { swipeStartRef.current = null; }}
       >
-        {/* Seek bar — 4-phase reveal, bass-reactive bronze at rest. */}
+        {/* Seek bar — v939 simple two-state. Bronze rest is bass-reactive
+            via --voyo-bass (warm room rhythm on hot tracks, near-silent on
+            chill). On tap: whole bar → bold purple for 15s, then 350ms
+            fade back. The morph spectrum lives on the Takeout bubble now. */}
         <div
           className="absolute bottom-1 left-2 right-2 h-1 overflow-hidden rounded-full"
           style={{
-            background:
-              barPhase === 'idle'
-                ? 'rgba(212,160,83, calc(0.19 + var(--voyo-bass, 0) * 0.25))'
-                : barPhase === 'bloom'
-                ? 'linear-gradient(90deg, rgba(139,92,246,0.40) 0%, rgba(236,72,153,0.40) 50%, rgba(251,146,60,0.40) 100%)'
-                : 'rgba(139,92,246,0.28)',
+            background: barRevealed
+              ? 'rgba(139,92,246,0.28)'
+              : 'rgba(212,160,83, calc(0.19 + var(--voyo-bass, 0) * 0.25))',
             transition: 'background 350ms ease-out',
           }}
         >
@@ -239,24 +272,16 @@ export const MiniPlayer = ({ onOpenFull, variant = 'docked' }: MiniPlayerProps) 
             <div
               className="absolute inset-0"
               style={{
-                background:
-                  barPhase === 'idle'
-                    ? 'rgba(212,160,83,0.47)'
-                    : barPhase === 'bloom'
-                    ? 'linear-gradient(90deg, #8b5cf6 0%, #ec4899 50%, #fb923c 100%)'
-                    : '#8b5cf6',
+                background: barRevealed ? '#8b5cf6' : 'rgba(212,160,83,0.47)',
                 transition: 'background 350ms ease-out',
               }}
             />
             <div
               className="absolute right-0 top-0 bottom-0 w-4"
               style={{
-                background:
-                  barPhase === 'idle'
-                    ? 'linear-gradient(to left, rgba(212,160,83,0.38), transparent)'
-                    : barPhase === 'bloom'
-                    ? 'linear-gradient(to left, rgba(251,146,60,0.7), transparent)'
-                    : 'linear-gradient(to left, rgba(139,92,246,0.7), transparent)',
+                background: barRevealed
+                  ? 'linear-gradient(to left, rgba(139,92,246,0.7), transparent)'
+                  : 'linear-gradient(to left, rgba(212,160,83,0.38), transparent)',
                 transition: 'background 350ms ease-out',
               }}
             />
@@ -319,11 +344,28 @@ export const MiniPlayer = ({ onOpenFull, variant = 'docked' }: MiniPlayerProps) 
         </div>
       </div>
 
-      {/* Marquee animation */}
+      {/* Marquee + Takeout bloom animations */}
       <style>{`
         @keyframes marquee {
           0% { transform: translateX(0); }
           100% { transform: translateX(-50%); }
+        }
+        /* v939 — Takeout bubble morph: purple → pink → orange. Browsers
+           interpolate between gradients of the same form (linear-gradient,
+           same stop count, same color-space format) so the transition
+           sweeps through the spectrum smoothly. forwards fill keeps the
+           button at orange after the animation completes. */
+        @keyframes voyo-takeout-bloom {
+          0%   { background: linear-gradient(135deg, rgba(168,85,247,0.85) 0%, rgba(124,58,237,0.85) 100%); }
+          45%  { background: linear-gradient(135deg, rgba(236,72,153,0.85) 0%, rgba(244,114,182,0.85) 100%); }
+          100% { background: linear-gradient(135deg, rgba(249,115,22,0.85) 0%, rgba(234,88,12,0.85) 100%); }
+        }
+        /* Steady-state orange while PiP is active. Same end-color as the
+           bloom keyframe's 100% so there's no visible step when the
+           animation completes and pipActive flips this class on. */
+        .voyo-takeout-active {
+          background: linear-gradient(135deg, rgba(249,115,22,0.85) 0%, rgba(234,88,12,0.85) 100%);
+          transition: background 250ms ease-out;
         }
       `}</style>
 
