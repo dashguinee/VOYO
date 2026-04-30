@@ -2251,6 +2251,37 @@ export const VoyoMoments: React.FC<VoyoMomentsProps> = ({ onPlayFullTrack, onArt
         </div>
       ) : currentMoment ? (
         <>
+          {/* v919 — STATIC GAP-FILLER (Dash 2026-04-30 "copied next-up
+              overlay, gapless"). Mounts only during a drift transition,
+              under the FadeWrapper pair. Reuses the same hidden-preload
+              pattern (line ~2328 below): a non-animated copy of the
+              INCOMING moment card sits at the bottom layer. As the
+              outgoing FadeWrapper fades out, this static card already
+              shows the destination — no black flash, no canvas gap.
+              The animated incoming FadeWrapper completes the motion
+              arc on top. isActive=false + isMuted=true so its <video>
+              doesn't double-play with the live incoming card. */}
+          {prevMoment && transitionDir && prevMoment.id !== currentMoment.id && (
+            <div
+              key={`gap-${currentMoment.id}`}
+              aria-hidden="true"
+              style={{ position: 'absolute', inset: 0, zIndex: 0, pointerEvents: 'none' }}
+            >
+              <MomentCard
+                moment={currentMoment}
+                isOyed={isOyed}
+                onOye={() => {}}
+                isActive={false}
+                isMuted={true}
+                onToggleMute={() => {}}
+                onArtistTap={onArtistTap}
+                showOrb={false}
+                showName={false}
+                showTitle={false}
+                showBioBody={false}
+              />
+            </div>
+          )}
           {/* Outgoing — only mounts during the 700ms transition window.
               isActive={false} so its video pauses (audio stops doubling
               up while two cards briefly coexist). */}
