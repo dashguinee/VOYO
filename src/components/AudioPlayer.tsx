@@ -170,7 +170,7 @@ export const AudioPlayer = () => {
   const runEndedAdvanceRef = useRef<() => void>(() => {});
   const syntheticEndedBypassRef = useRef<boolean>(false);
   const lastEndedTrackIdRef = useRef<string | null>(null);
-  const { engageSilentWav, isTransitioningToBackgroundRef } = useBgEngine({
+  const { engageSilentWav, isTransitioningToBackgroundRef, silentKeeperUrlRef } = useBgEngine({
     audioRef,
     audioContextRef,
     gainNodeRef,
@@ -207,6 +207,7 @@ export const AudioPlayer = () => {
   // the silent-WAV bridges engaged at transition points below.
   void engageSilentWav;
   void isTransitioningToBackgroundRef;
+  void silentKeeperUrlRef;
 
   // ── Frequency visualizer pump ─────────────────────────────────────────
   useFrequencyPump(isPlaying);
@@ -416,12 +417,16 @@ export const AudioPlayer = () => {
       await fadePromise;
       if (isStale()) return;
       if (knownInR2Sync && el) {
-        // Pause before src reassignment — guarantees el.paused=true so tryPlay's
-        // !e.paused guard doesn't exit early. trackSwapInProgressRef is already
-        // true so handlePause is a no-op. Without this, some browsers keep
-        // el.paused=false briefly after src change → tryPlay bails → preload="none"
-        // means no auto-load → canplay never fires → silent track.
-        el.pause();
+        // FG only: pause before src reassignment so tryPlay's !e.paused guard
+        // doesn't exit early on browsers that briefly keep el.paused=false
+        // after a src change. In BG the silentWav bridge is playing; an
+        // explicit el.pause() creates a brief audio-session gap that Android
+        // OEM power managers (Samsung/MIUI) use to revoke audio focus —
+        // subsequent el.play() for the real track then fails with
+        // NotAllowedError ("only 1 sing in BG"). The el.src assignment itself
+        // fires pause synchronously per spec, so el.paused=true after the
+        // assignment regardless, and tryPlay works correctly.
+        if (!document.hidden) el.pause();
         // R2 is keyed by raw YouTube ID; trackId may be a VOYO ID (vyo_<b64>).
         // engageSilentWav sets loop=true; must reset before R2 src lands or
         // the track will loop forever instead of firing 'ended' and advancing.
@@ -598,6 +603,16 @@ export const AudioPlayer = () => {
   // ── Audio element event handlers ──────────────────────────────────────
 
   const handleCanPlay = useCallback(() => {
+    // Silent WAV bridge — don't treat this as "new track ready."
+    // engageSilentWav already called el.play(); responding to its canplay
+    // would call el.play() a second time and then the track-change IIFE's
+    // el.pause() aborts it. That play→abort cycle on the silentWav can
+    // trigger an OS audio-session interruption on Android OEM power managers,
+    // causing the subsequent el.play() for the real R2 track to fail with
+    // NotAllowedError → "only 1 sing in BG."
+    const el = audioRef.current;
+    if (el?.src === silentKeeperUrlRef.current) return;
+
     setupAudioEnhancement(boostProfile as BoostPreset);
     // Track-change sets nextFadeInMsRef to TRACK_CHANGE_FADE_IN_MS — real
     // ease-in. Buffer recoveries leave it null → short anti-click default.
