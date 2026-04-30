@@ -40,18 +40,38 @@ export interface StreamResponse {
  * Fast timeout (8s) - database is primary source, this is fallback
  */
 export async function searchMusic(query: string, limit: number = 10): Promise<SearchResult[]> {
-  const response = await fetch(
-    `${API_URL}/api/search?q=${encodeURIComponent(query)}&limit=${limit}`,
-    { signal: AbortSignal.timeout(4000) } // 4s timeout - DB results show first, this just supplements
-  );
+  // v924 — fetch + JSON parse fully guarded. Network rejection used to
+  // bubble up unhandled to callers (poolCurator's Promise.all caught
+  // it but trackVerifier just logged). Same pattern with response.json:
+  // if the backend ever returns OK with empty/HTML body, JSON.parse
+  // would reject and corrupt every caller. Now both failure modes
+  // return [] cleanly.
+  let response: Response;
+  try {
+    response = await fetch(
+      `${API_URL}/api/search?q=${encodeURIComponent(query)}&limit=${limit}`,
+      { signal: AbortSignal.timeout(4000) }
+    );
+  } catch (err) {
+    devWarn(`[API] YouTube search network error:`, err);
+    trace('api_fail', null, { endpoint: 'search', status: 'network' });
+    return [];
+  }
 
   if (!response.ok) {
     devWarn(`[API] YouTube search failed: ${response.status}`);
     trace('api_fail', null, { endpoint: 'search', status: response.status });
-    return []; // Return empty, don't throw - let caller handle gracefully
+    return [];
   }
 
-  const data = await response.json();
+  let data: { items?: unknown[]; results?: unknown[] };
+  try {
+    data = await response.json();
+  } catch (err) {
+    devWarn(`[API] YouTube search JSON parse failed:`, err);
+    trace('api_fail', null, { endpoint: 'search', status: 'json_parse' });
+    return [];
+  }
 
   const results: SearchResult[] = ((data.items || data.results) || []).map((item: any) => ({
     voyoId: item.id || item.voyoId,

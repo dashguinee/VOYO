@@ -142,6 +142,15 @@ export async function markTrackAsKept(trackId: string): Promise<void> {
         metaStore.put(meta);
       }
     };
+    // v924 — was returning before transaction.oncomplete fired. Caller's
+    // `await markTrackAsKept(...)` resolved before the put committed,
+    // so a fast follow-up read could miss the upgrade. Now we wait for
+    // the transaction to actually commit.
+    await new Promise<void>((resolve) => {
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => resolve();
+      transaction.onabort = () => resolve();
+    });
   } catch {
     // Silent fail - not critical
   }
@@ -194,6 +203,13 @@ async function incrementPlayCount(trackId: string): Promise<void> {
         store.put(cached);
       }
     };
+    // v924 — wait for transaction commit. Was returning before put fired,
+    // so rapid replays could read-modify-write race and drop counts.
+    await new Promise<void>((resolve) => {
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => resolve();
+      transaction.onabort = () => resolve();
+    });
   } catch {
     // Ignore errors
   }

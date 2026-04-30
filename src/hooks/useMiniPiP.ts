@@ -89,16 +89,26 @@ export function useMiniPiP() {
   }, []);
 
   // Load album art when track changes. Cached in imgRef for the render loop.
+  // v924 — was racing on rapid track change: an in-flight previous-track
+  // image could resolve AFTER a new track started loading, overwriting
+  // imgRef with the wrong art. Cancelled flag + null-out handlers on
+  // teardown so the late onload no-ops.
   useEffect(() => {
     if (!currentTrack) {
       imgRef.current = null;
       return;
     }
+    let cancelled = false;
     const img = new Image();
     img.crossOrigin = 'anonymous';
-    img.onload = () => { imgRef.current = img; };
-    img.onerror = () => { imgRef.current = null; };
+    img.onload = () => { if (!cancelled) imgRef.current = img; };
+    img.onerror = () => { if (!cancelled) imgRef.current = null; };
     img.src = getThumb(currentTrack.trackId, 'high');
+    return () => {
+      cancelled = true;
+      img.onload = null;
+      img.onerror = null;
+    };
   }, [currentTrack?.trackId, currentTrack]);
 
   // Single-frame render. Reads FFT + progress live; everything else is

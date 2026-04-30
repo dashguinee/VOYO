@@ -990,16 +990,19 @@ export function Dahub({ userId, userName, userAvatar, coreId, appContext, onClos
 
   const loadData = useCallback(async () => {
     setIsLoading(true);
-    const [friendsData, sharedData, conversationsData, unread] = await Promise.all([
+    // v924 — was Promise.all; one fetch rejection wiped the entire UI
+    // because Promise.all short-circuits. allSettled lets partial-success
+    // populate (e.g. friends list survives an unread-count hiccup).
+    const [friendsRes, sharedRes, convosRes, unreadRes] = await Promise.allSettled([
       friendsAPI.getFriends(userId),
       friendsAPI.getSharedAccountMembers(userId),
       messagesAPI.getConversations(userId),
       messagesAPI.getUnreadCount(userId)
     ]);
-    setFriends(friendsData);
-    setSharedMembers(sharedData);
-    setConversations(conversationsData);
-    setUnreadCount(unread);
+    if (friendsRes.status === 'fulfilled') setFriends(friendsRes.value);
+    if (sharedRes.status === 'fulfilled') setSharedMembers(sharedRes.value);
+    if (convosRes.status === 'fulfilled') setConversations(convosRes.value);
+    if (unreadRes.status === 'fulfilled') setUnreadCount(unreadRes.value);
     setIsLoading(false);
   }, [userId]);
 

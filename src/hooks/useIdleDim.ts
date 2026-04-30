@@ -52,15 +52,31 @@ export function useIdleDim(opts: { disabled?: boolean } = {}): { dimLevel: 0 | 1
       window.addEventListener(ev, touch, { passive: true });
     }
 
-    const interval = setInterval(() => {
+    const tickIdle = () => {
       const idleMs = Date.now() - lastInteractionRef.current;
       const next: 0 | 1 | 2 = idleMs > 60_000 ? 2 : idleMs > 30_000 ? 1 : 0;
       setDimLevel(prev => (prev === next ? prev : next));
-    }, 5000);
+    };
+    let interval: ReturnType<typeof setInterval> | null = setInterval(tickIdle, 5000);
+
+    // v924 — pause the 5s polling tick while the tab is hidden. Was
+    // running forever in the background, burning a wake every 5s on
+    // idle laptops. Resume + run once on visibility-back so the dim
+    // level updates immediately.
+    const onVis = () => {
+      if (document.visibilityState === 'hidden') {
+        if (interval) { clearInterval(interval); interval = null; }
+      } else if (!interval) {
+        tickIdle();
+        interval = setInterval(tickIdle, 5000);
+      }
+    };
+    document.addEventListener('visibilitychange', onVis);
 
     return () => {
       for (const ev of events) window.removeEventListener(ev, touch);
-      clearInterval(interval);
+      document.removeEventListener('visibilitychange', onVis);
+      if (interval) clearInterval(interval);
     };
   }, [disabled]);
 

@@ -485,7 +485,11 @@ export function useMoments(): UseMomentsReturn {
         if (error) {
           if (error.message?.includes('timeout') || error.message?.includes('statement')) {
             _momentsBlocked = true;
-            devWarn('[useMoments] DB timeout — moments queries disabled until next reload');
+            // v924 — was permanent until reload. One transient DB blip
+            // killed the entire Moments feed for the rest of the
+            // session. Auto-reset after 5 min so a slow patch heals.
+            devWarn('[useMoments] DB timeout — moments queries paused 5 min');
+            setTimeout(() => { _momentsBlocked = false; }, 5 * 60 * 1000);
           } else {
             devWarn(`[useMoments] Fetch error for ${category}:`, error.message);
           }
