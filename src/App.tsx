@@ -50,6 +50,7 @@ import { useTabHistory } from './hooks/useTabHistory';
 // TRACK POOL: Start pool maintenance for dynamic track management
 import { startPoolMaintenance } from './store/trackPoolStore';
 import { syncSeedTracks } from './services/centralDJ';
+import { warmLastResortPool } from './services/databaseDiscovery';
 import { TRACKS } from './data/tracks';
 import { syncManyToDatabase } from './services/databaseSync';
 import { useUniverseStore } from './store/universeStore';
@@ -549,6 +550,10 @@ function App() {
     // Successful boot — clear the chunk-retry flag so a future transient
     // chunk-load error gets a fresh single-retry budget.
     try { sessionStorage.removeItem('voyo-chunk-retry-v1'); } catch {}
+  }, []);
+
+  useEffect(() => {
+    warmLastResortPool().catch(() => {});
   }, []);
 
   // MOBILE FIX: Setup audio unlock on app mount

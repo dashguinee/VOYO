@@ -11,6 +11,7 @@
  */
 
 import { supabase, isSupabaseConfigured as supabaseConfigured } from '../lib/supabase';
+import type { VideoIntelligenceRow } from '../lib/supabase';
 import { getVibeEssence, type VibeEssence } from './essenceEngine';
 import { searchMusic as searchYouTube } from './api';
 import { TRACKS } from '../data/tracks';
@@ -460,13 +461,76 @@ export async function searchTracks(query: string, limit: number = 20): Promise<T
 }
 
 // ============================================
+// LAST RESORT POOL (500-track warm cache)
+// ============================================
+
+const LAST_RESORT_KEY = 'voyo-last-resort-v1';
+const LAST_RESORT_TTL = 24 * 60 * 60 * 1000;
+
+interface LastResortCache {
+  tracks: Track[];
+  at: number;
+}
+
+function viRowToTrack(row: VideoIntelligenceRow): Track {
+  return {
+    id: `vi_${row.youtube_id}`,
+    trackId: row.youtube_id,
+    title: row.title,
+    artist: row.artist || row.channel_name || 'Unknown Artist',
+    album: '',
+    coverUrl: row.thumbnail_url || `https://i.ytimg.com/vi/${row.youtube_id}/hqdefault.jpg`,
+    duration: row.duration_seconds || 0,
+    tags: row.genres || [],
+    mood: (row.moods?.[0] as Track['mood']) || 'afro',
+    region: row.region || undefined,
+    oyeScore: row.voyo_play_count,
+    createdAt: row.created_at,
+  };
+}
+
+export async function warmLastResortPool(): Promise<void> {
+  if (!supabase) return;
+  try {
+    const raw = localStorage.getItem(LAST_RESORT_KEY);
+    if (raw) {
+      const cached: LastResortCache = JSON.parse(raw);
+      if (Date.now() - cached.at < LAST_RESORT_TTL && cached.tracks.length >= 100) return;
+    }
+  } catch {}
+
+  try {
+    const { data, error } = await supabase
+      .from('video_intelligence')
+      .select('youtube_id,title,artist,channel_name,duration_seconds,thumbnail_url,genres,moods,region,voyo_play_count,created_at')
+      .order('voyo_play_count', { ascending: false })
+      .limit(500);
+    if (error || !data || data.length === 0) return;
+    const tracks = (data as VideoIntelligenceRow[]).map(viRowToTrack);
+    localStorage.setItem(LAST_RESORT_KEY, JSON.stringify({ tracks, at: Date.now() }));
+    devLog(`[Discovery] Last-resort pool warmed: ${tracks.length} tracks`);
+  } catch {}
+}
+
+function getLastResortPool(): Track[] {
+  try {
+    const raw = localStorage.getItem(LAST_RESORT_KEY);
+    if (!raw) return [];
+    const cached: LastResortCache = JSON.parse(raw);
+    return cached.tracks || [];
+  } catch {
+    return [];
+  }
+}
+
+// ============================================
 // FALLBACK (when Supabase unavailable)
 // ============================================
 
 function getFallbackTracks(type: 'hot' | 'discovery', limit: number): Track[] {
-  // Use static seed tracks as fallback (no API calls)
-  // Shuffle and return subset for variety
-  const shuffled = [...TRACKS].sort(() => Math.random() - 0.5);
+  const pool = getLastResortPool();
+  const source = pool.length >= limit ? pool : [...pool, ...TRACKS];
+  const shuffled = [...source].sort(() => Math.random() - 0.5);
   return shuffled.slice(0, limit);
 }
 
