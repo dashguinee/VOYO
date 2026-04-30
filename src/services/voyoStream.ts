@@ -34,6 +34,8 @@ import type { Track } from '../types';
 import { onSignal as oyoPlanSignal } from './oyoPlan';
 import { usePlayerStore } from '../store/playerStore';
 import { trace } from './telemetry';
+import { markR2Known } from '../store/r2KnownStore';
+import { getYouTubeId } from '../utils/voyoId';
 
 // ── Queue upsert helper (internal + exported via ensureTrackReady) ────────
 
@@ -106,9 +108,18 @@ export async function ensureTrackReady(
 
   // Fast path: R2 already has it → return immediately (caller plays via
   // audio.src = R2 URL or lets iframe start first with hot-swap later).
+  // v938: also populate r2KnownStore on HEAD success. Without this, the
+  // pre-warm pipeline (v937) verifies R2 has the track via this HEAD but
+  // r2KnownStore stays unaware → AudioPlayer's track-change r2 fast-path
+  // (line 327) reads false → falls through to its own slow probe path.
+  // Net effect: pre-warm worked, but next-track-tap still paid 100-1500ms
+  // for a redundant HEAD probe. One markR2Known call closes that gap.
   try {
     const res = await fetch(`${R2_EDGE}/${track.trackId}?q=high`, { method: 'HEAD' });
-    if (res.ok) return;
+    if (res.ok) {
+      markR2Known(getYouTubeId(track.trackId));
+      return;
+    }
   } catch { /* fall through to poll */ }
 
   // Bounded poll — R2 hit wins immediately; queue row going 'failed' wins too
@@ -119,7 +130,10 @@ export async function ensureTrackReady(
   while (Date.now() - start < SEARCH_WAIT_MS) {
     try {
       const res = await fetch(`${R2_EDGE}/${track.trackId}?q=high`, { method: 'HEAD' });
-      if (res.ok) return;
+      if (res.ok) {
+        markR2Known(getYouTubeId(track.trackId));
+        return;
+      }
     } catch { /* transient */ }
 
     if (supaUrl && supaKey) {

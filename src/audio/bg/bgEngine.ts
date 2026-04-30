@@ -310,6 +310,14 @@ export function useBgEngine(params: UseBgEngineParams): BgEngineApi {
     let lastObservedTime = -1;
     let lastObservedTrackId: string | null = null;
     let stuckTicks = 0;
+    // v938 — synthetic-ended now requires TWO consecutive ticks of "near-end +
+    // paused + hidden" before firing. Old code fired on a single tick which
+    // could mis-classify a transient pause at 0.5s-from-end (buffer hiccup,
+    // brief readiness drop) as a "needs to advance" — premature track skip.
+    // Two consecutive ticks ≈ 4s window, still well under any acceptable BG
+    // recovery delay but immune to one-shot transients.
+    let synthEndedTicks = 0;
+    let synthEndedTrackId: string | null = null;
 
     mc.port1.onmessage = () => {
       if (!active) return;
@@ -378,37 +386,62 @@ export function useBgEngine(params: UseBgEngineParams): BgEngineApi {
 
       // (5) Synthetic-ended detector — Chrome BG sometimes doesn't fire
       // `ended`. If element paused + near duration + real src + hidden,
-      // force the advance.
-      if (
+      // force the advance. v938: requires 2 consecutive heartbeat ticks
+      // of the condition (≈4s) so a one-shot transient pause near end
+      // doesn't fire a false advance.
+      const trackIdForSynth = usePlayerStore.getState().currentTrack?.trackId;
+      const synthCondition =
         el && el.paused && el.src && document.hidden &&
         !isLoadingTrackRef.current &&
         el.src !== silentKeeperUrlRef.current &&
         el.duration && isFinite(el.duration) && el.duration > 0 &&
         el.currentTime >= el.duration - 0.5 &&
-        usePlayerStore.getState().isPlaying
-      ) {
-        const trackId = usePlayerStore.getState().currentTrack?.trackId;
-        if (trackId && lastEndedTrackIdRef.current !== trackId) {
-          trace('synthetic_ended', trackId, {
+        usePlayerStore.getState().isPlaying;
+      if (synthCondition && trackIdForSynth) {
+        if (synthEndedTrackId === trackIdForSynth) {
+          synthEndedTicks++;
+        } else {
+          synthEndedTrackId = trackIdForSynth;
+          synthEndedTicks = 1;
+        }
+        if (synthEndedTicks >= 2 && lastEndedTrackIdRef.current !== trackIdForSynth) {
+          trace('synthetic_ended', trackIdForSynth, {
             currentTime: el.currentTime,
             duration: el.duration,
             paused: el.paused,
             hidden: document.hidden,
+            ticks: synthEndedTicks,
           });
           if (syntheticEndedBypassRef.current !== null) {
             syntheticEndedBypassRef.current = true;
           }
+          synthEndedTicks = 0;
+          synthEndedTrackId = null;
           runEndedAdvanceRef.current?.();
           mc.port2.postMessage(null);
           return;
         }
+      } else {
+        // Condition broken on this tick → reset the consecutive-tick counter.
+        synthEndedTicks = 0;
+        synthEndedTrackId = null;
       }
 
       // (4) Silent-paused kick — if element is paused but should be playing,
       // kick it. Chrome can silently suspend the element without firing
-      // pause. Log the kick outcome so we know if Chrome is refusing to
-      // honor the play() call in BG.
-      if (el && el.paused && el.src && !isLoadingTrackRef.current && usePlayerStore.getState().isPlaying) {
+      // pause. v938: gate on el.readyState >= 2 (HAVE_CURRENT_DATA). Without
+      // this guard, the kick races AudioPlayer's tryPlay (which retries play
+      // for 1.5s after src assignment) — both fire play() against an element
+      // that's still loading metadata and the second call rejects with
+      // AbortError, polluting the kick telemetry and confusing the recovery
+      // signal. With the gate, the kick only fires once the element is
+      // actually capable of playing.
+      if (
+        el && el.paused && el.src &&
+        !isLoadingTrackRef.current &&
+        el.readyState >= 2 &&
+        usePlayerStore.getState().isPlaying
+      ) {
         try {
           ctx?.state === 'suspended' && ctx.resume().catch(() => {});
           const bat = getBatteryState();
@@ -416,6 +449,7 @@ export function useBgEngine(params: UseBgEngineParams): BgEngineApi {
           trace('heartbeat_kick', kickTrackId, {
             why: 'element_silently_paused',
             hidden: document.hidden,
+            readyState: el.readyState,
             batLvl: Math.round(bat.level * 100),
             batCharging: bat.charging,
             batLow: bat.lowBattery,

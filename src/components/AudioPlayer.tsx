@@ -98,6 +98,11 @@ export const AudioPlayer = () => {
   // new track gets exactly one predictive pre-warm round. Without this the
   // 4Hz timeupdate would fire ensureTrackReady hundreds of times per track.
   const prewarmFiredForRef = useRef<string | null>(null);
+  // v938 — R2 quality fallback ladder. On <audio> error during R2 playback,
+  // try the same track at ?q=medium, then ?q=low, before letting the burst
+  // circuit advance the track. Map<trackId, current quality>. Cleared on
+  // track-change so each new track starts fresh at high.
+  const qualityFallbackRef = useRef<Map<string, 'high' | 'medium' | 'low'>>(new Map());
   // Monotonic counter incremented on every track-change effect entry.
   // Async work inside the effect captures its token and bails if the ref
   // has moved past it — prevents a stale closure from a prior skip from
@@ -251,6 +256,9 @@ export const AudioPlayer = () => {
     // Clear error burst counter — errors from a prior track must not bleed
     // into the new track's circuit-breaker window and trigger a false skip.
     errorBurst = [];
+    // v938 — clear stale quality fallback state for any track other than
+    // the current one. Each new track starts at ?q=high.
+    qualityFallbackRef.current.clear();
 
     // ── Predictive pre-warm AT TRACK-CHANGE (v937) ─────────────────────
     // Was: fired only at 33% progress (line 714 below). On a 2-minute
@@ -394,7 +402,12 @@ export const AudioPlayer = () => {
         el.loop = false;
         el.src = `${R2_AUDIO}/${getYouTubeId(currentTrack.trackId)}?q=high`;
         // BG safety valve: if canplay/error never fires (slow BG network),
-        // clear the swap flag after 10s so the heartbeat kick can intervene.
+        // clear the swap flag so the heartbeat kick can intervene. v938:
+        // dropped 10s → 5s. Combined with bgEngine's new readyState >= 2
+        // gate on the kick (silent-paused detector now refuses to fire
+        // play() against a not-yet-ready element), 5s is plenty of canplay
+        // headroom while shrinking the dead-air window if canplay truly
+        // never arrives.
         if (document.hidden) {
           if (bgSwapSafetyTimerRef.current) clearTimeout(bgSwapSafetyTimerRef.current);
           bgSwapSafetyTimerRef.current = setTimeout(() => {
@@ -402,7 +415,7 @@ export const AudioPlayer = () => {
             if (isStale() || !trackSwapInProgressRef.current) return;
             trackSwapInProgressRef.current = false;
             logPlaybackEvent({ event_type: 'trace', track_id: currentTrack.trackId, meta: { subtype: 'bg_swap_safety_released' } });
-          }, 10_000);
+          }, 5_000);
         }
         // Transient 'pause' fires on src reassign; handlePause sees the
         // flag and skips the setIsPlaying(false). The flag clears in
@@ -1025,19 +1038,46 @@ export const AudioPlayer = () => {
           },
         });
 
-        // v936 — IFRAME GATE. When the canonical audio source is the iframe
-        // (R2 hasn't taken over yet via hot-swap), errors on this <audio>
-        // element are coming from useHotSwap's internal R2 probe attempts
-        // (el.src = R2_AUDIO/...). useHotSwap handles those with its own
-        // retry/backoff. Counting them toward the auto-skip burst was the
-        // bug: a flaky R2 lane would accumulate 5 probe errors in 15s and
-        // we'd advance the track BEFORE R2 ever had a chance to land —
-        // user wanted Track A, system jumps to Track B prematurely. While
-        // playbackSource === 'iframe', iframe is the user's audio truth;
-        // <audio> errors are background noise. Telemetry stays so we can
-        // still see the burst pattern.
+        // v936 — IFRAME GATE. While playbackSource === 'iframe', <audio>
+        // element errors come from useHotSwap's internal R2 probes (which
+        // the hook handles with its own retry). Don't count them toward the
+        // auto-skip burst — the user's audio is the iframe, not this element.
         if (playbackSource === 'iframe') {
           return;
+        }
+
+        // v938 — QUALITY FALLBACK LADDER. Before the circuit breaker
+        // advances the track, retry the same track at lower R2 quality:
+        // high → medium → low. Without this, a transient 5xx on the
+        // high-quality R2 file would skip the user past their track even
+        // though medium / low might be fine. Per-trackId state in
+        // qualityFallbackRef so each track gets its own ladder. Cleared
+        // on track-change so retries don't carry across.
+        if (playbackSource === 'r2' && trackId !== 'unknown') {
+          const current = qualityFallbackRef.current.get(trackId) ?? 'high';
+          const nextQuality: 'high' | 'medium' | 'low' | null =
+            current === 'high' ? 'medium'
+            : current === 'medium' ? 'low'
+            : null;
+          if (nextQuality && el) {
+            qualityFallbackRef.current.set(trackId, nextQuality);
+            const ytId = getYouTubeId(trackId);
+            const newSrc = `${R2_AUDIO}/${ytId}?q=${nextQuality}`;
+            logPlaybackEvent({
+              event_type: 'trace',
+              track_id: trackId,
+              meta: { subtype: 'r2_quality_fallback', from: current, to: nextQuality, burst_count: burstCount },
+            });
+            // Pop the burst entry we just pushed — quality fallback is
+            // internal recovery, not a real audio failure the user should
+            // be charged for.
+            errorBurst.pop();
+            try {
+              el.src = newSrc;
+              el.play().catch(() => { /* canplay or next error will retry */ });
+            } catch { /* fall through to circuit breaker */ }
+            return;
+          }
         }
 
         // BG mid-swap error: new track failed to load, user can't intervene.
@@ -1051,7 +1091,8 @@ export const AudioPlayer = () => {
 
         // Circuit breaker — five audio-element errors on the current track
         // in 15s → track is toast. Advance so the user doesn't sit on silence.
-        // Only gates here once R2 has taken over (playbackSource === 'r2').
+        // Only fires once R2 has taken over (playbackSource === 'r2') AND the
+        // quality ladder has been exhausted above.
         if (burstCount >= ERROR_BURST_LIMIT) {
           errorBurst = [];
           devWarn('[AudioPlayer] error-burst on current track — advancing');

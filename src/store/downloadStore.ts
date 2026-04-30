@@ -108,6 +108,25 @@ const downloadQueue: Array<{
 
 let isProcessing = false;
 
+// v938 — LRU cap on the downloads Map. Without this, every boost / cache
+// op adds an entry but nothing prunes; over a multi-hour session of 200+
+// tracks the Map grows unboundedly. 50 entries is enough headroom for any
+// reasonable session (recent prefetches + active downloads + a handful of
+// recently-completed tracks for OyeButton state lookup). On overflow we
+// drop the OLDEST non-`downloading` entry — Maps preserve insertion order
+// in JS, so iterate from the front until size is back under cap. Active
+// downloads are protected so an in-flight track can't get evicted.
+const MAX_DOWNLOADS_TRACKED = 50;
+function pruneDownloadsLRU(downloads: Map<string, DownloadProgress>): void {
+  if (downloads.size <= MAX_DOWNLOADS_TRACKED) return;
+  for (const [key, value] of downloads) {
+    if (downloads.size <= MAX_DOWNLOADS_TRACKED) break;
+    if (value.status !== 'downloading') {
+      downloads.delete(key);
+    }
+  }
+}
+
 /**
  * Decode VOYO ID to YouTube ID
  */
@@ -220,6 +239,7 @@ export const useDownloadStore = create<DownloadStore>((set, get) => ({
     if (currentQuality === 'boosted') {
       const newDownloads = new Map(get().downloads);
       newDownloads.set(normalizedId, { trackId: normalizedId, progress: 100, status: 'complete' });
+      pruneDownloadsLRU(newDownloads);
       set({ downloads: newDownloads });
       return;
     }
@@ -228,6 +248,7 @@ export const useDownloadStore = create<DownloadStore>((set, get) => ({
     // Update status to downloading
     const newDownloads = new Map(get().downloads);
     newDownloads.set(normalizedId, { trackId: normalizedId, progress: 0, status: 'downloading' });
+    pruneDownloadsLRU(newDownloads);
     set({ downloads: newDownloads });
 
     try {
@@ -260,6 +281,7 @@ export const useDownloadStore = create<DownloadStore>((set, get) => ({
             progress,
             status: 'downloading',
           });
+          pruneDownloadsLRU(currentDownloads);
           set({ downloads: currentDownloads });
         }
       );
@@ -323,6 +345,7 @@ export const useDownloadStore = create<DownloadStore>((set, get) => ({
         status: 'failed',
         error: error instanceof Error ? error.message : 'Download failed',
       });
+      pruneDownloadsLRU(failedDownloads);
       set({ downloads: failedDownloads });
     }
   },
@@ -403,6 +426,7 @@ export const useDownloadStore = create<DownloadStore>((set, get) => ({
     // Update state
     const newDownloads = new Map(downloads);
     newDownloads.set(trackId, { trackId, progress: 0, status: 'queued' });
+    pruneDownloadsLRU(newDownloads);
     set({ downloads: newDownloads });
 
     // Start processing
@@ -463,6 +487,7 @@ export const useDownloadStore = create<DownloadStore>((set, get) => ({
 
     const newDownloads = new Map(get().downloads);
     newDownloads.delete(normalizedId);
+    pruneDownloadsLRU(newDownloads);
     set({ downloads: newDownloads });
 
     await get().refreshCacheInfo();

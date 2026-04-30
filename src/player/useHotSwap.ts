@@ -24,6 +24,7 @@ import { logPlaybackEvent } from '../services/telemetry';
 import { devLog } from '../utils/logger';
 import { iframeBridge } from './iframeBridge';
 import { r2HasTrack, R2_AUDIO_BASE as R2_AUDIO } from './r2Probe';
+import { markR2Known } from '../store/r2KnownStore';
 import { getYouTubeId } from '../utils/voyoId';
 import type { Track } from '../types';
 
@@ -250,6 +251,12 @@ async function performHotSwap(
     // change, so it didn't self-heal.
     el.volume = 1.0;
     usePlayerStore.getState().setPlaybackSource('r2');
+    // v938 — mark R2-known on hot-swap success. r2KnownStore comment claims
+    // hotswap success populates the store, but the actual code only relied on
+    // r2Probe + r2Gate. After a successful swap we know the track is live in
+    // R2; informing the store here lets future re-renders / OyeButton state
+    // / next-track fast-path see it without paying another HEAD probe.
+    markR2Known(getYouTubeId(trackId));
 
     logPlaybackEvent({
       event_type: 'trace', track_id: trackId,
