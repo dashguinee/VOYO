@@ -336,9 +336,11 @@ export function getSession(): DJSessionState | null {
   return _session;
 }
 
-/** Reset (e.g. user navigates away, new app session). */
+/** Reset (e.g. user navigates away, foreground-resume after stale background). */
 export function resetDJ(): void {
   _session = null;
+  _lastTrendAt = 0;
+  _trendTrackIds = [];
 }
 
 // ── Conductor fetch ───────────────────────────────────────────────────────
@@ -444,6 +446,7 @@ let _trendTrackIds: string[] = [];
 export async function maybeFetchTrends(userState: UserState): Promise<string[]> {
   if (!TREND_ENDPOINT) return [];
   if (Date.now() - _lastTrendAt < TREND_INTERVAL_MS) return _trendTrackIds;
+  if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return _trendTrackIds;
   try {
     const res = await fetch(TREND_ENDPOINT, {
       method: 'POST',

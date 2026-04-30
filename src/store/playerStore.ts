@@ -42,7 +42,8 @@ async function getDatabaseDiscovery() {
 import { isKnownUnplayable } from '../services/trackVerifier';
 import { isBlocked as isBlocklisted } from '../services/trackBlocklist';
 import { getInsights as getOyoInsights } from '../services/oyoDJ';
-import { oyo, drainConductorQueue, getSession as getDJSession } from '../services/oyo';
+import { oyo, drainConductorQueue, peekConductorQueue, getSession as getDJSession } from '../services/oyo';
+import { getArc } from '../services/oyo/arc';
 import { devLog, devWarn } from '../utils/logger';
 import { trace } from '../services/telemetry';
 
@@ -1307,6 +1308,15 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     if (currentTrackId) recentHistoryIds.add(currentTrackId);
     if (state.currentTrack?.trackId) recentHistoryIds.add(state.currentTrack.trackId);
 
+    // Peek conductor queue first (Gap 1 fix) — mirrors what nextTrack will pick
+    // so preload caches the right track. Peek does NOT drain.
+    if (!state.shuffleMode) {
+      const conductorPeek = peekConductorQueue(recentHistoryIds);
+      if (conductorPeek && conductorPeek.id !== currentTrackId && conductorPeek.trackId !== currentTrackId) {
+        return conductorPeek;
+      }
+    }
+
     // Get available tracks (same priority as nextTrack — see getCandidatePool).
     const allAvailable = getCandidatePool(state);
 
@@ -1704,6 +1714,28 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
             ...trendingTier,
             ...mergedHot.filter(t => !freshIds.has(t.id)),
           ].slice(0, MAX_HOT_POOL);
+
+          // ── ARC-PHASE BIAS (Gap 3 fix) ─────────────────────────────────
+          // If the conductor has an active arc session, nudge finalHot and
+          // mergedDiscover to prefer tracks matching the current phase's
+          // cultural focus. This aligns the fallback pool with what
+          // conductorFetch would pick when the conductor queue is empty —
+          // so even raw hot/discover picks stay culturally coherent.
+          const djSession = getDJSession();
+          if (djSession) {
+            const arc = getArc(djSession.arc);
+            const phaseConfig = arc.phases[djSession.currentPhase as keyof typeof arc.phases];
+            if (phaseConfig?.culturalFocus?.length) {
+              const phaseTags = new Set(phaseConfig.culturalFocus);
+              const arcBias = (a: Track, b: Track) => {
+                const aM = (a.tags || []).some(t => phaseTags.has(t)) ? 1 : 0;
+                const bM = (b.tags || []).some(t => phaseTags.has(t)) ? 1 : 0;
+                return bM - aM;
+              };
+              finalHot.sort(arcBias);
+              mergedDiscover.sort(arcBias);
+            }
+          }
 
           // Gate pool: only R2-cached tracks enter. Filters out trending/
           // hot tracks that haven't been extracted yet. Also hydrates

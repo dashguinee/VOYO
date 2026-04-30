@@ -98,22 +98,58 @@ function recordRemoteSignal(trackId: string, action: SignalAction): void {
   }
 }
 
-// Flush on page-hide / unload so nothing queued gets lost when the user
-// closes the tab or backgrounds the PWA. Guard against double-registration
-// (Vite HMR re-evaluates this module, which would otherwise stack listeners).
-if (typeof window !== 'undefined' && !(window as unknown as { __voyoSignalFlushBound?: boolean }).__voyoSignalFlushBound) {
-  (window as unknown as { __voyoSignalFlushBound?: boolean }).__voyoSignalFlushBound = true;
-  const onExit = () => { void flushSignals(); };
-  window.addEventListener('pagehide', onExit);
+// ── Background / foreground lifecycle ────────────────────────────────────
+//
+// On hide  : flush pending signals so nothing is lost when the tab closes.
+// On show  : if backgrounded > ARC_STALE_MS, the time-of-day arc has likely
+//            changed (e.g. afternoon→evening). Reset the DJ session so the
+//            next track uses the correct arc, and purge the stale conductor
+//            queue (tracks were pre-selected for the OLD arc).
+// Refill   : skip conductor refill while the page is hidden — no point
+//            fetching when nobody is listening, and mobile browsers throttle
+//            network requests in background tabs anyway.
+
+const ARC_STALE_MS = 20 * 60 * 1000; // 20 min
+
+type BgWindow = { __voyoSignalFlushBound?: boolean };
+let _backgroundedAt: number | null = null;
+
+if (typeof window !== 'undefined' && !(window as unknown as BgWindow).__voyoSignalFlushBound) {
+  (window as unknown as BgWindow).__voyoSignalFlushBound = true;
+
+  window.addEventListener('pagehide', () => { void flushSignals(); });
+
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'hidden') onExit();
+    if (document.visibilityState === 'hidden') {
+      _backgroundedAt = Date.now();
+      void flushSignals();
+    } else {
+      // Foreground resume
+      const bgDuration = _backgroundedAt ? Date.now() - _backgroundedAt : 0;
+      _backgroundedAt = null;
+
+      if (bgDuration > ARC_STALE_MS) {
+        // Arc is stale — new time of day, reset conductor so the next track
+        // picks up a fresh arc (getNextMove() calls initDJ on null session).
+        resetDJ();
+        _conductorQueue = [];
+        // Reset action window too so engagement re-reads cleanly
+        _recentActions.length = 0;
+      }
+    }
   });
+}
+
+/** True when the page is currently backgrounded. Used to skip refill. */
+function _isHidden(): boolean {
+  return typeof document !== 'undefined' && document.visibilityState === 'hidden';
 }
 
 // ── DJ UserState tracker (rolling window of last 5 interactions) ─────────
 
-import { updateEngagement, getNextMove, conductorFetch } from './dj';
+import { updateEngagement, getNextMove, conductorFetch, resetDJ } from './dj';
 import type { UserState } from './dj';
+import { getVibeEssence, type VibeEssence } from '../essenceEngine';
 
 const WINDOW = 5; // last N interactions
 const _recentActions: Array<'skip' | 'complete' | 'react'> = [];
@@ -257,19 +293,47 @@ export async function prefetch(_tracks: Track[], _priority: number = 5): Promise
 // nextTrack() in playerStore is synchronous. conductorFetch() is async.
 // Bridge: maintain a small pre-fetched queue of conductor-selected tracks.
 // nextTrack drains it synchronously; when it runs low we refill in the bg.
-// drainConductorQueue() filters out stale entries (now excluded) on the fly.
+// drainConductorQueue() and peekConductorQueue() filter stale entries live.
+//
+// MixBoard bias: on every refill we read getVibeEssence() and nudge the
+// move's energyTarget toward the user's explicit MixBoard intent. The arc
+// provides cultural intelligence; MixBoard provides explicit mood intent.
+// 50/50 blend keeps both respected.
+//
+// Visibility guard: skip refill entirely when the page is hidden — browser
+// throttles network in background tabs and nobody is listening anyway.
 
 let _conductorQueue: Track[] = [];
 let _conductorRefilling = false;
 
+function _blendMixBoardEnergy(move: ReturnType<typeof getNextMove>, essence: VibeEssence): void {
+  // Compute a weighted "intent energy" (1–5) from MixBoard vibe weights.
+  // Weights are 0–1 proportions; normalize before weighting.
+  const total = essence.afro_heat + essence.chill + essence.party + essence.workout + essence.late_night;
+  if (total <= 0) return;
+  const n = 1 / total;
+  const intentEnergy = Math.round(
+    (essence.afro_heat * 5 + essence.chill * 1.5 + essence.party * 5 + essence.workout * 4 + essence.late_night * 2.5) * n,
+  );
+  // 50/50 blend: arc phase sets the cultural narrative, MixBoard steers energy.
+  const blended = Math.round((move.energyTarget + intentEnergy) / 2);
+  move.energyTarget = Math.min(move.energyRange[1], Math.max(move.energyRange[0], blended));
+}
+
 async function _refillConductorQueue(excludeIds: Set<string>): Promise<void> {
-  if (_conductorRefilling) return;
+  if (_conductorRefilling || _isHidden()) return;
   _conductorRefilling = true;
   try {
     const userState = _buildUserState();
     const move = getNextMove(userState);
+
+    // Blend MixBoard intent into the energy axis (Gap 2 fix)
+    try {
+      const essence = getVibeEssence();
+      _blendMixBoardEnergy(move, essence);
+    } catch { /* non-fatal — arc defaults hold */ }
+
     const candidates = await conductorFetch(move, excludeIds, 8);
-    // Append fresh entries, dedup by trackId
     const existing = new Set(_conductorQueue.map(t => t.trackId || t.id));
     for (const t of candidates) {
       if (!existing.has(t.trackId || t.id)) _conductorQueue.push(t);
@@ -279,19 +343,30 @@ async function _refillConductorQueue(excludeIds: Set<string>): Promise<void> {
   }
 }
 
+function _filterQueue(excludeIds: Set<string>): void {
+  _conductorQueue = _conductorQueue.filter(
+    t => !excludeIds.has(t.trackId) && !excludeIds.has(t.id),
+  );
+}
+
 /**
- * Pull the next conductor-selected track. Returns null if the queue is empty
- * (fall through to existing hot/discover pool pick).
+ * Pull the next conductor-selected track. Returns null if empty.
  * Triggers a background refill when the queue drops below 3.
  */
 export function drainConductorQueue(excludeIds: Set<string>): Track | null {
-  // Purge now-excluded entries
-  _conductorQueue = _conductorQueue.filter(t => !excludeIds.has(t.trackId) && !excludeIds.has(t.id));
+  _filterQueue(excludeIds);
   const next = _conductorQueue.shift() ?? null;
-  if (_conductorQueue.length < 3) {
-    void _refillConductorQueue(excludeIds);
-  }
+  if (_conductorQueue.length < 3) void _refillConductorQueue(excludeIds);
   return next;
+}
+
+/**
+ * Peek at the next conductor track WITHOUT removing it from the queue.
+ * Used by predictNextTrack() so preloading matches what nextTrack() will pick.
+ */
+export function peekConductorQueue(excludeIds: Set<string>): Track | null {
+  _filterQueue(excludeIds);
+  return _conductorQueue[0] ?? null;
 }
 
 // ── Namespaced default export ─────────────────────────────────────────────
@@ -320,6 +395,7 @@ export const oyo = {
     getNextMove,
     conductorFetch,
     drainConductorQueue,
+    peekConductorQueue,
     getSession,
     resetDJ,
   },
