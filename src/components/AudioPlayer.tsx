@@ -959,7 +959,8 @@ export const AudioPlayer = () => {
         errorBurst.push(now);
         const burstCount = errorBurst.length;
         const trackId = usePlayerStore.getState().currentTrack?.trackId ?? 'unknown';
-        devWarn('[AudioPlayer] stream error', { code, msg, burst: burstCount, wasSwapping });
+        const playbackSource = usePlayerStore.getState().playbackSource;
+        devWarn('[AudioPlayer] stream error', { code, msg, burst: burstCount, wasSwapping, src: playbackSource });
         logPlaybackEvent({
           event_type: 'stream_error',
           track_id: trackId,
@@ -970,8 +971,24 @@ export const AudioPlayer = () => {
             network_state: el?.networkState,
             burst_count: burstCount,
             was_swapping: wasSwapping,
+            playback_source: playbackSource,
           },
         });
+
+        // v936 — IFRAME GATE. When the canonical audio source is the iframe
+        // (R2 hasn't taken over yet via hot-swap), errors on this <audio>
+        // element are coming from useHotSwap's internal R2 probe attempts
+        // (el.src = R2_AUDIO/...). useHotSwap handles those with its own
+        // retry/backoff. Counting them toward the auto-skip burst was the
+        // bug: a flaky R2 lane would accumulate 5 probe errors in 15s and
+        // we'd advance the track BEFORE R2 ever had a chance to land —
+        // user wanted Track A, system jumps to Track B prematurely. While
+        // playbackSource === 'iframe', iframe is the user's audio truth;
+        // <audio> errors are background noise. Telemetry stays so we can
+        // still see the burst pattern.
+        if (playbackSource === 'iframe') {
+          return;
+        }
 
         // BG mid-swap error: new track failed to load, user can't intervene.
         // Skip immediately — no burst threshold needed.
@@ -982,8 +999,9 @@ export const AudioPlayer = () => {
           return;
         }
 
-        // Circuit breaker — three audio-element errors on the current track
-        // in 10s → track is toast. Advance so the user doesn't sit on silence.
+        // Circuit breaker — five audio-element errors on the current track
+        // in 15s → track is toast. Advance so the user doesn't sit on silence.
+        // Only gates here once R2 has taken over (playbackSource === 'r2').
         if (burstCount >= ERROR_BURST_LIMIT) {
           errorBurst = [];
           devWarn('[AudioPlayer] error-burst on current track — advancing');
