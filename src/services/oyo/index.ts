@@ -27,6 +27,11 @@ import { gateToR2 } from '../r2Gate';
 import * as pools from './pools';
 export { usePools } from './usePools';
 export { app, type PlaySource } from './app';
+export {
+  getNextMove, conductorFetch, initDJ, updateEngagement, getSession, resetDJ,
+  maybeFetchTrends,
+  type DJMove, type DJMoveType, type Engagement, type UserState, type DJSessionState,
+} from './dj';
 
 // Supabase record_signal RPC cooldown — if it returns 401 or 42501 (RLS
 // denied), we stop retrying to avoid flooding console with errors.
@@ -105,6 +110,51 @@ if (typeof window !== 'undefined' && !(window as unknown as { __voyoSignalFlushB
   });
 }
 
+// ── DJ UserState tracker (rolling window of last 5 interactions) ─────────
+
+import { updateEngagement, getNextMove, conductorFetch } from './dj';
+import type { UserState } from './dj';
+
+const WINDOW = 5; // last N interactions
+const _recentActions: Array<'skip' | 'complete' | 'react'> = [];
+const _favoriteArtists: Map<string, number> = new Map(); // artist → OYÉ count
+const _recentGenres: string[] = [];
+const _recentCulturalTags: string[] = [];
+
+function _pushAction(action: 'skip' | 'complete' | 'react'): void {
+  _recentActions.push(action);
+  if (_recentActions.length > WINDOW) _recentActions.shift();
+}
+
+function _pushTrackContext(track: Track): void {
+  if (track.tags?.length) {
+    _recentCulturalTags.push(...track.tags.slice(0, 2));
+    if (_recentCulturalTags.length > 12) _recentCulturalTags.splice(0, _recentCulturalTags.length - 12);
+  }
+}
+
+function _buildUserState(): UserState {
+  const recentSkips = _recentActions.filter(a => a === 'skip').length;
+  const recentCompletes = _recentActions.filter(a => a === 'complete').length;
+  const recentReactions = _recentActions.filter(a => a === 'react').length;
+  return {
+    recentSkips,
+    recentCompletes,
+    recentReactions,
+    favoriteArtists: [..._favoriteArtists.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([a]) => a),
+    recentGenres: [...new Set(_recentGenres)].slice(0, 5),
+    recentCulturalTags: [...new Set(_recentCulturalTags)].slice(0, 6),
+  };
+}
+
+/** Current DJ UserState — use to call getNextMove(). */
+export function getDJUserState(): UserState {
+  return _buildUserState();
+}
+
 // ── Signals in ────────────────────────────────────────────────────────────
 
 /**
@@ -112,6 +162,7 @@ if (typeof window !== 'undefined' && !(window as unknown as { __voyoSignalFlushB
  * taste-tracking modules so OYO's future suggestions are informed.
  */
 export function onPlay(track: Track): void {
+  _pushTrackContext(track);
   oyoDJOnTrackPlay(track);
   djRecordPlay(track);
   recordTrackInSession(track);
@@ -131,6 +182,8 @@ export function onPlay(track: Track): void {
  *   • video_intelligence.record_signal RPC — global recommender learning
  */
 export function onSkip(track: Track, positionSec: number = 0): void {
+  _pushAction('skip');
+  updateEngagement(_buildUserState());
   djRecordPlay(track, false, true);
   oyoPlanSignal('skip', track.trackId);
   oyoDJOnTrackSkip(track, positionSec);
@@ -148,6 +201,8 @@ export function onSkip(track: Track, positionSec: number = 0): void {
  *   • video_intelligence.record_signal RPC
  */
 export function onComplete(track: Track, completionRate: number = 100): void {
+  _pushAction('complete');
+  updateEngagement(_buildUserState());
   djRecordPlay(track, false, false);
   oyoPlanSignal('completion', track.trackId);
   recordPoolEngagement(track.trackId, 'complete', { completionRate });
@@ -158,6 +213,9 @@ export function onComplete(track: Track, completionRate: number = 100): void {
  * User explicitly OYÉ'd (hearted). Strongest possible positive.
  */
 export function onOye(track: Track): void {
+  _pushAction('react');
+  _favoriteArtists.set(track.artist, (_favoriteArtists.get(track.artist) || 0) + 1);
+  updateEngagement(_buildUserState());
   djRecordPlay(track, true, false);
   oyoPlanSignal('reaction', track.trackId);
   recordPoolEngagement(track.trackId, 'react');
@@ -194,6 +252,48 @@ export async function prefetch(_tracks: Track[], _priority: number = 5): Promise
   return;
 }
 
+// ── Conductor pre-queue ───────────────────────────────────────────────────
+//
+// nextTrack() in playerStore is synchronous. conductorFetch() is async.
+// Bridge: maintain a small pre-fetched queue of conductor-selected tracks.
+// nextTrack drains it synchronously; when it runs low we refill in the bg.
+// drainConductorQueue() filters out stale entries (now excluded) on the fly.
+
+let _conductorQueue: Track[] = [];
+let _conductorRefilling = false;
+
+async function _refillConductorQueue(excludeIds: Set<string>): Promise<void> {
+  if (_conductorRefilling) return;
+  _conductorRefilling = true;
+  try {
+    const userState = _buildUserState();
+    const move = getNextMove(userState);
+    const candidates = await conductorFetch(move, excludeIds, 8);
+    // Append fresh entries, dedup by trackId
+    const existing = new Set(_conductorQueue.map(t => t.trackId || t.id));
+    for (const t of candidates) {
+      if (!existing.has(t.trackId || t.id)) _conductorQueue.push(t);
+    }
+  } finally {
+    _conductorRefilling = false;
+  }
+}
+
+/**
+ * Pull the next conductor-selected track. Returns null if the queue is empty
+ * (fall through to existing hot/discover pool pick).
+ * Triggers a background refill when the queue drops below 3.
+ */
+export function drainConductorQueue(excludeIds: Set<string>): Track | null {
+  // Purge now-excluded entries
+  _conductorQueue = _conductorQueue.filter(t => !excludeIds.has(t.trackId) && !excludeIds.has(t.id));
+  const next = _conductorQueue.shift() ?? null;
+  if (_conductorQueue.length < 3) {
+    void _refillConductorQueue(excludeIds);
+  }
+  return next;
+}
+
 // ── Namespaced default export ─────────────────────────────────────────────
 
 export const oyo = {
@@ -213,6 +313,15 @@ export const oyo = {
     excludeIds:        pools.excludeIds,
     newest:            pools.newest,
     topN:              pools.topN,
+  },
+  // DJ conductor
+  dj: {
+    getUserState:    getDJUserState,
+    getNextMove,
+    conductorFetch,
+    drainConductorQueue,
+    getSession,
+    resetDJ,
   },
   prefetch,
 };

@@ -41,6 +41,25 @@ export interface DiscoveryTrack {
   heat_score?: number;
 }
 
+// Full-fidelity pool entry — all vibe columns preserved for conductor filtering.
+// The conductor reads these directly to apply W (energy) and V (vibe) filters
+// before converting winners to Track objects via toTrack().
+export interface RawPoolEntry {
+  youtube_id: string;
+  title: string;
+  artist: string | null;
+  thumbnail_url: string | null;
+  artist_tier: string | null;
+  primary_genre: string | null;
+  cultural_tags: string[] | null;
+  heat_score: number | null;
+  vibe_afro_heat: number | null;
+  vibe_chill_vibes: number | null;
+  vibe_party_mode: number | null;
+  vibe_late_night: number | null;
+  vibe_workout: number | null;
+}
+
 // ============================================
 // CONTENT FILTER (Block non-music)
 // ============================================
@@ -532,5 +551,38 @@ function getFallbackTracks(type: 'hot' | 'discovery', limit: number): Track[] {
   const source = pool.length >= limit ? pool : [...pool, ...TRACKS];
   const shuffled = [...source].sort(() => Math.random() - 0.5);
   return shuffled.slice(0, limit);
+}
+
+// ============================================
+// CONDUCTOR POOL ACCESS
+// ============================================
+
+/**
+ * Returns the in-memory cached pool with full vibe-column fidelity.
+ * The DJ conductor uses this to apply W (energy) and V (cultural) filters
+ * before picking tracks — no extra DB round-trips needed.
+ *
+ * Callers should warm the pool first via getHotTracks() if needed;
+ * this just exposes what's already cached.
+ */
+export function getRawCachedPool(): RawPoolEntry[] {
+  if (!_cachedPoolCache) return [];
+  return _cachedPoolCache.rows as unknown as RawPoolEntry[];
+}
+
+/** Convert a RawPoolEntry to Track for playback. */
+export function rawEntryToTrack(entry: RawPoolEntry): Track {
+  const thumbnail = entry.thumbnail_url || `https://i.ytimg.com/vi/${entry.youtube_id}/hqdefault.jpg`;
+  return {
+    id: entry.youtube_id,
+    trackId: entry.youtube_id,
+    title: entry.title || 'Unknown',
+    artist: entry.artist || 'Unknown Artist',
+    coverUrl: thumbnail,
+    duration: 0,
+    tags: entry.cultural_tags || [],
+    oyeScore: Math.round((entry.heat_score || 0) * 10),
+    createdAt: new Date().toISOString(),
+  };
 }
 

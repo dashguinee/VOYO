@@ -42,7 +42,7 @@ async function getDatabaseDiscovery() {
 import { isKnownUnplayable } from '../services/trackVerifier';
 import { isBlocked as isBlocklisted } from '../services/trackBlocklist';
 import { getInsights as getOyoInsights } from '../services/oyoDJ';
-import { oyo } from '../services/oyo';
+import { oyo, drainConductorQueue, getSession as getDJSession } from '../services/oyo';
 import { devLog, devWarn } from '../utils/logger';
 import { trace } from '../services/telemetry';
 
@@ -1057,6 +1057,46 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
         const tid = t.id || t.trackId;
         return tid !== currentTrackId;
       }).sort(() => Math.random() - 0.5);
+    }
+
+    // ── Conductor pick (U×V×W) — try before falling through to pool ─────────
+    // drainConductorQueue() returns a pre-fetched, culturally-filtered track
+    // from the DJ conductor. It's synchronous (drain from pre-fetch cache).
+    // If conductor queue is empty or all entries are excluded, we fall through
+    // to the existing availableTracks selection unchanged — fully additive.
+    if (!state.shuffleMode) {
+      const conductorTrack = drainConductorQueue(recentHistoryIds);
+      if (conductorTrack && conductorTrack.id !== currentTrackId && conductorTrack.trackId !== currentTrackId) {
+        if (state.currentTrack) {
+          get().addToHistory(state.currentTrack, state.currentTime);
+        }
+        recordPoolEngagement(conductorTrack.id || conductorTrack.trackId, 'play');
+        trace('nt_conductor_pick', conductorTrack.trackId || conductorTrack.id, {
+          title: conductorTrack.title?.slice(0, 40),
+          phase: getDJSession()?.currentPhase,
+          arc: getDJSession()?.arc,
+        });
+        set({
+          currentTrack: conductorTrack,
+          isPlaying: true,
+          progress: 0,
+          currentTime: 0,
+          seekPosition: null,
+          playbackRate: 1,
+          isSkeeping: false,
+        });
+        if (_pendingSignal) queueMicrotask(_pendingSignal);
+        const _cur = loadPersistedState();
+        savePersistedState({
+          ..._cur,
+          currentTrackId: conductorTrack.id || conductorTrack.trackId,
+          currentTrackTitle: conductorTrack.title,
+          currentTrackArtist: conductorTrack.artist,
+          currentTrackCoverUrl: conductorTrack.coverUrl || getThumb(conductorTrack.trackId || conductorTrack.id),
+          currentTime: 0,
+        });
+        return;
+      }
     }
 
     trace('nt_discover_enter', currentTrackId || null, {
