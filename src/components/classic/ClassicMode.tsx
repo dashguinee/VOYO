@@ -9,7 +9,7 @@
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Home, Radio, Library as LibraryIcon, Users, MessageCircle, Plus, Shuffle, Repeat, Repeat1 } from 'lucide-react';
+import { Home, Library as LibraryIcon, Users, MessageCircle, Plus, Shuffle, Repeat, Repeat1, PictureInPicture2 } from 'lucide-react';
 import { HomeFeed } from './HomeFeed';
 import { Library } from './Library';
 import { Dahub } from '../dahub/Dahub';
@@ -18,6 +18,7 @@ import { APP_CODES } from '../../lib/dahub/dahub-api';
 import { NowPlaying } from './NowPlaying';
 import { usePlayerStore } from '../../store/playerStore';
 import { app } from '../../services/oyo';
+import { pipService } from '../../services/pipService';
 import { getYouTubeThumbnail } from '../../data/tracks';
 import { SmartImage } from '../ui/SmartImage';
 import { Track } from '../../types';
@@ -36,9 +37,12 @@ interface ClassicModeProps {
 }
 
 // Mini Player (shown at bottom when a track is playing)
-// Single tap = floating bubble controls, Double tap = full player, Swipe = next/prev
-// VOYO = Music Experience App, not just a player!
-const MiniPlayer = ({ onVOYOClick, onOpenFull }: { onVOYOClick: () => void; onOpenFull: () => void }) => {
+// Single tap = floating bubble controls + reveal seek bar (purple 15s),
+// Double tap = full player, Swipe = next/prev.
+// At rest the seek bar sits in warm bronze so it blends with the v925
+// ambient glow under the chrome — it only "wakes up" purple when the user
+// engages, then fades back. Calm default, intentional reveal.
+const MiniPlayer = ({ onOpenFull }: { onOpenFull: () => void }) => {
   // Battery fix: fine-grained selectors — progress updates every second
   const currentTrack = usePlayerStore(s => s.currentTrack);
   const isPlaying = usePlayerStore(s => s.isPlaying);
@@ -55,13 +59,33 @@ const MiniPlayer = ({ onVOYOClick, onOpenFull }: { onVOYOClick: () => void; onOp
   const [swipeDirection, setSwipeDirection] = useState<'left' | 'right' | null>(null);
   const [showBubbles, setShowBubbles] = useState(false);
   const [showPlaylistModal, setShowPlaylistModal] = useState(false);
+  // v926 — seek bar is bronze at rest, purple for 15s after a tap, then
+  // fades back. The reveal piggybacks on every tap (single OR first tap of
+  // a double) — if it ends up being a double, MiniPlayer hides anyway when
+  // NowPlaying opens, so the timer is moot.
+  const [barRevealed, setBarRevealed] = useState(false);
+  const barRevealTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const titleRef = useRef<HTMLParagraphElement>(null);
   const lastTapRef = useRef<number>(0);
+
+  const revealBar = useCallback(() => {
+    setBarRevealed(true);
+    if (barRevealTimerRef.current) clearTimeout(barRevealTimerRef.current);
+    barRevealTimerRef.current = setTimeout(() => setBarRevealed(false), 15000);
+  }, []);
+  useEffect(() => () => {
+    if (barRevealTimerRef.current) clearTimeout(barRevealTimerRef.current);
+  }, []);
 
   // Double-tap detection for opening full player
   const handleTap = useCallback(() => {
     const now = Date.now();
     const DOUBLE_TAP_DELAY = 300; // ms
+
+    // Always reveal the bar — single or first-of-double, the user touched
+    // the chrome and wants feedback. If they end up double-tapping, the
+    // MiniPlayer unmounts when NowPlaying opens.
+    revealBar();
 
     if (now - lastTapRef.current < DOUBLE_TAP_DELAY) {
       // Double tap → open full player
@@ -76,7 +100,7 @@ const MiniPlayer = ({ onVOYOClick, onOpenFull }: { onVOYOClick: () => void; onOp
         }
       }, DOUBLE_TAP_DELAY);
     }
-  }, [onOpenFull]);
+  }, [onOpenFull, revealBar]);
 
   // Check if title needs scrolling (longer than container)
   useEffect(() => {
@@ -182,16 +206,21 @@ const MiniPlayer = ({ onVOYOClick, onOpenFull }: { onVOYOClick: () => void; onOp
               )}
             </button>
 
-            {/* VOYO Player Bubble - Video Experience - disappears first so user notices */}
+            {/* Takeout Bubble — arms PiP so the track follows the user out as
+                a floating cube. Replaced the old VOYO redirect (the bottom-nav
+                orb already does that — was a duplicate). pipService.enter()
+                needs a user gesture for first-PiP-of-session; this onClick IS
+                that gesture. Signal-free (no oye commit, no queue add) — that's
+                the OYÉ button's job. */}
             <button
               className="w-12 h-12 rounded-full backdrop-blur-xl flex items-center justify-center shadow-lg bg-gradient-to-br from-purple-500/80 to-violet-600/80 border-2 border-purple-400 active:scale-95 transition-transform"
-              aria-label="Open VOYO player"
+              aria-label="Take Out — keep playing in floating cube"
               onClick={(e) => {
                 e.stopPropagation();
-                onVOYOClick();
+                void pipService.enter().catch(() => { /* MediaSession is the fallback */ });
               }}
             >
-              <Radio className="w-5 h-5 text-white" />
+              <PictureInPicture2 className="w-5 h-5 text-white" />
             </button>
           </div>
         )}
@@ -209,18 +238,35 @@ const MiniPlayer = ({ onVOYOClick, onOpenFull }: { onVOYOClick: () => void; onOp
         onPointerUp={handleSwipeUp}
         onPointerCancel={() => { swipeStartRef.current = null; }}
       >
-        {/* Wave Progress Bar - VOYO gradient style */}
+        {/* Wave Progress Bar — at rest sits in warm bronze so it blends with
+            the v925 ambient glow and reads as part of the room. On tap (via
+            handleTap → revealBar) flips to bold purple for 15s so the user
+            can see exact progress, then 800ms ease back to bronze. The
+            color crossfade is the whole "intentional" signal. */}
         <div className="absolute bottom-0 left-0 right-0 h-[3px] bg-white/10 overflow-hidden rounded-full">
           <div
             className="h-full relative"
             style={{ width: `${progress}%` }}
           >
-            {/* Purple progress fill */}
-            <div className="absolute inset-0" style={{ background: '#8b5cf6' }} />
-            {/* Glowing edge effect */}
+            {/* Progress fill — color cross-fades between bronze (rest) and
+                purple (revealed). 800ms ease-out so the bar settles back
+                into the ambience without snapping. */}
+            <div
+              className="absolute inset-0"
+              style={{
+                background: barRevealed ? '#8b5cf6' : 'rgba(212,160,83,0.55)',
+                transition: 'background 800ms ease-out',
+              }}
+            />
+            {/* Glowing edge — same crossfade so the right-edge halo matches. */}
             <div
               className="absolute right-0 top-0 bottom-0 w-4"
-              style={{ background: 'linear-gradient(to left, rgba(139,92,246,0.6), transparent)' }}
+              style={{
+                background: barRevealed
+                  ? 'linear-gradient(to left, rgba(139,92,246,0.6), transparent)'
+                  : 'linear-gradient(to left, rgba(212,160,83,0.45), transparent)',
+                transition: 'background 800ms ease-out',
+              }}
             />
           </div>
         </div>
@@ -574,9 +620,9 @@ export const ClassicMode = ({ onSwitchToVOYO, onSearch }: ClassicModeProps) => {
       
 
       {/* Mini Player - Double tap to open full player */}
-      
+
         {currentTrack && !showNowPlaying && (
-          <MiniPlayer onVOYOClick={onSwitchToVOYO} onOpenFull={() => setShowNowPlaying(true)} />
+          <MiniPlayer onOpenFull={() => setShowNowPlaying(true)} />
         )}
       
 
