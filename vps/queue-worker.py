@@ -53,7 +53,10 @@ TELEMETRY_EVERY        = 60    # seconds between worker_tick emissions
 COOKIE_TTL_SEC         = 3600  # re-dump cookies at most once per hour
 
 # Baseline concurrency (adaptive throttle may deviate within bounds below)
-INITIAL_BATCH_SIZE     = 3
+# Start at 2 — VPS is fresh after downtime; YouTube needs a warm-up period
+# before trusting bursts of 3. Adaptive throttle will scale up to 3 once
+# the error rate settles at 0 for 2 minutes.
+INITIAL_BATCH_SIZE     = 2
 # Cooldown is now post-BATCH (not per-track) because the batch runs in
 # parallel. 3-6s between batches is adequate politeness; the adaptive layer
 # can tighten/loosen from here.
@@ -623,7 +626,17 @@ def main():
         # Post-batch: apply rate-limit backoff or normal politeness cooldown.
         if rate_limited_seen:
             log(f'rate-limited — backing off {RATE_LIMIT_BACKOFF_SEC}s')
-            time.sleep(RATE_LIMIT_BACKOFF_SEC)
+            # Sleep in 60s slices so telemetry ticks can still fire and
+            # _running is checked regularly (clean shutdown during backoff).
+            deadline = time.time() + RATE_LIMIT_BACKOFF_SEC
+            while _running and time.time() < deadline:
+                now2 = time.time()
+                if now2 - last_tel > TELEMETRY_EVERY:
+                    queue_depth = get_queue_depth()
+                    throttle.adjust(stats, queue_depth)
+                    emit_worker_tick(stats, throttle, queue_depth)
+                    last_tel = now2
+                time.sleep(min(60, deadline - time.time()))
         elif _running:
             # Randomise so concurrent lanes don't sync up on the next claim.
             time.sleep(random.uniform(throttle.cooldown_min, throttle.cooldown_max))
