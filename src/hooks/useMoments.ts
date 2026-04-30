@@ -57,34 +57,27 @@ let _momentsBlocked = false;
 //   'friends'   : creators you've starred + session-engaged.
 //                 Social graph view, empties shows the follow hint.
 //
-// v909 — Travel filtering. Diagnostic on the live catalog showed
-// voyo_moments.creator_username is Instagram-handle-shaped
-// (`burnaboygram`, `officialwizkid` etc) so the v903 strict
-// .in(creator_username, [canonical names]) approach hit ~zero rows
-// and Travel always fell through to broad-rescue ("fallback feel").
-// Switched to fuzzy: per country, take the first-token of each
-// canonical artist name as a 3+ char fragment (e.g. "Burna Boy" →
-// "burna") and match creator_username with case-insensitive ilike
-// wildcards. Now `burnaboygram`, `_burna_boy_`, `realburna` all
-// resolve to Nigeria.
-import { getAllVerifiedArtists } from '../knowledge/artistTiers';
-
-const COUNTRY_CREATOR_FRAGMENTS: Record<string, string[]> = (() => {
-  const map: Record<string, string[]> = {};
-  for (const a of getAllVerifiedArtists()) {
-    const country = a.country.toLowerCase();
-    // First token of the canonical name. Strip non-alnum and lowercase.
-    // Skip fragments < 3 chars (false positives explode at 1-2 chars).
-    const fragment = a.name.toLowerCase().replace(/[^a-z0-9 ]/g, '').split(' ')[0];
-    if (fragment.length < 3) continue;
-    if (!map[country]) map[country] = [];
-    map[country].push(fragment);
-  }
-  for (const k of Object.keys(map)) {
-    map[k] = Array.from(new Set(map[k]));
-  }
-  return map;
-})();
+// v911 — Travel filtering rewritten on the REAL catalog signal.
+// Diagnostic 2026-04-30: voyo_moments has a populated cultural_tags
+// column (string[]) with country/region tokens. Sample volumes:
+//   nigeria 2170, west-africa 2027, diaspora 1774, usa 1473,
+//   angola 964, lusophone-africa 927, uk 253, africa 188,
+//   ghana 62, senegal 46, kenya 54, tanzania 26, mali 4, guinea 5
+// The v903/v909 creator-name approach was off — none of artistTiers'
+// canonical names are in the moments catalog (creators are
+// Instagram-handle-shaped: ichievoodoo, only1daddyess, etc.). The
+// real country signal is cultural_tags overlap.
+// Sub-cats curated to volume: thin-but-symbolic (Senegal/Ghana) kept
+// for cultural relevance + bleed/rescue fills the page; near-zero
+// countries (Mali 4, Guinea 5, Côte d'Ivoire 0) dropped — surfacing
+// a sub-cat that cannot fill is worse UX than not surfacing it.
+const COUNTRY_TAG_MAP: Record<string, string[]> = {
+  'nigeria':     ['nigeria', 'naija'],
+  'senegal':     ['senegal'],
+  'ghana':       ['ghana'],
+  'angola':      ['angola'],
+  'west-africa': ['west-africa'],
+};
 
 // CategoryAxis — v902 (Dash 2026-04-29): top-bar reorg.
 //   trends   the TikTok-style "For You" explore feed (broadest pool)
@@ -154,13 +147,12 @@ export const CATEGORY_PRESETS: Record<CategoryAxis, string[]> = {
   'trends': [
     'all', 'dance', 'comedy', 'fashion',
   ],
-  // v903 — Travel: explore-the-world social-media surface. Sub-cats
-  // align to keys in src/knowledge/artistTiers.ts so we can filter
-  // moments by creator country via the static artist→country map.
-  // West-Africa-first per VOYO market priority; expand once tagging
-  // data gets richer.
+  // v911 — Travel sub-cats keyed to cultural_tags coverage in the
+  // live catalog. Volumes (April 2026):
+  //   nigeria 2170, west-africa 2027, angola 964, ghana 62, senegal 46
+  // Mali / Guinea / Ivory-Coast dropped (all <10 — under one creator-cap).
   'travel': [
-    'nigeria', 'senegal', 'ivory-coast', 'guinea', 'mali', 'ghana',
+    'nigeria', 'senegal', 'ghana', 'angola', 'west-africa',
   ],
   // v860 — Live = virality cuts (NOT time windows). Diagnostic on the
   // live catalog: every moment was ingested in a single 22-minute
@@ -198,13 +190,12 @@ const DISPLAY_NAMES: Record<string, string> = {
   'all': 'For You',
   // Live sub-categories (virality cuts)
   'pulse': 'Pulse', 'rising': 'Rising', 'gems': 'Gems',
-  // Travel countries (v903 — keys aligned to artistTiers)
+  // Travel sub-cats (v911 — cultural_tags-keyed)
   'nigeria':     'Nigeria',
   'senegal':     'Sénégal',
-  'ivory-coast': 'Côte d’Ivoire',
-  'guinea':      'Guinée',
-  'mali':        'Mali',
   'ghana':       'Ghana',
+  'angola':      'Angola',
+  'west-africa': 'West Africa',
 };
 
 // v902 — labels for the 5 top modes. Trends leads as the explore
@@ -274,16 +265,15 @@ const ADJACENCY: Record<CategoryAxis, Record<string, Record<string, number>>> = 
     'comedy':  { 'all': 0.5, 'dance': 0.3, 'fashion': 0.2 },
     'fashion': { 'all': 0.5, 'dance': 0.3, 'comedy': 0.2 },
   },
-  // Travel — country drift. West-Africa cluster + Nigeria. Weights
-  // approximate cultural/musical proximity until tagging volume gives
-  // us a data-driven lift.
+  // Travel — drift across cultural-tag regions. v911 weights:
+  // anglophone (Nigeria/Ghana) cluster, Senegal francophone bridge,
+  // Angola lusophone outpost, west-africa as the meta hub.
   'travel': {
-    'nigeria':     { 'ghana': 0.45, 'ivory-coast': 0.25, 'senegal': 0.15, 'guinea': 0.1, 'mali': 0.05 },
-    'senegal':     { 'ivory-coast': 0.3, 'guinea': 0.3, 'mali': 0.2, 'ghana': 0.1, 'nigeria': 0.1 },
-    'ivory-coast': { 'senegal': 0.3, 'guinea': 0.25, 'ghana': 0.2, 'mali': 0.15, 'nigeria': 0.1 },
-    'guinea':      { 'senegal': 0.4, 'mali': 0.3, 'ivory-coast': 0.2, 'ghana': 0.05, 'nigeria': 0.05 },
-    'mali':        { 'guinea': 0.35, 'senegal': 0.3, 'ivory-coast': 0.2, 'ghana': 0.1, 'nigeria': 0.05 },
-    'ghana':       { 'nigeria': 0.4, 'ivory-coast': 0.3, 'senegal': 0.15, 'mali': 0.1, 'guinea': 0.05 },
+    'nigeria':     { 'ghana': 0.4, 'west-africa': 0.35, 'senegal': 0.15, 'angola': 0.1 },
+    'senegal':     { 'west-africa': 0.45, 'ghana': 0.2, 'nigeria': 0.2, 'angola': 0.15 },
+    'ghana':       { 'nigeria': 0.4, 'west-africa': 0.3, 'senegal': 0.2, 'angola': 0.1 },
+    'angola':      { 'west-africa': 0.4, 'nigeria': 0.3, 'ghana': 0.15, 'senegal': 0.15 },
+    'west-africa': { 'nigeria': 0.4, 'ghana': 0.25, 'senegal': 0.2, 'angola': 0.15 },
   },
   'live': {
     'pulse':  { 'rising': 0.7, 'gems': 0.3 },
@@ -428,18 +418,12 @@ export function useMoments(): UseMomentsReturn {
               q = q.eq('content_type', category);
             }
           } else if (axis === 'travel') {
-            // v909 Travel — fuzzy creator_username match. Each country's
-            // artist names contribute their first-token fragment; we
-            // build an .or() of ilike wildcards so creator handles
-            // built around the artist name (e.g. burnaboygram for
-            // Burna Boy) actually hit. Empty fragments list → null
-            // sentinel.
-            const fragments = COUNTRY_CREATOR_FRAGMENTS[category];
-            if (!fragments || fragments.length === 0) return null;
-            const orClause = fragments
-              .map(f => `creator_username.ilike.*${f}*`)
-              .join(',');
-            q = q.or(orClause);
+            // v911 Travel — cultural_tags overlap. The catalog has a
+            // populated cultural_tags column with real country/region
+            // tokens, so this is the strict-but-actually-hits filter.
+            const tags = COUNTRY_TAG_MAP[category];
+            if (!tags || tags.length === 0) return null;
+            q = q.overlaps('cultural_tags', tags);
           } else if (axis === 'live') {
             // v860 — virality cuts (NOT time windows). The catalog
             // is static (last ingest 87d ago per circulation
@@ -595,12 +579,9 @@ export function useMoments(): UseMomentsReturn {
               } else if (axis === 'vibes') {
                 nq = nq.not('parent_track_id', 'is', null).eq('content_type', nc);
               } else if (axis === 'travel') {
-                const fragments = COUNTRY_CREATOR_FRAGMENTS[nc];
-                if (!fragments || fragments.length === 0) continue;
-                const orClause = fragments
-                  .map(f => `creator_username.ilike.*${f}*`)
-                  .join(',');
-                nq = nq.or(orClause);
+                const tags = COUNTRY_TAG_MAP[nc];
+                if (!tags || tags.length === 0) continue;
+                nq = nq.overlaps('cultural_tags', tags);
               } else if (axis === 'live') {
                 const liveMin: Record<string, number> = { 'pulse': 120000, 'rising': 20000, 'gems': 2500 };
                 const liveMax: Record<string, number | null> = { 'pulse': null, 'rising': 120000, 'gems': 20000 };
