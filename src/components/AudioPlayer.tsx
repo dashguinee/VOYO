@@ -245,12 +245,61 @@ export const AudioPlayer = () => {
     if (!currentTrack) return;
     // Reset completion signal on every track change
     completionSignaledRef.current = false;
-    // Clear predictive pre-warm latch so the new track gets its own single
-    // ahead-of-time ensureTrackReady call at the 50% mark.
+    // Clear predictive pre-warm latch so the new track gets a fresh
+    // pre-warm cycle (fires immediately below + safety re-fire at 33%).
     prewarmFiredForRef.current = null;
     // Clear error burst counter — errors from a prior track must not bleed
     // into the new track's circuit-breaker window and trigger a false skip.
     errorBurst = [];
+
+    // ── Predictive pre-warm AT TRACK-CHANGE (v937) ─────────────────────
+    // Was: fired only at 33% progress (line 714 below). On a 2-minute
+    // track that's 40 seconds in — R2 extraction needs 60-120s server-
+    // side, so a short track could end before the next was warm and
+    // BG playback would fall to the silent-WAV bridge (silence in BG
+    // because iframe doesn't play with screen locked).
+    //
+    // Now: fire on track-change so the upcoming tracks get the FULL
+    // duration of THIS track to extract. Depth bumped 2 → 3 so rapid
+    // skips stay on the warm rail. Priorities 9/7/5 — higher than the
+    // 33% safety net's 7/5 because this is the "BG continuity backbone."
+    //
+    // The 33% pre-warm below is now a safety net: ensureTrackReady is
+    // idempotent (if R2 has it, immediate return), so re-firing at
+    // 33% costs only a HEAD probe per upcoming track. If track-change
+    // pre-warm somehow failed silently, 33% catches it.
+    {
+      const store = usePlayerStore.getState();
+      const queueTracks = store.queue.slice(0, 3).map(q => q.track);
+      const remaining = 3 - queueTracks.length;
+      const predicted = remaining > 0 ? store.predictUpcoming(remaining) : [];
+      const upcoming: Array<Track> = [
+        ...queueTracks,
+        ...predicted.slice(0, remaining),
+      ].filter((t): t is Track => Boolean(t && t.trackId && t.trackId !== currentTrack.trackId))
+        .slice(0, 3);
+      const priorities = [9, 7, 5];
+      upcoming.forEach((t, i) => {
+        void ensureTrackReady(t, null, { priority: priorities[i] });
+        logPlaybackEvent({
+          event_type: 'trace',
+          track_id: t.trackId,
+          meta: {
+            subtype: 'predictive_prewarm',
+            from_track: currentTrack.trackId,
+            progress_at_fire: 0,
+            depth: i + 1,
+            source: queueTracks.length > i ? 'queue' : 'predict',
+            trigger: 'track_change',
+          },
+        });
+      });
+      // Set the latch so the 33% safety net only fires if track-change
+      // pre-warm somehow didn't run.
+      if (upcoming.length > 0) {
+        prewarmFiredForRef.current = currentTrack.trackId;
+      }
+    }
     // Clear any pending stall-log timer from the previous track so it doesn't
     // fire against the new track's readyState and log a phantom stall.
     if (stallLogTimerRef.current) {
@@ -700,15 +749,14 @@ export const AudioPlayer = () => {
       oyaPlanSignal('completion');
     }
 
-    // ── Predictive pre-warm ──────────────────────────────────────────────
-    // v912 (Dash 2026-04-30 streamline): fires earlier (33% instead of 50%)
-    // and 2-deep instead of 1-deep. Net effect: at the 1/3 mark of A, both
-    // B and C kick off ensureTrackReady in parallel. When A ends → B is
-    // already warm; if user double-skips A→B→C in quick succession, C is
-    // also warm so the hot-swap stays instant instead of falling back to
-    // the iframe-extraction bridge (3-12s).
-    // Priorities: B at 7 (above background), C at 5 (below B but still
-    // above background p=0). One firing per track (prewarmFiredForRef).
+    // ── Predictive pre-warm — 33% safety net (v937) ─────────────────────
+    // Primary fire is now at track-change (above) so upcoming tracks get
+    // the FULL duration of the current track to land in R2. This 33%
+    // re-fire is a safety net: if the track-change pre-warm somehow
+    // didn't run (race / unmount / store-snapshot oddity), this catches
+    // it. ensureTrackReady is idempotent (HEAD probes are cheap) so
+    // double-firing is harmless even on the happy path. Depth 3 to
+    // match track-change.
     const curTrack = usePlayerStore.getState().currentTrack;
     const curTrackId = curTrack?.trackId ?? null;
     if (
@@ -718,14 +766,15 @@ export const AudioPlayer = () => {
     ) {
       prewarmFiredForRef.current = curTrackId;
       const store = usePlayerStore.getState();
-      const queueTracks = store.queue.slice(0, 2).map(q => q.track);
-      const predicted = queueTracks.length < 2 ? store.predictUpcoming(2) : [];
+      const queueTracks = store.queue.slice(0, 3).map(q => q.track);
+      const remaining = 3 - queueTracks.length;
+      const predicted = remaining > 0 ? store.predictUpcoming(remaining) : [];
       const upcoming: Array<Track> = [
         ...queueTracks,
-        ...predicted.slice(0, 2 - queueTracks.length),
+        ...predicted.slice(0, remaining),
       ].filter((t): t is Track => Boolean(t && t.trackId && t.trackId !== curTrackId));
-      const priorities = [7, 5];
-      upcoming.slice(0, 2).forEach((t, i) => {
+      const priorities = [9, 7, 5];
+      upcoming.slice(0, 3).forEach((t, i) => {
         void ensureTrackReady(t, null, { priority: priorities[i] });
         logPlaybackEvent({
           event_type: 'trace',
@@ -735,7 +784,8 @@ export const AudioPlayer = () => {
             from_track: curTrackId,
             progress_at_fire: progress,
             depth: i + 1,
-            source: queueTracks.length > 0 ? 'queue' : 'predict',
+            source: queueTracks.length > i ? 'queue' : 'predict',
+            trigger: 'safety_33pct',
           },
         });
       });
