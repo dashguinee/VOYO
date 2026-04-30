@@ -251,21 +251,29 @@ const MiniPlayer = ({ onOpenFull }: { onOpenFull: () => void }) => {
         onPointerUp={handleSwipeUp}
         onPointerCancel={() => { swipeStartRef.current = null; }}
       >
-        {/* Wave Progress Bar — v928 redesign: the TRACK rail is always
-            visible across the full width (dim bronze) so the user always
-            sees the timeline, even when progress=0 (track loading / iframe
-            warming). The FILLED portion paints over the rail with a
-            brighter bronze at rest, and pops to bold purple for 15s after
-            a tap (via handleTap → revealBar). 800ms ease back to bronze.
-            Old design used bg-white/10 for the rail + width-driven inner
-            wrapper — at progress=0 the bar was effectively invisible
-            (0px-wide inner + 10% white track = ghost). */}
+        {/* Wave Progress Bar — v929: the rail (unfilled "remainder") is
+            now audio-reactive bronze, breathing with --voyo-energy as a
+            warm room rhythm. The filled portion at rest is also bronze
+            but only modestly brighter than the rail — progress reads as
+            DIFFUSED into the bar, one continuous element with a subtle
+            elapsed hint, not a sharp seam. On tap (revealBar → 15s
+            purple window) the filled portion pops to bold purple so
+            progress is sharply readable. Bubbles overlay the card during
+            the reveal, so the rail's breathing under the purple fill is
+            non-distracting. After 15s the fill eases back to merged
+            bronze and the bar settles into ambient bronze rhythm again.
+
+            Why audio-reactive bronze (not purple) — purple would re-create
+            the original "is the seek bar pulsing with the music?" bug
+            (v925 fix). Bronze breathing reads as warm ambience, distinct
+            from the purple reveal-state. */}
         <div
           className="absolute bottom-0 left-0 right-0 h-[3px] overflow-hidden rounded-full"
-          style={{ background: 'rgba(212,160,83,0.22)' }}
+          style={{ background: 'rgba(212,160,83, calc(0.22 + var(--voyo-energy, 0) * 0.20))' }}
         >
-          {/* Filled portion — width = progress%. At rest = bright bronze,
-              on tap = bold purple. Crossfade 800ms ease-out. */}
+          {/* Filled portion — width = progress%. At rest = merged bronze
+              (subtle, diffused into the rail), on tap = bold purple.
+              Crossfade 800ms ease-out. */}
           <div
             className="h-full relative"
             style={{ width: `${progress}%` }}
@@ -273,18 +281,19 @@ const MiniPlayer = ({ onOpenFull }: { onOpenFull: () => void }) => {
             <div
               className="absolute inset-0"
               style={{
-                background: barRevealed ? '#8b5cf6' : 'rgba(212,160,83,0.95)',
+                background: barRevealed ? '#8b5cf6' : 'rgba(212,160,83,0.55)',
                 transition: 'background 800ms ease-out',
               }}
             />
             {/* Playhead halo — soft right-edge glow that follows the
-                progress tip. Matches whichever color the fill is in. */}
+                progress tip. Subtler at rest so it doesn't break the
+                merged feel. */}
             <div
               className="absolute right-0 top-0 bottom-0 w-4"
               style={{
                 background: barRevealed
                   ? 'linear-gradient(to left, rgba(139,92,246,0.65), transparent)'
-                  : 'linear-gradient(to left, rgba(212,160,83,0.8), transparent)',
+                  : 'linear-gradient(to left, rgba(212,160,83,0.45), transparent)',
                 transition: 'background 800ms ease-out',
               }}
             />
