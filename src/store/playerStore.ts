@@ -946,8 +946,10 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     // Queue is empty or all tracks unplayable - check repeat all mode
     if (state.repeatMode === 'all' && state.history.length > 0) {
       // REPEAT ALL FIX: Rebuild queue from history and play first track
-      // This ensures proper looping through all played tracks
-      if (state.currentTrack && state.currentTime > 0) {
+      // This ensures proper looping through all played tracks.
+      // v913 — gate relaxed to match the other addToHistory call sites
+      // (consistent with v912 "library tracks all plays" rule).
+      if (state.currentTrack) {
         get().addToHistory(state.currentTrack, state.currentTime);
       }
 
@@ -1053,14 +1055,17 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       shuffle: state.shuffleMode,
     });
 
-    // POOL REFILL: if history exclusion + filters have eaten ≥50% of the
+    // POOL REFILL: if history exclusion + filters have eaten ≥30% of the
     // pool, kick a background refresh so the next nextTrack() call sees
-    // fresh candidates. Fire-and-forget; today's pick still uses what's
-    // left. Only fires when we're pulling from hot/discover (not TRACKS
-    // static seed — refreshing doesn't help that path).
+    // fresh candidates. v913 — bumped trigger from 50% → 30% (i.e. fire
+    // when only 70% of pool is available) so the pool stays fresh
+    // earlier, before the user notices "I keep getting the same tracks."
+    // Fire-and-forget; today's pick still uses what's left. Only fires
+    // when we're pulling from hot/discover (not TRACKS static seed —
+    // refreshing doesn't help that path).
     if (
       allAvailable.length > 0 &&
-      availableTracks.length <= allAvailable.length / 2 &&
+      availableTracks.length <= allAvailable.length * 0.7 &&
       (state.discoverTracks.length > 0 || state.hotTracks.length > 0)
     ) {
       trace('nt_pool_refill_kick', currentTrackId || null, {
