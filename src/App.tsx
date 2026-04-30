@@ -766,7 +766,11 @@ function App() {
       return null;
     };
 
-    const currentDashId = getDashId();
+    // v923 — was capturing currentDashId once at idle-fire time. If
+    // user signed in AFTER the idle callback ran, every reaction was
+    // treated as "from someone else" forever (their own reactions
+    // popped notifications back at them). Read fresh in the
+    // subscription so it tracks the current auth state.
 
     // Subscribe to reactions realtime
     subscribeToReactions();
@@ -778,7 +782,7 @@ function App() {
         const newReaction = state.recentReactions[0];
 
         // Only notify if reaction is from someone else
-        if (newReaction.username !== currentDashId) {
+        if (newReaction.username !== getDashId()) {
           // Determine notification based on reaction context
           const currentTrack = usePlayerStore.getState().currentTrack;
 

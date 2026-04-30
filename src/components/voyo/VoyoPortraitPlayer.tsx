@@ -1346,13 +1346,17 @@ const RightToolbar = memo(({ onSettingsClick }: { onSettingsClick: () => void })
   const [heartPulse, setHeartPulse] = useState(false);
   const prevLikedRef = useRef(isLiked);
   useEffect(() => {
-    if (isLiked && !prevLikedRef.current) {
+    // v923 — was assigning prevLikedRef.current = isLiked twice (inside
+    // the if and again after), and the cleanup-bearing branch returned
+    // early so the post-branch assignment never ran on transitions.
+    // Single write at the end is correct + the cleanup still fires.
+    const wasLiked = prevLikedRef.current;
+    prevLikedRef.current = isLiked;
+    if (isLiked && !wasLiked) {
       setHeartPulse(true);
       const t = setTimeout(() => setHeartPulse(false), 900);
-      prevLikedRef.current = isLiked;
       return () => clearTimeout(t);
     }
-    prevLikedRef.current = isLiked;
   }, [isLiked]);
 
   const handleLike = () => {
@@ -1573,7 +1577,8 @@ const DashPlaceholder = memo(({ onClick, label }: { onClick?: () => void; label:
 interface PortalBeltProps {
   tracks: Track[];
   onTap: (track: Track) => void;
-  onQueueAdd?: (track: Track) => void; // Track queue additions for MixBoard
+  // v923: onQueueAdd dropped — was plumbed through to StreamCard but
+  // never invoked inside StreamCard (its drag/queue path was retired).
   playedTrackIds: Set<string>;
   type: 'hot' | 'discovery';
   mixModes?: MixMode[]; // For color-coding cards by mode
@@ -1583,7 +1588,7 @@ interface PortalBeltProps {
   scrollOutwardTrigger?: number; // Increment to trigger outward scroll
 }
 
-const PortalBelt = memo(({ tracks, onTap, onQueueAdd, playedTrackIds, type, mixModes, modeBoosts, isActive, scrollOutwardTrigger = 0 }: PortalBeltProps) => {
+const PortalBelt = memo(({ tracks, onTap, playedTrackIds, type, mixModes, modeBoosts, isActive, scrollOutwardTrigger = 0 }: PortalBeltProps) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [offset, setOffset] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
@@ -1730,7 +1735,6 @@ const PortalBelt = memo(({ tracks, onTap, onQueueAdd, playedTrackIds, type, mixM
               <StreamCard
                 track={track}
                 onTap={() => onTap(track)}
-                onQueueAdd={onQueueAdd}
                 isPlayed={playedTrackIds.has(track.id)}
                 modeColor={mixModes ? getTrackModeColor(track.title, track.artist, mixModes, modeBoosts) : null}
               />
@@ -1862,76 +1866,25 @@ const PortalBelt = memo(({ tracks, onTap, onQueueAdd, playedTrackIds, type, mixM
 // STREAM CARD (Horizontal scroll - HOT/DISCOVERY - with VOYO brand tint)
 // Tap = play full track immediately. Drag = add to queue.
 // ============================================
-const StreamCard = memo(({ track, onTap, isPlayed, modeColor, onQueueAdd }: {
+const StreamCard = memo(({ track, onTap, isPlayed, modeColor }: {
   track: Track;
   onTap: () => void;
   isPlayed?: boolean;
   modeColor?: { neon: string; glow: string; intensity: number } | null; // From MixBoard mode matching
-  onQueueAdd?: (track: Track) => void; // Callback when track is added to queue (for MixBoard tracking)
 }) => {
-  const addToQueue = usePlayerStore(state => state.addToQueue);
-  const [showQueueFeedback, setShowQueueFeedback] = useState(false);
-  const [wasDragged, setWasDragged] = useState(false);
-  const [isFlying, setIsFlying] = useState(false); // Card flying to queue animation
-
-  // Timeout refs for cleanup - prevents memory leaks on rapid scrolling
-  const queueTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const dragTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const flyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // Cleanup timeouts on unmount
-  useEffect(() => {
-    return () => {
-      if (queueTimeoutRef.current) clearTimeout(queueTimeoutRef.current);
-      if (dragTimeoutRef.current) clearTimeout(dragTimeoutRef.current);
-      if (flyTimeoutRef.current) clearTimeout(flyTimeoutRef.current);
-    };
-  }, []);
-
-  // Handle tap - play the full track immediately on any device.
-  const handleTap = () => {
-    // If was dragging, don't trigger tap
-    if (wasDragged) {
-      setWasDragged(false);
-      return;
-    }
-    onTap();
-  };
-
+  // v923 — purged ~30 lines of dead state (showQueueFeedback / wasDragged
+  // / isFlying / queueTimeoutRef / dragTimeoutRef / flyTimeoutRef +
+  // their cleanup effect + the unrendered queue-feedback / flying-
+  // trail JSX). Setters were never called; the JSX rendered nothing
+  // because gating state was permanently false. Tap-only now.
+  // onQueueAdd prop also dropped — never invoked anywhere.
   return (
     <div
       className="flex-shrink-0 flex flex-col items-center w-16 relative"
     >
-      {/* Queue Feedback - Shows after card flies */}
-      
-        {showQueueFeedback && !isFlying && (
-          <div
-            className="absolute -top-6 left-1/2 -translate-x-1/2 z-50"
-          >
-            <div className="bg-gradient-to-r from-purple-500 to-violet-600 text-white text-[8px] font-bold px-2 py-1 rounded-full shadow-lg whitespace-nowrap flex items-center gap-1">
-              <svg className="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-              </svg>
-              Bucketed
-            </div>
-          </div>
-        )}
-      
-
-      {/* Flying trail effect - shows during flight */}
-      
-        {isFlying && (
-          <div
-            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none"
-          >
-            <div className="w-14 h-14 rounded-xl bg-gradient-to-r from-purple-500/40 to-violet-600/40 blur-md" />
-          </div>
-        )}
-      
-
       <button
         className="flex flex-col items-center group w-full"
-        onClick={handleTap}
+        onClick={onTap}
       >
         <div
           className="w-14 h-14 rounded-xl overflow-hidden mb-1.5 relative shadow-md bg-gradient-to-br from-purple-900/30 to-violet-900/20"
@@ -2971,7 +2924,11 @@ const ReactionBar = memo(({
       setTimeout(() => setIsChatMode(false), 2000);
     }
 
-    setIsProcessing(false);
+    // v923 — was flipping isProcessing false synchronously while the
+    // setTimeout-based close (1.5-2s) was still pending. Tap-spam in
+    // that window re-entered with stale chatInput. Hold the lock until
+    // the longest close timer settles.
+    setTimeout(() => setIsProcessing(false), 2200);
   };
 
   const handleChatSubmit = async () => {
@@ -4176,30 +4133,37 @@ export const VoyoPortraitPlayer = ({
     setSignalCategory(null);
   }, [currentTrack, signalCategory, signalText, dashId, createReaction]);
 
-  // Get community punches for each category (short + has emoji)
-  const getCommunityPunches = useCallback((category: ReactionCategory): CommunityPunch[] => {
-    // Just SHORT = billboard punch (punchy vibes!)
+  // v923 — was 5 separate useMemos each with a useCallback dep,
+  // running 5 filters × N reactions on every realtime broadcast even
+  // when only one category changed. Single-pass groupBy is O(N) and
+  // populates all 5 buckets in one walk.
+  const punchesByCategory = useMemo(() => {
     const isShort = (text: string) => text.length <= 30;
-
-    return recentReactions
-      .filter(r => r.category === category && r.comment && isShort(r.comment))
-      .slice(0, 5) // Max 5 punches per category
-      .map(r => ({
+    const buckets: Record<ReactionCategory, CommunityPunch[]> = {
+      'afro-heat': [], 'chill-vibes': [], 'party-mode': [],
+      'late-night': [], 'workout': [],
+    };
+    for (const r of recentReactions) {
+      if (!r.comment || !isShort(r.comment)) continue;
+      const bucket = buckets[r.category as ReactionCategory];
+      if (!bucket || bucket.length >= 5) continue;
+      bucket.push({
         id: r.id,
-        text: r.comment || '',
+        text: r.comment,
         username: r.username,
         trackId: r.track_id,
         trackTitle: r.track_title,
         emoji: r.emoji,
-      }));
+      });
+    }
+    return buckets;
   }, [recentReactions]);
 
-  // Punches for each category
-  const afroHeatPunches = useMemo(() => getCommunityPunches('afro-heat'), [getCommunityPunches]);
-  const chillVibesPunches = useMemo(() => getCommunityPunches('chill-vibes'), [getCommunityPunches]);
-  const partyModePunches = useMemo(() => getCommunityPunches('party-mode'), [getCommunityPunches]);
-  const lateNightPunches = useMemo(() => getCommunityPunches('late-night'), [getCommunityPunches]);
-  const workoutPunches = useMemo(() => getCommunityPunches('workout'), [getCommunityPunches]);
+  const afroHeatPunches  = punchesByCategory['afro-heat'];
+  const chillVibesPunches = punchesByCategory['chill-vibes'];
+  const partyModePunches  = punchesByCategory['party-mode'];
+  const lateNightPunches  = punchesByCategory['late-night'];
+  const workoutPunches    = punchesByCategory['workout'];
 
   // Handle punch click - navigate to track's expand view
   const handlePunchClick = useCallback((punch: CommunityPunch) => {
@@ -6395,7 +6359,6 @@ export const VoyoPortraitPlayer = ({
             <PortalBelt
               tracks={hotTracks.slice(0, 8)}
               onTap={playTrack}
-              onQueueAdd={trackQueueAddition}
               playedTrackIds={playedTrackIds}
               type="hot"
               mixModes={DEFAULT_MIX_MODES}
@@ -6549,7 +6512,6 @@ export const VoyoPortraitPlayer = ({
             <PortalBelt
               tracks={discoverTracks.slice(0, 8)}
               onTap={playTrack}
-              onQueueAdd={trackQueueAddition}
               playedTrackIds={playedTrackIds}
               type="discovery"
               mixModes={DEFAULT_MIX_MODES}
