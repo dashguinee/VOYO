@@ -339,7 +339,6 @@ def emit_worker_tick(stats: LaneStats, throttle: AdaptiveThrottle, queue_depth: 
     data to answer 'are we at the ceiling?' at any moment."""
     payload = {
         'event_type': 'trace',
-        'app_id':     'voyo',
         'track_id':   'lane-stats',
         'meta': {
             'subtype':         'worker_tick',
