@@ -1,56 +1,56 @@
 /**
- * VOYO Music - Premium Now Playing Experience
- * Clean audio player with Voyo Feed integration
+ * VOYO Music — NowPlaying (Expanded MiniPlayer canvas)
  *
- * Features:
- * - ALBUM ART BACKGROUND: Blurred cover art
- * - COMPACT CONTROLS: Bottom panel with all controls
- * - VOYO FEED BUTTON: Opens full video feed experience
- * - COMMUNITY VIBES: Collapsible comments section
- * - VOYO GRADIENT: Purple/pink design language
+ * Opened by double-tapping the MiniPlayer in Classic Home. This is the
+ * "expanded MiniPlayer" — same chrome at the bottom (so controls never
+ * relocate), surrounded by a vibes canvas:
  *
- * The Loop: Player → Voyo Feed → Discover → Player
+ *   - Backdrop: blurred album art + drifting bokeh of related tracks
+ *   - Floating ambient reactions
+ *   - Track title (auto-positioned: slides up when comments expand)
+ *   - Up Next strip (3 next tracks, hidden when comments expand)
+ *   - Comments overlay (transparent, VOYO Moments style, with expand button)
+ *   - MiniPlayer chrome at bottom (imported, identical to Home)
+ *
+ * v934 redesign: stripped Shuffle / Repeat / SkipBack / SkipForward / big
+ * Play-Pause / oyePrewarm Lightbulb / inline progress bar / Heart / Plus
+ * — all duplicated either in the MiniPlayer chrome (controls + OYÉ +
+ * Plus + seek) or in VOYO Portrait. NowPlaying is now a vibes/community
+ * surface around the music, not another control panel.
+ *
+ * Double-tap on the MiniPlayer here → switches to VOYO Portrait. Each
+ * tap-deeper goes one layer further into the experience:
+ *   ClassicMode (mini)  →  NowPlaying (canvas)  →  VOYO (portrait)
  */
 
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { devLog } from '../../utils/logger';
 import {
   ChevronDown,
-  Heart,
-  Shuffle,
-  SkipBack,
-  Play,
-  Pause,
-  SkipForward,
-  Repeat,
   MessageCircle,
-  ChevronUp,
+  Maximize2,
+  Minimize2,
   Send,
   User,
-  Plus,
   X,
   Share2,
   ListMusic,
-  Lightbulb,
   Video,
-  Image
+  Image as ImageIcon,
 } from 'lucide-react';
 import { usePlayerStore } from '../../store/playerStore';
 import { useShallow } from 'zustand/shallow';
-import { oyo, app } from '../../services/oyo';
-import { usePreferenceStore } from '../../store/preferenceStore';
 import { getTrackThumbnailUrl } from '../../utils/thumbnail';
-import { useMobilePlay } from '../../hooks/useMobilePlay';
+import { getYouTubeThumbnail } from '../../data/tracks';
 import { useBackGuard } from '../../hooks/useBackGuard';
-import { PlaylistModal } from '../playlist/PlaylistModal';
 import { VoyoCloseX } from '../ui/VoyoCloseX';
 import { useReactionStore, Reaction, TrackStats } from '../../store/reactionStore';
-import { OyeButton } from '../oye/OyeButton';
 import { useAuth } from '../../hooks/useAuth';
-import { formatTime } from '../../utils/format';
+import { Track } from '../../types';
+import { MiniPlayer } from './MiniPlayer';
 
 // ============================================
-// ALBUM ART BACKGROUND
+// ALBUM ART BACKGROUND (blurred cover, dark gradient)
 // ============================================
 const AlbumArtBackground = ({ coverUrl }: { coverUrl: string }) => (
   <div className="absolute inset-0 overflow-hidden">
@@ -62,14 +62,58 @@ const AlbumArtBackground = ({ coverUrl }: { coverUrl: string }) => (
       aria-hidden="true"
       className="absolute w-full h-full object-cover scale-110 blur-md"
     />
-    {/* Gradient overlay for depth */}
-    <div className="absolute inset-0 bg-black/50" />
+    <div className="absolute inset-0 bg-black/55" />
   </div>
 );
 
+// ============================================
+// BOKEH LAYER — related tracks drifting as soft depth elements
+// ============================================
+const BOKEH_POSITIONS: Array<React.CSSProperties & { delay: string }> = [
+  { top: '14%',  left: '12%',  width: 56, height: 56, delay: '0s' },
+  { top: '24%',  right: '10%', width: 44, height: 44, delay: '2.4s' },
+  { top: '40%',  left: '72%',  width: 48, height: 48, delay: '4.8s' },
+  { top: '52%',  left: '8%',   width: 38, height: 38, delay: '1.2s' },
+  { top: '34%',  left: '40%',  width: 32, height: 32, delay: '3.2s' },
+];
+
+const BokehLayer = ({ tracks }: { tracks: Track[] }) => {
+  if (!tracks.length) return null;
+  return (
+    <div className="absolute inset-0 pointer-events-none z-0 overflow-hidden" aria-hidden>
+      {tracks.slice(0, 5).map((t, i) => {
+        const { delay, ...pos } = BOKEH_POSITIONS[i];
+        return (
+          <img
+            key={t.trackId}
+            src={getYouTubeThumbnail(t.trackId, 'medium')}
+            alt=""
+            loading="lazy"
+            decoding="async"
+            className="absolute rounded-full object-cover"
+            style={{
+              ...pos,
+              opacity: 0.22,
+              filter: 'blur(1.5px) saturate(1.15)',
+              animation: 'voyo-bokeh-drift 11s ease-in-out infinite',
+              animationDelay: delay,
+              willChange: 'transform, opacity',
+            }}
+          />
+        );
+      })}
+      <style>{`
+        @keyframes voyo-bokeh-drift {
+          0%, 100% { transform: translate(0, 0) scale(1);    opacity: 0.18; }
+          50%      { transform: translate(10px, -14px) scale(1.05); opacity: 0.32; }
+        }
+      `}</style>
+    </div>
+  );
+};
 
 // ============================================
-// FLOATING REACTIONS
+// FLOATING REACTIONS — auto-spawned ambient emojis
 // ============================================
 interface FloatingReaction {
   id: number;
@@ -80,37 +124,81 @@ interface FloatingReaction {
 
 const FloatingReactions = ({ reactions }: { reactions: FloatingReaction[] }) => (
   <div className="absolute inset-0 pointer-events-none overflow-hidden z-20">
-    <>
-      {reactions.map((reaction) => (
-        <div
-          key={reaction.id}
-          className="absolute text-4xl"
-          style={{ left: `${reaction.x}%`, bottom: '30%' }}
-
-        >
-          <span className="drop-shadow-2xl">{reaction.emoji}</span>
-        </div>
-      ))}
-    </>
+    {reactions.map((reaction) => (
+      <div
+        key={reaction.id}
+        className="absolute text-4xl"
+        style={{ left: `${reaction.x}%`, bottom: '30%' }}
+      >
+        <span className="drop-shadow-2xl">{reaction.emoji}</span>
+      </div>
+    ))}
   </div>
 );
 
 // ============================================
-// COMMUNITY VIBES PANEL (Replaces Explore)
+// TITLE BLOCK — auto-positioned (slides up when comments expand)
 // ============================================
-const CommunityVibesPanel = ({
-  isExpanded,
-  onToggle,
+const TitleBlock = ({ track, compact }: { track: Track; compact: boolean }) => (
+  <div
+    className="px-6 text-center"
+    style={{
+      transform: compact ? 'translateY(-12px) scale(0.94)' : 'translateY(0) scale(1)',
+      transition: 'transform 380ms cubic-bezier(0.16, 1, 0.3, 1)',
+    }}
+  >
+    <h1 className="text-white text-2xl font-bold tracking-tight leading-tight truncate">
+      {track.title}
+    </h1>
+    <p className="text-white/60 text-base mt-1 truncate">{track.artist}</p>
+  </div>
+);
+
+// ============================================
+// UP NEXT STRIP — peek of the next 3 tracks
+// ============================================
+const UpNextStrip = ({ tracks }: { tracks: Track[] }) => {
+  if (!tracks.length) return null;
+  return (
+    <div className="px-4 mb-2">
+      <p className="text-white/40 text-[10px] uppercase tracking-[0.16em] mb-1.5 px-1">Up Next</p>
+      <div className="flex items-center gap-1.5">
+        {tracks.slice(0, 3).map((t) => (
+          <div
+            key={t.trackId}
+            className="flex items-center gap-2 bg-white/[0.06] rounded-xl p-1.5 pr-2.5 backdrop-blur-sm flex-1 min-w-0 border border-white/5"
+          >
+            <img
+              src={getYouTubeThumbnail(t.trackId, 'medium')}
+              alt={t.title}
+              loading="lazy"
+              decoding="async"
+              className="w-7 h-7 rounded-md object-cover flex-shrink-0"
+            />
+            <p className="text-white/75 text-[11px] truncate min-w-0">{t.title}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+// ============================================
+// COMMENTS OVERLAY — transparent, VOYO Moments style, with expand
+// ============================================
+const CommentsOverlay = ({
+  expanded,
+  onToggleExpand,
   reactions,
-  onAddComment,
   trackStats,
+  onAddComment,
   dashId,
 }: {
-  isExpanded: boolean;
-  onToggle: () => void;
+  expanded: boolean;
+  onToggleExpand: () => void;
   reactions: Reaction[];
-  onAddComment: (text: string) => void;
   trackStats: TrackStats | null;
+  onAddComment: (text: string) => void;
   dashId: string | null;
 }) => {
   const [commentText, setCommentText] = useState('');
@@ -133,7 +221,6 @@ const CommunityVibesPanel = ({
     return `${Math.floor(hours / 24)}d`;
   };
 
-  // Fallback comments
   const fallbackComments = [
     { user: 'burna_fan', text: 'This track is FIRE 🔥🔥🔥', time: '2m' },
     { user: 'afrovibes', text: 'OYÉ OYÉ OYÉ!!! ⚡', time: '5m' },
@@ -141,174 +228,150 @@ const CommunityVibesPanel = ({
     { user: 'music_lover', text: 'Best afrobeats this year 💜', time: '1h' },
   ];
 
+  // Variable height: collapsed peek vs expanded VOYO-Moments-style
+  const heightClass = expanded ? 'h-[58vh]' : 'h-[26vh]';
+
   return (
     <div
-      className="bg-black/90 backdrop-blur-xl rounded-t-3xl border-t border-white/10"
+      className={`mx-3 rounded-2xl overflow-hidden relative transition-all duration-[380ms] ease-out border border-white/[0.07] ${heightClass}`}
+      style={{
+        background: 'rgba(10, 10, 14, 0.42)',
+        backdropFilter: 'blur(22px) saturate(140%)',
+        WebkitBackdropFilter: 'blur(22px) saturate(140%)',
+      }}
     >
       {/* Header */}
-      <button
-        className="w-full flex items-center justify-between px-5 py-4"
-        onClick={onToggle}
-      >
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-500 to-[#D4A053] flex items-center justify-center">
-            <MessageCircle className="w-4 h-4 text-white" />
+      <div className="flex items-center justify-between px-4 py-2.5 border-b border-white/[0.06]">
+        <div className="flex items-center gap-2.5">
+          <div className="w-7 h-7 rounded-full bg-gradient-to-br from-purple-500 to-[#D4A053] flex items-center justify-center">
+            <MessageCircle className="w-3.5 h-3.5 text-white" />
           </div>
           <div className="text-left">
-            <p className="text-white font-bold text-sm">Community Vibes</p>
-            <p className="text-white/50 text-xs">
-              {trackStats?.total_reactions || reactions.length || 0} vibing now
+            <p className="text-white font-semibold text-[13px] leading-tight">Vibes</p>
+            <p className="text-white/45 text-[10px] leading-tight">
+              {trackStats?.total_reactions || reactions.length || 0} vibing
             </p>
           </div>
         </div>
-        <div
+        <button
+          className="p-1.5 rounded-full hover:bg-white/5 active:scale-95 transition"
+          onClick={onToggleExpand}
+          aria-label={expanded ? 'Collapse comments' : 'Expand comments'}
         >
-          <ChevronUp className="w-5 h-5 text-white/50" />
-        </div>
-      </button>
+          {expanded ? (
+            <Minimize2 className="w-4 h-4 text-white/70" />
+          ) : (
+            <Maximize2 className="w-4 h-4 text-white/70" />
+          )}
+        </button>
+      </div>
 
-      {/* Expanded Content */}
-      <>
-        {isExpanded && (
-          <div
-            className="px-5 pb-4"
-          >
-            {/* Comments List */}
-            <div ref={scrollRef} className="space-y-3 max-h-[180px] overflow-y-auto scrollbar-hide mb-4">
-              {reactions.length > 0 ? (
-                reactions.slice(-10).map((reaction) => (
-                  <div key={reaction.id} className="flex items-start gap-3">
-                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-600 to-purple-800 flex items-center justify-center flex-shrink-0">
-                      <User className="w-4 h-4 text-white" />
-                    </div>
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2">
-                        <span className="text-purple-400 text-xs font-bold">@{reaction.username}</span>
-                        <span className="text-white/30 text-[10px]">{timeAgo(reaction.created_at)}</span>
-                      </div>
-                      <p className="text-white/80 text-sm">
-                        {reaction.emoji} {reaction.comment || 'sent a vibe'}
-                      </p>
-                    </div>
-                  </div>
-                ))
-              ) : (
-                fallbackComments.map((comment, i) => (
-                  <div key={i} className="flex items-start gap-3">
-                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-600 to-purple-800 flex items-center justify-center flex-shrink-0">
-                      <User className="w-4 h-4 text-white" />
-                    </div>
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2">
-                        <span className="text-purple-400 text-xs font-bold">@{comment.user}</span>
-                        <span className="text-white/30 text-[10px]">{comment.time}</span>
-                      </div>
-                      <p className="text-white/80 text-sm">{comment.text}</p>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
+      {/* Top fade gradient — VOYO Moments signature */}
+      <div className="absolute top-[44px] left-0 right-0 h-4 bg-gradient-to-b from-[rgba(10,10,14,0.5)] to-transparent z-10 pointer-events-none" />
 
-            {/* Input */}
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={commentText}
-                onChange={(e) => setCommentText(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
-                placeholder="Drop a vibe..."
-                className="flex-1 bg-white/10 rounded-full px-4 py-3 text-sm text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-purple-500/50"
-              />
-              <button
-                className="w-12 h-12 rounded-full bg-gradient-to-r from-purple-500 to-[#D4A053] flex items-center justify-center"
-                onClick={handleSubmit}
-              >
-                <Send className="w-5 h-5 text-white" />
-              </button>
+      {/* Comments scroll */}
+      <div ref={scrollRef} className="overflow-y-auto scrollbar-hide px-4 py-3 space-y-3" style={{ height: 'calc(100% - 44px - 56px)' }}>
+        {(reactions.length > 0 ? reactions.slice(-30) : fallbackComments).map((c, i) => {
+          const isReal = 'username' in c;
+          return (
+            <div key={isReal ? (c as Reaction).id : i} className="flex items-start gap-2.5">
+              <div className="w-7 h-7 rounded-full bg-gradient-to-br from-purple-600 to-purple-800 flex items-center justify-center flex-shrink-0">
+                <User className="w-3.5 h-3.5 text-white" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="text-purple-300 text-[11px] font-bold">
+                    @{isReal ? (c as Reaction).username : (c as { user: string }).user}
+                  </span>
+                  <span className="text-white/30 text-[9px]">
+                    {isReal ? timeAgo((c as Reaction).created_at) : (c as { time: string }).time}
+                  </span>
+                </div>
+                <p className="text-white/85 text-[13px] leading-snug">
+                  {isReal
+                    ? `${(c as Reaction).emoji} ${(c as Reaction).comment || 'sent a vibe'}`
+                    : (c as { text: string }).text}
+                </p>
+              </div>
             </div>
-          </div>
-        )}
-      </>
+          );
+        })}
+      </div>
+
+      {/* Bottom fade gradient */}
+      <div className="absolute bottom-[56px] left-0 right-0 h-4 bg-gradient-to-t from-[rgba(10,10,14,0.5)] to-transparent z-10 pointer-events-none" />
+
+      {/* Input */}
+      <div className="absolute bottom-0 left-0 right-0 px-3 py-2 flex gap-2 bg-[rgba(10,10,14,0.55)] border-t border-white/[0.05]">
+        <input
+          type="text"
+          value={commentText}
+          onChange={(e) => setCommentText(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
+          placeholder={dashId ? 'Drop a vibe…' : 'Sign in to drop a vibe'}
+          disabled={!dashId}
+          className="flex-1 bg-white/[0.07] rounded-full px-3.5 py-2 text-[13px] text-white placeholder-white/35 focus:outline-none focus:ring-1 focus:ring-purple-500/40 disabled:opacity-50"
+        />
+        <button
+          className="w-9 h-9 rounded-full bg-gradient-to-r from-purple-500 to-[#D4A053] flex items-center justify-center active:scale-95 transition disabled:opacity-40"
+          onClick={handleSubmit}
+          disabled={!dashId || !commentText.trim()}
+          aria-label="Send"
+        >
+          <Send className="w-4 h-4 text-white" />
+        </button>
+      </div>
     </div>
   );
 };
 
 // ============================================
-// MAIN NOW PLAYING COMPONENT
+// MAIN
 // ============================================
 interface NowPlayingProps {
   isOpen: boolean;
   onClose: () => void;
+  /** Double-tap on the MiniPlayer here → goes to VOYO Portrait. */
+  onSwitchToVoyo?: () => void;
 }
 
-export const NowPlaying = ({ isOpen, onClose }: NowPlayingProps) => {
-  // Back-gesture coverage — system back / browser back / Android back closes
-  // the modal instead of exiting the app. Matches PlaylistModal /
-  // DiscoExplainer / SearchOverlayV2 pattern.
+export const NowPlaying = ({ isOpen, onClose, onSwitchToVoyo }: NowPlayingProps) => {
   useBackGuard(isOpen, onClose, 'now-playing');
 
-  // Fine-grained selectors — avoid re-rendering on unrelated store changes
   const currentTrack = usePlayerStore(s => s.currentTrack);
   const isPlaying = usePlayerStore(s => s.isPlaying);
-  const progress = usePlayerStore(s => s.progress);
-  const duration = usePlayerStore(s => s.duration);
-  const oyePrewarm = usePlayerStore(s => s.oyePrewarm);
-  const setOyePrewarm = usePlayerStore(s => s.setOyePrewarm);
-  const nextTrack = usePlayerStore(s => s.nextTrack);
-  const prevTrack = usePlayerStore(s => s.prevTrack);
-  const seekTo = usePlayerStore(s => s.seekTo);
   const queue = usePlayerStore(useShallow(s => s.queue));
   const removeFromQueue = usePlayerStore(s => s.removeFromQueue);
   const videoTarget = usePlayerStore(s => s.videoTarget);
   const setVideoTarget = usePlayerStore(s => s.setVideoTarget);
+  const predictUpcoming = usePlayerStore(s => s.predictUpcoming);
 
-  // Get current track position for hotspot detection
-  const trackPosition = Math.round(progress); // 0-100 percentage
-  const { handlePlayPause } = useMobilePlay();
-
-  // Only subscribe to the specific preference field we actually read
-  const explicitLike = usePreferenceStore(
-    s => (currentTrack ? s.trackPreferences[currentTrack.trackId]?.explicitLike : undefined)
-  );
-  const setExplicitLike = usePreferenceStore(s => s.setExplicitLike);
-  const isLiked = explicitLike === true;
+  const trackPosition = Math.round(usePlayerStore(s => s.progress));
 
   const createReaction = useReactionStore(s => s.createReaction);
   const fetchTrackReactions = useReactionStore(s => s.fetchTrackReactions);
   const fetchTrackStats = useReactionStore(s => s.fetchTrackStats);
-  // Maps spread on every realtime reaction; default === fires for every
-  // ANY-track reaction even when this track wasn't touched. Shallow
-  // compare on the Map's entries prevents that.
   const trackReactions = useReactionStore(useShallow(s => s.trackReactions));
   const statsMap = useReactionStore(useShallow(s => s.trackStats));
   const { dashId } = useAuth();
 
-  // State
-  // Shuffle + repeat wire directly to the playerStore — ClassicMode +
-  // VoyoPortraitPlayer already use this pattern. Prior bug: NowPlaying
-  // kept its own `useState` copies, so taps here updated icon color but
-  // the store's shuffleMode / repeatMode stayed at their defaults →
-  // nextTrack() never saw the user's intent. Observed in production as
-  // "repeat button does nothing" + "background loops same song because
-  // repeat-off can't be enabled from this surface".
-  const shuffleMode    = usePlayerStore(s => s.shuffleMode);
-  const repeatMode     = usePlayerStore(s => s.repeatMode);
-  const toggleShuffle  = usePlayerStore(s => s.toggleShuffle);
-  const cycleRepeat    = usePlayerStore(s => s.cycleRepeat);
-  const [showPlaylistModal, setShowPlaylistModal] = useState(false);
-  const [isVibesExpanded, setIsVibesExpanded] = useState(false);
   const [floatingReactions, setFloatingReactions] = useState<FloatingReaction[]>([]);
   const [showQueue, setShowQueue] = useState(false);
   const [shareToast, setShareToast] = useState(false);
-  // Video mode now uses global videoTarget from playerStore (no local state)
+  const [commentsExpanded, setCommentsExpanded] = useState(false);
 
-  // Reactions data
+  // Predicted next tracks — used for both the bokeh layer and Up Next strip.
+  // Derived from playerStore so it stays fresh as the queue / hot pool updates.
+  // Track-id keyed memo would be tighter but for 5 items the cost is trivial.
+  const upcoming = currentTrack ? predictUpcoming(8) : [];
+  const bokehTracks = upcoming.slice(0, 5);
+  const upNextTracks = upcoming.slice(0, 3);
+
   const currentTrackId = currentTrack?.id || '';
   const realReactions = trackReactions.get(currentTrackId) || [];
   const currentTrackStats = statsMap.get(currentTrackId) || null;
 
-  // Fetch reactions
+  // Fetch reactions when opened
   useEffect(() => {
     if (currentTrack && isOpen) {
       fetchTrackReactions(currentTrack.id);
@@ -316,28 +379,22 @@ export const NowPlaying = ({ isOpen, onClose }: NowPlayingProps) => {
     }
   }, [currentTrack?.id, isOpen, fetchTrackReactions, fetchTrackStats]);
 
-  // Reset videoTarget to hidden when NowPlaying closes
+  // Reset videoTarget when closing
   useEffect(() => {
-    if (!isOpen && videoTarget === 'portrait') {
-      setVideoTarget('hidden');
-    }
+    if (!isOpen && videoTarget === 'portrait') setVideoTarget('hidden');
   }, [isOpen, videoTarget, setVideoTarget]);
 
-  const currentTime = (progress / 100) * duration;
-
-  // Handle floating reaction
+  // Spawn floating reaction
   const spawnReaction = useCallback((emoji: string) => {
     const id = Date.now() + Math.random();
     const x = 20 + Math.random() * 60;
     const xOffset = (Math.random() - 0.5) * 100;
-
     setFloatingReactions(prev => [...prev, { id, emoji, x, xOffset }]);
     setTimeout(() => {
       setFloatingReactions(prev => prev.filter(r => r.id !== id));
     }, 3000);
   }, []);
 
-  // Handle comment
   const handleAddComment = useCallback(async (text: string) => {
     if (!currentTrack) return;
     spawnReaction('🔥');
@@ -351,14 +408,11 @@ export const NowPlaying = ({ isOpen, onClose }: NowPlayingProps) => {
       emoji: '💬',
       reactionType: 'oye',
       comment: text,
-      trackPosition, // Include position for hotspot detection
+      trackPosition,
     });
   }, [currentTrack, dashId, createReaction, spawnReaction, trackPosition]);
 
-  // Auto-spawn ambient reactions — only while NowPlaying is open, playing,
-  // AND the tab is visible. In BG we were burning setInterval + state
-  // updates on invisible floating emojis; now the whole interval stops
-  // when the tab hides and resumes when it's back.
+  // Auto-spawn ambient reactions while playing + visible
   useEffect(() => {
     if (!isPlaying || !isOpen) return;
     let interval: ReturnType<typeof setInterval> | null = null;
@@ -381,385 +435,206 @@ export const NowPlaying = ({ isOpen, onClose }: NowPlayingProps) => {
     };
   }, [isPlaying, isOpen, spawnReaction]);
 
-  // Handle Share button
   const handleShare = useCallback(async () => {
     if (!currentTrack) return;
-
     const shareData = {
       title: currentTrack.title,
       text: `Check out "${currentTrack.title}" by ${currentTrack.artist} on VOYO Music`,
       url: window.location.href,
     };
-
     try {
-      // Try Web Share API first
       if (navigator.share) {
         await navigator.share(shareData);
         spawnReaction('🔗');
       } else {
-        // Fallback to clipboard
-        const shareText = `${shareData.text}\n${shareData.url}`;
-        await navigator.clipboard.writeText(shareText);
+        await navigator.clipboard.writeText(`${shareData.text}\n${shareData.url}`);
         setShareToast(true);
         spawnReaction('📋');
         setTimeout(() => setShareToast(false), 2000);
       }
     } catch (error) {
-      // User cancelled or error occurred
       devLog('Share cancelled or failed:', error);
     }
   }, [currentTrack, spawnReaction]);
 
-  // Handle Queue button
-  const handleQueue = useCallback(() => {
-    setShowQueue(!showQueue);
-    spawnReaction('🎵');
-  }, [showQueue, spawnReaction]);
+  // Double-tap on MiniPlayer here = go to VOYO. If onSwitchToVoyo wasn't
+  // wired, fall back to closing the surface so we don't trap the user.
+  const handleMiniPlayerDoubleTap = useCallback(() => {
+    onClose();
+    if (onSwitchToVoyo) onSwitchToVoyo();
+  }, [onClose, onSwitchToVoyo]);
 
   if (!currentTrack) return null;
+  if (!isOpen) return null;
 
   return (
-    <>
-      {isOpen && (
-        <div
-          className="fixed inset-0 z-50 bg-black flex flex-col"
-        >
-          {/* BACKGROUND - Album Art (Video uses global YouTubeIframe via videoTarget) */}
-          {videoTarget !== 'portrait' && (
-            <AlbumArtBackground coverUrl={getTrackThumbnailUrl(currentTrack, 'max')} />
-          )}
-          {/* When videoTarget === 'portrait', the global YouTubeIframe renders here */}
+    <div className="fixed inset-0 z-50 bg-black flex flex-col">
+      {/* Backdrop: blurred album art (when not in video mode) */}
+      {videoTarget !== 'portrait' && (
+        <AlbumArtBackground coverUrl={getTrackThumbnailUrl(currentTrack, 'max')} />
+      )}
 
-          {/* VIDEO TOGGLE - Left side vertical toggle */}
-          <div
-            className="absolute left-3 top-1/2 -translate-y-1/2 z-40"
+      {/* Drifting bokeh of related tracks */}
+      <BokehLayer tracks={bokehTracks} />
+
+      {/* Gradient overlays */}
+      <div className="absolute inset-0 bg-gradient-to-t from-black via-black/45 to-transparent z-10 pointer-events-none" />
+      <div className="absolute inset-0 bg-gradient-to-b from-black/65 via-transparent to-transparent z-10 pointer-events-none" />
+
+      {/* Floating ambient reactions */}
+      <FloatingReactions reactions={floatingReactions} />
+
+      {/* VIDEO TOGGLE — left side vertical (kept) */}
+      <div className="absolute left-3 top-1/2 -translate-y-1/2 z-40">
+        <button
+          className={`flex flex-col items-center gap-2 px-2 py-3 rounded-full backdrop-blur-xl border transition-all duration-300 ${
+            videoTarget === 'portrait'
+              ? 'bg-purple-500/30 border-purple-400/50'
+              : 'bg-black/40 border-white/10 hover:border-white/20'
+          }`}
+          onClick={() => setVideoTarget(videoTarget === 'portrait' ? 'hidden' : 'portrait')}
+          aria-label={videoTarget === 'portrait' ? 'Show album art' : 'Show video'}
+        >
+          {videoTarget === 'portrait' ? (
+            <ImageIcon className="w-4 h-4 text-white" />
+          ) : (
+            <Video className="w-4 h-4 text-white" />
+          )}
+          <span
+            className="text-[9px] text-white/80 font-medium"
+            style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}
           >
+            {videoTarget === 'portrait' ? 'ART' : 'VIDEO'}
+          </span>
+        </button>
+      </div>
+
+      {/* MAIN CONTENT */}
+      <div className="relative z-30 flex flex-col h-full">
+        {/* TOP CHROME */}
+        <div className="flex items-center justify-between px-4 pt-4 pb-2">
+          <button
+            className="p-2 -ml-2 active:scale-95 transition"
+            onClick={onClose}
+            aria-label="Close"
+          >
+            <ChevronDown className="w-7 h-7 text-white" />
+          </button>
+          <div className="text-center">
+            <p className="text-white/50 text-[10px] uppercase tracking-[0.18em]">Playing from</p>
+            <p className="text-white/90 text-[13px] font-medium">{currentTrack.album || 'Your Library'}</p>
+          </div>
+          <div className="flex items-center gap-1">
             <button
-              className={`flex flex-col items-center gap-2 px-2 py-3 rounded-full backdrop-blur-xl border transition-all duration-300 ${
-                videoTarget === 'portrait'
-                  ? 'bg-purple-500/30 border-purple-400/50'
-                  : 'bg-black/40 border-white/10 hover:border-white/20'
-              }`}
-              onClick={() => setVideoTarget(videoTarget === 'portrait' ? 'hidden' : 'portrait')}
+              className="p-2 active:scale-95 transition"
+              onClick={handleShare}
+              aria-label="Share"
             >
-              {videoTarget === 'portrait' ? (
-                <Image className="w-4 h-4 text-white" />
-              ) : (
-                <Video className="w-4 h-4 text-white" />
-              )}
-              <span
-                className="text-[9px] text-white/80 font-medium"
-                style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}
-              >
-                {videoTarget === 'portrait' ? 'ART' : 'VIDEO'}
-              </span>
+              <Share2 className="w-5 h-5 text-white/70" />
+            </button>
+            <button
+              className={`p-2 active:scale-95 transition ${showQueue ? 'text-purple-400' : 'text-white/70'}`}
+              onClick={() => setShowQueue(true)}
+              aria-label="Queue"
+            >
+              <ListMusic className="w-5 h-5" />
             </button>
           </div>
+        </div>
 
-          {/* GRADIENT OVERLAYS - Black Contour Style */}
-          <div className="absolute inset-0 bg-gradient-to-t from-black via-black/50 to-transparent z-10 pointer-events-none" />
-          <div className="absolute inset-0 bg-gradient-to-b from-black/80 via-transparent to-transparent z-10 pointer-events-none" />
+        {/* SPACER + TITLE */}
+        <div className="flex-1 flex items-center justify-center">
+          <TitleBlock track={currentTrack} compact={commentsExpanded} />
+        </div>
 
-          {/* FLOATING REACTIONS */}
-          <FloatingReactions reactions={floatingReactions} />
+        {/* COMMENTS OVERLAY — variable height, transparent VOYO Moments style */}
+        <CommentsOverlay
+          expanded={commentsExpanded}
+          onToggleExpand={() => setCommentsExpanded(prev => !prev)}
+          reactions={realReactions}
+          trackStats={currentTrackStats}
+          onAddComment={handleAddComment}
+          dashId={dashId}
+        />
 
-          {/* MAIN CONTENT */}
-          <div className="relative z-30 flex flex-col h-full">
-            {/* TOP BAR */}
-            <div className="flex items-center justify-between px-4 py-4">
-              <button
-                className="p-2"
-                onClick={onClose}
-              >
-                <ChevronDown className="w-7 h-7 text-white" />
-              </button>
-              <div className="text-center">
-                <p className="text-white/50 text-xs uppercase tracking-wider">Playing from playlist</p>
-                <p className="text-white text-sm font-medium">{currentTrack.album || 'Your Library'}</p>
-              </div>
-              <div className="w-11" /> {/* Spacer */}
-            </div>
-
-            {/* SPACER - Push content to bottom */}
-            <div className="flex-1" />
-
-
-            {/* TRACK INFO ROW */}
-            <div className="flex items-center gap-4 px-4 mb-3">
-              {/* Album Art */}
-              <div className="w-14 h-14 rounded-lg overflow-hidden shadow-xl ring-1 ring-white/10">
-                <img
-                  src={getTrackThumbnailUrl(currentTrack, 'medium')}
-                  alt={currentTrack.title}
-                  decoding="async"
-                  fetchPriority="high"
-                  className="w-full h-full object-cover"
-                />
-              </div>
-
-              {/* Title & Artist */}
-              <div className="flex-1 min-w-0">
-                <h2 className="text-white font-bold text-lg truncate">{currentTrack.title}</h2>
-                <p className="text-white/60 text-sm truncate">{currentTrack.artist}</p>
-              </div>
-
-              {/* Action Buttons */}
-              {/* LIKE — Heart icon reflects isLiked (pink fill when liked,
-                  faint outline otherwise). Prior bug: rendered <X />, users
-                  mistook it for "close" and silently corrupted their like
-                  graph tapping to dismiss. Pattern mirrors VideoMode.tsx. */}
-              <button
-                className="p-2"
-                onClick={() => currentTrack && setExplicitLike(currentTrack.trackId, !isLiked)}
-                aria-label={isLiked ? 'Unlike' : 'Like'}
-              >
-                <Heart
-                  className="w-6 h-6"
-                  style={{
-                    color: isLiked ? '#f472b6' : 'rgba(255,255,255,0.6)',
-                    fill: isLiked ? '#f472b6' : 'none',
-                  }}
-                />
-              </button>
-              <button
-                className="p-2"
-                onClick={() => setShowPlaylistModal(true)}
-              >
-                <Plus className="w-6 h-6 text-white" strokeWidth={2.5} />
-              </button>
-            </div>
-
-            {/* PROGRESS BAR */}
-            <div className="px-4 mb-2">
-              <div
-                className="relative h-1 bg-white/20 rounded-full cursor-pointer"
-                onClick={(e) => {
-                  const rect = e.currentTarget.getBoundingClientRect();
-                  const percent = ((e.clientX - rect.left) / rect.width) * 100;
-                  seekTo((percent / 100) * duration);
-                }}
-              >
-                <div
-                  className="absolute left-0 top-0 h-full bg-white rounded-full"
-                  style={{ width: `${progress}%` }}
-                />
-                <div
-                  className="absolute top-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full shadow-lg"
-                  style={{ left: `${progress}%`, marginLeft: '-6px' }}
-                />
-              </div>
-              <div className="flex justify-between mt-1 text-xs text-white/50">
-                <span>{formatTime(currentTime)}</span>
-                <span>{formatTime(duration)}</span>
-              </div>
-            </div>
-
-            {/* MAIN CONTROLS */}
-            <div className="flex items-center justify-between px-6 py-4">
-              <button
-                className={shuffleMode ? 'text-purple-400' : 'text-white/60'}
-                onClick={toggleShuffle}
-                aria-label={shuffleMode ? 'Disable shuffle' : 'Enable shuffle'}
-              >
-                <Shuffle className="w-6 h-6" />
-              </button>
-
-              <button
-                className="text-white"
-                onClick={prevTrack}
-              >
-                <SkipBack className="w-8 h-8" fill="white" />
-              </button>
-
-              <button
-                className="w-16 h-16 rounded-full bg-white flex items-center justify-center"
-                onClick={handlePlayPause}
-              >
-                {isPlaying ? (
-                  <Pause className="w-8 h-8 text-black" fill="black" />
-                ) : (
-                  <Play className="w-8 h-8 text-black ml-1" fill="black" />
-                )}
-              </button>
-
-              <button
-                className="text-white"
-                onClick={nextTrack}
-              >
-                <SkipForward className="w-8 h-8" fill="white" />
-              </button>
-
-              <button
-                className={repeatMode !== 'off' ? 'text-purple-400' : 'text-white/60'}
-                onClick={cycleRepeat}
-                aria-label={
-                  repeatMode === 'off'
-                    ? 'Enable repeat'
-                    : repeatMode === 'one'
-                      ? 'Repeat one — click to disable'
-                      : 'Repeat all — click for repeat one'
-                }
-              >
-                <Repeat className="w-6 h-6" />
-              </button>
-            </div>
-
-            {/* SECONDARY CONTROLS */}
-            <div className="flex items-center justify-between px-6 py-2">
-              {/* OYÉ Button — unified four-state visual. Replaces the prior
-                  purple pill so state (purple faded → bubbling → gold faded
-                  → gold filled) is legible here the same way it is on every
-                  card, mini-player, and search row. */}
-              {currentTrack && <OyeButton track={currentTrack} size="lg" />}
-
-              {/* OYÉ Lightning Bulb — predictive pre-warm toggle. Glows when on
-                  (workers warm N+1/N+2 ahead), dim when off (reactive only). */}
-              <button
-                onClick={() => setOyePrewarm(!oyePrewarm)}
-                aria-label={oyePrewarm ? 'OYÉ bulb on — pre-warming' : 'OYÉ bulb off — reactive'}
-                title={oyePrewarm ? 'Bulb ON — next tracks pre-loading' : 'Bulb OFF — load on demand'}
-                className="flex items-center justify-center w-10 h-10 rounded-full transition-all"
-                style={{
-                  background: oyePrewarm ? 'rgba(253,224,71,0.15)' : 'rgba(255,255,255,0.05)',
-                  border: oyePrewarm ? '1px solid rgba(253,224,71,0.5)' : '1px solid rgba(255,255,255,0.1)',
-                  boxShadow: oyePrewarm ? '0 0 12px rgba(253,224,71,0.35)' : 'none',
-                }}
-              >
-                <Lightbulb
-                  className="w-4 h-4 transition-all"
-                  style={{
-                    color: oyePrewarm ? '#fde047' : 'rgba(255,255,255,0.45)',
-                    fill:  oyePrewarm ? 'rgba(253,224,71,0.35)' : 'none',
-                  }}
-                />
-              </button>
-
-              {/* Right buttons */}
-              <div className="flex items-center gap-4">
-                <button
-                  className="text-white/60 hover:text-white"
-                  onClick={handleShare}
-                >
-                  <Share2 className="w-5 h-5" />
-                </button>
-                <button
-                  className={showQueue ? 'text-purple-400' : 'text-white/60 hover:text-white'}
-                  onClick={handleQueue}
-                >
-                  <ListMusic className="w-5 h-5" />
-                </button>
-              </div>
-            </div>
-
-            {/* COMMUNITY VIBES PANEL */}
-            <CommunityVibesPanel
-              isExpanded={isVibesExpanded}
-              onToggle={() => setIsVibesExpanded(!isVibesExpanded)}
-              reactions={realReactions}
-              onAddComment={handleAddComment}
-              trackStats={currentTrackStats}
-              dashId={dashId}
-            />
+        {/* UP NEXT — hidden when comments expand to give them room */}
+        {!commentsExpanded && (
+          <div className="mt-3">
+            <UpNextStrip tracks={upNextTracks} />
           </div>
+        )}
 
-          {/* QUEUE PANEL */}
-          <>
-            {showQueue && (
-              <div
-                className="absolute inset-0 bg-black/95 backdrop-blur-xl z-40 flex flex-col"
-              >
-                {/* Queue Header */}
-                <div className="flex items-center justify-between px-5 py-4 border-b border-white/10">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-500 to-[#D4A053] flex items-center justify-center">
-                      <ListMusic className="w-4 h-4 text-white" />
-                    </div>
-                    <div>
-                      <p className="text-white font-bold text-base">Up Next</p>
-                      <p className="text-white/50 text-xs">{queue.length} tracks in bucket</p>
-                    </div>
+        {/* MINIPLAYER CHROME at bottom — same component as Home, double-tap → VOYO */}
+        <div className="px-3 pt-2 pb-3" style={{ paddingBottom: 'max(12px, env(safe-area-inset-bottom))' }}>
+          <MiniPlayer variant="inline" onOpenFull={handleMiniPlayerDoubleTap} />
+        </div>
+      </div>
+
+      {/* QUEUE PANEL */}
+      {showQueue && (
+        <div className="absolute inset-0 bg-black/95 backdrop-blur-xl z-40 flex flex-col">
+          <div className="flex items-center justify-between px-5 py-4 border-b border-white/10">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-500 to-[#D4A053] flex items-center justify-center">
+                <ListMusic className="w-4 h-4 text-white" />
+              </div>
+              <div>
+                <p className="text-white font-bold text-base">Up Next</p>
+                <p className="text-white/50 text-xs">{queue.length} tracks in bucket</p>
+              </div>
+            </div>
+            <VoyoCloseX onClose={() => setShowQueue(false)} size="md" />
+          </div>
+          <div className="flex-1 overflow-y-auto px-5 py-4 space-y-2">
+            {queue.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-full text-center py-12">
+                <ListMusic className="w-16 h-16 text-white/20 mb-4" />
+                <p className="text-white/50 text-lg font-medium mb-2">Bucket is empty</p>
+                <p className="text-white/30 text-sm">Add tracks to fill your bucket</p>
+              </div>
+            ) : (
+              queue.map((item, index) => (
+                <div
+                  key={item.track.id + index}
+                  className="flex items-center gap-3 bg-white/5 rounded-lg p-3 hover:bg-white/10 transition-colors"
+                >
+                  <span className="text-white/40 text-sm font-bold w-6 text-center">
+                    {index + 1}
+                  </span>
+                  <div className="w-12 h-12 rounded-md overflow-hidden flex-shrink-0">
+                    <img
+                      src={getTrackThumbnailUrl(item.track, 'default')}
+                      alt={item.track.title}
+                      loading="lazy"
+                      decoding="async"
+                      className="w-full h-full object-cover"
+                    />
                   </div>
-                  <VoyoCloseX onClose={() => setShowQueue(false)} size="md" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-white text-sm font-medium truncate">{item.track.title}</p>
+                    <p className="text-white/50 text-xs truncate">{item.track.artist}</p>
+                  </div>
+                  <button
+                    className="p-2 text-white/40 hover:text-red-400"
+                    onClick={() => removeFromQueue(index)}
+                    aria-label="Remove"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
                 </div>
-
-                {/* Queue List */}
-                <div className="flex-1 overflow-y-auto px-5 py-4 space-y-2">
-                  {queue.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center h-full text-center py-12">
-                      <ListMusic className="w-16 h-16 text-white/20 mb-4" />
-                      <p className="text-white/50 text-lg font-medium mb-2">Bucket is empty</p>
-                      <p className="text-white/30 text-sm">Add tracks to fill your bucket</p>
-                    </div>
-                  ) : (
-                    queue.map((item, index) => (
-                      <div
-                        key={item.track.id + index}
-                        className="flex items-center gap-3 bg-white/5 rounded-lg p-3 hover:bg-white/10 transition-colors"
-                      >
-                        {/* Track Number */}
-                        <span className="text-white/40 text-sm font-bold w-6 text-center">
-                          {index + 1}
-                        </span>
-
-                        {/* Album Art */}
-                        <div className="w-12 h-12 rounded-md overflow-hidden flex-shrink-0">
-                          <img
-                            src={getTrackThumbnailUrl(item.track, 'default')}
-                            alt={item.track.title}
-                            loading="lazy"
-                            decoding="async"
-                            className="w-full h-full object-cover"
-                          />
-                        </div>
-
-                        {/* Track Info */}
-                        <div className="flex-1 min-w-0">
-                          <p className="text-white text-sm font-medium truncate">
-                            {item.track.title}
-                          </p>
-                          <p className="text-white/50 text-xs truncate">
-                            {item.track.artist}
-                          </p>
-                        </div>
-
-                        {/* Remove Button */}
-                        <button
-                          className="p-2 text-white/40 hover:text-red-400"
-                          onClick={() => removeFromQueue(index)}
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
+              ))
             )}
-          </>
-
-          {/* SHARE TOAST */}
-          <>
-            {shareToast && (
-              <div
-                className="absolute top-20 left-1/2 -translate-x-1/2 z-50 bg-white/10 backdrop-blur-xl rounded-full px-6 py-3 flex items-center gap-2"
-              >
-                <Share2 className="w-4 h-4 text-white" />
-                <span className="text-white text-sm font-medium">Copied to clipboard</span>
-              </div>
-            )}
-          </>
-
-          {/* Playlist Modal */}
-          <PlaylistModal
-            isOpen={showPlaylistModal}
-            onClose={() => setShowPlaylistModal(false)}
-            trackId={currentTrack.trackId}
-            trackTitle={currentTrack.title}
-          />
+          </div>
         </div>
       )}
-    </>
+
+      {/* SHARE TOAST */}
+      {shareToast && (
+        <div className="absolute top-20 left-1/2 -translate-x-1/2 z-50 bg-white/10 backdrop-blur-xl rounded-full px-6 py-3 flex items-center gap-2">
+          <Share2 className="w-4 h-4 text-white" />
+          <span className="text-white text-sm font-medium">Copied to clipboard</span>
+        </div>
+      )}
+    </div>
   );
 };
-
-export default NowPlaying;
