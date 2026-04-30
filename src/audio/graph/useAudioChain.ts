@@ -289,8 +289,16 @@ export function useAudioChain(params: UseAudioChainParams): AudioChainApi {
     // fires fadeIn and obliterates the outgoing track's ramp to silence.
     // Let the fade-out complete; the next real canplay will do the ramp-up.
     if (gainIntentRef.current === 'fade-out') {
-      devWarn('[gain] fadeIn suppressed while fade-out in flight');
-      return;
+      // BG-throttled setTimeout may have kept 'fade-out' alive long after the
+      // AudioContext ramp completed. If gain is already at the floor the ramp
+      // is done — clear the stale intent and proceed. Otherwise the fade-out
+      // is truly in flight; suppress to protect the outgoing track's ramp.
+      const currentGain = gainNodeRef.current?.gain.value ?? 1;
+      if (currentGain > 0.05) {
+        devWarn('[gain] fadeIn suppressed while fade-out in flight');
+        return;
+      }
+      gainIntentRef.current = 'idle';
     }
     const ctx = audioContextRef.current;
     if (ctx.state === 'suspended' || (ctx as any).state === 'interrupted') {
