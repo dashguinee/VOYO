@@ -4,7 +4,7 @@
  */
 
 import { useState, useRef, useEffect, useCallback, memo } from 'react';
-import { Search, X, Music2, Clock, Play, Compass, Disc3, Radio, User } from 'lucide-react';
+import { Search, X, Clock, Play, Compass, User } from 'lucide-react';
 import { VoyoCloseX } from '../ui/VoyoCloseX';
 import { OyeButton } from '../oye/OyeButton';
 import { VoyoIcon, VoyoIconName } from '../ui/VoyoIcon';
@@ -14,7 +14,6 @@ import { usePlayerStore } from '../../store/playerStore';
 import { app } from '../../services/oyo';
 import { Track } from '../../types';
 import { searchMusic, SearchResult, prefetchTrack } from '../../services/api';
-import { getThumb } from '../../utils/thumbnail';
 import { SmartImage } from '../ui/SmartImage';
 import { searchCache } from '../../utils/searchCache';
 import { addSearchResultsToPool } from '../../services/personalization';
@@ -259,12 +258,15 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap, onEnterVideoMode
   // already handled by the OyeButton's own r2KnownStore subscription.
   const announcedDiscoRef = useRef<Set<string>>(new Set());
   useEffect(() => {
+    // v915 — was `break` after the first match; if two tracks landed
+    // in the same tick the second one was permanently silenced
+    // (added to announcedDiscoRef logic only via its own future tick
+    // that never came). Announce all freshly-landed IDs.
     for (const id of warmingSet) {
       if (r2KnownSet.has(id) && !announcedDiscoRef.current.has(id)) {
         announcedDiscoRef.current.add(id);
         const result = results.find(r => getYouTubeId(r.voyoId) === id);
         if (result) showToast({ type: 'in_disco', trackTitle: result.title });
-        break; // one announcement per tick — don't pile up
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -317,7 +319,6 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap, onEnterVideoMode
   // so the user spots which will play instantly + survive the lockscreen.
   const [cachedSet, setCachedSet] = useState<Set<string>>(new Set());
   useEffect(() => {
-    if (results.length === 0) { setCachedSet(new Set()); return; }
     let cancelled = false;
     // (audit-2 P1) AbortController so fast typing doesn't stack 35
     // in-flight /exists/ fetches per query behind the browser's 6-conn
@@ -326,6 +327,13 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap, onEnterVideoMode
     // connection slots the latest query needed. AbortController also
     // composes with the per-fetch 4s timeout via AbortSignal.any.
     const controller = new AbortController();
+    // v915 — empty-results path used to early-return WITHOUT aborting
+    // the previous controller (a non-empty results → empty results
+    // transition leaked the prior Promise.all behind connection slots
+    // the next query needed). Now we always declare the controller
+    // first; the cleanup below aborts it regardless of which branch
+    // we took.
+    if (results.length === 0) { setCachedSet(new Set()); return () => { cancelled = true; controller.abort(); }; }
     const ids = results.map(r => r.voyoId).filter(id => /^[A-Za-z0-9_-]{11}$/.test(id));
     const checkOne = async (id: string): Promise<[string, boolean]> => {
       try {
@@ -404,6 +412,9 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap, onEnterVideoMode
       // = wrong-track playback. Same for the play_now auto-dismiss.
       if (toastTimerRef.current) { clearTimeout(toastTimerRef.current); toastTimerRef.current = null; }
       if (morphTimerRef.current) { clearTimeout(morphTimerRef.current); morphTimerRef.current = null; }
+      // v915 — clear so reopening with the same query re-announces
+      // any "Landed in Disco" pills that the user missed before.
+      announcedDiscoRef.current.clear();
       setToast(null);
     }
   }, [isOpen]);

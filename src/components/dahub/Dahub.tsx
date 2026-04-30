@@ -1023,7 +1023,13 @@ export function Dahub({ userId, userName, userAvatar, coreId, appContext, onClos
       try { unsubscribe?.(); } catch {}
       try { presenceAPI.updatePresence(userId, 'offline', appContext || APP_CODES.COMMAND_CENTER); } catch {}
     };
-  }, [userId, appContext, loadData]);
+    // v915 — was [userId, appContext, loadData]. loadData is recreated
+    // on every userId change, which retriggered this effect → resub +
+    // double presence call. Channels could briefly overlap. Now we key
+    // only on the real identifiers; loadData is called once at the
+    // top of the effect and never via deps.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId, appContext]);
 
   const handleConnect = async (member: SharedAccountMember) => {
     setConnectingId(member.dash_id);

@@ -1633,15 +1633,30 @@ export const VoyoMoments: React.FC<VoyoMomentsProps> = ({ onPlayFullTrack, onArt
   }, []);
 
   // Record play after 1.5s dwell.
+  // v915 — was over-keyed on [currentMoment?.id, recordPlay, recordSkip,
+  // categoryAxis, onPlayFullTrack, currentMoment]. Any callback identity
+  // churn during the 1.5s dwell tore the effect down and fired
+  // recordSkip even though the user was still watching. Pinned the
+  // volatile callbacks to refs and narrowed the dep list to the moment
+  // id, so the dwell timer only restarts on actual moment change.
+  const recordPlayRef = useRef(recordPlay);
+  const recordSkipRef = useRef(recordSkip);
+  const onPlayFullTrackRef = useRef(onPlayFullTrack);
+  const categoryAxisRef = useRef(categoryAxis);
+  useEffect(() => { recordPlayRef.current = recordPlay; }, [recordPlay]);
+  useEffect(() => { recordSkipRef.current = recordSkip; }, [recordSkip]);
+  useEffect(() => { onPlayFullTrackRef.current = onPlayFullTrack; }, [onPlayFullTrack]);
+  useEffect(() => { categoryAxisRef.current = categoryAxis; }, [categoryAxis]);
   useEffect(() => {
     if (!currentMoment) return;
     const id = currentMoment.id;
     const moment = currentMoment;
     let recorded = false;
     const t = window.setTimeout(() => {
-      recordPlay(id);
+      recordPlayRef.current(id);
       recorded = true;
-      if (categoryAxis === 'vibes' && moment.parent_track_id && onPlayFullTrack) {
+      const playFullTrack = onPlayFullTrackRef.current;
+      if (categoryAxisRef.current === 'vibes' && moment.parent_track_id && playFullTrack) {
         const livePlayingId = usePlayerStore.getState().currentTrack?.trackId
           || (usePlayerStore.getState().currentTrack as unknown as { id?: string })?.id;
         // (1) Same-track guard (v871) — no redundant reload.
@@ -1654,7 +1669,7 @@ export const VoyoMoments: React.FC<VoyoMomentsProps> = ({ onPlayFullTrack, onArt
         // change, no auto-plays. Lets the new track settle without
         // the feed yanking it back.
         if (Date.now() - lastTrackChangeAtRef.current < 4000) return;
-        onPlayFullTrack({
+        playFullTrack({
           id: moment.parent_track_id,
           title: moment.parent_track_title || 'Unknown',
           artist: moment.parent_track_artist || 'Unknown Artist',
@@ -1663,9 +1678,9 @@ export const VoyoMoments: React.FC<VoyoMomentsProps> = ({ onPlayFullTrack, onArt
     }, 1500);
     return () => {
       window.clearTimeout(t);
-      if (!recorded) recordSkip(id);
+      if (!recorded) recordSkipRef.current(id);
     };
-  }, [currentMoment?.id, recordPlay, recordSkip, categoryAxis, onPlayFullTrack, currentMoment]);
+  }, [currentMoment?.id, currentMoment]);
 
   // Navigate with animation direction
   // Nav-fade signal — VoyoBottomNav fades to 30% (orb to 50%) when this

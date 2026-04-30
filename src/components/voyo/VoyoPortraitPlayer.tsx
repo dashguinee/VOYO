@@ -1187,8 +1187,11 @@ const ExpandVideoButton = memo(({ onClick, isIframeAudio, isMiniPlayerActive, co
         subtitle: text,
       });
     } catch { /* never break */ }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase === 'takeout']);
+    // v915 — dep was the boolean `phase === 'takeout'`. React lints
+    // this for a reason: the effect captures `phase` from closure but
+    // re-runs only on the boolean change. Worked by accident; key on
+    // `phase` directly and gate inside (already done above).
+  }, [phase]);
 
   // After Take Out settles for ~2.2s, park the chip (fade out from the
   // card spot). User has seen the morph; the bottom-right rising chip
@@ -5521,11 +5524,9 @@ export const VoyoPortraitPlayer = ({
   // Cleanup on unmount
   useEffect(() => {
     return () => {
-      // skeepEscalateTimer is actually a setTimeout (despite the
-      // clearInterval call working in browsers). Renaming would be
-      // semantic; keeping clearInterval here for now since both clear
-      // the same handle space in DOM impls.
-      if (skeepEscalateTimer.current) clearInterval(skeepEscalateTimer.current);
+      // v915 — skeepEscalateTimer is a setTimeout; was clearInterval
+      // (works in browsers but semantic debt). Aligned to clearTimeout.
+      if (skeepEscalateTimer.current) clearTimeout(skeepEscalateTimer.current);
       if (skeepHoldTimer.current) clearTimeout(skeepHoldTimer.current);
       // (audit-2 P0-PUI-1) skeepSeekInterval was missed from this
       // cleanup. The 100ms seekTo() interval kept scrubbing whatever

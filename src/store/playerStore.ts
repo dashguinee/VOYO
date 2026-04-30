@@ -448,8 +448,16 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   videoBlocked: false,
   playerCompact: false,
   feedNavDim: false,
-  shuffleMode: false,
-  repeatMode: 'off',
+  // v915 — hydrate from localStorage so playback modes survive reload.
+  shuffleMode: ((): boolean => {
+    try { return localStorage.getItem('voyo-shuffle-mode') === 'true'; } catch { return false; }
+  })(),
+  repeatMode: ((): 'off' | 'all' | 'one' => {
+    try {
+      const v = localStorage.getItem('voyo-repeat-mode');
+      return v === 'all' || v === 'one' ? v : 'off';
+    } catch { return 'off'; }
+  })(),
 
   // SKEEP Initial State
   playbackRate: 1,
@@ -1862,14 +1870,24 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   },
 
   // Playback Mode Actions
-  toggleShuffle: () => set((state) => ({ shuffleMode: !state.shuffleMode })),
+  // v915 — both setters now persist to localStorage so shuffle/repeat
+  // survive a reload. Was: flip → reload → silently reset to default.
+  toggleShuffle: () => {
+    set((state) => {
+      const next = !state.shuffleMode;
+      try { localStorage.setItem('voyo-shuffle-mode', String(next)); } catch {}
+      return { shuffleMode: next };
+    });
+  },
 
   cycleRepeat: () => {
     set((state) => {
       const modes: Array<'off' | 'all' | 'one'> = ['off', 'all', 'one'];
       const currentIndex = modes.indexOf(state.repeatMode);
       const nextIndex = (currentIndex + 1) % modes.length;
-      return { repeatMode: modes[nextIndex] };
+      const next = modes[nextIndex];
+      try { localStorage.setItem('voyo-repeat-mode', next); } catch {}
+      return { repeatMode: next };
     });
   },
 

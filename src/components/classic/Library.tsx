@@ -307,9 +307,17 @@ const SongRow = ({
 }) => {
   const [isHovered, setIsHovered] = useState(false);
   const currentTrack = usePlayerStore(s => s.currentTrack);
+  // v915 — long-press timer ref (was stored on e.currentTarget DOM
+  // node; row unmount mid-press leaked it).
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current); }, []);
 
-  // Detect if device has hover capability (desktop)
-  const hasHover = window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+  // v915 — was matchMedia per-render (rebuilt on every SongRow render +
+  // SSR-unsafe). Resolve once on mount.
+  const [hasHover] = useState(() =>
+    typeof window !== 'undefined' &&
+    window.matchMedia?.('(hover: hover) and (pointer: fine)').matches
+  );
 
   // Tap = play the full track immediately. (30s teaser preview removed.)
   const handleClick = () => {
@@ -394,17 +402,26 @@ const SongRow = ({
         onClick={(e) => { e.stopPropagation(); onLike(); }}
         onPointerDown={(e) => {
           e.stopPropagation();
-          // Start long press timer (500ms)
-          const timer = setTimeout(() => {
+          // v915 — was storing the timer on `e.currentTarget` as a DOM
+          // property; row unmount mid-press leaked the timer + the
+          // closure fired against stale state. Use a ref instead.
+          if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+          longPressTimerRef.current = setTimeout(() => {
             onAddToPlaylist();
+            longPressTimerRef.current = null;
           }, 500);
-          (e.currentTarget as any).__longPressTimer = timer;
         }}
-        onPointerUp={(e) => {
-          clearTimeout((e.currentTarget as any).__longPressTimer);
+        onPointerUp={() => {
+          if (longPressTimerRef.current) {
+            clearTimeout(longPressTimerRef.current);
+            longPressTimerRef.current = null;
+          }
         }}
-        onPointerLeave={(e) => {
-          clearTimeout((e.currentTarget as any).__longPressTimer);
+        onPointerLeave={() => {
+          if (longPressTimerRef.current) {
+            clearTimeout(longPressTimerRef.current);
+            longPressTimerRef.current = null;
+          }
         }}
       >
         <Heart
@@ -626,7 +643,9 @@ export const Library = ({ onTrackClick }: LibraryProps) => {
     let base: Track[];
     switch (activeFilter) {
       case 'just-played':
-        base = [...history].reverse().map(h => h.track);
+        // v915 — filter out missing track entries; downstream
+        // matchesSearch reads track.title which would null-deref.
+        base = [...history].reverse().map(h => h.track).filter((t): t is Track => !!t);
         break;
       case 'oyed': {
         // Union of "in your gravity right now": current bucket (queue) ∪

@@ -1090,6 +1090,13 @@ export const YouTubeIframe = memo(() => {
               ox: portraitPos.x,
               oy: portraitPos.y,
             };
+            // v915 — capture the pointer so subsequent move/up fire
+            // on this layer even if the finger drags over the
+            // fixed-position right-edge portal strip mid-gesture.
+            // Without this, releasing on a different layer left
+            // dragStartRef stuck and the cube was permanently in
+            // drag-grow scale.
+            try { e.currentTarget.setPointerCapture(e.pointerId); } catch {}
             setIsDragging(true);
           }}
           onPointerMove={(e) => {
