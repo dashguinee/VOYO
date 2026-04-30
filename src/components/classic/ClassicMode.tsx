@@ -279,20 +279,27 @@ const MiniPlayer = ({ onOpenFull }: { onOpenFull: () => void }) => {
             the original "is the seek bar pulsing with the music?" bug
             (v925 fix). Bronze breathing reads as warm ambience, distinct
             from the purple reveal-state. */}
-        {/* v932 — Seek bar 4-phase choreography (driven by barPhase):
-              idle    → music-reactive bronze (rest)
-              purple1 → solid purple while bubbles up (0-3s post-tap)
-              bloom   → purple→pink→orange gradient celebration (3-8s)
-              purple2 → solid purple again (8-15s)
-              → fades back to idle bronze at 15s.
-            Whole bar reads in the active palette (rail + fill both shift)
-            so progress is visible at any % even right after song start. */}
+        {/* v933 — Seek bar tweaks:
+            - Inset (bottom-1 left-2 right-2) + h-1 so the rounded-full
+              pill ends are actually visible instead of being absorbed
+              into the card's rounded-2xl corner. Less harsh edges.
+            - Bronze idle alphas faded ~15% (0.22 → 0.19 rail base, 0.55 →
+              0.47 fill, 0.45 → 0.38 halo). More diluted, sits softer in
+              the card.
+            - Reactive driver switched --voyo-energy → --voyo-bass.
+              voyo-energy is RMS over the full spectrum so even chill
+              songs with quiet melodic content moved the bar. voyo-bass
+              is just the 60-250Hz bins (kicks, 808s, sub) — strong on
+              afrobeats/amapiano/drill, near-silent on acoustic/chill.
+              Same real-FFT infrastructure (freqPump.ts), genuinely
+              audio-synced — naturally gated by song genre / BPM energy,
+              not a heuristic guess. */}
         <div
-          className="absolute bottom-0 left-0 right-0 h-[3px] overflow-hidden rounded-full"
+          className="absolute bottom-1 left-2 right-2 h-1 overflow-hidden rounded-full"
           style={{
             background:
               barPhase === 'idle'
-                ? 'rgba(212,160,83, calc(0.22 + var(--voyo-energy, 0) * 0.20))'
+                ? 'rgba(212,160,83, calc(0.19 + var(--voyo-bass, 0) * 0.25))'
                 : barPhase === 'bloom'
                 ? 'linear-gradient(90deg, rgba(139,92,246,0.40) 0%, rgba(236,72,153,0.40) 50%, rgba(251,146,60,0.40) 100%)'
                 : 'rgba(139,92,246,0.28)',
@@ -311,7 +318,7 @@ const MiniPlayer = ({ onOpenFull }: { onOpenFull: () => void }) => {
               style={{
                 background:
                   barPhase === 'idle'
-                    ? 'rgba(212,160,83,0.55)'
+                    ? 'rgba(212,160,83,0.47)'
                     : barPhase === 'bloom'
                     ? 'linear-gradient(90deg, #8b5cf6 0%, #ec4899 50%, #fb923c 100%)'
                     : '#8b5cf6',
@@ -326,7 +333,7 @@ const MiniPlayer = ({ onOpenFull }: { onOpenFull: () => void }) => {
               style={{
                 background:
                   barPhase === 'idle'
-                    ? 'linear-gradient(to left, rgba(212,160,83,0.45), transparent)'
+                    ? 'linear-gradient(to left, rgba(212,160,83,0.38), transparent)'
                     : barPhase === 'bloom'
                     ? 'linear-gradient(to left, rgba(251,146,60,0.7), transparent)'
                     : 'linear-gradient(to left, rgba(139,92,246,0.7), transparent)',
