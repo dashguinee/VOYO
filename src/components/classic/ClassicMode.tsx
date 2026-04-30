@@ -81,9 +81,13 @@ const MiniPlayer = ({ onOpenFull }: { onOpenFull: () => void }) => {
   }, []);
 
   // Double-tap detection for opening full player
+  // v930 — DOUBLE_TAP_DELAY 300 → 200ms. The bubbles felt sluggish to
+  // pop because every single-tap waited the full 300ms to disambiguate
+  // from a potential double. 200ms is still comfortably above human
+  // double-tap reaction floor (~150ms) and reads as immediate.
   const handleTap = useCallback(() => {
     const now = Date.now();
-    const DOUBLE_TAP_DELAY = 300; // ms
+    const DOUBLE_TAP_DELAY = 200; // ms
 
     // Always reveal the bar — single or first-of-double, the user touched
     // the chrome and wants feedback. If they end up double-tapping, the

@@ -3,7 +3,7 @@
  * Clean, fast search with Queue + Discovery actions
  */
 
-import { useState, useRef, useEffect, useCallback, memo } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo, memo } from 'react';
 import { Search, X, Clock, Play, Compass, User } from 'lucide-react';
 import { VoyoCloseX } from '../ui/VoyoCloseX';
 import { OyeButton } from '../oye/OyeButton';

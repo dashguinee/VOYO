@@ -292,7 +292,7 @@ export async function saveVerifiedTrack(
  */
 export async function saveVerifiedTracks(
   tracks: Track[],
-  vibe: VibeProfile,
+  vibe?: VibeProfile,
   discoveredBy: 'gemini' | 'user_search' | 'related' | 'seed' = 'gemini'
 ): Promise<number> {
   // Parallel saves with bounded concurrency so we don't flood Supabase.
