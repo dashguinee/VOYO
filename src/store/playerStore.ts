@@ -513,9 +513,14 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     currentTrackAbortController = new AbortController();
     const signal = currentTrackAbortController.signal;
 
-    // Add current track to history before switching (save ALL tracks, even brief plays)
-    // User requested: "make sure all songs played show in library history even if played 5s"
-    if (state.currentTrack && state.currentTime > 0) {
+    // Add current track to history before switching (save ALL tracks,
+    // even brief plays). v912 (Dash 2026-04-30 "library is no tracking
+    // all"): dropped the `currentTime > 0` gate. Fast tap-tap-tap on
+    // different tracks was leaving the previous one un-logged when it
+    // hadnt ticked yet — now even a 0-second seen-it counts as part
+    // of the trail. Pool engagement still gates on real completion
+    // (>30%) so we dont reward tap-skip behavior.
+    if (state.currentTrack) {
       get().addToHistory(state.currentTrack, state.currentTime);
 
       // POOL ENGAGEMENT: Record completion if played significantly

@@ -701,36 +701,44 @@ export const AudioPlayer = () => {
     }
 
     // ── Predictive pre-warm ──────────────────────────────────────────────
-    // At 50% of the current track, fire ensureTrackReady on what's coming
-    // next at priority=7 (below user-click p=10, above background p=0). The
-    // VPS lane can then extract the next track in parallel with the current
-    // track's second half — when A ends, B's R2 file is already warm and
-    // the hot-swap lands instantly instead of iframe-bridging 3-12s of
-    // extraction lag. Fires exactly once per track (prewarmFiredForRef).
-    // Canonical "warm it up and slide it in" loop: predict → warm → arrive.
+    // v912 (Dash 2026-04-30 streamline): fires earlier (33% instead of 50%)
+    // and 2-deep instead of 1-deep. Net effect: at the 1/3 mark of A, both
+    // B and C kick off ensureTrackReady in parallel. When A ends → B is
+    // already warm; if user double-skips A→B→C in quick succession, C is
+    // also warm so the hot-swap stays instant instead of falling back to
+    // the iframe-extraction bridge (3-12s).
+    // Priorities: B at 7 (above background), C at 5 (below B but still
+    // above background p=0). One firing per track (prewarmFiredForRef).
     const curTrack = usePlayerStore.getState().currentTrack;
     const curTrackId = curTrack?.trackId ?? null;
     if (
-      progress >= 0.5 &&
+      progress >= 0.33 &&
       curTrackId &&
       prewarmFiredForRef.current !== curTrackId
     ) {
       prewarmFiredForRef.current = curTrackId;
       const store = usePlayerStore.getState();
-      const upcoming = store.queue[0]?.track ?? store.predictUpcoming(1)[0] ?? null;
-      if (upcoming && upcoming.trackId && upcoming.trackId !== curTrackId) {
-        void ensureTrackReady(upcoming, null, { priority: 7 });
+      const queueTracks = store.queue.slice(0, 2).map(q => q.track);
+      const predicted = queueTracks.length < 2 ? store.predictUpcoming(2) : [];
+      const upcoming: Array<Track> = [
+        ...queueTracks,
+        ...predicted.slice(0, 2 - queueTracks.length),
+      ].filter((t): t is Track => Boolean(t && t.trackId && t.trackId !== curTrackId));
+      const priorities = [7, 5];
+      upcoming.slice(0, 2).forEach((t, i) => {
+        void ensureTrackReady(t, null, { priority: priorities[i] });
         logPlaybackEvent({
           event_type: 'trace',
-          track_id: upcoming.trackId,
+          track_id: t.trackId,
           meta: {
             subtype: 'predictive_prewarm',
             from_track: curTrackId,
             progress_at_fire: progress,
-            source: store.queue.length > 0 ? 'queue' : 'predict',
+            depth: i + 1,
+            source: queueTracks.length > 0 ? 'queue' : 'predict',
           },
         });
-      }
+      });
     }
 
     setCurrentTime(position);
