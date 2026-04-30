@@ -2288,15 +2288,27 @@ const BigCenterCard = memo(({ track, onExpandVideo, onShowLyrics, onLyricsArmed,
       // intent moves to the parent card.
       className="absolute inset-0 cursor-pointer z-10"
     >
-      <SmartImage
-        src={getTrackThumbnailUrl(track, 'high')}
-        alt={`${track.title} by ${track.artist}`}
-        className="w-full h-full object-cover transition-all duration-700 scale-[1.3] group-hover:scale-[1.4]"
-        trackId={track.trackId}
-        artist={track.artist}
-        title={track.title}
-        lazy={false}
-      />
+      {/* v920b — wrap the artwork in a moment-id-keyed gentle fade-in
+          so on every track change the new poster *settles* in
+          (matches the v920 moments-cube DriftGapFiller pattern). The
+          iframe video loads in the background regardless; if the track
+          eventually auto-promotes to the floating mini, the fade
+          here is irrelevant — but for the first second of every new
+          track the poster lands softly. */}
+      <div
+        key={`art-${track.trackId}`}
+        className="w-full h-full voyo-cube-poster-arrive"
+      >
+        <SmartImage
+          src={getTrackThumbnailUrl(track, 'high')}
+          alt={`${track.title} by ${track.artist}`}
+          className="w-full h-full object-cover transition-all duration-700 scale-[1.3] group-hover:scale-[1.4]"
+          trackId={track.trackId}
+          artist={track.artist}
+          title={track.title}
+          lazy={false}
+        />
+      </div>
       {/* ── GLOSSY LIGHT SOURCE ──────────────────────────────────────
           Thin gradient from top-left (light hits the tilted surface)
           to bottom-right (shadow side). Combined with the rotateY tilt,
@@ -2353,9 +2365,11 @@ const BigCenterCard = memo(({ track, onExpandVideo, onShowLyrics, onLyricsArmed,
           clarified the text position should NOT have been moved. Keeping
           the contrast bump (15/11 sizes + white/bronze halos) since that
           improves legibility without "moving" anything. */}
+      {/* v920b — title/artist now arrives with the same 2s gentle
+          curve as moments (voyo-moment-text-arrive). Was 0.4s pop. */}
       <div
         key={track.trackId}
-        className="absolute bottom-3 left-3 right-3 animate-[voyo-fade-in_0.4s_ease-out]"
+        className="absolute bottom-3 left-3 right-3 voyo-moment-text-arrive"
       >
         <p
           className="text-white font-bold text-[15px] truncate pointer-events-none tracking-[0.005em]"

@@ -1377,3 +1377,20 @@ input[type="range"]:focus::-moz-range-thumb {
 .voyo-moment-text-arrive {
   animation: voyo-moment-text-arrive 2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
+
+/* v920b — Portrait-cube poster "arrive" fade. Re-fires on every
+   track change because the wrapper div re-mounts via key={trackId}.
+   Matches the moments DriftGapFiller curve — slightly faster (1.4s)
+   so the cube doesnt
+
+/* v920b - Portrait-cube poster arrive fade. Re-fires on every
+   track change because the wrapper div re-mounts via key=trackId.
+   Slightly faster (1.4s) than the title 2s curve so the cube does
+   not lag behind the text. */
+@keyframes voyo-cube-poster-arrive {
+  0%   { opacity: 0; }
+  100% { opacity: 1; }
+}
+.voyo-cube-poster-arrive {
+  animation: voyo-cube-poster-arrive 1.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
