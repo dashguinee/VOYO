@@ -98,6 +98,14 @@ export const AudioPlayer = () => {
   // new track gets exactly one predictive pre-warm round. Without this the
   // 4Hz timeupdate would fire ensureTrackReady hundreds of times per track.
   const prewarmFiredForRef = useRef<string | null>(null);
+  // ── Audio pre-buffer (< 0.1s dead silence target) ────────────────────
+  // A hidden <audio preload="auto"> downloads the next track's R2 bytes
+  // while the current track is playing. When the main element gets the
+  // same URL on track-advance, it hits the browser HTTP cache and canplay
+  // fires in < 20ms — keeping the silent-WAV bridge gap under 100ms even
+  // in background sessions. Starts at 60% so slow BG networks have time.
+  const nextTrackPreloadRef  = useRef<HTMLAudioElement | null>(null);
+  const nextPreloadedIdRef   = useRef<string | null>(null);
   // v938 — R2 quality fallback ladder. On <audio> error during R2 playback,
   // try the same track at ?q=medium, then ?q=low, before letting the burst
   // circuit advance the track. Map<trackId, current quality>. Cleared on
@@ -264,6 +272,13 @@ export const AudioPlayer = () => {
     // Clear predictive pre-warm latch so the new track gets a fresh
     // pre-warm cycle (fires immediately below + safety re-fire at 33%).
     prewarmFiredForRef.current = null;
+    // Release the pre-buffer element — main element now owns the URL (if
+    // prediction matched) or we moved on. Reset so the 60% gate re-fires
+    // for the new current track's next-track prediction.
+    if (nextTrackPreloadRef.current) {
+      nextTrackPreloadRef.current.src = '';
+      nextPreloadedIdRef.current = null;
+    }
     // Clear error burst counter — errors from a prior track must not bleed
     // into the new track's circuit-breaker window and trigger a false skip.
     errorBurst = [];
@@ -813,6 +828,30 @@ export const AudioPlayer = () => {
           },
         });
       });
+    }
+
+    // ── Audio pre-buffer at 60% ──────────────────────────────────────────
+    // ensureTrackReady (33%) confirms R2 has the file but doesn't cache audio
+    // bytes in the browser. This gate creates a hidden <audio preload="auto">
+    // that downloads the actual bytes so the main element hits HTTP cache on
+    // advance → canplay fires in < 20ms → dead silence < 0.1s.
+    // 60% instead of 75% so slow BG networks (OS-throttled) have more runway.
+    if (progress >= 0.60 && usePlayerStore.getState().playbackSource === 'r2') {
+      const nextTrack = usePlayerStore.getState().predictNextTrack();
+      if (nextTrack) {
+        const nextYtId = getYouTubeId(nextTrack.trackId || nextTrack.id || '');
+        if (nextYtId && nextYtId !== nextPreloadedIdRef.current && useR2KnownStore.getState().has(nextYtId)) {
+          nextPreloadedIdRef.current = nextYtId;
+          if (!nextTrackPreloadRef.current) {
+            const el = document.createElement('audio');
+            el.preload = 'auto';
+            el.muted = true;
+            nextTrackPreloadRef.current = el;
+          }
+          nextTrackPreloadRef.current.src = `${R2_AUDIO}/${nextYtId}?q=high`;
+          nextTrackPreloadRef.current.load(); // explicit load() triggers BG fetch
+        }
+      }
     }
 
     setCurrentTime(position);
