@@ -223,6 +223,17 @@ def get_youtube_id(track_id: str) -> str:
 
 def categorize_error(err_msg: str) -> str:
     m = (err_msg or '').lower()
+    # Permanent failures checked first — even if 429 appears in the same
+    # stderr dump, the video is gone and no backoff will help.
+    # extract_and_upload raises RuntimeError('unavailable: ...') explicitly
+    # when it detects these patterns in the full stderr, so this also handles
+    # the case where [-250:] truncation missed the removed/private line.
+    if m.startswith('unavailable:'):
+        return 'unavailable'
+    if 'video has been removed' in m or 'this video is private' in m:
+        return 'unavailable'
+    if 'video unavailable' in m or ('unavailable' in m and 'uploader' in m):
+        return 'unavailable'
     if 'rate-limited' in m or 'too many requests' in m or '429' in m:
         return 'rate_limited'
     if 'format not available' in m or 'requested format is not available' in m:
@@ -505,8 +516,16 @@ def extract_and_upload(track_id: str) -> tuple[int, int]:
         urls = [l.strip() for l in (result.stdout or '').splitlines() if l.strip().startswith('http')]
 
     if not urls:
-        log(f'stderr dump for {yt_id}:\n{(result.stderr or "")[:1000]}')
-        raise RuntimeError(f'no url: {(result.stderr or "")[-250:]}')
+        stderr = result.stderr or ''
+        log(f'stderr dump for {yt_id}:\n{stderr[:1000]}')
+        # Surface permanent failures even when 429 appears first in stderr —
+        # yt-dlp logs the 429 warning before the real "removed/private" error.
+        sl = stderr.lower()
+        if 'video has been removed' in sl or 'this video is private' in sl:
+            raise RuntimeError(f'unavailable: {stderr[-200:]}')
+        if 'video unavailable' in sl:
+            raise RuntimeError(f'unavailable: {stderr[-200:]}')
+        raise RuntimeError(f'no url: {stderr[-250:]}')
 
     # Step 2 — 4-range parallel download from googlevideo.
     content = _parallel_download(urls[0])
@@ -618,8 +637,9 @@ def main():
                     if category in ('signature', 'format_not_available'):
                         invalidate_cookie_cache()
 
-                    # Hard rate-limit: note it, apply backoff after batch
-                    # finishes so in-flight tracks can still complete.
+                    # Hard rate-limit: note it, apply backoff after batch.
+                    # Permanent failures (unavailable, removed, private) are
+                    # NOT rate-limit events — don't penalise the whole lane.
                     if category == 'rate_limited':
                         rate_limited_seen = True
 
