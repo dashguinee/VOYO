@@ -600,51 +600,9 @@ const CompassArc = memo(({ categories, currentIndex, displayName, onJumpTo, sele
 });
 CompassArc.displayName = 'CompassArc';
 
-// ============================================
-// NEXT MOMENT PREVIEW — Corner fade ghost
-// ============================================
-
-interface NextPreviewProps {
-  moment: Moment | null;
-}
-
-const NextMomentPreview = memo(({ moment }: NextPreviewProps) => {
-  if (!moment || !moment.thumbnail_url) return null;
-
-  return (
-    <div
-      className="animate-[voyo-fade-in_0.6s_ease]"
-      style={{
-        position: 'absolute',
-        bottom: 120,
-        right: 60,
-        width: 56,
-        height: 72,
-        borderRadius: 10,
-        overflow: 'hidden',
-        opacity: 0.25,
-        filter: 'blur(2px)',
-        zIndex: 6,
-        pointerEvents: 'none',
-        border: '1px solid rgba(255,255,255,0.08)',
-      }}
-    >
-      <img
-        src={moment.thumbnail_url}
-        alt=""
-        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-        loading="lazy"
-        draggable={false}
-      />
-      {/* Fade edges */}
-      <div style={{
-        position: 'absolute', inset: 0,
-        background: 'radial-gradient(ellipse at center, transparent 30%, rgba(0,0,0,0.8) 100%)',
-      }} />
-    </div>
-  );
-});
-NextMomentPreview.displayName = 'NextMomentPreview';
+// (v921 — NextMomentPreview retired; never rendered after the v604
+//  hidden-preload pattern replaced its corner-ghost with a full
+//  off-screen card. ~40 lines of dead code dropped.)
 
 const actIcon = (on: boolean): React.CSSProperties => ({
   // 48×48: above Apple (44) and Android (48) touch minimums. The visual

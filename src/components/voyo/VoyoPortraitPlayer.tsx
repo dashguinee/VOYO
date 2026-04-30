@@ -1324,101 +1324,10 @@ const ExpandVideoButton = memo(({ onClick, isIframeAudio, isMiniPlayerActive, co
   );
 });
 
-// ============================================
-// BOTTOM TAKE OUT CHIP — rises from bottom-right when user scrolls
-// to the mix-board area. After 5s settled, morphs into a compact 44×44
-// circular pill (dot + play glyph) — still visible, still tappable, just
-// less chrome. Was a 7%-opacity ghost which read as broken AND was a
-// silent tap trap. Pill state replaces decay state.
-// ============================================
-const BottomTakeOutChip = memo(({ portalProgress }: { portalProgress: number }) => {
-  const [compact, setCompact] = useState(false);
-  // riseProgress: 0 below 0.2, 1 by 0.45 — rises in tandem with the
-  // mix-board layer climbing into view.
-  const riseProgress = Math.max(0, Math.min(1, (portalProgress - 0.2) / 0.25));
-  const risen = riseProgress >= 1;
-
-  useEffect(() => {
-    if (!risen) {
-      setCompact(false);
-      return;
-    }
-    const t = setTimeout(() => setCompact(true), 5000);
-    return () => clearTimeout(t);
-  }, [risen]);
-
-  return (
-    <button
-      type="button"
-      onClick={(e) => {
-        e.stopPropagation();
-        // v797: reverted to PiP — Take Out is the PiP gesture, full stop.
-        void pipService.enter();
-      }}
-      aria-label="Take Out — Picture-in-Picture"
-      className="rounded-full backdrop-blur-sm border flex items-center justify-center voyo-tap-scale"
-      style={{
-        position: 'fixed',
-        bottom: 'calc(env(safe-area-inset-bottom, 0px) + 16px)',
-        right: 'calc(env(safe-area-inset-right, 0px) + 14px)',
-        padding: compact ? 0 : '6px 12px',
-        // 2026-04-28: matured to bronze (#D4A053 family) to harmonize with
-        // the rest of the Take Out / Cinema palette in ExpandVideoButton.
-        // Was rgba(244,162,62,...) — too saturated against the new theme.
-        background: 'rgba(212,160,83,0.20)',
-        border: '1.5px solid rgba(212,160,83,0.55)',
-        color: '#E6C58A',
-        fontSize: 12,
-        fontWeight: 600,
-        letterSpacing: '0.04em',
-        boxShadow: compact
-          ? '0 0 8px rgba(212,160,83,0.30)'
-          : '0 0 14px rgba(212,160,83,0.45), 0 0 24px rgba(212,160,83,0.20)',
-        minHeight: 44,
-        width: compact ? 44 : 'auto',
-        zIndex: 70,
-        opacity: compact ? 0.82 : riseProgress,
-        transform: `translateY(${(1 - riseProgress) * 36}px)`,
-        pointerEvents: riseProgress > 0.5 ? 'auto' : 'none',
-        transition: [
-          'opacity 320ms ease',
-          'transform 360ms cubic-bezier(0.16, 1, 0.3, 1)',
-          'width 420ms cubic-bezier(0.16, 1, 0.3, 1)',
-          'padding 420ms cubic-bezier(0.16, 1, 0.3, 1)',
-          'box-shadow 320ms ease',
-        ].join(', '),
-        overflow: 'hidden',
-        whiteSpace: 'nowrap',
-      }}
-    >
-      <span
-        aria-hidden="true"
-        style={{
-          width: 6, height: 6, borderRadius: '50%',
-          background: '#E6C58A',
-          boxShadow: '0 0 6px rgba(212,160,83,0.9)',
-          marginRight: compact ? 0 : 6,
-          maxWidth: compact ? 0 : 6,
-          opacity: compact ? 0 : 1,
-          transition: 'margin 380ms cubic-bezier(0.16, 1, 0.3, 1), max-width 380ms cubic-bezier(0.16, 1, 0.3, 1), opacity 240ms ease',
-        }}
-      />
-      <Play size={compact ? 14 : 12} fill="currentColor" style={{ flexShrink: 0, transition: 'width 320ms ease, height 320ms ease' }} />
-      <span
-        style={{
-          opacity: compact ? 0 : 1,
-          maxWidth: compact ? 0 : 80,
-          marginLeft: compact ? 0 : 6,
-          overflow: 'hidden',
-          transition: 'opacity 240ms ease, max-width 380ms cubic-bezier(0.16, 1, 0.3, 1), margin 380ms cubic-bezier(0.16, 1, 0.3, 1)',
-        }}
-      >
-        Take Out
-      </span>
-    </button>
-  );
-});
-BottomTakeOutChip.displayName = 'BottomTakeOutChip';
+// (v921 — BottomTakeOutChip retired entirely. ~88 lines dropped.
+//  Was removed from the render tree at v806 but the component lingered
+//  "in case." Take Out path now lives on ExpandVideoButton + the
+//  YouTubeIframe right-edge portal. Git history has the original.)
 
 // ============================================
 // RIGHT-SIDE TOOLBAR - Vertical action buttons

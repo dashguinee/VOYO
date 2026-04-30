@@ -601,6 +601,20 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap, onEnterVideoMode
     createdAt: new Date().toISOString(),
   }), []);
 
+  // v921 — section split + per-result track map memoized once per
+  // results identity. Was: filter() + resultToTrack() running per
+  // item per render → memo'd TrackItem invalidated every keystroke.
+  const sectionedResults = useMemo(() => ({
+    library: results.filter(r => r.source === 'library'),
+    youtube: results.filter(r => r.source === 'youtube'),
+  }), [results]);
+
+  const trackById = useMemo(() => {
+    const map = new Map<string, Track>();
+    for (const r of results) map.set(r.voyoId, resultToTrack(r));
+    return map;
+  }, [results, resultToTrack]);
+
   const showToast = useCallback((t: ToastState) => {
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
     setToast(t);
@@ -1063,19 +1077,24 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap, onEnterVideoMode
                     </div>
                   )}
 
-                  {/* Sectioned results — Library on top, YouTube below */}
+                  {/* Sectioned results — Library on top, YouTube below.
+                      v921: track objects + section split now memoized
+                      below so memo'd TrackItem doesn't bail on a fresh
+                      track ref every keystroke. */}
                   {(() => {
-                    const library = results.filter(r => r.source === 'library');
-                    const youtube = results.filter(r => r.source === 'youtube');
+                    const library = sectionedResults.library;
+                    const youtube = sectionedResults.youtube;
                     let runningIndex = -1;
                     const renderItem = (result: SearchResult) => {
                       runningIndex += 1;
                       const idx = runningIndex;
+                      const track = trackById.get(result.voyoId);
+                      if (!track) return null;
                       return (
                         <TrackItem
                           key={result.voyoId}
                           result={result}
-                          track={resultToTrack(result)}
+                          track={track}
                           index={idx}
                           isActive={idx === activeIndex}
                           isCached={cachedSet.has(result.voyoId)}

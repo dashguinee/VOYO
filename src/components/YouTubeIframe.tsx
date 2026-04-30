@@ -172,15 +172,15 @@ export const YouTubeIframe = memo(() => {
   const seekPosition = usePlayerStore((s) => s.seekPosition);
   // currentTime/duration not subscribed here — OverlayTimingSync (render-null sub-component)
   // computes overlay zones and writes only on zone transitions (~1-2x per track, not 4Hz).
-  const duration = usePlayerStore((s) => s.duration);
+  // v921 — dropped 5 unused selectors: duration, setCurrentTime,
+  // setProgress, setBufferHealth, clearSeekPosition. They were
+  // subscribed at top-level but only referenced inside child components
+  // (OverlayTimingSync owns its own subscription) or via setState
+  // direct calls below. Pure subscription churn.
   const queue = usePlayerStore((s) => s.queue);
 
-  const setCurrentTime = usePlayerStore((s) => s.setCurrentTime);
   const setDuration = usePlayerStore((s) => s.setDuration);
-  const setProgress = usePlayerStore((s) => s.setProgress);
-  const setBufferHealth = usePlayerStore((s) => s.setBufferHealth);
   const nextTrack = usePlayerStore((s) => s.nextTrack);
-  const clearSeekPosition = usePlayerStore((s) => s.clearSeekPosition);
   const setVideoTarget = usePlayerStore((s) => s.setVideoTarget);
 
   const youtubeId = currentTrack?.trackId ? getYouTubeId(currentTrack.trackId) : '';

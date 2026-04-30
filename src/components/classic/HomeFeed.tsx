@@ -2602,25 +2602,18 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onNavVisibilityChange, onSwitc
   const navigate = useNavigate();
   const [liveFriends, setLiveFriends] = useState<Friend[]>([]);
   const [allFriends, setAllFriends] = useState<Friend[]>([]);
-  const [liveCount, setLiveCount] = useState(0);
+  // v921: liveCount, vibesHeaderRef, shimmerDuration, and the
+  // Classics-disk state (diskCenterIndex/diskScrollRef/diskRafRef/
+  // diskCenterRef/selectedClassic) all retired — set but never read
+  // since the Apr 28 Classics shelving + the friend-presence polling
+  // removal. ~10 lines of dead state.
   const [vibesSheetOpen, setVibesSheetOpen] = useState(false);
   const [vibesFriendsLoading, setVibesFriendsLoading] = useState(false);
   const [showSearchPill, setShowSearchPill] = useState(false);
   const [searchPillLoading, setSearchPillLoading] = useState(false);
-  const vibesHeaderRef = useRef<HTMLDivElement>(null);
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const longPressMoved = useRef(false);
   const longPressFired = useRef(false);
-
-  // Random shimmer cycle duration per session — 18-28s so the gap never feels mechanical
-  const shimmerDuration = useRef(`${(18 + Math.random() * 10).toFixed(1)}s`);
-
-  // Classics disk timeline — center-focused scroll
-  const [diskCenterIndex, setDiskCenterIndex] = useState(0);
-  const diskScrollRef = useRef<HTMLDivElement>(null);
-  const diskRafRef = useRef<number | null>(null);
-  const diskCenterRef = useRef(0);
-  const [selectedClassic, setSelectedClassic] = useState<Track | null>(null);
 
 
   // ── Infinite loop scroll + ambient water ripple + audio reactive glow ───
@@ -2890,7 +2883,6 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onNavVisibilityChange, onSwitc
       const online = friends.filter(f => f.status === 'online');
       setAllFriends(friends);
       setLiveFriends(online);
-      setLiveCount(online.length);
     } catch { /* silent */ }
     finally { setVibesFriendsLoading(false); }
   }, [isLoggedIn, dashId]);
@@ -2908,7 +2900,6 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onNavVisibilityChange, onSwitc
       setAllFriends(friends);
       const online = friends.filter(f => f.status === 'online');
       setLiveFriends(online);
-      setLiveCount(online.length);
     } catch { /* silent */ }
     finally { setSearchPillLoading(false); }
   }, [isLoggedIn, dashId, allFriends.length]);

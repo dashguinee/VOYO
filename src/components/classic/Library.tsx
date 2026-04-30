@@ -607,8 +607,12 @@ export const Library = ({ onTrackClick }: LibraryProps) => {
     }
   }, [initDownloads, isInitialized]);
 
-  // Convert cached tracks to Track format for display
-  const boostedTracks: Track[] = cachedTracks.map(cached => ({
+  // v921 — memoized. These three derive from cachedTracks but were
+  // rebuilt every render, which invalidated the downstream
+  // filteredTracks / libraryIds memos that depend on them. Net: the
+  // big filter+sort pipeline was a cache-miss every render. Memoizing
+  // here is a real perf fix, not just style.
+  const boostedTracks = useMemo<Track[]>(() => cachedTracks.map(cached => ({
     id: cached.id,
     trackId: cached.id,
     title: cached.title,
@@ -618,11 +622,12 @@ export const Library = ({ onTrackClick }: LibraryProps) => {
     oyeScore: 0,
     duration: 0,
     createdAt: new Date().toISOString(),
-  }));
+  })), [cachedTracks]);
 
-  // Create maps for quick lookup of cached tracks and their quality
-  const cachedTrackIds = new Set(cachedTracks.map(t => t.id));
-  const trackQualityMap = new Map(cachedTracks.map(t => [t.id, t.quality]));
+  const trackQualityMap = useMemo(
+    () => new Map(cachedTracks.map(t => [t.id, t.quality])),
+    [cachedTracks]
+  );
 
   // Compose pipeline:
   //   1. primary filter picks the base set (my-disco / oyed / just-played)
