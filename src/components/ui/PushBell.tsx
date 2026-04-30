@@ -58,7 +58,7 @@ function PushBellInner({ appCode = 'voyo' }: Props) {
         }
       }}
       disabled={isBusy}
-      className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-purple-500/15 border border-purple-500/30 text-[10px] text-purple-200 backdrop-blur-md hover:bg-purple-500/25 transition-colors"
+      className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-purple-500/15 border border-purple-500/30 text-[10px] text-purple-200 backdrop-blur-md hover:bg-purple-500/25 transition-colors"
       title="Turn on push notifications"
       style={{
         opacity: targetOpacity,
