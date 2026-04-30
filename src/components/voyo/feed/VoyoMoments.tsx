@@ -128,6 +128,37 @@ const FadeWrapper = memo(({ children, dir, role }: { children: React.ReactNode; 
 });
 FadeWrapper.displayName = 'FadeWrapper';
 
+// v920 — Drift gap-filler wrapper. Sits at zIndex 0 under the
+// outgoing/incoming FadeWrapper pair during a transition, holding a
+// static copy of the INCOMING moment card. Eye-leads the destination
+// so the swap feels seamless. Fades 0 → 1 over 480ms so the user
+// watches the next card settle in, rather than popping at full
+// opacity (v919). Re-mounts per moment via the parent's key prop.
+const DriftGapFiller = memo(({ children }: { children: React.ReactNode }) => {
+  const [phase, setPhase] = useState<'pre' | 'post'>('pre');
+  useEffect(() => {
+    const id = requestAnimationFrame(() => setPhase('post'));
+    return () => cancelAnimationFrame(id);
+  }, []);
+  return (
+    <div
+      aria-hidden="true"
+      style={{
+        position: 'absolute',
+        inset: 0,
+        zIndex: 0,
+        pointerEvents: 'none',
+        opacity: phase === 'pre' ? 0 : 1,
+        transition: 'opacity 480ms cubic-bezier(0.16, 1, 0.3, 1)',
+        willChange: 'opacity',
+      }}
+    >
+      {children}
+    </div>
+  );
+});
+DriftGapFiller.displayName = 'DriftGapFiller';
+
 // ============================================
 // COMPACT STYLES
 // ============================================
@@ -911,8 +942,11 @@ const MomentCard = memo(({ moment, isOyed, onOye, isActive, isMuted, onToggleMut
       {/* CREATOR BLOCK — single positioned container, stacked layout:
           orb + name on top, glass bio card below. Staged fade choreography:
           bio body fades first (2s), then title (4s), then orb paint-out (6s).
-          Name STAYS through all stages — lightweight creator credit. */}
-      <div style={S.creatorBlock}>
+          Name STAYS through all stages — lightweight creator credit.
+          v920 — wrapped in a 2s "world arrives" fade so on every new
+          moment the entire text block lands gently rather than popping.
+          The internal stage timers continue from there. */}
+      <div style={S.creatorBlock} className="voyo-moment-text-arrive">
         <div style={S.creatorOrbWrap}>
           {/* Orb — fades with paint sweep at stage 3 */}
           <div
@@ -2251,22 +2285,17 @@ export const VoyoMoments: React.FC<VoyoMomentsProps> = ({ onPlayFullTrack, onArt
         </div>
       ) : currentMoment ? (
         <>
-          {/* v919 — STATIC GAP-FILLER (Dash 2026-04-30 "copied next-up
-              overlay, gapless"). Mounts only during a drift transition,
-              under the FadeWrapper pair. Reuses the same hidden-preload
-              pattern (line ~2328 below): a non-animated copy of the
-              INCOMING moment card sits at the bottom layer. As the
-              outgoing FadeWrapper fades out, this static card already
-              shows the destination — no black flash, no canvas gap.
-              The animated incoming FadeWrapper completes the motion
+          {/* v919/v920 — STATIC GAP-FILLER. Mounts only during a drift
+              transition, under the FadeWrapper pair. As the outgoing
+              FadeWrapper fades out, this static card sells the
+              destination — no black flash, no canvas gap.
+              v920: now fades in gently (0 → 1 over the drift window)
+              so the user's eye watches it settle rather than pop. The
+              animated incoming FadeWrapper still completes the motion
               arc on top. isActive=false + isMuted=true so its <video>
               doesn't double-play with the live incoming card. */}
           {prevMoment && transitionDir && prevMoment.id !== currentMoment.id && (
-            <div
-              key={`gap-${currentMoment.id}`}
-              aria-hidden="true"
-              style={{ position: 'absolute', inset: 0, zIndex: 0, pointerEvents: 'none' }}
-            >
+            <DriftGapFiller key={`gap-${currentMoment.id}`}>
               <MomentCard
                 moment={currentMoment}
                 isOyed={isOyed}
@@ -2280,7 +2309,7 @@ export const VoyoMoments: React.FC<VoyoMomentsProps> = ({ onPlayFullTrack, onArt
                 showTitle={false}
                 showBioBody={false}
               />
-            </div>
+            </DriftGapFiller>
           )}
           {/* Outgoing — only mounts during the 700ms transition window.
               isActive={false} so its video pauses (audio stops doubling

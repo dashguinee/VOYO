@@ -1365,3 +1365,15 @@ input[type="range"]:focus::-moz-range-thumb {
   60%  { opacity: 0.6; }
   100% { opacity: 0; }
 }
+
+/* v920 — Moment text-block "world arrives" fade-in. Re-fires on every
+   moment change because MomentCard re-mounts via key. Independent of
+   the staged orb/bio/title timers — sits on top, gentle 2s curve, lets
+   the new card settle visually before reading. */
+@keyframes voyo-moment-text-arrive {
+  0%   { opacity: 0; transform: translateY(4px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+.voyo-moment-text-arrive {
+  animation: voyo-moment-text-arrive 2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
