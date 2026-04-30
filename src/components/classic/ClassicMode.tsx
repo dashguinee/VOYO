@@ -271,13 +271,27 @@ const MiniPlayer = ({ onOpenFull }: { onOpenFull: () => void }) => {
             the original "is the seek bar pulsing with the music?" bug
             (v925 fix). Bronze breathing reads as warm ambience, distinct
             from the purple reveal-state. */}
+        {/* v931 — on tap, the WHOLE bar reads purple (rail crossfades to
+            dim purple, fill pops bold purple). The old design only
+            painted purple on the elapsed portion, so at low progress
+            (e.g. 3% into a song) the purple was a tiny sliver and easy
+            to miss — Dash kept reporting "I don't see purple on tap."
+            Now the entire bar shifts to purple territory, with elapsed
+            brighter over a dim purple remainder so progress stays
+            readable inside the unified purple state. Transition tightened
+            to 350ms so the snap feels responsive (was 800ms = sluggish). */}
         <div
           className="absolute bottom-0 left-0 right-0 h-[3px] overflow-hidden rounded-full"
-          style={{ background: 'rgba(212,160,83, calc(0.22 + var(--voyo-energy, 0) * 0.20))' }}
+          style={{
+            background: barRevealed
+              ? 'rgba(139,92,246,0.28)'
+              : 'rgba(212,160,83, calc(0.22 + var(--voyo-energy, 0) * 0.20))',
+            transition: 'background 350ms ease-out',
+          }}
         >
           {/* Filled portion — width = progress%. At rest = merged bronze
-              (subtle, diffused into the rail), on tap = bold purple.
-              Crossfade 800ms ease-out. */}
+              (diffused into the bronze rail), on tap = bold purple atop
+              the dim-purple rail. */}
           <div
             className="h-full relative"
             style={{ width: `${progress}%` }}
@@ -286,19 +300,17 @@ const MiniPlayer = ({ onOpenFull }: { onOpenFull: () => void }) => {
               className="absolute inset-0"
               style={{
                 background: barRevealed ? '#8b5cf6' : 'rgba(212,160,83,0.55)',
-                transition: 'background 800ms ease-out',
+                transition: 'background 350ms ease-out',
               }}
             />
-            {/* Playhead halo — soft right-edge glow that follows the
-                progress tip. Subtler at rest so it doesn't break the
-                merged feel. */}
+            {/* Playhead halo — soft right-edge glow at the progress tip. */}
             <div
               className="absolute right-0 top-0 bottom-0 w-4"
               style={{
                 background: barRevealed
-                  ? 'linear-gradient(to left, rgba(139,92,246,0.65), transparent)'
+                  ? 'linear-gradient(to left, rgba(139,92,246,0.7), transparent)'
                   : 'linear-gradient(to left, rgba(212,160,83,0.45), transparent)',
-                transition: 'background 800ms ease-out',
+                transition: 'background 350ms ease-out',
               }}
             />
           </div>
