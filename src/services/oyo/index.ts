@@ -305,6 +305,8 @@ export async function prefetch(_tracks: Track[], _priority: number = 5): Promise
 
 let _conductorQueue: Track[] = [];
 let _conductorRefilling = false;
+const BG_REFILL_MIN_INTERVAL_MS = 5 * 60 * 1000; // allow one BG refill per 5 min
+let _lastBgRefillAt = 0;
 
 function _blendMixBoardEnergy(move: ReturnType<typeof getNextMove>, essence: VibeEssence): void {
   // Compute a weighted "intent energy" (1–5) from MixBoard vibe weights.
@@ -321,7 +323,11 @@ function _blendMixBoardEnergy(move: ReturnType<typeof getNextMove>, essence: Vib
 }
 
 async function _refillConductorQueue(excludeIds: Set<string>): Promise<void> {
-  if (_conductorRefilling || _isHidden()) return;
+  if (_conductorRefilling) return;
+  const hidden = _isHidden();
+  // In background: allow at most one refill per BG_REFILL_MIN_INTERVAL_MS so
+  // the conductor queue doesn't fully drain during extended BG listening.
+  if (hidden && Date.now() - _lastBgRefillAt < BG_REFILL_MIN_INTERVAL_MS) return;
   _conductorRefilling = true;
   try {
     const userState = _buildUserState();
@@ -338,6 +344,7 @@ async function _refillConductorQueue(excludeIds: Set<string>): Promise<void> {
     for (const t of candidates) {
       if (!existing.has(t.trackId || t.id)) _conductorQueue.push(t);
     }
+    if (hidden) _lastBgRefillAt = Date.now();
   } finally {
     _conductorRefilling = false;
   }
@@ -369,6 +376,19 @@ export function peekConductorQueue(excludeIds: Set<string>): Track | null {
   return _conductorQueue[0] ?? null;
 }
 
+/**
+ * Called when a track is set directly (rapid-skip pivot, roulette, etc.)
+ * bypassing nextTrack(). Purges the stale conductor queue — those picks
+ * were built for the old direction — and triggers a fresh refill aligned
+ * to the new context. Also records the track's tags so the DJ knows
+ * what's playing even through a manual override.
+ */
+export function notifyManualPick(track: Track): void {
+  _conductorQueue = [];
+  _pushTrackContext(track);
+  void _refillConductorQueue(new Set<string>());
+}
+
 // ── Namespaced default export ─────────────────────────────────────────────
 
 export const oyo = {
@@ -396,6 +416,7 @@ export const oyo = {
     conductorFetch,
     drainConductorQueue,
     peekConductorQueue,
+    notifyManualPick,
     getSession,
     resetDJ,
   },

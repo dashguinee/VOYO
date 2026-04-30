@@ -42,7 +42,7 @@ async function getDatabaseDiscovery() {
 import { isKnownUnplayable } from '../services/trackVerifier';
 import { isBlocked as isBlocklisted } from '../services/trackBlocklist';
 import { getInsights as getOyoInsights } from '../services/oyoDJ';
-import { oyo, drainConductorQueue, peekConductorQueue, getSession as getDJSession } from '../services/oyo';
+import { oyo, drainConductorQueue, peekConductorQueue, notifyManualPick, getSession as getDJSession } from '../services/oyo';
 import { getArc } from '../services/oyo/arc';
 import { devLog, devWarn } from '../utils/logger';
 import { trace } from '../services/telemetry';
@@ -998,6 +998,9 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
           playbackRate: 1,
           isSkeeping: false,
         });
+        // Dispatch the outgoing-track signal — same rule as all other nextTrack
+        // exit paths. Previously this return bailed before dispatching it.
+        if (_pendingSignal) queueMicrotask(_pendingSignal);
         return;
       }
     }
@@ -1233,6 +1236,15 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     // Go to previous track from history
     if (state.history.length > 0) {
       const lastPlayed = state.history[state.history.length - 1];
+
+      // Dispatch skip signal for the track being abandoned. Going backward
+      // is a signal the current track wasn't what the user wanted.
+      if (state.currentTrack) {
+        const _prev = state.currentTrack;
+        const _time = state.currentTime;
+        queueMicrotask(() => oyo.onSkip(_prev, _time));
+      }
+
       set({
         currentTrack: lastPlayed.track,
         history: state.history.slice(0, -1),

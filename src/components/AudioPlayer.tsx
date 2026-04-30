@@ -16,7 +16,7 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { usePlayerStore } from '../store/playerStore';
 import { voyoStream, ensureTrackReady } from '../services/voyoStream';
-import { oyo, app } from '../services/oyo';
+import { oyo, app, notifyManualPick } from '../services/oyo';
 import { useAudioChain } from '../audio/graph/useAudioChain';
 import { useFrequencyPump } from '../audio/graph/freqPump';
 import { useBgEngine } from '../audio/bg/bgEngine';
@@ -239,6 +239,10 @@ export const AudioPlayer = () => {
         // Route through playerStore — AudioPlayer's track-change effect then
         // runs the R2-first flow (iframe fallback + hot-swap). No VPS session.
         usePlayerStore.getState().setCurrentTrack(pivot);
+        // Purge the conductor queue — picks were built for the old direction.
+        // notifyManualPick records the new track's context and triggers a fresh
+        // refill so the next drainConductorQueue() sees aligned candidates.
+        notifyManualPick(pivot);
         void ensureTrackReady(pivot, null, { priority: 10 });
         devLog(`[OYO] Rapid skip pivot → ${meta.title}`);
       } catch {}
@@ -1084,7 +1088,13 @@ export const AudioPlayer = () => {
         // Skip immediately — no burst threshold needed.
         if (wasSwapping && document.hidden) {
           errorBurst = [];
+          // Dedup against bgEngine's synthetic-ended + stuck detectors so we
+          // don't fire nextTrack() twice for the same track failure.
+          lastEndedTrackIdRef.current = trackId;
           logPlaybackEvent({ event_type: 'skip_auto', track_id: trackId, meta: { reason: 'bg_swap_error' } });
+          // Bridge the audio gap — keeps OS audio focus alive so the BG
+          // session survives the transition to the next track's load.
+          engageSilentWav('bg_swap_error', trackId);
           usePlayerStore.getState().nextTrack();
           return;
         }
@@ -1095,6 +1105,8 @@ export const AudioPlayer = () => {
         // quality ladder has been exhausted above.
         if (burstCount >= ERROR_BURST_LIMIT) {
           errorBurst = [];
+          // Dedup against bgEngine detectors — same as the BG mid-swap path.
+          lastEndedTrackIdRef.current = trackId;
           devWarn('[AudioPlayer] error-burst on current track — advancing');
           logPlaybackEvent({
             event_type: 'skip_auto',
