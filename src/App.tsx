@@ -1267,7 +1267,7 @@ function App() {
           style={{
             position: 'fixed',
             right: 'max(0.75rem, var(--safe-x))',
-            bottom: 'calc(env(safe-area-inset-bottom, 0px) + 0.75rem)',
+            bottom: 'calc(env(safe-area-inset-bottom, 0px) + 1.75rem)',
             zIndex: 55,
             pointerEvents: 'auto',
           }}
