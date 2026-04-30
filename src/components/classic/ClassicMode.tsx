@@ -251,35 +251,40 @@ const MiniPlayer = ({ onOpenFull }: { onOpenFull: () => void }) => {
         onPointerUp={handleSwipeUp}
         onPointerCancel={() => { swipeStartRef.current = null; }}
       >
-        {/* Wave Progress Bar — at rest sits in warm bronze so it blends with
-            the v925 ambient glow and reads as part of the room. On tap (via
-            handleTap → revealBar) flips to bold purple for 15s so the user
-            can see exact progress, then 800ms ease back to bronze. The
-            color crossfade is the whole "intentional" signal. */}
-        <div className="absolute bottom-0 left-0 right-0 h-[3px] bg-white/10 overflow-hidden rounded-full">
+        {/* Wave Progress Bar — v928 redesign: the TRACK rail is always
+            visible across the full width (dim bronze) so the user always
+            sees the timeline, even when progress=0 (track loading / iframe
+            warming). The FILLED portion paints over the rail with a
+            brighter bronze at rest, and pops to bold purple for 15s after
+            a tap (via handleTap → revealBar). 800ms ease back to bronze.
+            Old design used bg-white/10 for the rail + width-driven inner
+            wrapper — at progress=0 the bar was effectively invisible
+            (0px-wide inner + 10% white track = ghost). */}
+        <div
+          className="absolute bottom-0 left-0 right-0 h-[3px] overflow-hidden rounded-full"
+          style={{ background: 'rgba(212,160,83,0.22)' }}
+        >
+          {/* Filled portion — width = progress%. At rest = bright bronze,
+              on tap = bold purple. Crossfade 800ms ease-out. */}
           <div
             className="h-full relative"
             style={{ width: `${progress}%` }}
           >
-            {/* Progress fill — color cross-fades between bronze (rest) and
-                purple (revealed). v927: bumped bronze alpha 0.55 → 0.85 so
-                the bar reads clearly as ambient bronze instead of "is that
-                even there?" 800ms ease-out so the bar settles back into the
-                ambience without snapping. */}
             <div
               className="absolute inset-0"
               style={{
-                background: barRevealed ? '#8b5cf6' : 'rgba(212,160,83,0.85)',
+                background: barRevealed ? '#8b5cf6' : 'rgba(212,160,83,0.95)',
                 transition: 'background 800ms ease-out',
               }}
             />
-            {/* Glowing edge — same crossfade so the right-edge halo matches. */}
+            {/* Playhead halo — soft right-edge glow that follows the
+                progress tip. Matches whichever color the fill is in. */}
             <div
               className="absolute right-0 top-0 bottom-0 w-4"
               style={{
                 background: barRevealed
-                  ? 'linear-gradient(to left, rgba(139,92,246,0.6), transparent)'
-                  : 'linear-gradient(to left, rgba(212,160,83,0.7), transparent)',
+                  ? 'linear-gradient(to left, rgba(139,92,246,0.65), transparent)'
+                  : 'linear-gradient(to left, rgba(212,160,83,0.8), transparent)',
                 transition: 'background 800ms ease-out',
               }}
             />
