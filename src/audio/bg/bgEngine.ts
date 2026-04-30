@@ -62,6 +62,13 @@ interface UseBgEngineParams {
   isPlaying: boolean;
   playbackSource: string | null;
   computeMasterTarget: () => number;
+  // Called after every ctx.resume() to re-anchor the gain ramp. Gain ramps
+  // scheduled before a suspend "freeze" and snap incorrectly on resume —
+  // applyMasterGain cancels any frozen schedule and starts a fresh 25ms ramp.
+  applyMasterGain: () => void;
+  // Pre-zeros gain (8ms ramp to 0.0001) before BG src reassignment so the
+  // audio stream cuts at silence, not at a non-zero amplitude → no click.
+  muteMasterGainInstantly: () => void;
   // Invoked for synthetic/stuck/proactive forced advances. Caller must
   // set its own bypass ref before this fires if it wants runEndedAdvance
   // to skip the audio.ended check.
@@ -93,10 +100,14 @@ export function useBgEngine(params: UseBgEngineParams): BgEngineApi {
     isPlaying,
     playbackSource,
     computeMasterTarget,
+    applyMasterGain,
+    muteMasterGainInstantly,
     runEndedAdvanceRef,
     syntheticEndedBypassRef,
     lastEndedTrackIdRef,
   } = params;
+  // Prevent lint "declared but unused" when downstream callers evolve.
+  void muteMasterGainInstantly;
 
   // ── SILENT WAV KEEPER ────────────────────────────────────────────────
   // 2-second silent WAV blob URL. Set on mount, revoked on unmount.
@@ -206,6 +217,9 @@ export function useBgEngine(params: UseBgEngineParams): BgEngineApi {
       } else if (ctx && (ctx.state === 'suspended' || (ctx.state as string) === 'interrupted')) {
         const wasState = ctx.state;
         ctx.resume().then(() => {
+          // Re-anchor gain — ramps frozen during suspend snap incorrectly on
+          // resume; applyMasterGain cancels the stale schedule + starts fresh.
+          applyMasterGain();
           // Typed bg_reconnect alongside ae_resume — dashboards prefer typed.
           logPlaybackEvent({
             event_type: 'bg_reconnect',
@@ -231,7 +245,7 @@ export function useBgEngine(params: UseBgEngineParams): BgEngineApi {
     return () => document.removeEventListener('visibilitychange', handleVisibility, true);
     // playbackSource intentionally a dep — different sources may want
     // different return-from-BG handling in future.
-  }, [audioRef, audioContextRef, gainNodeRef, isLoadingTrackRef, playbackSource]);
+  }, [audioRef, audioContextRef, gainNodeRef, isLoadingTrackRef, playbackSource, applyMasterGain]);
 
   // ── iOS AudioContext 'interrupted' listener ───────────────────────────
   // iOS transitions AudioContext to state='interrupted' on screen lock
@@ -249,6 +263,8 @@ export function useBgEngine(params: UseBgEngineParams): BgEngineApi {
       const ctx = audioContextRef.current;
       if (!ctx) return;
       ctx.resume().then(() => {
+        // Re-anchor gain after iOS audio-thread interruption resume.
+        applyMasterGain();
         const el = audioRef.current;
         if (el && el.paused && !el.ended && usePlayerStore.getState().isPlaying) {
           el.play().catch(() => {});
@@ -256,7 +272,7 @@ export function useBgEngine(params: UseBgEngineParams): BgEngineApi {
       }).catch(() => {});
     });
     return unsub;
-  }, [audioRef, audioContextRef]);
+  }, [audioRef, audioContextRef, applyMasterGain]);
 
   // ── BATTERY-SUSPEND TIMER ────────────────────────────────────────────
   // 5s after paused + hidden, suspend the context for battery. Cancels
@@ -353,7 +369,11 @@ export function useBgEngine(params: UseBgEngineParams): BgEngineApi {
         const prevState = ctx.state;
         if (prevState === 'suspended' || (prevState as any) === 'interrupted') {
           ctx.resume()
-            .then(() => trace('ctx_resume_ok', usePlayerStore.getState().currentTrack?.trackId, { prevState, hidden: document.hidden }))
+            .then(() => {
+              // Re-anchor gain — frozen ramps snap incorrectly after resume.
+              applyMasterGain();
+              trace('ctx_resume_ok', usePlayerStore.getState().currentTrack?.trackId, { prevState, hidden: document.hidden });
+            })
             .catch(e => trace('ctx_resume_rejected', usePlayerStore.getState().currentTrack?.trackId, { prevState, err: e?.name, msg: (e?.message || '').slice(0, 80), hidden: document.hidden }));
         }
 
@@ -534,7 +554,7 @@ export function useBgEngine(params: UseBgEngineParams): BgEngineApi {
       mc.port1.close();
       mc.port2.close();
     };
-  }, [isPlaying, audioRef, audioContextRef, gainNodeRef, isLoadingTrackRef, computeMasterTarget, runEndedAdvanceRef, syntheticEndedBypassRef, lastEndedTrackIdRef]);
+  }, [isPlaying, audioRef, audioContextRef, gainNodeRef, isLoadingTrackRef, computeMasterTarget, applyMasterGain, runEndedAdvanceRef, syntheticEndedBypassRef, lastEndedTrackIdRef]);
 
   return {
     silentKeeperUrlRef,

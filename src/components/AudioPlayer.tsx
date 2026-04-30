@@ -152,6 +152,7 @@ export const AudioPlayer = () => {
     fadeInMasterGain,
     softFadeOut,
     computeMasterTarget,
+    muteMasterGainInstantly,
   } = useAudioChain({
     audioRef,
     volume,
@@ -178,6 +179,8 @@ export const AudioPlayer = () => {
     isPlaying,
     playbackSource,
     computeMasterTarget,
+    applyMasterGain,
+    muteMasterGainInstantly,
     runEndedAdvanceRef,
     syntheticEndedBypassRef,
     lastEndedTrackIdRef,
@@ -427,6 +430,11 @@ export const AudioPlayer = () => {
         // fires pause synchronously per spec, so el.paused=true after the
         // assignment regardless, and tryPlay works correctly.
         if (!document.hidden) el.pause();
+        // BG: pre-zero gain before src reassign so the audio stream cuts at
+        // silence instead of at a non-zero amplitude (avoids the click/pop).
+        // handleCanPlay's fadeInMasterGain restores it once the new track is
+        // ready. No-op in FG (el is paused → silent anyway).
+        if (document.hidden) muteMasterGainInstantly();
         // R2 is keyed by raw YouTube ID; trackId may be a VOYO ID (vyo_<b64>).
         // engageSilentWav sets loop=true; must reset before R2 src lands or
         // the track will loop forever instead of firing 'ended' and advancing.
@@ -508,7 +516,11 @@ export const AudioPlayer = () => {
             // trackSwapInProgressRef already true from line 282 — don't re-set,
             // it masks rapid-skip races where the flag from the current effect
             // was already valid. Same el.pause() guarantee as the fast path.
-            el2.pause();
+            // In BG the silent WAV bridge is playing; skip explicit pause (same
+            // reasoning as the knownInR2Sync branch). Pre-zero gain to prevent
+            // an audible click when the stream cuts at non-zero amplitude.
+            if (!document.hidden) el2.pause();
+            if (document.hidden) muteMasterGainInstantly();
             el2.loop = false;
             el2.src = `${R2_AUDIO}/${getYouTubeId(currentTrack.trackId)}?q=high`;
             setSource('r2');
