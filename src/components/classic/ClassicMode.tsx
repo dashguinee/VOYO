@@ -59,12 +59,15 @@ const MiniPlayer = ({ onOpenFull }: { onOpenFull: () => void }) => {
   const [swipeDirection, setSwipeDirection] = useState<'left' | 'right' | null>(null);
   const [showBubbles, setShowBubbles] = useState(false);
   const [showPlaylistModal, setShowPlaylistModal] = useState(false);
-  // v926 — seek bar is bronze at rest, purple for 15s after a tap, then
-  // fades back. The reveal piggybacks on every tap (single OR first tap of
-  // a double) — if it ends up being a double, MiniPlayer hides anyway when
-  // NowPlaying opens, so the timer is moot.
+  // v926/v927 — seek bar is barely-visible bronze at rest, purple for 15s
+  // after a tap, then fades back. The reveal piggybacks on every tap (single
+  // OR first tap of a double) — if it ends up being a double, MiniPlayer
+  // hides anyway when NowPlaying opens, so the timer is moot.
   const [barRevealed, setBarRevealed] = useState(false);
   const barRevealTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // v927 — Takeout bubble flips purple → orange on tap (confirms takeout
+  // armed). Resets when bubbles auto-hide so a fresh tap starts purple.
+  const [takenOut, setTakenOut] = useState(false);
   const titleRef = useRef<HTMLParagraphElement>(null);
   const lastTapRef = useRef<number>(0);
 
@@ -149,6 +152,9 @@ const MiniPlayer = ({ onOpenFull }: { onOpenFull: () => void }) => {
       const timer = setTimeout(() => setShowBubbles(false), 3000);
       return () => clearTimeout(timer);
     }
+    // When bubbles dismiss, reset Takeout's orange-confirmed state so the
+    // next reveal starts purple again.
+    setTakenOut(false);
   }, [showBubbles]);
 
   if (!currentTrack) return null;
@@ -211,12 +217,19 @@ const MiniPlayer = ({ onOpenFull }: { onOpenFull: () => void }) => {
                 orb already does that — was a duplicate). pipService.enter()
                 needs a user gesture for first-PiP-of-session; this onClick IS
                 that gesture. Signal-free (no oye commit, no queue add) — that's
-                the OYÉ button's job. */}
+                the OYÉ button's job.
+                v927: purple → orange on tap (confirms takeout armed). State
+                lives until bubbles auto-hide so a fresh tap starts purple. */}
             <button
-              className="w-12 h-12 rounded-full backdrop-blur-xl flex items-center justify-center shadow-lg bg-gradient-to-br from-purple-500/80 to-violet-600/80 border-2 border-purple-400 active:scale-95 transition-transform"
-              aria-label="Take Out — keep playing in floating cube"
+              className={`w-12 h-12 rounded-full backdrop-blur-xl flex items-center justify-center shadow-lg active:scale-95 transition-all duration-300 border-2 ${
+                takenOut
+                  ? 'bg-gradient-to-br from-orange-500/85 to-amber-600/85 border-orange-400'
+                  : 'bg-gradient-to-br from-purple-500/80 to-violet-600/80 border-purple-400'
+              }`}
+              aria-label={takenOut ? 'Taken Out — playing in floating cube' : 'Take Out — keep playing in floating cube'}
               onClick={(e) => {
                 e.stopPropagation();
+                setTakenOut(true);
                 void pipService.enter().catch(() => { /* MediaSession is the fallback */ });
               }}
             >
@@ -249,12 +262,14 @@ const MiniPlayer = ({ onOpenFull }: { onOpenFull: () => void }) => {
             style={{ width: `${progress}%` }}
           >
             {/* Progress fill — color cross-fades between bronze (rest) and
-                purple (revealed). 800ms ease-out so the bar settles back
-                into the ambience without snapping. */}
+                purple (revealed). v927: bumped bronze alpha 0.55 → 0.85 so
+                the bar reads clearly as ambient bronze instead of "is that
+                even there?" 800ms ease-out so the bar settles back into the
+                ambience without snapping. */}
             <div
               className="absolute inset-0"
               style={{
-                background: barRevealed ? '#8b5cf6' : 'rgba(212,160,83,0.55)',
+                background: barRevealed ? '#8b5cf6' : 'rgba(212,160,83,0.85)',
                 transition: 'background 800ms ease-out',
               }}
             />
@@ -264,7 +279,7 @@ const MiniPlayer = ({ onOpenFull }: { onOpenFull: () => void }) => {
               style={{
                 background: barRevealed
                   ? 'linear-gradient(to left, rgba(139,92,246,0.6), transparent)'
-                  : 'linear-gradient(to left, rgba(212,160,83,0.45), transparent)',
+                  : 'linear-gradient(to left, rgba(212,160,83,0.7), transparent)',
                 transition: 'background 800ms ease-out',
               }}
             />
