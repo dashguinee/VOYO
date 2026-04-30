@@ -59,12 +59,16 @@ const MiniPlayer = ({ onOpenFull }: { onOpenFull: () => void }) => {
   const [swipeDirection, setSwipeDirection] = useState<'left' | 'right' | null>(null);
   const [showBubbles, setShowBubbles] = useState(false);
   const [showPlaylistModal, setShowPlaylistModal] = useState(false);
-  // v926/v927 — seek bar is barely-visible bronze at rest, purple for 15s
-  // after a tap, then fades back. The reveal piggybacks on every tap (single
-  // OR first tap of a double) — if it ends up being a double, MiniPlayer
-  // hides anyway when NowPlaying opens, so the timer is moot.
-  const [barRevealed, setBarRevealed] = useState(false);
-  const barRevealTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // v932 — Seek bar runs a 4-phase choreography on tap:
+  //   purple1 (0-3s):   solid purple, while bubbles are visible
+  //   bloom   (3-8s):   purple → pink → orange gradient, 5s celebration
+  //   purple2 (8-15s):  back to solid purple
+  //   idle    (15s+):   fade back to bronze (music-reactive rest state)
+  // Bubbles auto-hide at 3s — same beat as the bloom kick-in, so engagement
+  // UI exits as the bar's "celebration of the tap" begins.
+  type BarPhase = 'idle' | 'purple1' | 'bloom' | 'purple2';
+  const [barPhase, setBarPhase] = useState<BarPhase>('idle');
+  const phaseTimersRef = useRef<Array<ReturnType<typeof setTimeout>>>([]);
   // v927 — Takeout bubble flips purple → orange on tap (confirms takeout
   // armed). Resets when bubbles auto-hide so a fresh tap starts purple.
   const [takenOut, setTakenOut] = useState(false);
@@ -72,12 +76,16 @@ const MiniPlayer = ({ onOpenFull }: { onOpenFull: () => void }) => {
   const lastTapRef = useRef<number>(0);
 
   const revealBar = useCallback(() => {
-    setBarRevealed(true);
-    if (barRevealTimerRef.current) clearTimeout(barRevealTimerRef.current);
-    barRevealTimerRef.current = setTimeout(() => setBarRevealed(false), 15000);
+    // Cancel any in-flight phase timers so a re-tap restarts from purple1.
+    phaseTimersRef.current.forEach(clearTimeout);
+    phaseTimersRef.current = [];
+    setBarPhase('purple1');
+    phaseTimersRef.current.push(setTimeout(() => setBarPhase('bloom'), 3000));
+    phaseTimersRef.current.push(setTimeout(() => setBarPhase('purple2'), 8000));
+    phaseTimersRef.current.push(setTimeout(() => setBarPhase('idle'), 15000));
   }, []);
   useEffect(() => () => {
-    if (barRevealTimerRef.current) clearTimeout(barRevealTimerRef.current);
+    phaseTimersRef.current.forEach(clearTimeout);
   }, []);
 
   // Double-tap detection for opening full player
@@ -271,27 +279,29 @@ const MiniPlayer = ({ onOpenFull }: { onOpenFull: () => void }) => {
             the original "is the seek bar pulsing with the music?" bug
             (v925 fix). Bronze breathing reads as warm ambience, distinct
             from the purple reveal-state. */}
-        {/* v931 — on tap, the WHOLE bar reads purple (rail crossfades to
-            dim purple, fill pops bold purple). The old design only
-            painted purple on the elapsed portion, so at low progress
-            (e.g. 3% into a song) the purple was a tiny sliver and easy
-            to miss — Dash kept reporting "I don't see purple on tap."
-            Now the entire bar shifts to purple territory, with elapsed
-            brighter over a dim purple remainder so progress stays
-            readable inside the unified purple state. Transition tightened
-            to 350ms so the snap feels responsive (was 800ms = sluggish). */}
+        {/* v932 — Seek bar 4-phase choreography (driven by barPhase):
+              idle    → music-reactive bronze (rest)
+              purple1 → solid purple while bubbles up (0-3s post-tap)
+              bloom   → purple→pink→orange gradient celebration (3-8s)
+              purple2 → solid purple again (8-15s)
+              → fades back to idle bronze at 15s.
+            Whole bar reads in the active palette (rail + fill both shift)
+            so progress is visible at any % even right after song start. */}
         <div
           className="absolute bottom-0 left-0 right-0 h-[3px] overflow-hidden rounded-full"
           style={{
-            background: barRevealed
-              ? 'rgba(139,92,246,0.28)'
-              : 'rgba(212,160,83, calc(0.22 + var(--voyo-energy, 0) * 0.20))',
+            background:
+              barPhase === 'idle'
+                ? 'rgba(212,160,83, calc(0.22 + var(--voyo-energy, 0) * 0.20))'
+                : barPhase === 'bloom'
+                ? 'linear-gradient(90deg, rgba(139,92,246,0.40) 0%, rgba(236,72,153,0.40) 50%, rgba(251,146,60,0.40) 100%)'
+                : 'rgba(139,92,246,0.28)',
             transition: 'background 350ms ease-out',
           }}
         >
-          {/* Filled portion — width = progress%. At rest = merged bronze
-              (diffused into the bronze rail), on tap = bold purple atop
-              the dim-purple rail. */}
+          {/* Filled portion — width = progress%. Same palette as the rail
+              at higher saturation so the elapsed slice stays distinguishable
+              within whatever state the bar is in. */}
           <div
             className="h-full relative"
             style={{ width: `${progress}%` }}
@@ -299,17 +309,27 @@ const MiniPlayer = ({ onOpenFull }: { onOpenFull: () => void }) => {
             <div
               className="absolute inset-0"
               style={{
-                background: barRevealed ? '#8b5cf6' : 'rgba(212,160,83,0.55)',
+                background:
+                  barPhase === 'idle'
+                    ? 'rgba(212,160,83,0.55)'
+                    : barPhase === 'bloom'
+                    ? 'linear-gradient(90deg, #8b5cf6 0%, #ec4899 50%, #fb923c 100%)'
+                    : '#8b5cf6',
                 transition: 'background 350ms ease-out',
               }}
             />
-            {/* Playhead halo — soft right-edge glow at the progress tip. */}
+            {/* Playhead halo — soft right-edge glow at the progress tip.
+                Tip color tracks the active phase so the playhead reads
+                coherent inside the phase. */}
             <div
               className="absolute right-0 top-0 bottom-0 w-4"
               style={{
-                background: barRevealed
-                  ? 'linear-gradient(to left, rgba(139,92,246,0.7), transparent)'
-                  : 'linear-gradient(to left, rgba(212,160,83,0.45), transparent)',
+                background:
+                  barPhase === 'idle'
+                    ? 'linear-gradient(to left, rgba(212,160,83,0.45), transparent)'
+                    : barPhase === 'bloom'
+                    ? 'linear-gradient(to left, rgba(251,146,60,0.7), transparent)'
+                    : 'linear-gradient(to left, rgba(139,92,246,0.7), transparent)',
                 transition: 'background 350ms ease-out',
               }}
             />
