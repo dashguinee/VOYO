@@ -236,6 +236,13 @@ export const AudioPlayer = () => {
           oyeScore: 0,
           createdAt: new Date().toISOString(),
         };
+        // Dispatch skip for the track being abandoned. setCurrentTrack bypasses
+        // nextTrack() so _pendingSignal never fires — we must emit manually.
+        const abandonedTrack = usePlayerStore.getState().currentTrack;
+        const abandonedTime = usePlayerStore.getState().currentTime;
+        if (abandonedTrack) {
+          queueMicrotask(() => oyo.onSkip(abandonedTrack, abandonedTime));
+        }
         // Route through playerStore — AudioPlayer's track-change effect then
         // runs the R2-first flow (iframe fallback + hot-swap). No VPS session.
         usePlayerStore.getState().setCurrentTrack(pivot);

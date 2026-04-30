@@ -25,6 +25,9 @@ import { recordTrackInSession } from '../poolCurator';
 import { recordPoolEngagement } from '../personalization';
 import { gateToR2 } from '../r2Gate';
 import * as pools from './pools';
+import { updateEngagement, getNextMove, conductorFetch, resetDJ } from './dj';
+import type { UserState } from './dj';
+import { getVibeEssence, type VibeEssence } from '../essenceEngine';
 export { usePools } from './usePools';
 export { app, type PlaySource } from './app';
 export {
@@ -133,8 +136,11 @@ if (typeof window !== 'undefined' && !(window as unknown as BgWindow).__voyoSign
         // picks up a fresh arc (getNextMove() calls initDJ on null session).
         resetDJ();
         _conductorQueue = [];
-        // Reset action window too so engagement re-reads cleanly
         _recentActions.length = 0;
+        _lastBgRefillAt = 0; // unblock the throttle so post-resume refill fires immediately
+        // Eager refill — don't wait for the first drain call. Queue is ready
+        // before the user's first skip after a long BG session.
+        void _refillConductorQueue(new Set());
       }
     }
   });
@@ -146,10 +152,6 @@ function _isHidden(): boolean {
 }
 
 // ── DJ UserState tracker (rolling window of last 5 interactions) ─────────
-
-import { updateEngagement, getNextMove, conductorFetch, resetDJ } from './dj';
-import type { UserState } from './dj';
-import { getVibeEssence, type VibeEssence } from '../essenceEngine';
 
 const WINDOW = 5; // last N interactions
 const _recentActions: Array<'skip' | 'complete' | 'react'> = [];

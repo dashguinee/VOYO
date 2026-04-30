@@ -298,11 +298,6 @@ export function getNextMove(userState: UserState): DJMove {
 
   // ── Phase advancement ──────────────────────────────────────────────────
 
-  // Only phases in PHASE_ORDER have PhaseConfig entries in arc.phases
-  const phasesWithConfig = PHASE_ORDER.filter(
-    p => p in arc.phases
-  ) as (keyof typeof arc.phases)[];
-
   const currentConfig = arc.phases[session.currentPhase as keyof typeof arc.phases];
   if (currentConfig && shouldAdvancePhase(session, currentConfig, session.engagement)) {
     const next = advancePhase(session);
