@@ -644,7 +644,10 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     };
     savePersistedState({
       ...current,
-      history: [...(current.history || []).slice(-49), newHistoryItem],
+      // v914 — was slice(-49) (= cap 50), bumped to match the v909
+      // 200-cap on the other persistence path. Eager save on track
+      // start was undersizing relative to the deferred saves.
+      history: [...(current.history || []).slice(-199), newHistoryItem],
     });
     devLog('[VOYO] Track started, saved immediately:', track.title);
 
@@ -1519,8 +1522,13 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
 
   // History Actions
   addToHistory: (track, duration) => {
-    set((state) => ({
-      history: [
+    set((state) => {
+      // v914 — in-memory history was unbounded; long sessions grew it
+      // forever. Cap at 500 (more than the 200 persisted, so a back-
+      // ramp of recent plays remains live in-memory for derived
+      // surfaces like Library "Just Played"). Trim from the head so
+      // the most recent stays.
+      const next = [
         ...state.history,
         {
           track,
@@ -1528,8 +1536,9 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
           duration,
           oyeReactions: 0,
         },
-      ],
-    }));
+      ];
+      return { history: next.length > 500 ? next.slice(-500) : next };
+    });
 
     setTimeout(() => {
       const state = get();

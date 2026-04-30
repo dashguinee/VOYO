@@ -22,8 +22,6 @@ import { usePreferenceStore } from '../../store/preferenceStore';
 import { getThumbnailUrl, getTrackThumbnailUrl } from '../../utils/thumbnail';
 import { Track, ReactionType } from '../../types';
 import { SmartImage } from '../ui/SmartImage';
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-import { unlockMobileAudio, isMobileDevice } from '../../utils/mobileAudioUnlock';
 import { useMobilePlay } from '../../hooks/useMobilePlay';
 import { BoostButton } from '../ui/BoostButton';
 import { BoostSettings } from '../ui/BoostSettings';
