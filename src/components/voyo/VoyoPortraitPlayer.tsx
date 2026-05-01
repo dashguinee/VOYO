@@ -2169,10 +2169,9 @@ const BigCenterCard = memo(({ track, onExpandVideo, onShowLyrics, onLyricsArmed,
         if (!pos) return;
         const dx = e.clientX - pos.x;
         const dy = e.clientY - pos.y;
-        // Ignore if it turned into a drag
         if (Math.abs(dx) > 8 || Math.abs(dy) > 8) { cardDownPos.current = null; return; }
         const heldFor = Date.now() - cardDownAt.current;
-        if (heldFor < 500) onShowLyrics?.();
+        if (heldFor < 500) usePlayerStore.getState().togglePlay();
         cardDownPos.current = null;
       }}
       onPointerLeave={() => { cardDownPos.current = null; }}
