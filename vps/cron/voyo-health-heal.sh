@@ -23,15 +23,15 @@ exec >>"$LOG" 2>&1
 echo ""
 echo "==== $(date -u +%Y-%m-%dT%H:%M:%SZ) ===="
 
-# Load Supabase credentials from /etc/voyo-health.env (same file as
-# voyo-health-probe.sh). Decoupled from the voyo-proxy.js process env so
-# heal still works when voyo-audio is down — self-heal during outage is
-# the whole point. Expected vars: VOYO_SUPABASE_URL, VOYO_SUPABASE_ANON_KEY.
+# Load Supabase credentials from /etc/voyo-health.env.
+# IMPORTANT: requeue PATCH requires service_role key (RLS blocks anon UPDATE).
+# Expected vars: VOYO_SUPABASE_URL, VOYO_SUPABASE_SERVICE_KEY (and optionally ANON_KEY).
 [ -r "$ENV_FILE" ] && . "$ENV_FILE"
 
 URL="${VOYO_SUPABASE_URL:-https://anmgyxhnyhbyxzpjhxgx.supabase.co}"
-KEY="${VOYO_SUPABASE_ANON_KEY:-}"
-if [ -z "$KEY" ]; then echo "no VOYO_SUPABASE_ANON_KEY in $ENV_FILE — skipping"; exit 0; fi
+# Use service key for write ops; fall back to anon only for read-only paths
+KEY="${VOYO_SUPABASE_SERVICE_KEY:-}"
+if [ -z "$KEY" ]; then echo "no VOYO_SUPABASE_SERVICE_KEY in $ENV_FILE — skipping"; exit 0; fi
 
 # ── 1. Chrome profile health check ───────────────────────────────────────
 
