@@ -379,6 +379,9 @@ interface PlayerStore {
    *  surface like Search is active so the page content has more room. */
   playerCompact: boolean;
   setPlayerCompact: (compact: boolean) => void;
+  /** Increment to request lyrics open from any surface (e.g. cube double-tap). */
+  lyricsOpenRequest: number;
+  requestLyricsOpen: () => void;
   /** Feed (Moments) ambient dim signal — VoyoMoments flips this on after
    *  3s of dwell or 5 swipes; VoyoBottomNav reads it and fades the nav
    *  pill to 30% (center VOYO orb stays at 50% — visible+accessible).
@@ -448,6 +451,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   videoPolitePosition: 'center',
   videoBlocked: false,
   playerCompact: false,
+  lyricsOpenRequest: 0,
   feedNavDim: false,
   // v915 — hydrate from localStorage so playback modes survive reload.
   shuffleMode: ((): boolean => {
@@ -1424,6 +1428,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
 
   setVideoTarget: (target: 'hidden' | 'portrait' | 'landscape') => set({ videoTarget: target }),
   setPlayerCompact: (compact: boolean) => set({ playerCompact: compact }),
+  requestLyricsOpen: () => set(s => ({ lyricsOpenRequest: s.lyricsOpenRequest + 1 })),
   setFeedNavDim: (dim: boolean) => set({ feedNavDim: dim }),
   setVideoPolitePosition: (pos: 'center' | 'bottom' | 'top-right' | 'top-left') => set({ videoPolitePosition: pos }),
   setVideoBlocked: (blocked: boolean) => set({ videoBlocked: blocked }),

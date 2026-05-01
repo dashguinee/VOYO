@@ -191,6 +191,9 @@ export const YouTubeIframe = memo(() => {
   const [showNextUp, setShowNextUp] = useState(false);
   const [showPortraitNextUp, setShowPortraitNextUp] = useState(false); // Full-cover thumbnail for portrait
   const [isDragging, setIsDragging] = useState(false);
+  // Double-tap detection for lyrics
+  const lastCubeTapRef = useRef<{ time: number; y: number } | null>(null);
+  const cubeSingleTapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Landscape fades auto-mute after a short dwell: the purple top/bottom
   // gradients fade heavy-then-light so the "just entered" moment is
   // framed, but after ~3s the video breathes — fade heights shrink and
@@ -1121,11 +1124,10 @@ export const YouTubeIframe = memo(() => {
             portalGlowRef.current = g;
             setPortalGlow(g);
           }}
-          onPointerUp={() => {
+          onPointerUp={(e) => {
             dragStartRef.current = null;
             setIsDragging(false);
-            // Portal armed → drop = Take Out (PiP). Hide the floating
-            // mini, fade portal back to 0, fire pipService.
+            // Portal armed → Take Out (PiP).
             if (portalGlowRef.current >= PORTAL_ARM) {
               haptics.success();
               void pipService.enter();
@@ -1136,14 +1138,43 @@ export const YouTubeIframe = memo(() => {
               portraitDraggedRef.current = false;
               return;
             }
-            // No portal drop. If no meaningful drag happened, it's a tap → close.
-            if (!portraitDraggedRef.current) {
-              setVideoTarget('hidden');
-              setPortraitPos(DEFAULT_PORTRAIT_POS);
-            }
-            // Fade the portal back out either way.
             portalGlowRef.current = 0;
             setPortalGlow(0);
+
+            if (!portraitDraggedRef.current) {
+              // Tap detected. Check for double-tap first.
+              const now = Date.now();
+              const last = lastCubeTapRef.current;
+              const rect = e.currentTarget.getBoundingClientRect();
+              const relY = e.clientY - rect.top;
+
+              if (last && now - last.time < 300) {
+                // Double-tap → open lyrics
+                if (cubeSingleTapTimer.current) { clearTimeout(cubeSingleTapTimer.current); cubeSingleTapTimer.current = null; }
+                lastCubeTapRef.current = null;
+                usePlayerStore.getState().requestLyricsOpen();
+                haptics.selection();
+                return;
+              }
+
+              lastCubeTapRef.current = { time: now, y: relY };
+              // Delay single-tap action to allow a double-tap to cancel it
+              if (cubeSingleTapTimer.current) clearTimeout(cubeSingleTapTimer.current);
+              const tapRelY = relY;
+              const tapHeight = rect.height;
+              cubeSingleTapTimer.current = setTimeout(() => {
+                cubeSingleTapTimer.current = null;
+                lastCubeTapRef.current = null;
+                // Bottom 25% = close. Top 75% = pause/resume.
+                if (tapRelY > tapHeight * 0.75) {
+                  setVideoTarget('hidden');
+                  setPortraitPos(DEFAULT_PORTRAIT_POS);
+                } else {
+                  usePlayerStore.getState().togglePlay();
+                  haptics.light();
+                }
+              }, 220);
+            }
           }}
           onPointerCancel={() => {
             dragStartRef.current = null;

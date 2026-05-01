@@ -1973,26 +1973,9 @@ const BigCenterCard = memo(({ track, onExpandVideo, onShowLyrics, onLyricsArmed,
     return () => clearTimeout(t);
   }, [track?.trackId, hideThumb]);
 
-  // v879 (Dash 2026-04-29 "card tap = open lyrics, hold = pause
-  // natural with volume duck to 7%, release after hold = pause").
-  // The artwork now carries TWO gestures with one pointer chain:
-  //   • Quick TAP (release < 80ms before duck timer fires) → lyrics
-  //   • HOLD release < 350ms → un-duck (no pause; was just a "shh")
-  //   • HOLD release >= 350ms → pause + un-duck
-  // Volume ducks to 7% as soon as the duck timer fires (80ms after
-  // pointerdown). Quick taps never trigger the duck (they release
-  // before the timer). The user's previous volume is captured on
-  // pointerdown and restored on release / pause.
-  const cardDuckTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Card tap = open lyrics. Single clean gesture, no hold/duck.
   const cardDownAt = useRef<number>(0);
-  const cardIsDucking = useRef<boolean>(false);
-  const cardPreDuckVolume = useRef<number>(100);
-  const cardHoldStart = useRef<{ x: number; y: number } | null>(null);
-  useEffect(() => {
-    return () => {
-      if (cardDuckTimer.current) clearTimeout(cardDuckTimer.current);
-    };
-  }, []);
+  const cardDownPos = useRef<{ x: number; y: number } | null>(null);
 
   return (
   // ── PERSPECTIVE CONTAINER ─────────────────────────────────────────
@@ -2061,86 +2044,27 @@ const BigCenterCard = memo(({ track, onExpandVideo, onShowLyrics, onLyricsArmed,
       backfaceVisibility: 'hidden',
     }}
   >
-    {/* THUMBNAIL — v879. Tap = lyrics. Hold = volume duck → release
-        decides pause vs un-duck. Stops propagation on pointerdown so
-        the canvas swipe doesn't fight us; the card-area gesture is
-        owned here exclusively. */}
+    {/* THUMBNAIL — single tap = lyrics. No hold/duck. */}
     <div
       data-card-tap
       onPointerDown={(e) => {
         e.stopPropagation();
-        if (cardDuckTimer.current) clearTimeout(cardDuckTimer.current);
         cardDownAt.current = Date.now();
-        cardHoldStart.current = { x: e.clientX, y: e.clientY };
-        cardIsDucking.current = false;
-        // Capture pre-duck volume so we can restore on release.
-        cardPreDuckVolume.current = usePlayerStore.getState().volume;
-        // 80ms gate: faster than this and it's a tap, not a hold.
-        cardDuckTimer.current = setTimeout(() => {
-          cardDuckTimer.current = null;
-          cardIsDucking.current = true;
-          usePlayerStore.getState().setVolume(7);
-          haptics.light();
-        }, 80);
+        cardDownPos.current = { x: e.clientX, y: e.clientY };
       }}
-      onPointerMove={(e) => {
-        const start = cardHoldStart.current;
-        if (!start) return;
-        const dx = e.clientX - start.x;
-        const dy = e.clientY - start.y;
-        // Movement > 8px → cancel the gesture entirely. Restore
-        // volume if duck already fired.
-        if (Math.abs(dx) > 8 || Math.abs(dy) > 8) {
-          if (cardDuckTimer.current) {
-            clearTimeout(cardDuckTimer.current);
-            cardDuckTimer.current = null;
-          }
-          if (cardIsDucking.current) {
-            usePlayerStore.getState().setVolume(cardPreDuckVolume.current);
-            cardIsDucking.current = false;
-          }
-          cardHoldStart.current = null;
-        }
-      }}
-      onPointerUp={() => {
+      onPointerUp={(e) => {
+        const pos = cardDownPos.current;
+        if (!pos) return;
+        const dx = e.clientX - pos.x;
+        const dy = e.clientY - pos.y;
+        // Ignore if it turned into a drag
+        if (Math.abs(dx) > 8 || Math.abs(dy) > 8) { cardDownPos.current = null; return; }
         const heldFor = Date.now() - cardDownAt.current;
-        if (cardDuckTimer.current) {
-          // Released before the 80ms duck → it's a TAP. Open lyrics.
-          // v889: card-tap reverted to Lyrics per Dash — "tap on center
-          // of the card or card itself...mode change is actually for
-          // Lyrics". Mode toggle moved off the card onto canvas tap.
-          clearTimeout(cardDuckTimer.current);
-          cardDuckTimer.current = null;
-          onShowLyrics?.();
-        } else if (cardIsDucking.current) {
-          // Was holding; restore volume regardless. If held >=350ms,
-          // commit a real PAUSE on release.
-          usePlayerStore.getState().setVolume(cardPreDuckVolume.current);
-          cardIsDucking.current = false;
-          if (heldFor >= 350 && usePlayerStore.getState().isPlaying) {
-            // Trigger pause via store (no handlePlayPause access here;
-            // setIsPlaying false is the canonical pause path).
-            usePlayerStore.getState().setIsPlaying(false);
-            haptics.medium();
-          }
-        }
-        cardHoldStart.current = null;
+        if (heldFor < 500) onShowLyrics?.();
+        cardDownPos.current = null;
       }}
-      onPointerLeave={() => {
-        if (cardDuckTimer.current) { clearTimeout(cardDuckTimer.current); cardDuckTimer.current = null; }
-        if (cardIsDucking.current) {
-          usePlayerStore.getState().setVolume(cardPreDuckVolume.current);
-          cardIsDucking.current = false;
-        }
-        cardHoldStart.current = null;
-      }}
-      onPointerCancel={() => {
-        if (cardDuckTimer.current) { clearTimeout(cardDuckTimer.current); cardDuckTimer.current = null; }
-        if (cardIsDucking.current) {
-          usePlayerStore.getState().setVolume(cardPreDuckVolume.current);
-          cardIsDucking.current = false;
-        }
-        cardHoldStart.current = null;
+      onPointerLeave={() => { cardDownPos.current = null; }}
+      onPointerCancel={() => { cardDownPos.current = null;
       }}
       // v826b: NO role="button" / aria-label here. didOriginateOnInteractive
       // matches [role="button"] and made handleCanvasPointerDown bail out
@@ -4078,8 +4002,12 @@ export const VoyoPortraitPlayer = ({
   const [signalCategory, setSignalCategory] = useState<ReactionCategory | null>(null);
   const [signalText, setSignalText] = useState('');
 
-  // ====== LYRICS OVERLAY - Tap album art to show lyrics ======
+  // ====== LYRICS OVERLAY — tap album art OR cube double-tap ======
   const [showLyricsOverlay, setShowLyricsOverlay] = useState(false);
+  const lyricsOpenRequest = usePlayerStore(s => s.lyricsOpenRequest);
+  useEffect(() => {
+    if (lyricsOpenRequest > 0) setShowLyricsOverlay(true);
+  }, [lyricsOpenRequest]);
 
   // Handle double-tap on MixBoard column = open Signal input
   const handleModeReaction = useCallback((category: ReactionCategory) => {
