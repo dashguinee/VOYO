@@ -64,6 +64,11 @@ async function performHotSwap(
   snapshot: { trackId: string; seconds: number } | null,
   iframeStartedAt: number,
 ): Promise<boolean> {
+  // Track whether we've actually mutated the element. bail() is called
+  // from multiple stages including pre_src (before we've touched anything).
+  // Pausing / stripping src on a pre_src bail would clobber whatever the
+  // element was already doing (e.g. silentWav looping in BG).
+  let elementModified = false;
   // Claim a unique token for this swap invocation. Incremented before any
   // async work so parallel calls (unlikely but possible if trigger fires
   // twice) each hold a distinct value. [AUDIT-2 #1]
@@ -117,22 +122,31 @@ async function performHotSwap(
   // unconditional removeAttribute('src')+load() here would strip the src
   // off the *new* track's element, producing silent dead audio. Only strip
   // if el.src still corresponds to the track this bail is for.
+  //
+  // elementModified guards pre_src bails: if we haven't touched el yet,
+  // calling el.pause() would pause whatever the element was already doing
+  // (silentWav looping, incoming track loading) without us having caused
+  // the problem. Root cause: bail at pre_src was pausing the silentWav
+  // keeper in BG — OS interprets a sudden pause as the app yielding audio
+  // focus, eventually revoking it for the session.
   const bail = (subtype: string, extra: Record<string, unknown> = {}): false => {
     logPlaybackEvent({
       event_type: 'trace', track_id: trackId,
       meta: { subtype, mode: posSource, elapsed_ms: Date.now() - iframeStartedAt, ...extra },
     });
-    try { el.pause(); } catch {}
-    try {
-      const ytId = getYouTubeId(trackId);
-      // Only strip src if this element still points at OUR track. If the
-      // user skipped and AudioPlayer reassigned el.src to a new ytId,
-      // leave it alone — the new effect owns the element now.
-      if (ytId && el.src && el.src.includes(ytId)) {
-        el.removeAttribute('src');
-        el.load();
-      }
-    } catch {}
+    if (elementModified) {
+      try { el.pause(); } catch {}
+      try {
+        const ytId = getYouTubeId(trackId);
+        // Only strip src if this element still points at OUR track. If the
+        // user skipped and AudioPlayer reassigned el.src to a new ytId,
+        // leave it alone — the new effect owns the element now.
+        if (ytId && el.src && el.src.includes(ytId)) {
+          el.removeAttribute('src');
+          el.load();
+        }
+      } catch {}
+    }
     return false;
   };
 
@@ -152,6 +166,7 @@ async function performHotSwap(
     // IDs reaching hotswap_watcher_mount — those would 404 without decode.
     const ourSrc = `${R2_AUDIO}/${getYouTubeId(trackId)}?q=high`;
     el.src = ourSrc;
+    elementModified = true; // element is now under our control — bail() may clean up
     try { el.load(); } catch {}
     try { el.currentTime = t; } catch {}
     el.volume = 0;
@@ -310,6 +325,7 @@ export function useHotSwap(
   currentTrack: Track | null,
   playbackSource: string | null | undefined,
   audioRef: RefObject<HTMLAudioElement | null>,
+  engageSilentWav: (reason: string, trackId?: string | null) => void,
 ): void {
   // Last-known iframe currentTime — for the iframe-cut resume case.
   const lastIframePosRef = useRef<{ trackId: string; seconds: number } | null>(null);
@@ -408,6 +424,15 @@ export function useHotSwap(
             // Abort — reset flag so the NEXT poll/RT fire can retry.
             // Watchers stay active for exactly this reason.
             inFlight = false;
+            // BG: bail() may have stripped el.src (on canplay-timeout or
+            // play-stall), leaving the element with no src. The OS sees a
+            // paused, src-less element and revokes audio focus within ~4s —
+            // exactly the 2s poll gap + some margin. Re-engage silentWav
+            // immediately so the keeper loop is live until the next poll
+            // fires and sets the R2 src again.
+            if (document.hidden) {
+              engageSilentWav('hotswap_bail_bg', trackId);
+            }
           }
         });
     };

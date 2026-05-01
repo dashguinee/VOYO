@@ -200,7 +200,7 @@ export const AudioPlayer = () => {
   // contribution. Hot swap is the bridge for users who tap Play Now on
   // the cusp (~1s before R2 lands) so they don't eat iframe quality for
   // the rest of the song. Creating our own experience, true to our feels.
-  useHotSwap(currentTrack, playbackSource, audioRef);
+  useHotSwap(currentTrack, playbackSource, audioRef, engageSilentWav);
 
   // Mini PiP — canvas-composite (album art + Now Playing + Next Up
   // chrome) PiP'd via captureStream. Auto-enters when app goes
@@ -214,7 +214,6 @@ export const AudioPlayer = () => {
   useWakeLock(isPlaying);
   // Silence unused-ref warnings — consumers are the useBgEngine API and
   // the silent-WAV bridges engaged at transition points below.
-  void engageSilentWav;
   void isTransitioningToBackgroundRef;
   void silentKeeperUrlRef;
 
@@ -711,11 +710,22 @@ export const AudioPlayer = () => {
         // AbortError = src swap mid-play — isPlaying must stay true.
         if (errName === 'AbortError') return;
         // NotAllowedError in BG = audio focus briefly dropped at track boundary.
-        // Killing isPlaying here stops the heartbeat and prevents all recovery.
-        // Let the heartbeat's 4s kick handle re-acquisition instead.
+        // Killing isPlaying stops the heartbeat and prevents all recovery.
+        // Retry instead: the heartbeat's 2s kick also gets NotAllowedError
+        // while the iOS/Android audio policy is locked, so a ladder of
+        // attempts at 200/800/2000ms covers the recovery window and
+        // supplements the heartbeat without racing it.
         if (document.hidden && errName === 'NotAllowedError') {
           const ctx = audioContextRef.current;
           if (ctx && ctx.state !== 'running') ctx.resume().catch(() => {});
+          [200, 800, 2000].forEach(ms => setTimeout(() => {
+            const e = audioRef.current;
+            if (!e || !e.paused || e.ended) return;
+            if (!usePlayerStore.getState().isPlaying) return;
+            const c = audioContextRef.current;
+            if (c && c.state !== 'running') c.resume().then(() => e.play().catch(() => {})).catch(() => {});
+            else e.play().catch(() => {});
+          }, ms));
           return;
         }
         setIsPlaying(false);
