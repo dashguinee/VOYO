@@ -45,6 +45,13 @@ export const CubeGestureHint = memo(({
   onTap?: () => void;
 }) => {
   const [phase, setPhase] = useState<Phase>(computeInitialPhase);
+  // True after the entrance delay so the hint fades in after cube motion settles
+  const [entered, setEntered] = useState(false);
+
+  useEffect(() => {
+    const t = setTimeout(() => setEntered(true), 350);
+    return () => clearTimeout(t);
+  }, []);
 
   useEffect(() => {
     if (phase === 'dead') return;
@@ -74,24 +81,26 @@ export const CubeGestureHint = memo(({
       }}
       style={{
         position: 'absolute',
-        [position]: 4,
+        [position]: 1,
         left: 0,
         right: 0,
         textAlign: 'center',
         zIndex: 20,
         pointerEvents: onTap ? 'auto' : 'none',
         cursor: onTap ? 'pointer' : 'default',
-        opacity: phase === 'visible' ? 1 : 0,
-        transition: `opacity ${FADE_DURATION_MS}ms ease-out`,
+        opacity: entered && phase === 'visible' ? 1 : 0,
+        transition: entered
+          ? `opacity ${FADE_DURATION_MS}ms ease-out`
+          : 'opacity 400ms ease-in',
       }}
     >
       <p
         style={{
-          color: highlighted ? 'rgba(139,92,246,0.85)' : 'rgba(255,255,255,0.55)',
-          fontSize: 10,
-          fontWeight: 500,
-          letterSpacing: '0.04em',
-          textShadow: '0 1px 3px rgba(0,0,0,0.6)',
+          color: highlighted ? 'rgba(139,92,246,0.45)' : 'rgba(255,255,255,0.18)',
+          fontSize: 9,
+          fontWeight: 400,
+          letterSpacing: '0.05em',
+          textShadow: '0 1px 2px rgba(0,0,0,0.4)',
           margin: 0,
           transition: 'color 0.2s',
         }}
