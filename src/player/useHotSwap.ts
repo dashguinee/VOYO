@@ -189,6 +189,15 @@ async function performHotSwap(
       return bail('hotswap_canplay_timeout');
     }
 
+    // Re-read live iframe position — canplay wait can take 0.3–2.5s and the
+    // iframe kept playing throughout. Using the stale t from swap-start means
+    // R2 begins 0.3–2.5s behind the iframe, audible as desync during the
+    // crossfade. Reading fresh here closes the gap to ~0ms.
+    const freshT = iframeBridge.getCurrentTime();
+    if (freshT != null && isFinite(freshT) && freshT > 0) {
+      t = freshT;
+      posSource = 'live';
+    }
     try { el.currentTime = t; } catch {}
     let playRejected = false;
     await el.play().catch((err: Error) => {
@@ -345,13 +354,14 @@ export function useHotSwap(
       },
     });
 
-    // Start snapshot ticker — 1s cadence, writes last-known iframe position.
+    // Snapshot ticker — 250ms cadence matches the iframe time-update interval
+    // so dead-iframe fallback position is at most 250ms stale (was 1s).
     snapRef.current = setInterval(() => {
       const t = iframeBridge.getCurrentTime();
       if (t != null && isFinite(t) && t > 0) {
         lastIframePosRef.current = { trackId, seconds: t };
       }
-    }, 1000);
+    }, 250);
 
     // Unified trigger — whichever watcher fires first wins. `inFlight`
     // (not a one-shot latch) lets a failed swap retry: if performHotSwap

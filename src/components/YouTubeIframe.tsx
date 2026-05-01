@@ -761,7 +761,7 @@ export const YouTubeIframe = memo(() => {
   //      we re-seek, then fade out. Marked done; never re-check.
   // No interval polling. No "hectic reactive reload."
   const POSTER_MIN_MS = 3000;        // poster minimum dwell
-  const DRIFT_CHECK_DELAY_MS = 8000; // single drift check, T+ this after sync
+  const DRIFT_CHECK_DELAY_MS = 3000; // single drift check, T+ this after sync
   const DRIFT_THRESHOLD_S = 1.5;
   const POSTER_FADE_MS = 600;
 
