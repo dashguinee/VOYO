@@ -35,7 +35,7 @@ export interface ArtistTrack {
   artist: string | null;
   thumbnail_url: string | null;
   duration_seconds: number | null;
-  voyo_play_count: number;
+  play_count: number;
   genres: string[];
   moods: string[];
   // Exposed so ArtistPage / callers can optionally show a "warming up" dot
@@ -221,7 +221,7 @@ export function useArtist(artistName: string): UseArtistReturn {
             : typeof item.duration_seconds === 'number'
               ? item.duration_seconds
               : null,
-          voyo_play_count: 0,
+          play_count: 0,
           genres: [] as string[],
           moods: [] as string[],
           r2_cached: false,
@@ -240,7 +240,7 @@ export function useArtist(artistName: string): UseArtistReturn {
   // Aggregated stats
   const trackCount = tracks.length;
   const momentCount = moments.length;
-  const totalPlays = tracks.reduce((sum, t) => sum + (t.voyo_play_count || 0), 0);
+  const totalPlays = tracks.reduce((sum, t) => sum + (t.play_count || 0), 0);
 
   return {
     profile,
@@ -271,9 +271,9 @@ async function fetchTracks(artistName: string): Promise<ArtistTrack[]> {
   // "No tracks found" dead-end, which violates the no-retry philosophy.
   const { data, error } = await supabase
     .from('video_intelligence')
-    .select('youtube_id, title, artist, thumbnail_url, duration_seconds, voyo_play_count, genres, moods, r2_cached')
+    .select('youtube_id, title, artist, thumbnail_url, play_count, r2_cached')
     .eq('matched_artist', artistName.toLowerCase())
-    .order('voyo_play_count', { ascending: false })
+    .order('play_count', { ascending: false })
     .limit(100);
 
   if (error) {
@@ -305,7 +305,7 @@ async function fetchTracks(artistName: string): Promise<ArtistTrack[]> {
         uncached.slice(0, 20).map(r => ({
           id: r.youtube_id, trackId: r.youtube_id, title: r.title || '',
           artist: r.artist || '', coverUrl: r.thumbnail_url || '',
-          duration: r.duration_seconds || 0, tags: [], oyeScore: 0,
+          duration: 0, tags: [], oyeScore: 0,
           createdAt: new Date().toISOString(),
         })),
         5,
@@ -318,10 +318,10 @@ async function fetchTracks(artistName: string): Promise<ArtistTrack[]> {
     title: row.title || '',
     artist: row.artist || null,
     thumbnail_url: row.thumbnail_url || null,
-    duration_seconds: row.duration_seconds || null,
-    voyo_play_count: row.voyo_play_count || 0,
-    genres: row.genres || [],
-    moods: row.moods || [],
+    duration_seconds: null,
+    play_count: (row as any).play_count || 0,
+    genres: [],
+    moods: [],
     r2_cached: row.r2_cached === true,
   }));
 }

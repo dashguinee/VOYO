@@ -561,26 +561,33 @@ export interface VideoIntelligenceRow {
   youtube_id: string;
   title: string;
   artist: string | null;
-  channel_name: string | null;
-  duration_seconds: number | null;
   thumbnail_url: string | null;
-  search_terms: string[] | null;
-  normalized_title: string | null;
-  related_ids: string[];
-  similar_ids: string[];
-  genres: string[];
-  moods: string[];
-  language: string | null;
-  region: string | null;
-  r2_cached?: boolean;
-  voyo_play_count: number;
-  voyo_queue_count: number;
-  voyo_reaction_count: number;
-  discovered_by: string | null;
   discovery_method: 'manual_play' | 'ocr_extraction' | 'api_search' | 'related_crawl' | 'import' | null;
-  created_at: string;
-  updated_at: string;
-  last_played_at: string | null;
+  play_count?: number;
+  queue_count?: number;
+  love_count?: number;
+  heat_score?: number;
+  first_seen?: string;
+  last_played?: string | null;
+  matched_artist?: string | null;
+  primary_genre?: string | null;
+  r2_cached?: boolean;
+  r2_quality?: string | null;
+  r2_size?: number | null;
+  blocklisted?: boolean;
+  // legacy aliases kept optional — use play_count / first_seen instead
+  channel_name?: string | null;
+  duration_seconds?: number | null;
+  genres?: string[];
+  moods?: string[];
+  region?: string | null;
+  voyo_play_count?: number;
+  voyo_queue_count?: number;
+  voyo_reaction_count?: number;
+  discovered_by?: string | null;
+  created_at?: string;
+  updated_at?: string;
+  last_played_at?: string | null;
 }
 
 // Batch debounce for sync() — collects individual calls into one batchSync()
@@ -658,7 +665,7 @@ export const videoIntelligenceAPI = {
     const { data, error } = await supabase
       .from('video_intelligence')
       .select('*')
-      .order('voyo_play_count', { ascending: false })
+      .order('play_count', { ascending: false })
       .limit(limit);
     if (error) return [];
     return data || [];
@@ -669,7 +676,7 @@ export const videoIntelligenceAPI = {
     const { data, error } = await supabase
       .from('video_intelligence')
       .select('*')
-      .order('created_at', { ascending: false })
+      .order('first_seen', { ascending: false })
       .limit(limit);
     if (error) return [];
     return data || [];
@@ -704,12 +711,12 @@ export const videoIntelligenceAPI = {
     if (!supabase) return { totalVideos: 0, totalPlays: 0, recentDiscoveries: 0 };
     const [countRes, playsRes, recentRes] = await Promise.all([
       supabase.from('video_intelligence').select('*', { count: 'exact', head: true }),
-      supabase.from('video_intelligence').select('voyo_play_count'),
+      supabase.from('video_intelligence').select('play_count'),
       supabase.from('video_intelligence')
         .select('*', { count: 'exact', head: true })
-        .gte('created_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
+        .gte('first_seen', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
     ]);
-    const totalPlays = (playsRes.data || []).reduce((sum: number, v: { voyo_play_count?: number }) => sum + (v.voyo_play_count || 0), 0);
+    const totalPlays = (playsRes.data || []).reduce((sum: number, v: { play_count?: number }) => sum + (v.play_count || 0), 0);
     return {
       totalVideos: countRes.count || 0,
       totalPlays,
@@ -740,7 +747,7 @@ export const videoIntelligenceAPI = {
       .from('video_intelligence')
       .select('*')
       .eq('matched_artist', artistName)
-      .order('voyo_play_count', { ascending: false })
+      .order('play_count', { ascending: false })
       .limit(limit);
     if (error) {
       devWarn('[VideoIntelligence] getByArtist error:', error.message);

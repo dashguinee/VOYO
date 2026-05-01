@@ -496,15 +496,15 @@ function viRowToTrack(row: VideoIntelligenceRow): Track {
     id: `vi_${row.youtube_id}`,
     trackId: row.youtube_id,
     title: row.title,
-    artist: row.artist || row.channel_name || 'Unknown Artist',
+    artist: row.artist || 'Unknown Artist',
     album: '',
     coverUrl: row.thumbnail_url || `https://i.ytimg.com/vi/${row.youtube_id}/hqdefault.jpg`,
-    duration: row.duration_seconds || 0,
-    tags: row.genres || [],
-    mood: (row.moods?.[0] as Track['mood']) || 'afro',
-    region: row.region || undefined,
-    oyeScore: row.voyo_play_count,
-    createdAt: row.created_at,
+    duration: 0,
+    tags: [],
+    mood: 'afro',
+    region: undefined,
+    oyeScore: row.play_count,
+    createdAt: row.first_seen,
   };
 }
 
@@ -523,8 +523,8 @@ export async function warmLastResortPool(): Promise<void> {
     // r2Gate enforces cache status at play time; here we just want popular tracks.
     const { data, error } = await supabase
       .from('video_intelligence')
-      .select('youtube_id,title,artist,channel_name,duration_seconds,thumbnail_url,genres,moods,region,voyo_play_count,created_at')
-      .order('voyo_play_count', { ascending: false })
+      .select('youtube_id,title,artist,thumbnail_url,play_count,first_seen')
+      .order('play_count', { ascending: false })
       .limit(500);
     if (error || !data || data.length === 0) return;
     const tracks = (data as VideoIntelligenceRow[]).map(viRowToTrack);
