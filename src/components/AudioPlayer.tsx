@@ -536,49 +536,45 @@ export const AudioPlayer = () => {
             el2.play().catch(() => {});
             logPlaybackEvent({ event_type: 'play_start', track_id: currentTrack.trackId, source: 'r2', meta: { subtype: 'probe_found' } });
           } else {
-            // Not in R2 — go straight to iframe. CF InnerTube extraction
-            // fails on datacenter IPs so /realtime/ would just add 5-10s
-            // dead air before erroring out. Iframe plays immediately;
-            // useHotSwap upgrades to R2 within 2s of VPS finishing.
-            // Do NOT pause el2 — silentWav bridge must keep looping or
-            // bgEngine heartbeat sees a paused element and fights to restart it.
-            setSource('iframe');
-            trackSwapInProgressRef.current = false;
-            logPlaybackEvent({ event_type: 'play_start', track_id: currentTrack.trackId, source: 'iframe', meta: { subtype: 'r2_miss_iframe_immediate' } });
-            // BG: iframe can't provide audio — the hidden player won't run.
-            // Silent WAV loops, useHotSwap polls R2 every 2s. If R2 still
-            // hasn't landed in 25s (~12 poll cycles), skip to keep the queue
-            // moving so the user hears music instead of indefinite silence.
+            // Not in R2.
+            // FG: go to iframe. useHotSwap upgrades to R2 when extraction lands.
+            // BG: iframe can't play with screen locked AND the hotswap poll is
+            // paused while hidden — that whole path was silent dead-air.
+            // Use /realtime/ instead: CF extracts on the fly and returns actual
+            // audio bytes that <audio> can play in background. If CF extraction
+            // fails (502 → onError 'edge' gate), skip immediately.
             if (document.hidden) {
-              setTimeout(() => {
-                if (isStale()) return;
-                if (usePlayerStore.getState().currentTrack?.trackId !== currentTrack.trackId) return;
-                if (usePlayerStore.getState().playbackSource !== 'iframe') return; // hot-swap fired ✓
-                logPlaybackEvent({ event_type: 'trace', track_id: currentTrack.trackId, meta: { subtype: 'bg_iframe_skip_timeout' } });
-                syntheticEndedBypassRef.current = true;
-                runEndedAdvanceRef.current?.();
-              }, 25_000);
+              el2.loop = false;
+              el2.src = `${EDGE_REALTIME}/${getYouTubeId(currentTrack.trackId)}`;
+              setSource('edge');
+              trackSwapInProgressRef.current = false;
+              void el2.play().catch(() => {});
+              logPlaybackEvent({ event_type: 'play_start', track_id: currentTrack.trackId, source: 'edge', meta: { subtype: 'bg_realtime_stream' } });
+            } else {
+              setSource('iframe');
+              trackSwapInProgressRef.current = false;
+              logPlaybackEvent({ event_type: 'play_start', track_id: currentTrack.trackId, source: 'iframe', meta: { subtype: 'r2_miss_iframe_immediate' } });
             }
           }
         }).catch(() => {
-          // Network error on probe — same fallback. Iframe carries audio,
-          // useHotSwap will retry R2 detection in the background.
+          // Network error on R2 probe.
+          // FG: fall to iframe, useHotSwap retries R2 detection.
+          // BG: same /realtime/ approach — iframe + paused poll = dead in BG.
           if (isStale()) return;
           const el2 = audioRef.current;
           if (!el2) return;
-          el2.loop = true;
-          setSource('iframe');
-          trackSwapInProgressRef.current = false;
-          logPlaybackEvent({ event_type: 'trace', track_id: currentTrack.trackId, meta: { subtype: 'r2_probe_err_iframe_audio' } });
           if (document.hidden) {
-            setTimeout(() => {
-              if (isStale()) return;
-              if (usePlayerStore.getState().currentTrack?.trackId !== currentTrack.trackId) return;
-              if (usePlayerStore.getState().playbackSource !== 'iframe') return;
-              logPlaybackEvent({ event_type: 'trace', track_id: currentTrack.trackId, meta: { subtype: 'bg_iframe_skip_timeout' } });
-              syntheticEndedBypassRef.current = true;
-              runEndedAdvanceRef.current?.();
-            }, 25_000);
+            el2.loop = false;
+            el2.src = `${EDGE_REALTIME}/${getYouTubeId(currentTrack.trackId)}`;
+            setSource('edge');
+            trackSwapInProgressRef.current = false;
+            void el2.play().catch(() => {});
+            logPlaybackEvent({ event_type: 'trace', track_id: currentTrack.trackId, meta: { subtype: 'bg_realtime_probe_err' } });
+          } else {
+            el2.loop = true;
+            setSource('iframe');
+            trackSwapInProgressRef.current = false;
+            logPlaybackEvent({ event_type: 'trace', track_id: currentTrack.trackId, meta: { subtype: 'r2_probe_err_iframe_audio' } });
           }
         });
       }
@@ -1227,6 +1223,14 @@ export const AudioPlayer = () => {
         // handled by their own fallback logic (useHotSwap / onEdgeErr).
         // Don't count toward auto-skip burst.
         if (playbackSource === 'iframe' || playbackSource === 'edge') {
+          // /realtime/ extraction failed in BG (502/network error) — skip immediately.
+          // No recovery possible: no iframe fallback, no retry in BG.
+          if (playbackSource === 'edge' && document.hidden) {
+            lastEndedTrackIdRef.current = trackId;
+            logPlaybackEvent({ event_type: 'trace', track_id: trackId, meta: { subtype: 'bg_realtime_error_skip' } });
+            engageSilentWav('realtime_error', trackId);
+            usePlayerStore.getState().nextTrack();
+          }
           return;
         }
 
