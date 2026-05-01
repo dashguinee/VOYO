@@ -287,6 +287,8 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap, onEnterVideoMode
   const scrollRafRef = useRef<number | null>(null);
   const scrollPctRef = useRef(0);
   const handleResultsScroll = useCallback(() => {
+    // Dismiss keyboard on scroll so results aren't obscured on mobile
+    inputRef.current?.blur();
     if (scrollRafRef.current != null) return;
     scrollRafRef.current = requestAnimationFrame(() => {
       scrollRafRef.current = null;
