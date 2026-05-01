@@ -536,9 +536,8 @@ export const AudioPlayer = () => {
             // fails on datacenter IPs so /realtime/ would just add 5-10s
             // dead air before erroring out. Iframe plays immediately;
             // useHotSwap upgrades to R2 within 2s of VPS finishing.
-            if (!document.hidden) el2.pause();
-            if (document.hidden) muteMasterGainInstantly();
-            el2.loop = true;
+            // Do NOT pause el2 — silentWav bridge must keep looping or
+            // bgEngine heartbeat sees a paused element and fights to restart it.
             setSource('iframe');
             trackSwapInProgressRef.current = false;
             logPlaybackEvent({ event_type: 'play_start', track_id: currentTrack.trackId, source: 'iframe', meta: { subtype: 'r2_miss_iframe_immediate' } });
