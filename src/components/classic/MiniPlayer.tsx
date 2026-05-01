@@ -288,31 +288,33 @@ export const MiniPlayer = ({ onOpenFull, variant = 'docked' }: MiniPlayerProps) 
           </div>
         </div>
 
-        {/* Thumbnail */}
-        <div className="relative w-12 h-12 rounded-xl overflow-hidden flex-shrink-0">
-          <SmartImage
-            src={getYouTubeThumbnail(currentTrack.trackId, 'medium')}
-            alt={`${currentTrack.title} by ${currentTrack.artist}`}
-            className="w-full h-full object-cover"
-            trackId={currentTrack.trackId}
-            artist={currentTrack.artist}
-            title={currentTrack.title}
-          />
-        </div>
-
-        {/* Info */}
-        <div className="flex-1 min-w-0 text-left overflow-hidden">
-          <div className="overflow-hidden">
-            <p
-              ref={titleRef}
-              className={`text-white font-medium text-sm whitespace-nowrap ${shouldScroll ? 'animate-marquee' : 'truncate'}`}
-              style={shouldScroll ? { animation: 'marquee 8s linear infinite' } : {}}
-            >
-              {currentTrack.title}
-              {shouldScroll && <span className="mx-8">{currentTrack.title}</span>}
-            </p>
+        {/* Thumbnail + Info — keyed so they re-mount and fade in on track change */}
+        <div key={currentTrack.trackId} className="flex items-center gap-2.5 flex-1 min-w-0 voyo-miniplayer-card-arrive">
+          <div className="relative w-12 h-12 rounded-xl overflow-hidden flex-shrink-0">
+            <SmartImage
+              src={getYouTubeThumbnail(currentTrack.trackId, 'medium')}
+              alt={`${currentTrack.title} by ${currentTrack.artist}`}
+              className="w-full h-full object-cover"
+              trackId={currentTrack.trackId}
+              artist={currentTrack.artist}
+              title={currentTrack.title}
+            />
           </div>
-          <p className="text-white/50 text-xs truncate">{currentTrack.artist}</p>
+
+          {/* Info */}
+          <div className="flex-1 min-w-0 text-left overflow-hidden">
+            <div className="overflow-hidden">
+              <p
+                ref={titleRef}
+                className={`text-white font-medium text-sm whitespace-nowrap ${shouldScroll ? 'animate-marquee' : 'truncate'}`}
+                style={shouldScroll ? { animation: 'marquee 8s linear infinite' } : {}}
+              >
+                {currentTrack.title}
+                {shouldScroll && <span className="mx-8">{currentTrack.title}</span>}
+              </p>
+            </div>
+            <p className="text-white/50 text-xs truncate">{currentTrack.artist}</p>
+          </div>
         </div>
 
         {/* Action buttons */}

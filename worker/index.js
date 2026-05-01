@@ -750,6 +750,14 @@ export default {
     //   GET /debug?v={id}              → probe all CLIENTS
     //   GET /debug?v={id}&client=IOS   → probe just one
     if (url.pathname === '/debug') {
+      const debugKey = url.searchParams.get('key');
+      if (!env.UPLOAD_SECRET || debugKey !== env.UPLOAD_SECRET) {
+        return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+          status: 401,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
       const videoId = url.searchParams.get('v');
       const only = url.searchParams.get('client');
 
@@ -838,6 +846,16 @@ export default {
     // Zero-gap: Both succeed or neither
     // ========================================
     if (url.pathname.startsWith('/upload/') && request.method === 'POST') {
+      // Auth: only the VPS queue worker (which holds UPLOAD_SECRET) may write to R2
+      const authHeader = request.headers.get('Authorization') || '';
+      const expectedSecret = env.UPLOAD_SECRET;
+      if (!expectedSecret || authHeader !== `Bearer ${expectedSecret}`) {
+        return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+          status: 401,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
       const videoId = url.pathname.split('/')[2];
       const quality = url.searchParams.get('q') || 'high'; // high = 128kbps folder
       const title = url.searchParams.get('title') || '';

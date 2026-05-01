@@ -22,6 +22,7 @@ const COMMON_ENV = {
   VOYO_SUPABASE_URL:      'https://anmgyxhnyhbyxzpjhxgx.supabase.co',
   VOYO_SUPABASE_ANON_KEY: process.env.VOYO_SUPABASE_ANON_KEY,
   R2_UPLOAD_BASE:         'https://voyo-edge.dash-webtv.workers.dev',
+  R2_UPLOAD_SECRET:       process.env.R2_UPLOAD_SECRET,
   PYTHONUNBUFFERED:       '1',
 };
 

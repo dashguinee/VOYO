@@ -44,6 +44,7 @@ import requests
 SUPABASE_URL    = os.environ['VOYO_SUPABASE_URL']
 SUPABASE_KEY    = os.environ['VOYO_SUPABASE_ANON_KEY']
 R2_UPLOAD_BASE  = os.environ.get('R2_UPLOAD_BASE', 'https://voyo-edge.dash-webtv.workers.dev')
+R2_UPLOAD_SECRET = os.environ.get('R2_UPLOAD_SECRET', '')
 LANE_ID         = os.environ.get('VOYO_LANE_ID', f'vps-lane-{os.getpid()}')
 CHROME_PROFILE  = os.environ.get('VOYO_CHROME_PROFILE', '/opt/voyo/chrome-profile-001')
 
@@ -398,7 +399,7 @@ def get_cookie_file() -> Path:
             ['/usr/local/bin/voyo-dump-cookies', CHROME_PROFILE, str(dest)],
             capture_output=True, timeout=20, check=True,
         )
-        try: dest.chmod(0o644)
+        try: dest.chmod(0o600)
         except PermissionError: pass
         _cookie_cache_path = dest
         _cookie_cache_at   = now
@@ -533,9 +534,12 @@ def extract_and_upload(track_id: str) -> tuple[int, int]:
         raise RuntimeError(f'empty download ({len(content)}b)')
 
     # Step 3 — upload to R2 via edge worker.
+    upload_headers = {'Content-Type': 'audio/ogg'}
+    if R2_UPLOAD_SECRET:
+        upload_headers['Authorization'] = f'Bearer {R2_UPLOAD_SECRET}'
     r = requests.post(
         f'{R2_UPLOAD_BASE}/upload/{yt_id}?q=medium',
-        data=content, headers={'Content-Type': 'audio/ogg'},
+        data=content, headers=upload_headers,
         timeout=60,
     )
     if not r.ok:
