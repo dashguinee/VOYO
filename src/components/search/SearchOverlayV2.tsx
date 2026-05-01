@@ -13,7 +13,7 @@ import { DiscoExplainer } from '../ui/DiscoExplainer';
 import { usePlayerStore } from '../../store/playerStore';
 import { app } from '../../services/oyo';
 import { Track } from '../../types';
-import { searchMusic, SearchResult, prefetchTrack } from '../../services/api';
+import { SearchResult, prefetchTrack } from '../../services/api';
 import { SmartImage } from '../ui/SmartImage';
 import { searchCache } from '../../utils/searchCache';
 import { addSearchResultsToPool } from '../../services/personalization';
@@ -485,10 +485,7 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap, onEnterVideoMode
       return unique;
     };
 
-    // Library (DB/pool) on top; YouTube results below with a labeled divider.
-    // Clean mental model: "what we already have" vs "what's out there".
-
-    // Parallel fetch — DB returns in ~200ms, YT in 1-4s
+    // Library (DB) only — no YouTube section.
     const essence = getVibeEssence();
     const dbPromise = isSupabaseConfigured
       ? supabase!.rpc('search_tracks_by_vibe', {
@@ -512,12 +509,7 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap, onEnterVideoMode
         )
       : Promise.resolve([] as SearchResult[]);
 
-    const ytPromise = searchMusic(searchQuery, 35).catch((err: unknown) => {
-      devWarn('[Search] YT error:', err);
-      return [] as SearchResult[];
-    });
-
-    // PHASE 1: render library first as soon as it arrives — fast feedback
+    // PHASE 1: render library as soon as it arrives
     dbPromise.then((data) => {
       if (searchIdRef.current !== thisSearchId) return;
       const tagged = dedup(data).map(r => ({ ...r, source: 'library' as const }));
@@ -528,17 +520,10 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap, onEnterVideoMode
       }
     });
 
-    // PHASE 2: append YouTube section once it arrives. Both sections live in
-    // the same flat array; render code splits by `source` field for sectioning.
-    const [db, yt] = await Promise.all([dbPromise, ytPromise]);
+    const db = await dbPromise;
     if (searchIdRef.current !== thisSearchId) return;
 
-    const librarySeen = new Set<string>();
-    const library = dedup(db).map(r => { librarySeen.add(r.voyoId); return { ...r, source: 'library' as const }; });
-    // Drop YouTube duplicates that already appear in library — no point showing the same track twice
-    const youtube = dedup(yt).filter(r => !librarySeen.has(r.voyoId)).map(r => ({ ...r, source: 'youtube' as const }));
-
-    const merged = [...library, ...youtube];
+    const merged = dedup(db).map(r => ({ ...r, source: 'library' as const }));
     const hasResults = merged.length > 0;
 
     if (hasResults) {
@@ -608,7 +593,6 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap, onEnterVideoMode
   // item per render → memo'd TrackItem invalidated every keystroke.
   const sectionedResults = useMemo(() => ({
     library: results.filter(r => r.source === 'library'),
-    youtube: results.filter(r => r.source === 'youtube'),
   }), [results]);
 
   const trackById = useMemo(() => {
@@ -1082,13 +1066,9 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap, onEnterVideoMode
                     </div>
                   )}
 
-                  {/* Sectioned results — Library on top, YouTube below.
-                      v921: track objects + section split now memoized
-                      below so memo'd TrackItem doesn't bail on a fresh
-                      track ref every keystroke. */}
+                  {/* Search results — library only */}
                   {(() => {
                     const library = sectionedResults.library;
-                    const youtube = sectionedResults.youtube;
                     let runningIndex = -1;
                     const renderItem = (result: SearchResult) => {
                       runningIndex += 1;
@@ -1121,8 +1101,6 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap, onEnterVideoMode
                       <>
                         {library.length > 0 && (
                           <>
-                            {/* "Disco" — your dance floor, your collection. Diaspora music-soul.
-                                Faded bronze-gold label aesthetic. Fades on scroll past 15%. */}
                             <div className="flex items-center gap-2 px-1 pt-1 pb-2 text-[10.5px] font-semibold tracking-[0.18em] uppercase"
                                  style={{ color: 'rgba(212, 175, 110, 0.85)', opacity: sectionHeaderOpacity, transition: 'opacity 200ms ease' }}>
                               <span style={{ textShadow: '0 0 12px rgba(212,175,110,0.18)' }}>My Disco</span>
@@ -1133,16 +1111,6 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap, onEnterVideoMode
                                           background: 'linear-gradient(180deg, rgba(212,175,110,0.045) 0%, rgba(212,175,110,0.0) 70%)' }}>
                               {library.map(renderItem)}
                             </div>
-                          </>
-                        )}
-                        {youtube.length > 0 && (
-                          <>
-                            <div className={`flex items-center gap-2 px-1 ${library.length > 0 ? 'pt-6' : 'pt-1'} pb-2 text-[10.5px] font-semibold tracking-[0.18em] uppercase text-white/45`}
-                                 style={{ opacity: sectionHeaderOpacity, transition: 'opacity 200ms ease' }}>
-                              <span>From YouTube</span>
-                              <span className="flex-1 h-px bg-white/10" />
-                            </div>
-                            {youtube.map(renderItem)}
                           </>
                         )}
                       </>

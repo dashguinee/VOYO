@@ -51,6 +51,7 @@ export const MiniPlayer = ({ onOpenFull, variant = 'docked' }: MiniPlayerProps) 
   const shuffleMode = usePlayerStore(s => s.shuffleMode);
   const repeatMode = usePlayerStore(s => s.repeatMode);
   const toggleShuffle = usePlayerStore(s => s.toggleShuffle);
+  const playerCompact = usePlayerStore(s => s.playerCompact);
   const cycleRepeat = usePlayerStore(s => s.cycleRepeat);
   const { handlePlayPause } = useMobilePlay();
   const [shouldScroll, setShouldScroll] = useState(false);
@@ -154,9 +155,13 @@ export const MiniPlayer = ({ onOpenFull, variant = 'docked' }: MiniPlayerProps) 
 
   if (!currentTrack) return null;
 
+  // When search is open (playerCompact), switch to fixed so it floats above
+  // the search backdrop (z-[65]). z-[68] = above backdrop, below search content (z-[70]).
   const wrapperClass =
     variant === 'docked'
-      ? 'absolute bottom-24 left-4 right-4 z-40'
+      ? playerCompact
+        ? 'fixed bottom-24 left-4 right-4 z-[68]'
+        : 'absolute bottom-24 left-4 right-4 z-40'
       : 'relative w-full';
 
   return (
