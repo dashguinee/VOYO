@@ -509,43 +509,19 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap, onEnterVideoMode
         )
       : Promise.resolve([] as SearchResult[]);
 
-    // PHASE 1: render library as soon as it arrives
-    dbPromise.then((data) => {
-      if (searchIdRef.current !== thisSearchId) return;
-      const tagged = dedup(data).map(r => ({ ...r, source: 'library' as const }));
-      if (tagged.length > 0) {
-        setResults(tagged);
-        setIsSearching(false);
-        saveToHistory(searchQuery);
-      }
-    });
-
     const db = await dbPromise;
     if (searchIdRef.current !== thisSearchId) return;
 
-    const merged = dedup(db).map(r => ({ ...r, source: 'library' as const }));
+    const merged = dedup(db);
     const hasResults = merged.length > 0;
 
+    setIsSearching(false);
     if (hasResults) {
       setResults(merged);
       saveToHistory(searchQuery);
-    }
-
-    if (searchIdRef.current !== thisSearchId) return;
-
-    // Final: cache the ACTUAL results for THIS query's closure — never read
-    // from state (which may still carry the previous query's results due to
-    // the "keep showing previous while typing" UX at handleSearch).
-    // Bug before: `setResults(prev => { if (prev.length > 0) searchCache.set(searchQuery, prev) })`
-    //   → if query B returned empty while A's results were on screen, A's
-    //     tracks got cached under B's key → next search for B = wrong data.
-    setIsSearching(false);
-    if (hasResults) {
       searchCache.set(searchQuery, merged);
       syncSearchResults(merged);
     } else {
-      // Empty result for THIS query: clear stale prev so "No results for X"
-      // UI renders correctly instead of pretending old data is the answer.
       setResults([]);
       setError('No results found. Try a different search.');
     }
