@@ -1,0 +1,14 @@
+{
+  "name": "voyo-session-guardian",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Playwright session keep-alive for VOYO Chrome profiles",
+  "main": "session-guardian.js",
+  "scripts": {
+    "start": "node session-guardian.js",
+    "install-browsers": "npx playwright install chromium --with-deps"
+  },
+  "dependencies": {
+    "playwright": "^1.44.0"
+  }
+}

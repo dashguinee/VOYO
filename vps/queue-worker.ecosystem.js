@@ -13,9 +13,10 @@
 //
 // Add more lanes: bump LANES and ensure /opt/voyo/chrome-profile-NNN exists.
 
-// 3 lanes — all share chrome-profile-001 (only valid YouTube session as of 2026-05-01).
-// Profiles 002/003 had expired Google sessions. cookie_lock in queue-worker.py handles
-// concurrent reads safely. Bump LANES + add new profiles when sessions are re-established.
+// Each lane owns its own Chrome profile + cookie file (exported by session-guardian).
+// Guardian runs every 6h, keeps sessions alive, writes /opt/voyo/cookies-NNN.txt.
+// If a profile is logged out, guardian fires cookie_login_lost to Supabase — re-login
+// manually via SSH tunnel + chrome://inspect, then guardian picks it back up.
 const LANES = 3;
 
 const COMMON_ENV = {
@@ -24,7 +25,6 @@ const COMMON_ENV = {
   R2_UPLOAD_BASE:         'https://voyo-edge.dash-webtv.workers.dev',
   R2_UPLOAD_SECRET:       process.env.R2_UPLOAD_SECRET,
   PYTHONUNBUFFERED:       '1',
-  VOYO_CHROME_PROFILE:    '/opt/voyo/chrome-profile-001',
 };
 
 module.exports = {
@@ -38,6 +38,8 @@ module.exports = {
       env: {
         ...COMMON_ENV,
         VOYO_LANE_ID:        `vps-lane-${n}`,
+        VOYO_CHROME_PROFILE: `/opt/voyo/chrome-profile-${n}`,
+        VOYO_COOKIE_FILE:    `/opt/voyo/cookies-${n}.txt`,
       },
       autorestart:   true,
       restart_delay: 2000,
