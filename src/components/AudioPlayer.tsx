@@ -546,6 +546,20 @@ export const AudioPlayer = () => {
             setSource('iframe');
             trackSwapInProgressRef.current = false;
             logPlaybackEvent({ event_type: 'play_start', track_id: currentTrack.trackId, source: 'iframe', meta: { subtype: 'r2_miss_iframe_immediate' } });
+            // BG: iframe can't provide audio — the hidden player won't run.
+            // Silent WAV loops, useHotSwap polls R2 every 2s. If R2 still
+            // hasn't landed in 25s (~12 poll cycles), skip to keep the queue
+            // moving so the user hears music instead of indefinite silence.
+            if (document.hidden) {
+              setTimeout(() => {
+                if (isStale()) return;
+                if (usePlayerStore.getState().currentTrack?.trackId !== currentTrack.trackId) return;
+                if (usePlayerStore.getState().playbackSource !== 'iframe') return; // hot-swap fired ✓
+                logPlaybackEvent({ event_type: 'trace', track_id: currentTrack.trackId, meta: { subtype: 'bg_iframe_skip_timeout' } });
+                syntheticEndedBypassRef.current = true;
+                runEndedAdvanceRef.current?.();
+              }, 25_000);
+            }
           }
         }).catch(() => {
           // Network error on probe — same fallback. Iframe carries audio,
@@ -557,6 +571,16 @@ export const AudioPlayer = () => {
           setSource('iframe');
           trackSwapInProgressRef.current = false;
           logPlaybackEvent({ event_type: 'trace', track_id: currentTrack.trackId, meta: { subtype: 'r2_probe_err_iframe_audio' } });
+          if (document.hidden) {
+            setTimeout(() => {
+              if (isStale()) return;
+              if (usePlayerStore.getState().currentTrack?.trackId !== currentTrack.trackId) return;
+              if (usePlayerStore.getState().playbackSource !== 'iframe') return;
+              logPlaybackEvent({ event_type: 'trace', track_id: currentTrack.trackId, meta: { subtype: 'bg_iframe_skip_timeout' } });
+              syntheticEndedBypassRef.current = true;
+              runEndedAdvanceRef.current?.();
+            }, 25_000);
+          }
         });
       }
     })();
@@ -762,22 +786,23 @@ export const AudioPlayer = () => {
       if (usePlayerStore.getState().isPlaying) {
         const el = audioRef.current;
         if (el && !el.ended) {
-          setTimeout(() => {
-            // ctx-state listener already recovered? skip.
-            if (!el.paused || el.ended) return;
-            if (!usePlayerStore.getState().isPlaying) return;
-            const ctx = audioContextRef.current;
-            const doPlay = () => el.play().catch((e: unknown) => {
-              if ((e as { name?: string })?.name === 'NotAllowedError') {
-                setTimeout(() => { if (el.paused && !el.ended) el.play().catch(() => {}); }, 100);
-              }
-            });
-            if (ctx && ctx.state !== 'running') {
-              ctx.resume().then(doPlay).catch(doPlay);
-            } else {
-              doPlay();
-            }
-          }, 150);
+          // Multi-step ladder: 150ms, 500ms, 1500ms. iOS can hold the audio
+          // session in 'interrupted' for 300–800ms after screen lock; a single
+          // 100ms sub-retry was too short and silently gave up, leaving the
+          // player dead until the next heartbeat tick (~2s).
+          const bgRecoveryDelays = [150, 500, 1500];
+          const tryBgRecovery = (idx: number) => {
+            if (idx >= bgRecoveryDelays.length) return;
+            setTimeout(() => {
+              if (!el.paused || el.ended) return; // ctx-state path already recovered
+              if (!usePlayerStore.getState().isPlaying) return;
+              const ctx = audioContextRef.current;
+              const attempt = () => el.play().catch(() => tryBgRecovery(idx + 1));
+              if (ctx && ctx.state !== 'running') ctx.resume().then(attempt).catch(() => tryBgRecovery(idx + 1));
+              else attempt();
+            }, bgRecoveryDelays[idx]);
+          };
+          tryBgRecovery(0);
         }
       }
       return;
@@ -797,7 +822,26 @@ export const AudioPlayer = () => {
       // and the browser's pause event fires el.play() on the dead element → replay.
       if (el && !el.ended) {
         el.play().catch((e: unknown) => {
-          if ((e as { name?: string })?.name !== 'AbortError') setIsPlaying(false);
+          const name = (e as { name?: string })?.name;
+          if (name === 'AbortError') return;
+          if (name === 'NotAllowedError') {
+            // Notification or call interrupted the audio session. Killing
+            // isPlaying here stops the heartbeat and prevents all further
+            // BG recovery for the rest of the session (no heartbeat = no
+            // kick, no ctx resume, no advance). Instead retry once the
+            // session recovers — heartbeat keeps running either way.
+            const ctx = audioContextRef.current;
+            const retry = () => el.play().catch(() => {
+              if (el.paused && !el.ended) setIsPlaying(false);
+            });
+            setTimeout(() => {
+              if (!usePlayerStore.getState().isPlaying || !el.paused || el.ended) return;
+              if (ctx && ctx.state !== 'running') ctx.resume().then(retry).catch(retry);
+              else retry();
+            }, 500);
+            return;
+          }
+          setIsPlaying(false);
         });
         return;
       }
