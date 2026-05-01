@@ -371,7 +371,7 @@ export async function conductorFetch(
   if (vibeFilters.length) {
     const energyFiltered = pool.filter(e =>
       vibeFilters.some(({ col, min }) => {
-        const score = (e as Record<string, unknown>)[col];
+        const score = (e as unknown as Record<string, unknown>)[col];
         return typeof score === 'number' && score >= min;
       }),
     );
@@ -400,7 +400,7 @@ export async function conductorFetch(
       const heat = e.heat_score || 0;
       // Low play-derived heat but still has some vibe quality
       const hasVibeQuality = vibeFilters.some(({ col, min }) => {
-        const score = (e as Record<string, unknown>)[col];
+        const score = (e as unknown as Record<string, unknown>)[col];
         return typeof score === 'number' && score >= min * 0.6;
       });
       return heat < 30 && (hasVibeQuality || vibeFilters.length === 0);
@@ -430,7 +430,7 @@ export async function conductorFetch(
 //   POST body: { arc, engagement, recentGenres, limit: 5 }
 //   Response: { track_ids: string[], confidence: number }
 
-const TREND_ENDPOINT = (import.meta as Record<string, unknown>).env
+const TREND_ENDPOINT = (import.meta as unknown as Record<string, unknown>).env
   ? (import.meta as { env: Record<string, string> }).env.VITE_OYO_TREND_ENDPOINT
   : undefined;
 

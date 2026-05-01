@@ -37,8 +37,9 @@ import { useR2KnownStore } from '../store/r2KnownStore';
 import { getYouTubeId } from '../utils/voyoId';
 export type { BoostPreset };
 
-const EDGE_ART = 'https://voyo-edge.dash-webtv.workers.dev/cdn/art';
-const YT_ART   = 'https://i.ytimg.com/vi';
+const EDGE_ART      = 'https://voyo-edge.dash-webtv.workers.dev/cdn/art';
+const EDGE_REALTIME = 'https://voyo-edge.dash-webtv.workers.dev/realtime';
+const YT_ART        = 'https://i.ytimg.com/vi';
 
 // Circuit breaker — 3 errors within 10s on the same session = tear down
 // and rebuild instead of looping el.src assignments. Module-scope so it
@@ -531,16 +532,46 @@ export const AudioPlayer = () => {
             el2.play().catch(() => {});
             logPlaybackEvent({ event_type: 'play_start', track_id: currentTrack.trackId, source: 'r2', meta: { subtype: 'probe_found' } });
           } else {
-            // Iframe-as-audio fallback. Silent WAV is already engaged on
-            // the audio element (line above) — set it to loop so it doesn't
-            // fire 'ended' and trigger nextTrack while iframe carries the
-            // real audio. YouTubeIframe inits when playbackSource==='iframe'
-            // even with videoTarget hidden; iframe unmute branch (line ~525)
-            // engages because source is no longer 'cached'/'r2'.
-            el2.loop = true;
-            setSource('iframe');
+            // CF edge realtime — sub-3s extraction from 300+ PoPs.
+            // Sets audio.src = /realtime/{ytId}: CF checks R2 (instant if
+            // cached since probe), then InnerTube-extracts and proxies bytes.
+            // On audio error (502 extraction fail) → fall through to iframe.
+            // Background: CF bumps queue so VPS caches for future listeners.
+            if (!document.hidden) el2.pause();
+            if (document.hidden) muteMasterGainInstantly();
+            el2.loop = false;
+            const realtimeUrl = `${EDGE_REALTIME}/${getYouTubeId(currentTrack.trackId)}`;
+            el2.src = realtimeUrl;
+            setSource('edge');
             trackSwapInProgressRef.current = false;
-            logPlaybackEvent({ event_type: 'play_start', track_id: currentTrack.trackId, source: 'iframe', meta: { subtype: 'r2_pending_iframe_audio' } });
+
+            // Fallback: extraction failed at CF → engage iframe.
+            el2.addEventListener('error', function onEdgeErr() {
+              if (isStale()) return;
+              const e = audioRef.current;
+              if (!e || !e.src.includes('/realtime/')) return;
+              e.removeEventListener('error', onEdgeErr);
+              e.loop = true;
+              setSource('iframe');
+              logPlaybackEvent({ event_type: 'trace', track_id: currentTrack.trackId, meta: { subtype: 'edge_fail_iframe_fallback' } });
+            }, { once: true });
+
+            // Same retry ladder as the R2 fast path.
+            const tryPlayEdge = async () => {
+              const delays = [0, 120, 500, 1500];
+              for (const d of delays) {
+                if (d > 0) await new Promise(r => setTimeout(r, d));
+                if (isStale()) return;
+                const e = audioRef.current;
+                if (!e || e.src === '' || !e.paused) return;
+                const ctx = audioContextRef.current;
+                if (ctx && ctx.state !== 'running') await ctx.resume().catch(() => {});
+                try { await e.play(); return; } catch { /* retry */ }
+              }
+            };
+            void tryPlayEdge();
+
+            logPlaybackEvent({ event_type: 'play_start', track_id: currentTrack.trackId, source: 'edge', meta: { subtype: 'r2_miss_cf_realtime' } });
           }
         }).catch(() => {
           // Network error on probe — same fallback. Iframe carries audio,
@@ -652,7 +683,6 @@ export const AudioPlayer = () => {
     // the guard so subsequent user-initiated pauses actually pause.
     if (bgSwapSafetyTimerRef.current) { clearTimeout(bgSwapSafetyTimerRef.current); bgSwapSafetyTimerRef.current = null; }
     trackSwapInProgressRef.current = false;
-    const el = audioRef.current;
     if (el && usePlayerStore.getState().isPlaying) {
       el.play().catch((e: unknown) => {
         const errName = (e as { name?: string })?.name;
@@ -1115,11 +1145,10 @@ export const AudioPlayer = () => {
           },
         });
 
-        // v936 — IFRAME GATE. While playbackSource === 'iframe', <audio>
-        // element errors come from useHotSwap's internal R2 probes (which
-        // the hook handles with its own retry). Don't count them toward the
-        // auto-skip burst — the user's audio is the iframe, not this element.
-        if (playbackSource === 'iframe') {
+        // IFRAME/EDGE GATE. While on iframe or edge, <audio> errors are
+        // handled by their own fallback logic (useHotSwap / onEdgeErr).
+        // Don't count toward auto-skip burst.
+        if (playbackSource === 'iframe' || playbackSource === 'edge') {
           return;
         }
 

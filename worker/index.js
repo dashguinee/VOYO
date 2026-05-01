@@ -1418,6 +1418,130 @@ export default {
       }
     }
 
+    // ========================================
+    // REALTIME AUDIO — R2-first + live edge extraction
+    // Client-facing (no auth). Sub-3s for uncached tracks.
+    //   R2 hit  → stream bytes directly (free, instant, permanent)
+    //   R2 miss → extract via InnerTube → proxy stream to client
+    //             + background bump_queue_priority so VPS caches it for future plays
+    // ========================================
+    if (url.pathname.startsWith('/realtime/')) {
+      const videoId = url.pathname.split('/')[2];
+      if (!videoId || !/^[a-zA-Z0-9_-]{11}$/.test(videoId)) {
+        return new Response(JSON.stringify({ error: 'Invalid video ID' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      // Step 1: R2 first — free, instant, permanent cache.
+      try {
+        const obj = await env.VOYO_AUDIO.get(`128/${videoId}.opus`)
+                 || await env.VOYO_AUDIO.get(`64/${videoId}.opus`);
+        if (obj) {
+          const rangeHeader = request.headers.get('Range');
+          if (rangeHeader) {
+            // Partial content — R2 streaming with range support.
+            // R2 doesn't natively handle Range on get(), serve full + 200.
+            // Browser will use Content-Length for progress anyway.
+          }
+          return new Response(obj.body, {
+            headers: {
+              ...corsHeaders,
+              'Content-Type': 'audio/opus',
+              'Content-Length': String(obj.size),
+              'Accept-Ranges': 'bytes',
+              'Cache-Control': 'public, max-age=31536000',
+              'X-VOYO-Realtime': 'r2',
+            }
+          });
+        }
+      } catch (_) { /* fall through to edge extraction */ }
+
+      // Step 2: R2 miss — background-queue for VPS so future plays are instant.
+      if (env.SUPABASE_URL && env.SUPABASE_KEY) {
+        ctx.waitUntil(
+          fetch(`${env.SUPABASE_URL}/rest/v1/rpc/bump_queue_priority`, {
+            method: 'POST',
+            headers: {
+              apikey: env.SUPABASE_KEY,
+              Authorization: `Bearer ${env.SUPABASE_KEY}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ p_youtube_id: videoId, p_priority: 10, p_title: null, p_artist: null, p_session: 'realtime' }),
+          }).catch(() => {})
+        );
+      }
+
+      // Step 3: Extract fresh audio from YouTube via InnerTube clients.
+      let audioUrl = null;
+      let mimeType = 'audio/mp4';
+      const [sts, poToken] = await Promise.all([getSignatureTimestamp(), fetchPoToken(videoId)]);
+      if (poToken) console.log(`[Realtime] ${videoId} using PoToken`);
+
+      for (const client of CLIENTS) {
+        try {
+          const data = await tryClient(videoId, client, sts, poToken);
+          const result = extractBestAudio(data);
+          if (result.url) {
+            audioUrl = result.url;
+            mimeType = result.mimeType || 'audio/mp4';
+            console.log(`[Realtime] ${videoId} extracted via ${client.name}`);
+            break;
+          }
+        } catch (_) {}
+      }
+
+      if (!audioUrl) {
+        console.log(`[Realtime] ${videoId} all clients failed`);
+        return new Response(JSON.stringify({ error: 'Extraction failed' }), {
+          status: 502,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      // Step 4: Proxy audio bytes through CF — avoids YouTube CDN IP-binding issues.
+      try {
+        const audioRes = await fetch(audioUrl, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36',
+            'Accept': '*/*',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Range': request.headers.get('Range') || 'bytes=0-',
+          }
+        });
+
+        if (!audioRes.ok && audioRes.status !== 206) {
+          return new Response(JSON.stringify({ error: `CDN ${audioRes.status}` }), {
+            status: audioRes.status,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          });
+        }
+
+        const respHeaders = {
+          ...corsHeaders,
+          'Content-Type': mimeType.split(';')[0],
+          'Accept-Ranges': 'bytes',
+          'Cache-Control': 'public, max-age=3600',
+          'X-VOYO-Realtime': 'edge',
+        };
+        const cl = audioRes.headers.get('Content-Length');
+        const cr = audioRes.headers.get('Content-Range');
+        if (cr) { respHeaders['Content-Range'] = cr; }
+        else if (cl) { respHeaders['Content-Length'] = cl; }
+
+        return new Response(audioRes.body, {
+          status: cr ? 206 : 200,
+          headers: respHeaders,
+        });
+      } catch (err) {
+        return new Response(JSON.stringify({ error: err.message }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+    }
+
     return new Response('VOYO Edge Worker v7 - Unified Gateway (IOS + ANDROID_VR + WEB_EMBEDDED)', { headers: corsHeaders });
   }
 };

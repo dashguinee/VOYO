@@ -25,7 +25,7 @@ import { recordTrackInSession } from '../poolCurator';
 import { recordPoolEngagement } from '../personalization';
 import { gateToR2 } from '../r2Gate';
 import * as pools from './pools';
-import { updateEngagement, getNextMove, conductorFetch, resetDJ } from './dj';
+import { updateEngagement, getNextMove, conductorFetch, resetDJ, getSession } from './dj';
 import type { UserState } from './dj';
 import { getVibeEssence, type VibeEssence } from '../essenceEngine';
 export { usePools } from './usePools';

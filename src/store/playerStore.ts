@@ -296,7 +296,7 @@ interface PlayerStore {
   bufferHealth: number; // 0-100 percentage
   bufferStatus: BufferStatus;  // 'healthy' | 'warning' | 'emergency'
   prefetchStatus: Map<string, PrefetchStatus>; // trackId -> status
-  playbackSource: 'cached' | 'iframe' | 'r2' | 'direct' | 'cdn' | null; // cached = boosted, r2 = R2 collective cache, iframe = streaming
+  playbackSource: 'cached' | 'iframe' | 'r2' | 'direct' | 'cdn' | 'edge' | null; // edge = CF realtime extraction
 
   // Boost Audio Preset - African Bass with speaker protection
   // 🟡 boosted (Yellow) - Standard warm boost (default)
@@ -417,7 +417,7 @@ interface PlayerStore {
   setNetworkQuality: (quality: NetworkQuality) => void;
   setStreamQuality: (quality: BitrateLevel) => void;
   setBufferHealth: (health: number, status: BufferStatus) => void;
-  setPlaybackSource: (source: 'cached' | 'iframe' | 'r2' | 'direct' | 'cdn' | null) => void;
+  setPlaybackSource: (source: 'cached' | 'iframe' | 'r2' | 'direct' | 'cdn' | 'edge' | null) => void;
   setPrefetchStatus: (trackId: string, status: PrefetchStatus) => void;
   detectNetworkQuality: () => void;
   setBoostProfile: (profile: 'off' | 'boosted' | 'calm' | 'voyex') => void;
