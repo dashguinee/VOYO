@@ -339,14 +339,33 @@ export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
 
+    // Stealth: only reflect the origin if it's a known VOYO surface.
+    // Browser requests from other domains get voyomusic.com — effectively blocked by CORS.
+    // VPS server-to-server calls have no Origin header and bypass CORS entirely.
+    const ALLOWED_ORIGINS = [
+      'https://voyomusic.com',
+      'https://www.voyomusic.com',
+      'http://localhost:5173',
+      'http://localhost:3000',
+    ];
+    const reqOrigin = request.headers.get('Origin') || '';
+    const corsOrigin = ALLOWED_ORIGINS.includes(reqOrigin) ? reqOrigin : 'https://voyomusic.com';
+
     const corsHeaders = {
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type',
+      'Access-Control-Allow-Origin': corsOrigin,
+      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      'Vary': 'Origin',
+    };
+
+    // Strip fingerprinting headers from every response
+    const stealth = {
+      'X-Robots-Tag': 'noindex, nofollow',
+      'X-Content-Type-Options': 'nosniff',
     };
 
     if (request.method === 'OPTIONS') {
-      return new Response(null, { headers: corsHeaders });
+      return new Response(null, { headers: { ...corsHeaders, ...stealth } });
     }
 
     // Health check
@@ -476,9 +495,7 @@ export default {
               ...corsHeaders,
               'Content-Type': 'audio/opus',
               'Content-Length': fallback.size,
-              'Cache-Control': 'public, max-age=31536000', // 1 year
-              'X-VOYO-Source': 'r2-fallback',
-              'X-VOYO-Quality': quality === 'low' ? '128' : '64'
+              'Cache-Control': 'public, max-age=31536000',
             }
           });
         }
@@ -489,9 +506,7 @@ export default {
             ...corsHeaders,
             'Content-Type': 'audio/opus',
             'Content-Length': object.size,
-            'Cache-Control': 'public, max-age=31536000', // 1 year
-            'X-VOYO-Source': 'r2',
-            'X-VOYO-Quality': quality === 'low' ? '64' : '128'
+            'Cache-Control': 'public, max-age=31536000',
           }
         });
       } catch (err) {

@@ -89,6 +89,28 @@ HEADERS = {
     'Content-Type':  'application/json',
 }
 
+# Stealth: rotate through realistic browser UAs so extraction requests don't
+# all share the same fingerprint. Skewed toward Chrome/Windows (most common)
+# and Chrome/Android (mobile music users). Avoid any Linux/headless UA.
+_UA_POOL = [
+    # Chrome Windows (most common globally)
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.6478.127 Safari/537.36',
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.7049.115 Safari/537.36',
+    # Chrome macOS
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.6478.127 Safari/537.36',
+    # Chrome Android (aligns with mweb player_client)
+    'Mozilla/5.0 (Linux; Android 14; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.6478.122 Mobile Safari/537.36',
+    'Mozilla/5.0 (Linux; Android 13; SM-S918B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.7049.111 Mobile Safari/537.36',
+    # Safari iOS (another common music listener profile)
+    'Mozilla/5.0 (iPhone; CPU iPhone OS 17_4_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4.1 Mobile/15E148 Safari/604.1',
+    # Firefox Windows
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:126.0) Gecko/20100101 Firefox/126.0',
+]
+
+def _pick_ua() -> str:
+    """Return a weighted-random UA. Android/Windows Chrome = 60% share."""
+    return random.choice(_UA_POOL)
+
 def log(msg: str) -> None:
     print(f'[{LANE_ID}] {msg}', flush=True)
 
@@ -481,9 +503,16 @@ def extract_and_upload(track_id: str) -> tuple[int, int]:
     # below catches the rare misses.
     # Wrap in env -i so NODE_CHANNEL_FD (set by pm2) doesn't leak into
     # the subprocess and crash any Deno-based PoToken solver.
+    # Stealth: organic micro-jitter before each extraction so requests don't
+    # arrive in lockstep. 0.3–1.8s variance — below human perception threshold
+    # but enough to break clockwork fingerprinting.
+    time.sleep(random.uniform(0.3, 1.8))
+
+    ua = _pick_ua()
     yt_cmd = (
         '/usr/local/bin/yt-dlp -f "bestaudio[vcodec=none]/bestaudio" --get-url '
         f'--cookies {cookie_file} '
+        f'--user-agent "{ua}" '
         '--extractor-args "youtube:player_client=mweb" '
         f'"https://www.youtube.com/watch?v={yt_id}"'
     )
@@ -500,9 +529,11 @@ def extract_and_upload(track_id: str) -> tuple[int, int]:
     # mweb rejects ~5% of tracks (age-gated, region-locked). Fall back to
     # the full client chain for those rather than marking them failed.
     if not urls:
+        ua_fb = _pick_ua()
         yt_cmd_fb = (
             '/usr/local/bin/yt-dlp -f "bestaudio[vcodec=none]/bestaudio" --get-url '
             f'--cookies {cookie_file} '
+            f'--user-agent "{ua_fb}" '
             '--extractor-args "youtube:player_client=default,mweb,web_safari,web_music,tv_simply,tv" '
             f'"https://www.youtube.com/watch?v={yt_id}"'
         )
