@@ -572,7 +572,7 @@ export interface VideoIntelligenceRow {
   moods: string[];
   language: string | null;
   region: string | null;
-  r2_cached: boolean;
+  r2_cached?: boolean;
   voyo_play_count: number;
   voyo_queue_count: number;
   voyo_reaction_count: number;
