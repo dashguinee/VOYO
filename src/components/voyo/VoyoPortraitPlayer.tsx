@@ -6339,7 +6339,7 @@ export const VoyoPortraitPlayer = ({
           When the cube dock is open, the min-height grows so the chat
           space slides in without pushing the rail offscreen. */}
       <div
-        className="flex-shrink-0 w-full relative z-40 flex flex-col pt-3 pb-7 transition-[min-height] duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] min-h-[clamp(252px,33dvh,312px)]"
+        className="flex-shrink-0 w-full relative z-[70] flex flex-col pt-3 pb-7 transition-[min-height] duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] min-h-[clamp(252px,33dvh,312px)]"
         style={{
           // Two-step Layer B fade.
           // Step 1 (portal 0 → 0.55): mild fade to ~60%, soft blur,
@@ -6397,18 +6397,21 @@ export const VoyoPortraitPlayer = ({
         {/* Stream Labels — HOT/Discover row.
             z-index 10 ensures labels sit above the animated card overlays below. */}
         <div className="flex justify-between px-6 mb-1" style={{ position: 'relative', zIndex: 10 }}>
-          {/* HOT Label — deep rust ember. Breathes at 70%→100%→65% pattern. */}
+          {/* HOT Label — deep rust ember. */}
           <button
             onClick={handleToggleHotBelt}
             className="flex items-center gap-1.5 px-2 py-1 rounded relative overflow-hidden"
-            style={{
-              background: 'rgba(181,74,46,0.10)',
-              boxShadow: isHotBeltActive
-                ? '0 0 15px rgba(181,74,46,0.4), inset 0 0 10px rgba(181,74,46,0.2)'
-                : undefined,
-              animation: undefined,
-            }}
+            style={{ background: 'rgba(181,74,46,0.10)' }}
           >
+            {/* Glow overlay — opacity on compositor, no paint on toggle */}
+            <div aria-hidden style={{
+              position: 'absolute', inset: 0, borderRadius: 'inherit', pointerEvents: 'none',
+              background: 'radial-gradient(ellipse at center, rgba(181,74,46,0.45) 0%, rgba(181,74,46,0) 80%)',
+              filter: 'blur(4px)',
+              opacity: isHotBeltActive ? 1 : 0,
+              transition: 'opacity 350ms cubic-bezier(0.16,1,0.3,1)',
+              transform: 'translateZ(0)',
+            }} />
             <div>
               <Flame size={12} style={{ color: '#B54A2E' }} />
             </div>
@@ -6428,38 +6431,26 @@ export const VoyoPortraitPlayer = ({
             )}
           </button>
 
-          {/* DISCOVERY Label — African Gold Bronze. Breathes at 70%→100%→65% pattern. */}
+          {/* DISCOVERY Label — African Gold Bronze. */}
           <button
             onClick={handleToggleDiscoveryBelt}
             className="flex items-center gap-1.5 px-2 py-1 rounded relative overflow-hidden"
-            style={{
-              background: 'rgba(212,160,83,0.1)',
-              boxShadow: isDiscoveryBeltActive
-                ? '0 0 15px rgba(212,160,83,0.4), inset 0 0 10px rgba(212,160,83,0.2)'
-                : undefined,
-              animation: undefined,
-            }}
+            style={{ background: 'rgba(212,160,83,0.1)' }}
           >
-            {/* DISCOVER glyph + GPU-promoted halo. Was a text-shadow
-                (paints every transition tick of the parent box-shadow).
-                Replaced with a sibling div blur-glow on its own
-                composite layer (translate3d) so the parent's
-                isDiscoveryBeltActive box-shadow toggle no longer
-                invalidates the text paint cache. */}
+            {/* Glow overlay — opacity on compositor, no paint on toggle */}
+            <div aria-hidden style={{
+              position: 'absolute', inset: 0, borderRadius: 'inherit', pointerEvents: 'none',
+              background: 'radial-gradient(ellipse at center, rgba(212,160,83,0.45) 0%, rgba(212,160,83,0) 80%)',
+              filter: 'blur(4px)',
+              opacity: isDiscoveryBeltActive ? 1 : 0,
+              transition: 'opacity 350ms cubic-bezier(0.16,1,0.3,1)',
+              transform: 'translateZ(0)',
+            }} />
             <span
               className="relative text-[11px] font-black tracking-[0.15em] uppercase"
               style={{ color: '#D4A053' }}
             >
-              <span
-                aria-hidden
-                className="absolute inset-0 pointer-events-none"
-                style={{
-                  background: 'radial-gradient(ellipse at center, rgba(212,160,83,0.55) 0%, rgba(212,160,83,0) 70%)',
-                  transform: 'translate3d(0,0,0)',
-                  filter: 'blur(6px)',
-                }}
-              />
-              <span style={{ position: 'relative' }}>DISCOVER</span>
+              DISCOVER
             </span>
             {isDiscoveryBeltActive && (
               <span
