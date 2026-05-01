@@ -878,6 +878,32 @@ export const AudioPlayer = () => {
           oyaPlanSignal('completion');
         }
       }
+      // Pre-buffer next track's R2 bytes even in BG. Without this, the
+      // 60% gate below (skipped by this return) never fires, so every BG
+      // track transition fetches cold from CF edge → 200-800ms silence.
+      // With this, the browser HTTP cache already has the bytes when
+      // el.src is assigned on track-advance → canplay in <20ms.
+      const bgProgress = (() => {
+        const dur = isFinite(el.duration) ? el.duration : 0;
+        return dur > 0 ? el.currentTime / dur : 0;
+      })();
+      if (bgProgress >= 0.60 && usePlayerStore.getState().playbackSource === 'r2') {
+        const bgNext = usePlayerStore.getState().predictNextTrack();
+        if (bgNext) {
+          const bgNextId = getYouTubeId(bgNext.trackId || bgNext.id || '');
+          if (bgNextId && bgNextId !== nextPreloadedIdRef.current && useR2KnownStore.getState().has(bgNextId)) {
+            nextPreloadedIdRef.current = bgNextId;
+            if (!nextTrackPreloadRef.current) {
+              const preEl = document.createElement('audio');
+              preEl.preload = 'auto';
+              preEl.muted = true;
+              nextTrackPreloadRef.current = preEl;
+            }
+            nextTrackPreloadRef.current.src = `${R2_AUDIO}/${bgNextId}?q=high`;
+            nextTrackPreloadRef.current.load();
+          }
+        }
+      }
       // BG auto-advance watchdog MOVED out of here to a standalone
       // setInterval below — timeupdate events halt once <audio> enters
       // ended+paused, which is the exact state the watchdog was built

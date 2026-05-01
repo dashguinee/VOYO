@@ -48,6 +48,14 @@ R2_UPLOAD_SECRET = os.environ.get('R2_UPLOAD_SECRET', '')
 LANE_ID         = os.environ.get('VOYO_LANE_ID', f'vps-lane-{os.getpid()}')
 CHROME_PROFILE  = os.environ.get('VOYO_CHROME_PROFILE', '/opt/voyo/chrome-profile-001')
 
+# R2 S3-compatible API credentials (Cloudflare dashboard → R2 → Manage R2 API Tokens).
+# When set, large files (>95MB) bypass the CF Worker 100MB limit by uploading directly.
+CF_ACCOUNT_ID      = os.environ.get('CF_ACCOUNT_ID', '')
+R2_ACCESS_KEY_ID   = os.environ.get('R2_ACCESS_KEY_ID', '')
+R2_SECRET_ACCESS_KEY = os.environ.get('R2_SECRET_ACCESS_KEY', '')
+R2_BUCKET          = os.environ.get('R2_BUCKET', 'voyo-audio')
+R2_S3_AVAILABLE    = bool(CF_ACCOUNT_ID and R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY)
+
 POLL_IDLE_SEC          = 3
 HOUSEKEEP_EVERY        = 300   # seconds between requeue_stale sweeps
 TELEMETRY_EVERY        = 60    # seconds between worker_tick emissions
@@ -253,6 +261,8 @@ def categorize_error(err_msg: str) -> str:
     # the case where [-250:] truncation missed the removed/private line.
     if m.startswith('unavailable:'):
         return 'unavailable'
+    if m.startswith('large_file:'):
+        return 'large_file'
     if 'video has been removed' in m or 'this video is private' in m:
         return 'unavailable'
     if 'video unavailable' in m or ('unavailable' in m and 'uploader' in m):
@@ -321,15 +331,20 @@ def mark_done(row_id: int, yt_id: str, extraction_ms: int, audio_bytes: int) -> 
     except Exception: pass
 
 def mark_failed(row_id: int, error_msg: str, category: str, extraction_ms: int) -> None:
-    # Bump failure_count; status=failed once >=3, else back to pending.
-    try:
-        r = requests.get(
-            f'{SUPABASE_URL}/rest/v1/voyo_upload_queue?id=eq.{row_id}&select=failure_count',
-            headers=HEADERS, timeout=10,
-        )
-        count = (r.json()[0]['failure_count'] if r.status_code == 200 and r.json() else 0) + 1
-    except Exception:
-        count = 1
+    # Permanent categories: fail immediately without retry.
+    PERMANENT = {'unavailable', 'large_file'}
+    if category in PERMANENT:
+        count = 3
+    else:
+        # Bump failure_count; status=failed once >=3, else back to pending.
+        try:
+            r = requests.get(
+                f'{SUPABASE_URL}/rest/v1/voyo_upload_queue?id=eq.{row_id}&select=failure_count',
+                headers=HEADERS, timeout=10,
+            )
+            count = (r.json()[0]['failure_count'] if r.status_code == 200 and r.json() else 0) + 1
+        except Exception:
+            count = 1
     new_status = 'failed' if count >= 3 else 'pending'
     try:
         requests.patch(
@@ -459,6 +474,9 @@ def invalidate_cookie_cache() -> None:
 
 COBALT_URL = os.environ.get('COBALT_URL', 'http://localhost:9090')
 
+# CF Worker request body cap is 100MB. Leave 5MB headroom.
+MAX_UPLOAD_BYTES = 95 * 1024 * 1024
+
 def _parallel_download(url: str) -> bytes:
     """Download audio bytes using 4 concurrent Range requests.
 
@@ -478,6 +496,11 @@ def _parallel_download(url: str) -> bytes:
         head = requests.head(url, timeout=10)
         head.raise_for_status()
         size = int(head.headers.get('content-length', 0))
+
+    if size > MAX_UPLOAD_BYTES:
+        raise RuntimeError(
+            f'large_file: {size // (1024 * 1024)}MB exceeds {MAX_UPLOAD_BYTES // (1024 * 1024)}MB CF upload limit'
+        )
 
     if size < 512_000:
         # Small file — single connection is fine, no split overhead.
@@ -508,6 +531,40 @@ def _parallel_download(url: str) -> bytes:
         parts = sorted((f.result() for f in as_completed(futs)), key=lambda x: x[0])
 
     return b''.join(data for _, data in parts)
+
+
+def _upload_r2_s3(yt_id: str, content: bytes, quality_folder: str = '128') -> None:
+    """Upload directly to R2 via S3-compatible API. No 100MB CF Worker cap.
+    Used as fallback for files that exceed the CF Worker request body limit."""
+    import boto3
+    s3 = boto3.client(
+        's3',
+        endpoint_url=f'https://{CF_ACCOUNT_ID}.r2.cloudflarestorage.com',
+        aws_access_key_id=R2_ACCESS_KEY_ID,
+        aws_secret_access_key=R2_SECRET_ACCESS_KEY,
+        region_name='auto',
+    )
+    s3.put_object(
+        Bucket=R2_BUCKET,
+        Key=f'{quality_folder}/{yt_id}.opus',
+        Body=content,
+        ContentType='audio/opus',
+    )
+    # Update Supabase directly (CF Worker /upload/ normally handles this atomically,
+    # but S3 path needs to do it manually since we bypassed the worker).
+    try:
+        requests.patch(
+            f'{SUPABASE_URL}/rest/v1/voyo_tracks?youtube_id=eq.{yt_id}',
+            json={
+                'r2_cached': True,
+                'r2_quality': quality_folder,
+                'r2_size': len(content),
+                'r2_cached_at': 'now()',
+            },
+            headers=HEADERS, timeout=10,
+        )
+    except Exception:
+        pass
 
 
 def _extract_cf_edge(yt_id: str) -> bytes:
@@ -574,6 +631,19 @@ def extract_and_upload(track_id: str) -> tuple[int, int]:
     """
     t0 = time.time()
     yt_id = get_youtube_id(track_id)
+
+    # Pre-check: skip tracks already in R2. The CF Worker /upload/ has an
+    # already_exists guard, but it never fires for large files (CF drops 413
+    # at the edge before worker code runs). Check first, save the download.
+    try:
+        exists_r = requests.get(
+            f'{R2_UPLOAD_BASE}/exists/{yt_id}', timeout=8
+        )
+        if exists_r.ok and exists_r.json().get('exists'):
+            log(f'[skip] {yt_id} already in R2 — marking done')
+            return int((time.time() - t0) * 1000), 0
+    except Exception:
+        pass  # network blip — proceed with extraction
 
     # Organic jitter — breaks batch timing fingerprint
     time.sleep(random.uniform(0.3, 1.8))
@@ -648,16 +718,26 @@ def extract_and_upload(track_id: str) -> tuple[int, int]:
         raise RuntimeError(f'empty download ({len(content) if content else 0}b)')
 
     # ── Upload to R2 ─────────────────────────────────────────────────────
-    upload_headers = {'Content-Type': 'audio/ogg'}
-    if R2_UPLOAD_SECRET:
-        upload_headers['Authorization'] = f'Bearer {R2_UPLOAD_SECRET}'
-    r = requests.post(
-        f'{R2_UPLOAD_BASE}/upload/{yt_id}?q=medium',
-        data=content, headers=upload_headers,
-        timeout=60,
-    )
-    if not r.ok:
-        raise RuntimeError(f'R2 upload HTTP {r.status_code}: {r.text[:200]}')
+    if len(content) > MAX_UPLOAD_BYTES and R2_S3_AVAILABLE:
+        # Large file: bypass CF Worker 100MB cap, upload directly via S3 API.
+        log(f'[s3-direct] uploading {yt_id} ({len(content)//1024}KB) — too large for CF Worker')
+        _upload_r2_s3(yt_id, content)
+        log(f'[s3-direct] ✓ {yt_id}')
+    elif len(content) > MAX_UPLOAD_BYTES:
+        raise RuntimeError(
+            f'large_file: {len(content) // (1024 * 1024)}MB exceeds CF limit — set R2 S3 credentials to enable direct upload'
+        )
+    else:
+        upload_headers = {'Content-Type': 'audio/ogg'}
+        if R2_UPLOAD_SECRET:
+            upload_headers['Authorization'] = f'Bearer {R2_UPLOAD_SECRET}'
+        r = requests.post(
+            f'{R2_UPLOAD_BASE}/upload/{yt_id}?q=medium',
+            data=content, headers=upload_headers,
+            timeout=60,
+        )
+        if not r.ok:
+            raise RuntimeError(f'R2 upload HTTP {r.status_code}: {r.text[:200]}')
 
     return int((time.time() - t0) * 1000), len(content)
 

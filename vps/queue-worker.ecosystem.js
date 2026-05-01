@@ -25,6 +25,13 @@ const COMMON_ENV = {
   VOYO_SUPABASE_ANON_KEY: process.env.VOYO_SUPABASE_ANON_KEY,
   R2_UPLOAD_BASE:         'https://voyo-edge.dash-webtv.workers.dev',
   R2_UPLOAD_SECRET:       process.env.R2_UPLOAD_SECRET,
+  // R2 S3 credentials — enables direct upload for files >95MB (bypasses CF Worker cap).
+  // Get from: Cloudflare dashboard → R2 → Manage R2 API Tokens → Create API Token
+  //   (Object Read & Write, voyo-audio bucket)
+  // Set on VPS: export CF_ACCOUNT_ID=... R2_ACCESS_KEY_ID=... R2_SECRET_ACCESS_KEY=...
+  CF_ACCOUNT_ID:          process.env.CF_ACCOUNT_ID,
+  R2_ACCESS_KEY_ID:       process.env.R2_ACCESS_KEY_ID,
+  R2_SECRET_ACCESS_KEY:   process.env.R2_SECRET_ACCESS_KEY,
   PYTHONUNBUFFERED:       '1',
 };
 
