@@ -13,10 +13,9 @@
 //
 // Add more lanes: bump LANES and ensure /opt/voyo/chrome-profile-NNN exists.
 
-// Start with 2 — VPS has chrome-profile-001 and 002. To add lane 003, create
-// the third profile first (clone 001: sudo cp -r /opt/voyo/chrome-profile-001
-// /opt/voyo/chrome-profile-003 && sign in to YT in that profile).
-const LANES = 2;
+// 3 lanes — chrome-profile-001/002/003 all on VPS.
+// Profile 003 was cloned from 001 (2026-05-01); cookie warmup cron handles refresh.
+const LANES = 3;
 
 const COMMON_ENV = {
   VOYO_SUPABASE_URL:      'https://anmgyxhnyhbyxzpjhxgx.supabase.co',
