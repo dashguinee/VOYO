@@ -392,7 +392,8 @@ function UpdateButton() {
       if (sessionStorage.getItem(PENDING_FORCE_RELOAD_KEY) === '1') {
         if (isSafeToReload()) {
           setForceUpdate(true);
-          void performForceReload();
+          await performForceReload();
+          setForceUpdate(false); // bail-out: reload guard fired, don't leave spinner up
           return;
         }
         attachEndedListener();
@@ -410,6 +411,9 @@ function UpdateButton() {
             if (isSafeToReload()) {
               setForceUpdate(true);
               await performForceReload();
+              // performForceReload() returns early if the 10s stale-guard fires
+              // (Vercel served cached JS). Un-show the spinner so the user isn't stuck.
+              setForceUpdate(false);
             } else {
               // DEFER — user is mid-track with >10s left. Persist so we still
               // reload if the tab closes + reopens before the track ends.
