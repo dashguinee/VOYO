@@ -13,8 +13,9 @@
 //
 // Add more lanes: bump LANES and ensure /opt/voyo/chrome-profile-NNN exists.
 
-// 3 lanes — chrome-profile-001/002/003 all on VPS.
-// Profile 003 was cloned from 001 (2026-05-01); cookie warmup cron handles refresh.
+// 3 lanes — all share chrome-profile-001 (only valid YouTube session as of 2026-05-01).
+// Profiles 002/003 had expired Google sessions. cookie_lock in queue-worker.py handles
+// concurrent reads safely. Bump LANES + add new profiles when sessions are re-established.
 const LANES = 3;
 
 const COMMON_ENV = {
@@ -23,6 +24,7 @@ const COMMON_ENV = {
   R2_UPLOAD_BASE:         'https://voyo-edge.dash-webtv.workers.dev',
   R2_UPLOAD_SECRET:       process.env.R2_UPLOAD_SECRET,
   PYTHONUNBUFFERED:       '1',
+  VOYO_CHROME_PROFILE:    '/opt/voyo/chrome-profile-001',
 };
 
 module.exports = {
@@ -36,7 +38,6 @@ module.exports = {
       env: {
         ...COMMON_ENV,
         VOYO_LANE_ID:        `vps-lane-${n}`,
-        VOYO_CHROME_PROFILE: `/opt/voyo/chrome-profile-${n}`,
       },
       autorestart:   true,
       restart_delay: 2000,

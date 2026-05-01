@@ -436,8 +436,28 @@ def invalidate_cookie_cache() -> None:
 
 
 # ═══════════════════════════════════════════════════════════════════════
-# EXTRACT — mweb-only + 4-range parallel download + R2 upload
+# EXTRACT — 3-method chain
+#
+# Method A  CF edge (primary)
+#   Calls /extract/{id} on the Cloudflare Worker. Extraction runs at CF
+#   edge IPs globally — not the VPS IP. No cookies needed. Returns raw
+#   audio bytes directly. Falls through on 502 (all InnerTube clients
+#   failed) or any other error.
+#
+# Method B  yt-dlp mweb + Chrome cookies (fallback 1)
+#   VPS IP visible to YouTube but uses real account cookies. Handles
+#   age-gated and region-locked content that CF edge can't reach.
+#
+# Method C  yt-dlp full client chain + cookies (fallback 2)
+#   Probes all InnerTube clients in sequence. Slowest (~2s extra) but
+#   catches the last few percent that mweb misses.
+#
+# Method D  Cobalt local service (fallback 3, localhost:9090)
+#   Different extraction stack entirely. Activated when present; silent
+#   skip if the service isn't running.
 # ═══════════════════════════════════════════════════════════════════════
+
+COBALT_URL = os.environ.get('COBALT_URL', 'http://localhost:9090')
 
 def _parallel_download(url: str) -> bytes:
     """Download audio bytes using 4 concurrent Range requests.
@@ -488,47 +508,108 @@ def _parallel_download(url: str) -> bytes:
     return b''.join(data for _, data in parts)
 
 
-def extract_and_upload(track_id: str) -> tuple[int, int]:
-    """Returns (wall_ms, audio_bytes). Raises on any failure (caller
-    categorizes + marks failed)."""
-    t0 = time.time()
-    # Decode VOYO IDs (vyo_<base64url>) to plain YouTube IDs before hitting yt-dlp.
-    yt_id = get_youtube_id(track_id)
-    cookie_file = get_cookie_file()
+def _extract_cf_edge(yt_id: str) -> bytes:
+    """Method A — stream audio through Cloudflare Worker edge.
+    CF fetches from YouTube using edge IPs; VPS never touches YouTube directly.
+    Returns raw audio bytes or raises RuntimeError."""
+    if not R2_UPLOAD_SECRET:
+        raise RuntimeError('no R2_UPLOAD_SECRET — CF edge disabled')
+    r = requests.get(
+        f'{R2_UPLOAD_BASE}/extract/{yt_id}',
+        headers={'Authorization': f'Bearer {R2_UPLOAD_SECRET}'},
+        timeout=120,
+    )
+    if r.status_code == 502:
+        raise RuntimeError(f'CF edge: all InnerTube clients failed')
+    if r.status_code == 401:
+        raise RuntimeError('CF edge: auth rejected')
+    if not r.ok:
+        raise RuntimeError(f'CF edge HTTP {r.status_code}: {r.text[:100]}')
+    content = r.content
+    if len(content) < 1024:
+        raise RuntimeError(f'CF edge empty ({len(content)}b)')
+    return content
 
-    # Step 1 — get the signed googlevideo URL.
-    # mweb alone is always the fastest client — the default multi-client
-    # chain (default,mweb,web_safari,...) probed 6 clients sequentially,
-    # wasting ~2s. mweb succeeds on ~95%+ of tracks; the CLI fallback
-    # below catches the rare misses.
-    # Wrap in env -i so NODE_CHANNEL_FD (set by pm2) doesn't leak into
-    # the subprocess and crash any Deno-based PoToken solver.
-    # Stealth: organic micro-jitter before each extraction so requests don't
-    # arrive in lockstep. 0.3–1.8s variance — below human perception threshold
-    # but enough to break clockwork fingerprinting.
+
+def _extract_cobalt(yt_id: str) -> bytes:
+    """Method D — Cobalt local service (localhost:9090). Different extraction
+    stack than yt-dlp. Silent skip if service isn't running."""
+    try:
+        r = requests.post(
+            f'{COBALT_URL}/',
+            json={'url': f'https://www.youtube.com/watch?v={yt_id}', 'downloadMode': 'audio'},
+            headers={'Accept': 'application/json', 'Content-Type': 'application/json'},
+            timeout=30,
+        )
+    except requests.exceptions.ConnectionError:
+        raise RuntimeError('Cobalt not running')
+    if not r.ok:
+        raise RuntimeError(f'Cobalt HTTP {r.status_code}')
+    data = r.json()
+    status = data.get('status', '')
+    if status not in ('tunnel', 'redirect', 'stream'):
+        code = data.get('error', {}).get('code', '') if isinstance(data.get('error'), dict) else ''
+        raise RuntimeError(f'Cobalt status={status} code={code}')
+    stream_url = data.get('url')
+    if not stream_url:
+        raise RuntimeError('Cobalt: no url in response')
+    audio = requests.get(stream_url, timeout=120)
+    audio.raise_for_status()
+    content = audio.content
+    if len(content) < 1024:
+        raise RuntimeError(f'Cobalt empty ({len(content)}b)')
+    return content
+
+
+def extract_and_upload(track_id: str) -> tuple[int, int]:
+    """Returns (wall_ms, audio_bytes). Raises on any failure.
+
+    Extraction chain (first success wins):
+      A  CF Worker edge  — CF IPs globally, no cookies, fast
+      B  yt-dlp mweb    — VPS IP, Chrome cookies, ~95% coverage
+      C  yt-dlp full    — all InnerTube clients, catches remaining ~5%
+      D  Cobalt local   — different stack entirely, localhost:9090
+    """
+    t0 = time.time()
+    yt_id = get_youtube_id(track_id)
+
+    # Organic jitter — breaks batch timing fingerprint
     time.sleep(random.uniform(0.3, 1.8))
 
-    ua = _pick_ua()
-    yt_cmd = (
-        '/usr/local/bin/yt-dlp -f "bestaudio[vcodec=none]/bestaudio" --get-url '
-        f'--cookies {cookie_file} '
-        f'--user-agent "{ua}" '
-        '--extractor-args "youtube:player_client=mweb" '
-        f'"https://www.youtube.com/watch?v={yt_id}"'
-    )
-    cmd = ['/usr/bin/env', '-i',
-           'PATH=/usr/local/bin:/usr/bin:/bin',
-           'HOME=/root',
-           '/bin/bash', '-c', yt_cmd]
-    result = subprocess.run(
-        cmd, capture_output=True, timeout=60, text=True,
-        close_fds=True, start_new_session=True,
-    )
-    urls = [l.strip() for l in (result.stdout or '').splitlines() if l.strip().startswith('http')]
+    content = None
 
-    # mweb rejects ~5% of tracks (age-gated, region-locked). Fall back to
-    # the full client chain for those rather than marking them failed.
-    if not urls:
+    # ── Method A: CF edge ────────────────────────────────────────────────
+    try:
+        content = _extract_cf_edge(yt_id)
+        log(f'[cf-edge] ✓ {yt_id} ({len(content)//1024}KB)')
+    except RuntimeError as e:
+        log(f'[cf-edge] miss {yt_id}: {e}')
+
+    # ── Method B: yt-dlp mweb + cookies ─────────────────────────────────
+    if content is None:
+        cookie_file = get_cookie_file()
+        ua = _pick_ua()
+        yt_cmd = (
+            '/usr/local/bin/yt-dlp -f "bestaudio[vcodec=none]/bestaudio" --get-url '
+            f'--cookies {cookie_file} '
+            f'--user-agent "{ua}" '
+            '--extractor-args "youtube:player_client=mweb" '
+            f'"https://www.youtube.com/watch?v={yt_id}"'
+        )
+        result = subprocess.run(
+            ['/usr/bin/env', '-i', 'PATH=/usr/local/bin:/usr/bin:/bin', 'HOME=/root',
+             '/bin/bash', '-c', yt_cmd],
+            capture_output=True, timeout=60, text=True,
+            close_fds=True, start_new_session=True,
+        )
+        urls = [l.strip() for l in (result.stdout or '').splitlines() if l.strip().startswith('http')]
+        if urls:
+            content = _parallel_download(urls[0])
+            log(f'[ytdlp-mweb] ✓ {yt_id} ({len(content)//1024}KB)')
+
+    # ── Method C: yt-dlp full client chain + cookies ─────────────────────
+    if content is None:
+        cookie_file = get_cookie_file()
         ua_fb = _pick_ua()
         yt_cmd_fb = (
             '/usr/local/bin/yt-dlp -f "bestaudio[vcodec=none]/bestaudio" --get-url '
@@ -537,34 +618,37 @@ def extract_and_upload(track_id: str) -> tuple[int, int]:
             '--extractor-args "youtube:player_client=default,mweb,web_safari,web_music,tv_simply,tv" '
             f'"https://www.youtube.com/watch?v={yt_id}"'
         )
-        cmd_fb = ['/usr/bin/env', '-i',
-                  'PATH=/usr/local/bin:/usr/bin:/bin',
-                  'HOME=/root',
-                  '/bin/bash', '-c', yt_cmd_fb]
         result = subprocess.run(
-            cmd_fb, capture_output=True, timeout=60, text=True,
+            ['/usr/bin/env', '-i', 'PATH=/usr/local/bin:/usr/bin:/bin', 'HOME=/root',
+             '/bin/bash', '-c', yt_cmd_fb],
+            capture_output=True, timeout=60, text=True,
             close_fds=True, start_new_session=True,
         )
-        urls = [l.strip() for l in (result.stdout or '').splitlines() if l.strip().startswith('http')]
+        urls_fb = [l.strip() for l in (result.stdout or '').splitlines() if l.strip().startswith('http')]
+        if urls_fb:
+            content = _parallel_download(urls_fb[0])
+            log(f'[ytdlp-full] ✓ {yt_id} ({len(content)//1024}KB)')
+        else:
+            # All yt-dlp methods failed — classify the error
+            stderr = result.stderr or ''
+            log(f'stderr dump for {yt_id}:\n{stderr[:1000]}')
+            sl = stderr.lower()
+            if 'video has been removed' in sl or 'this video is private' in sl:
+                raise RuntimeError(f'unavailable: {stderr[-200:]}')
+            if 'video unavailable' in sl:
+                raise RuntimeError(f'unavailable: {stderr[-200:]}')
+            # Attempt Method D before giving up
+            try:
+                content = _extract_cobalt(yt_id)
+                log(f'[cobalt] ✓ {yt_id} ({len(content)//1024}KB)')
+            except RuntimeError as ce:
+                log(f'[cobalt] miss {yt_id}: {ce}')
+                raise RuntimeError(f'no url: {stderr[-250:]}')
 
-    if not urls:
-        stderr = result.stderr or ''
-        log(f'stderr dump for {yt_id}:\n{stderr[:1000]}')
-        # Surface permanent failures even when 429 appears first in stderr —
-        # yt-dlp logs the 429 warning before the real "removed/private" error.
-        sl = stderr.lower()
-        if 'video has been removed' in sl or 'this video is private' in sl:
-            raise RuntimeError(f'unavailable: {stderr[-200:]}')
-        if 'video unavailable' in sl:
-            raise RuntimeError(f'unavailable: {stderr[-200:]}')
-        raise RuntimeError(f'no url: {stderr[-250:]}')
+    if not content or len(content) < 1024:
+        raise RuntimeError(f'empty download ({len(content) if content else 0}b)')
 
-    # Step 2 — 4-range parallel download from googlevideo.
-    content = _parallel_download(urls[0])
-    if len(content) < 1024:
-        raise RuntimeError(f'empty download ({len(content)}b)')
-
-    # Step 3 — upload to R2 via edge worker.
+    # ── Upload to R2 ─────────────────────────────────────────────────────
     upload_headers = {'Content-Type': 'audio/ogg'}
     if R2_UPLOAD_SECRET:
         upload_headers['Authorization'] = f'Bearer {R2_UPLOAD_SECRET}'

@@ -128,42 +128,78 @@ async function fetchPoToken(videoId) {
   return null;
 }
 
-// Client configurations ranked by success rate (best → worst).
-// IOS is the most reliable for audio extraction as of late-2025; returns
-// un-ciphered URLs. ANDROID_VR is less throttled but sometimes returns
-// lower-bitrate formats. WEB_EMBEDDED_PLAYER is the final browser fallback.
-// Client configurations — UPDATED 2026-04-12.
-// YouTube periodically blocks old client versions. These are the latest
-// working versions as of Q2 2026. Priority: IOS > ANDROID_VR > WEB_CREATOR.
+// Client configurations — UPDATED 2026-05-01.
+// Priority: ANDROID_TESTSUITE > IOS_MUSIC > IOS > ANDROID_VR > MWEB.
 //
-// ANDROID_MUSIC removed — YouTube requires sign-in for all music clients.
-// WEB_EMBEDDED_PLAYER removed — returns "unavailable" for most videos.
-// TVHTML5 removed — "no longer supported" error.
-// Added WEB_CREATOR — returns unciphered URLs, no sign-in required.
-// Added MWEB — mobile web, different bot-detection surface.
+// ANDROID_TESTSUITE (id:30): QA/developer client; returns direct URLs;
+//   YouTube doesn't scrutinize this client's IP the same way as production clients.
+// IOS_MUSIC (id:26): Music-specific iOS client; returns direct URLs.
+// IOS (id:5): direct URLs when version is current; HTTP 400 on stale.
+// ANDROID_VR (id:28): different device context; LOGIN_REQUIRED from DC IPs.
+// MWEB (id:2): returns OK+formats but cipher-protected — last resort.
+// TVHTML5_SIMPLY_EMBEDDED_PLAYER: deprecated by YouTube (2025).
+// WEB_CREATOR / ANDROID removed — HTTP 400 or LOGIN_REQUIRED.
 const CLIENTS = [
   {
-    name: 'IOS',
+    // QA testing client — bypasses standard production bot-detection surface.
+    // Returns direct (unciphered) URLs. Used by yt-dlp as primary client.
+    name: 'ANDROID_TESTSUITE',
+    clientNameId: '30',
     context: {
       client: {
-        clientName: 'IOS',
-        clientVersion: '19.45.4',
-        deviceMake: 'Apple',
-        deviceModel: 'iPhone16,2',
-        osName: 'iPhone',
-        osVersion: '18.2.1.22C161',
+        clientName: 'ANDROID_TESTSUITE',
+        clientVersion: '1.9',
+        androidSdkVersion: 30,
+        osName: 'Android',
+        osVersion: '11',
         hl: 'en',
         gl: 'US',
       }
     },
-    userAgent: 'com.google.ios.youtube/19.45.4 (iPhone16,2; U; CPU iOS 18_2_1 like Mac OS X; en_US)'
+    userAgent: 'com.google.android.youtube/1.9 (Linux; U; Android 11) gzip'
+  },
+  {
+    // Music-specific iOS client — less restricted than main iOS client.
+    name: 'IOS_MUSIC',
+    clientNameId: '26',
+    context: {
+      client: {
+        clientName: 'IOS_MUSIC',
+        clientVersion: '7.27.0',
+        deviceMake: 'Apple',
+        deviceModel: 'iPhone16,2',
+        osName: 'iPhone',
+        osVersion: '18.3.2.22D82',
+        hl: 'en',
+        gl: 'US',
+      }
+    },
+    userAgent: 'com.google.ios.youtubemusic/7.27.0 (iPhone16,2; U; CPU iOS 18_3_2 like Mac OS X; en_US)'
+  },
+  {
+    name: 'IOS',
+    clientNameId: '5',
+    context: {
+      client: {
+        clientName: 'IOS',
+        clientVersion: '19.49.7',
+        deviceMake: 'Apple',
+        deviceModel: 'iPhone17,2',
+        osName: 'iPhone',
+        osVersion: '18.3.2.22D82',
+        hl: 'en',
+        gl: 'US',
+      }
+    },
+    userAgent: 'com.google.ios.youtube/19.49.7 (iPhone17,2; U; CPU iOS 18_3_2 like Mac OS X; en_US)'
   },
   {
     name: 'ANDROID_VR',
+    clientNameId: '28',
     context: {
       client: {
         clientName: 'ANDROID_VR',
-        clientVersion: '1.62.27',
+        clientVersion: '1.63.29',
         deviceMake: 'Oculus',
         deviceModel: 'Quest 3',
         androidSdkVersion: 34,
@@ -173,48 +209,21 @@ const CLIENTS = [
         gl: 'US',
       }
     },
-    userAgent: 'com.google.android.apps.youtube.vr.oculus/1.62.27 (Linux; U; Android 14; en_US; Quest 3)'
+    userAgent: 'com.google.android.apps.youtube.vr.oculus/1.63.29 (Linux; U; Android 14; en_US; Quest 3)'
   },
   {
-    name: 'WEB_CREATOR',
-    context: {
-      client: {
-        clientName: 'WEB_CREATOR',
-        clientVersion: '1.20260401.01.00',
-        hl: 'en',
-        gl: 'US',
-      }
-    },
-    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36'
-  },
-  {
-    name: 'ANDROID',
-    context: {
-      client: {
-        clientName: 'ANDROID',
-        clientVersion: '19.44.38',
-        androidSdkVersion: 34,
-        osName: 'Android',
-        osVersion: '14',
-        hl: 'en',
-        gl: 'US',
-      }
-    },
-    userAgent: 'com.google.android.youtube/19.44.38 (Linux; U; Android 14) gzip'
-  },
-  {
-    // MWEB — mobile web client, different bot-detection surface than desktop clients.
-    // Uses the same InnerTube key but presents as a mobile browser (lower scrutiny).
+    // MWEB returns OK+formats but cipher-protected URLs — absolute last resort.
     name: 'MWEB',
+    clientNameId: '2',
     context: {
       client: {
         clientName: 'MWEB',
-        clientVersion: '2.20240726.01.00',
+        clientVersion: '2.20260401.01.00',
         hl: 'en',
         gl: 'US',
       }
     },
-    userAgent: 'Mozilla/5.0 (Linux; Android 14; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36'
+    userAgent: 'Mozilla/5.0 (Linux; Android 14; Pixel 9) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Mobile Safari/537.36'
   },
 ];
 
@@ -254,7 +263,7 @@ async function tryClient(videoId, clientConfig, signatureTimestamp, poToken) {
     headers: {
       'Content-Type': 'application/json',
       'User-Agent': clientConfig.userAgent,
-      'X-YouTube-Client-Name': clientConfig.context.client.clientName,
+      'X-YouTube-Client-Name': clientConfig.clientNameId || clientConfig.context.client.clientName,
       'X-YouTube-Client-Version': clientConfig.context.client.clientVersion,
       'X-Goog-Visitor-Id': visitorId,
       'Origin': 'https://www.youtube.com',
