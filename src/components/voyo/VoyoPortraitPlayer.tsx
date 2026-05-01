@@ -4750,17 +4750,17 @@ export const VoyoPortraitPlayer = ({
       el.style.opacity = '0';
       return;
     }
+    // Disable transition during drag — each pointermove call would restart
+    // the 320ms timer causing jitter. Transition restored in clearSwipeLabel.
+    el.style.transition = 'none';
     el.textContent = text;
     el.style.color = color;
-    // v881 — optional ACCENT halo (cross-tone). For LIKE we mix in
-    // a soft purple so the text reads unisex, not gendered pink.
     if (accent) {
       el.style.textShadow = `0 0 10px ${color}, 0 0 16px ${color}, 0 0 22px ${accent}`;
     } else {
       el.style.textShadow = `0 0 10px ${color}, 0 0 18px ${color}`;
     }
     // Entry 30% dimmer: alpha*(0.7 + 0.3*alpha) → approaches 1.0 only at full commit.
-    // Fades out naturally when clearSwipeLabel sets opacity back to 0.
     el.style.opacity = String(alpha * (0.7 + 0.3 * alpha));
     const scale = 0.9 + alpha * 0.14;
     const ty = 6 - alpha * 6;
@@ -4771,6 +4771,8 @@ export const VoyoPortraitPlayer = ({
   const clearSwipeLabel = () => {
     const el = swipeLabelRef.current;
     if (!el) return;
+    // Restore transition so the fade-out animates smoothly.
+    el.style.transition = 'opacity 220ms cubic-bezier(0.16, 1, 0.3, 1), transform 320ms cubic-bezier(0.16, 1, 0.3, 1), color 200ms ease';
     el.style.opacity = '0';
     el.style.transform = 'translate(0, 6px) scale(0.9)';
     el.style.boxShadow = '0 0 0 rgba(0,0,0,0)';

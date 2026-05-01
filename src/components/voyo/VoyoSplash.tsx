@@ -10,15 +10,12 @@ interface VoyoSplashProps {
 
 export const VoyoSplash = ({ onComplete, minDuration = 900 }: VoyoSplashProps) => {
   const [phase, setPhase] = useState<'bar' | 'pulse' | 'out'>('bar');
+  const [boomFired, setBoomFired] = useState(false);
   const doneRef = useRef(false);
 
   const initDownloads = useDownloadStore((s) => s.initialize);
-  // Touch selector to mount the store — do NOT put in effect deps (object
-  // reference changes every render after initDownloads mutates the store,
-  // causing an infinite re-run loop).
   usePreferenceStore((s) => s.trackPreferences);
 
-  // Init stores once on mount. Hard 3s cap — never blocks the splash.
   useEffect(() => {
     let cancelled = false;
     const run = async () => {
@@ -37,8 +34,14 @@ export const VoyoSplash = ({ onComplete, minDuration = 900 }: VoyoSplashProps) =
     return () => { cancelled = true; };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Boom rings fire 80ms after mount — just enough for the first paint
+  // to settle so the animation is visible from its true start.
+  useEffect(() => {
+    const t = setTimeout(() => setBoomFired(true), 80);
+    return () => clearTimeout(t);
+  }, []);
+
   // Phase timeline: bar → pulse → out → done
-  // Total guaranteed exit: minDuration + 500ms pulse + 220ms fade
   useEffect(() => {
     const t1 = setTimeout(() => setPhase('pulse'), minDuration);
     const t2 = setTimeout(() => setPhase('out'),   minDuration + 500);
@@ -60,8 +63,25 @@ export const VoyoSplash = ({ onComplete, minDuration = 900 }: VoyoSplashProps) =
         fontFamily: "'Satoshi', system-ui, sans-serif",
       }}
     >
+      {/* Boom-expand ring burst — 3 staggered rings radiate from the wordmark */}
+      {boomFired && [0, 1, 2].map((i) => (
+        <div
+          key={i}
+          aria-hidden
+          style={{
+            position: 'absolute',
+            width: 120,
+            height: 120,
+            borderRadius: '50%',
+            border: '1.5px solid rgba(139, 92, 246, 0.55)',
+            animation: `voyo-boom-ring 640ms cubic-bezier(0.2, 0, 0.8, 1) ${i * 110}ms forwards`,
+            pointerEvents: 'none',
+          }}
+        />
+      ))}
+
       {phase === 'bar' && (
-        <div className="flex flex-col items-center gap-2">
+        <div className="flex flex-col items-center gap-2" style={{ position: 'relative', zIndex: 1 }}>
           <h1 className="text-lg font-bold text-white" style={{ letterSpacing: '0.05em' }}>
             VOYO
           </h1>
@@ -75,7 +95,7 @@ export const VoyoSplash = ({ onComplete, minDuration = 900 }: VoyoSplashProps) =
       )}
 
       {(phase === 'pulse' || phase === 'out') && (
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5" style={{ position: 'relative', zIndex: 1 }}>
           {[0, 1, 2].map((i) => (
             <div
               key={i}
@@ -90,6 +110,11 @@ export const VoyoSplash = ({ onComplete, minDuration = 900 }: VoyoSplashProps) =
         @keyframes voyo-loading-bar {
           0%, 100% { transform: translateX(-100%); }
           50%       { transform: translateX(100%); }
+        }
+        @keyframes voyo-boom-ring {
+          0%   { transform: scale(0.15); opacity: 0.75; }
+          60%  { opacity: 0.35; }
+          100% { transform: scale(2.8); opacity: 0; }
         }
       `}</style>
     </div>

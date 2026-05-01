@@ -74,6 +74,11 @@ const LONG_FADE_OUT_MS  = 180;
 const LONG_FADE_IN_MS   = 320;
 const FADE_OUT_MIN_ELAPSED_S = 30;
 
+// One-shot 7s rise for the very first audio playback of the session.
+// Module-level so it's immune to StrictMode double-mount. Never reset during
+// the tab's lifetime — only the first cold-boot track gets the gentle rise.
+let _coldBootRiseDone = false;
+
 export const AudioPlayer = () => {
   const audioRef = useRef<HTMLAudioElement>(null);
   const completionSignaledRef = useRef(false);
@@ -646,7 +651,21 @@ export const AudioPlayer = () => {
       lastTrackChangeAtRef.current > 0 &&
       sinceTrackChange < lastFadeOutMsRef.current - 20;
     if (!withinFadeWindow) {
-      fadeInMasterGain(fadeMs);
+      if (!_coldBootRiseDone) {
+        _coldBootRiseDone = true;
+        // Cold-boot: zero the gain first so the 7s rise starts from silence.
+        // Setting setValueAtTime(0.0001) BEFORE fadeInMasterGain means
+        // fadeInMasterGain reads param.value ≈ 0 and ramps from there.
+        if (gainNodeRef.current && audioContextRef.current) {
+          const _ctx = audioContextRef.current;
+          const _now = _ctx.currentTime;
+          gainNodeRef.current.gain.cancelScheduledValues(_now);
+          gainNodeRef.current.gain.setValueAtTime(0.0001, _now);
+        }
+        fadeInMasterGain(7000);
+      } else {
+        fadeInMasterGain(fadeMs);
+      }
     }
     // New track has data ready → track-change is fully committed. Clear
     // the guard so subsequent user-initiated pauses actually pause.

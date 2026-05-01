@@ -763,7 +763,7 @@ export const YouTubeIframe = memo(() => {
   const POSTER_MIN_MS = 3000;        // poster minimum dwell
   const DRIFT_CHECK_DELAY_MS = 8000; // single drift check, T+ this after sync
   const DRIFT_THRESHOLD_S = 1.5;
-  const POSTER_FADE_MS = 360;
+  const POSTER_FADE_MS = 600;
 
   // Phase machine: 'poster' = poster fully covers iframe; 'synced' = poster
   // faded out, iframe visible; 'correcting' = poster faded in for a one-shot
@@ -1051,7 +1051,7 @@ export const YouTubeIframe = memo(() => {
             the user never sees a load spinner. Visible during 'poster'
             (initial settle) and 'correcting' (one-shot drift fix). Fades
             out only when the phase machine reaches 'synced'. */}
-        {currentTrack?.coverUrl && (videoSyncPhase === 'poster' || videoSyncPhase === 'correcting') && (
+        {currentTrack?.coverUrl && (
           <div
             aria-hidden
             style={{
@@ -1060,8 +1060,8 @@ export const YouTubeIframe = memo(() => {
               backgroundImage: `url(${currentTrack.coverUrl})`,
               backgroundSize: 'cover',
               backgroundPosition: 'center',
-              opacity: 1,
-              transition: `opacity ${POSTER_FADE_MS}ms ease-out`,
+              opacity: videoSyncPhase === 'synced' ? 0 : 1,
+              transition: `opacity ${POSTER_FADE_MS}ms cubic-bezier(0.4, 0, 0.2, 1)`,
               zIndex: 4,
               pointerEvents: 'none',
               filter: 'brightness(0.92)',
