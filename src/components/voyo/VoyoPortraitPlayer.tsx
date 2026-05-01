@@ -5912,6 +5912,7 @@ export const VoyoPortraitPlayer = ({
             alignItems: 'center',
             gap: 13,
             paddingInline: 4,
+            paddingTop: 5,
             paddingBottom: 6,
             scrollSnapType: 'x proximity',
             overflowY: 'visible',
