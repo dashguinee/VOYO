@@ -1442,6 +1442,81 @@ const VoyoBrandTint = ({ isPlayed }: { isPlayed?: boolean }) => (
 );
 
 // ============================================
+// ELEMENT SYSTEM — maps track mood/tags to 4 ambient personalities.
+// Used for SmallCard live overlays + HOT/DISCOVER breathing.
+// Pattern: enter 70% → peak 100% → dip 65% rest (same as gesture label alpha curve).
+// ============================================
+type TrackElement = 'fire' | 'water' | 'earth' | 'air';
+
+const getTrackElement = (track: Track): TrackElement => {
+  const m = track.mood;
+  if (m && ['hype', 'party', 'dance', 'gym'].includes(m)) return 'fire';
+  if (m && ['chill', 'heartbreak', 'rnb', 'feed'].includes(m)) return 'water';
+  if (m && ['afro', 'street'].includes(m)) return 'earth';
+  if (m && ['focus', 'worship'].includes(m)) return 'air';
+  const tags = track.tags?.map(t => t.toLowerCase()) ?? [];
+  if (tags.some(t => ['fire','hot','hype','drill','trap','afrobeats'].includes(t))) return 'fire';
+  if (tags.some(t => ['chill','smooth','rnb','soul','sad','love'].includes(t))) return 'water';
+  if (tags.some(t => ['afro','amapiano','afropop','bongo'].includes(t))) return 'earth';
+  return 'air';
+};
+
+const ELEMENT_GLOW: Record<TrackElement, {
+  color: string; // rgba for the overlay gradient
+  dur: string;   // animation duration
+  blend: string; // mix-blend-mode
+}> = {
+  fire:  { color: '220,78,30',   dur: '2.2s', blend: 'screen'   },
+  water: { color: '40,110,220',  dur: '4.0s', blend: 'screen'   },
+  earth: { color: '190,130,40',  dur: '3.0s', blend: 'screen'   },
+  air:   { color: '180,180,210', dur: '5.5s', blend: 'screen'   },
+};
+
+// CSS keyframes injected once (module-level so React render doesn't re-inject).
+// Pattern: 0%=70% intensity (enter), 45%=100% (peak), 100%=65% (dip/rest) then loops.
+let _elementStyleInjected = false;
+const injectElementStyles = () => {
+  if (_elementStyleInjected || typeof document === 'undefined') return;
+  _elementStyleInjected = true;
+  const el = document.createElement('style');
+  el.textContent = `
+    @keyframes voyo-el-fire {
+      0%   { opacity: 0.70; }
+      20%  { opacity: 0.85; }
+      45%  { opacity: 1.00; }
+      70%  { opacity: 0.60; }
+      85%  { opacity: 0.80; }
+      100% { opacity: 0.65; }
+    }
+    @keyframes voyo-el-water {
+      0%   { opacity: 0.70; }
+      50%  { opacity: 1.00; }
+      100% { opacity: 0.65; }
+    }
+    @keyframes voyo-el-earth {
+      0%   { opacity: 0.70; }
+      40%  { opacity: 1.00; }
+      75%  { opacity: 0.72; }
+      100% { opacity: 0.65; }
+    }
+    @keyframes voyo-el-air {
+      0%   { opacity: 0.70; }
+      55%  { opacity: 0.95; }
+      100% { opacity: 0.65; }
+    }
+    @keyframes voyo-hot-breathe {
+      0%,100% { box-shadow: 0 0 8px rgba(181,74,46,0.20); }
+      50%     { box-shadow: 0 0 18px rgba(181,74,46,0.55), inset 0 0 10px rgba(181,74,46,0.25); }
+    }
+    @keyframes voyo-discover-breathe {
+      0%,100% { box-shadow: 0 0 8px rgba(212,160,83,0.20); }
+      50%     { box-shadow: 0 0 18px rgba(212,160,83,0.55), inset 0 0 10px rgba(212,160,83,0.25); }
+    }
+  `;
+  document.head.appendChild(el);
+};
+
+// ============================================
 // SMALL CARD (History/Queue)
 // Title + artist OVERLAID on the card image (no separate text row).
 // Played tracks get a deeper purple tint over the whole card. The
@@ -1453,7 +1528,15 @@ const SmallCard = memo(({ track, onTap, isPlayed, isNextUp }: {
   onTap: () => void;
   isPlayed?: boolean;
   isNextUp?: boolean;
-}) => (
+}) => {
+  injectElementStyles();
+  const element = getTrackElement(track);
+  const { color, dur, blend } = ELEMENT_GLOW[element];
+
+  // Entrance: different stagger per element so rails don't all pulse in unison
+  const phaseDelay = element === 'fire' ? '0s' : element === 'water' ? '0.9s' : element === 'earth' ? '0.45s' : '1.4s';
+
+  return (
   <button
     className="relative flex-shrink-0 group"
     style={{ width: 78, height: 78 }}
@@ -1496,6 +1579,20 @@ const SmallCard = memo(({ track, onTap, isPlayed, isNextUp }: {
         artist={track.artist}
         title={track.title}
         lazy={true}
+      />
+
+      {/* ELEMENT AMBIENT GLOW — enter 70%→peak 100%→dip 65% then loops.
+          Each element has its own color, speed, and phase offset so a
+          history rail of 3 cards pulses asynchronously, feeling alive
+          rather than mechanical. Intensity capped at 70% max opacity
+          per the pattern (screen blend keeps it additive/non-destructive). */}
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          background: `radial-gradient(ellipse at 50% 80%, rgba(${color},0.55) 0%, rgba(${color},0.18) 50%, transparent 75%)`,
+          mixBlendMode: blend as React.CSSProperties['mixBlendMode'],
+          animation: `voyo-el-${element} ${dur} ease-in-out ${phaseDelay} infinite`,
+        }}
       />
 
       {/* PLAYED TINT — deeper purple wash over the whole card so the
@@ -1551,7 +1648,9 @@ const SmallCard = memo(({ track, onTap, isPlayed, isNextUp }: {
       </div>
     </div>
   </button>
-));
+  );
+});
+SmallCard.displayName = 'SmallCard';
 
 // ============================================
 // DASH PLACEHOLDER (Empty state for queue/history)
@@ -1858,6 +1957,19 @@ const PortalBelt = memo(({ tracks, onTap, playedTrackIds, type, mixModes, modeBo
       <div className="absolute inset-0 pointer-events-none">
         {renderCards()}
       </div>
+      {/* Outer-edge fade — HOT fades left, Discover fades right.
+          Creates the "infinite shelf" depth effect. Uses the background
+          color of the bottom section so the fade matches the surface. */}
+      <div
+        className="absolute top-0 bottom-0 w-8 pointer-events-none"
+        style={{
+          [type === 'hot' ? 'left' : 'right']: 0,
+          background: type === 'hot'
+            ? 'linear-gradient(to right, rgba(8,8,10,0.90) 0%, transparent 100%)'
+            : 'linear-gradient(to left,  rgba(8,8,10,0.90) 0%, transparent 100%)',
+          zIndex: 5,
+        }}
+      />
     </div>
   );
 });
@@ -6150,12 +6262,9 @@ export const VoyoPortraitPlayer = ({
             bottom navbar — that build is its own session. */}
 
         {/* Stream Labels — HOT/Discover row.
-            v873 (Dash 2026-04-29): disk-slot light reverted entirely.
-            v869's bronze line + v872's two-layer atmospheric shade
-            both removed. Row is back to the v868 baseline — labels
-            only, no ambient slot. */}
-        <div className="flex justify-between px-6 mb-1">
-          {/* HOT Label — deep rust ember (mature, aged, premium) */}
+            z-index 10 ensures labels sit above the animated card overlays below. */}
+        <div className="flex justify-between px-6 mb-1" style={{ position: 'relative', zIndex: 10 }}>
+          {/* HOT Label — deep rust ember. Breathes at 70%→100%→65% pattern. */}
           <button
             onClick={handleToggleHotBelt}
             className="flex items-center gap-1.5 px-2 py-1 rounded relative overflow-hidden"
@@ -6163,8 +6272,9 @@ export const VoyoPortraitPlayer = ({
               background: 'rgba(181,74,46,0.10)',
               boxShadow: isHotBeltActive
                 ? '0 0 15px rgba(181,74,46,0.4), inset 0 0 10px rgba(181,74,46,0.2)'
-                : '0 0 8px rgba(181,74,46,0.2)'
-                }}
+                : undefined,
+              animation: isHotBeltActive ? undefined : 'voyo-hot-breathe 3.2s ease-in-out infinite',
+            }}
           >
             <div>
               <Flame size={12} style={{ color: '#B54A2E' }} />
@@ -6185,7 +6295,7 @@ export const VoyoPortraitPlayer = ({
             )}
           </button>
 
-          {/* DISCOVERY Label — African Gold Bronze */}
+          {/* DISCOVERY Label — African Gold Bronze. Breathes at 70%→100%→65% pattern. */}
           <button
             onClick={handleToggleDiscoveryBelt}
             className="flex items-center gap-1.5 px-2 py-1 rounded relative overflow-hidden"
@@ -6193,8 +6303,9 @@ export const VoyoPortraitPlayer = ({
               background: 'rgba(212,160,83,0.1)',
               boxShadow: isDiscoveryBeltActive
                 ? '0 0 15px rgba(212,160,83,0.4), inset 0 0 10px rgba(212,160,83,0.2)'
-                : '0 0 8px rgba(212,160,83,0.2)'
-                }}
+                : undefined,
+              animation: isDiscoveryBeltActive ? undefined : 'voyo-discover-breathe 4.0s ease-in-out 0.8s infinite',
+            }}
           >
             {/* DISCOVER glyph + GPU-promoted halo. Was a text-shadow
                 (paints every transition tick of the parent box-shadow).
