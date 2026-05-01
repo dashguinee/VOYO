@@ -532,46 +532,16 @@ export const AudioPlayer = () => {
             el2.play().catch(() => {});
             logPlaybackEvent({ event_type: 'play_start', track_id: currentTrack.trackId, source: 'r2', meta: { subtype: 'probe_found' } });
           } else {
-            // CF edge realtime — sub-3s extraction from 300+ PoPs.
-            // Sets audio.src = /realtime/{ytId}: CF checks R2 (instant if
-            // cached since probe), then InnerTube-extracts and proxies bytes.
-            // On audio error (502 extraction fail) → fall through to iframe.
-            // Background: CF bumps queue so VPS caches for future listeners.
+            // Not in R2 — go straight to iframe. CF InnerTube extraction
+            // fails on datacenter IPs so /realtime/ would just add 5-10s
+            // dead air before erroring out. Iframe plays immediately;
+            // useHotSwap upgrades to R2 within 2s of VPS finishing.
             if (!document.hidden) el2.pause();
             if (document.hidden) muteMasterGainInstantly();
-            el2.loop = false;
-            const realtimeUrl = `${EDGE_REALTIME}/${getYouTubeId(currentTrack.trackId)}`;
-            el2.src = realtimeUrl;
-            setSource('edge');
+            el2.loop = true;
+            setSource('iframe');
             trackSwapInProgressRef.current = false;
-
-            // Fallback: extraction failed at CF → engage iframe.
-            el2.addEventListener('error', function onEdgeErr() {
-              if (isStale()) return;
-              const e = audioRef.current;
-              if (!e || !e.src.includes('/realtime/')) return;
-              e.removeEventListener('error', onEdgeErr);
-              e.loop = true;
-              setSource('iframe');
-              logPlaybackEvent({ event_type: 'trace', track_id: currentTrack.trackId, meta: { subtype: 'edge_fail_iframe_fallback' } });
-            }, { once: true });
-
-            // Same retry ladder as the R2 fast path.
-            const tryPlayEdge = async () => {
-              const delays = [0, 120, 500, 1500];
-              for (const d of delays) {
-                if (d > 0) await new Promise(r => setTimeout(r, d));
-                if (isStale()) return;
-                const e = audioRef.current;
-                if (!e || e.src === '' || !e.paused) return;
-                const ctx = audioContextRef.current;
-                if (ctx && ctx.state !== 'running') await ctx.resume().catch(() => {});
-                try { await e.play(); return; } catch { /* retry */ }
-              }
-            };
-            void tryPlayEdge();
-
-            logPlaybackEvent({ event_type: 'play_start', track_id: currentTrack.trackId, source: 'edge', meta: { subtype: 'r2_miss_cf_realtime' } });
+            logPlaybackEvent({ event_type: 'play_start', track_id: currentTrack.trackId, source: 'iframe', meta: { subtype: 'r2_miss_iframe_immediate' } });
           }
         }).catch(() => {
           // Network error on probe — same fallback. Iframe carries audio,

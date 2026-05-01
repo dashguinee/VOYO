@@ -17,7 +17,8 @@
 // Guardian runs every 6h, keeps sessions alive, writes /opt/voyo/cookies-NNN.txt.
 // If a profile is logged out, guardian fires cookie_login_lost to Supabase — re-login
 // manually via SSH tunnel + chrome://inspect, then guardian picks it back up.
-const LANES = 3;
+// Profile-003 has no session — running 2 lanes until a 3rd account is added.
+const LANES = 2;
 
 const COMMON_ENV = {
   VOYO_SUPABASE_URL:      'https://anmgyxhnyhbyxzpjhxgx.supabase.co',

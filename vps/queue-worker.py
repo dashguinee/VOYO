@@ -485,11 +485,13 @@ def _parallel_download(url: str) -> bytes:
         r.raise_for_status()
         return r.content
 
-    # Split into 4 equal ranges; last range absorbs any remainder.
-    chunk = size // 4
+    # Split into 8 equal ranges — YT throttles per connection so more
+    # parallel ranges = proportionally more total bandwidth.
+    SPLITS = 8
+    chunk = size // SPLITS
     ranges = [
-        (i * chunk, (i + 1) * chunk - 1 if i < 3 else size - 1)
-        for i in range(4)
+        (i * chunk, (i + 1) * chunk - 1 if i < SPLITS - 1 else size - 1)
+        for i in range(SPLITS)
     ]
 
     def _fetch(start: int, end: int) -> tuple[int, bytes]:
@@ -501,7 +503,7 @@ def _parallel_download(url: str) -> bytes:
         r.raise_for_status()
         return start, r.content
 
-    with ThreadPoolExecutor(max_workers=4) as pool:
+    with ThreadPoolExecutor(max_workers=SPLITS) as pool:
         futs = [pool.submit(_fetch, s, e) for s, e in ranges]
         parts = sorted((f.result() for f in as_completed(futs)), key=lambda x: x[0])
 
@@ -578,12 +580,9 @@ def extract_and_upload(track_id: str) -> tuple[int, int]:
 
     content = None
 
-    # ── Method A: CF edge ────────────────────────────────────────────────
-    try:
-        content = _extract_cf_edge(yt_id)
-        log(f'[cf-edge] ✓ {yt_id} ({len(content)//1024}KB)')
-    except RuntimeError as e:
-        log(f'[cf-edge] miss {yt_id}: {e}')
+    # Method A (CF edge) skipped in queue worker — queue tracks are uncached
+    # by definition so CF InnerTube always fails, wasting 2-3s per track.
+    # CF edge is used only on the client /realtime/ path for R2 cache hits.
 
     # ── Method B: yt-dlp mweb + cookies ─────────────────────────────────
     if content is None:
