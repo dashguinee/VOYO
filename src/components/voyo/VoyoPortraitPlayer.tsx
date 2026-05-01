@@ -352,6 +352,8 @@ const NeonBillboardCard = memo(({
   const [showTapBurst, setShowTapBurst] = useState(false);
   const [isDraggingToQueue, setIsDraggingToQueue] = useState(false);
   const [showQueuedFeedback, setShowQueuedFeedback] = useState(false);
+  const [showHoldOverlay, setShowHoldOverlay] = useState(false);
+  const neonHoldTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Swipe-up-to-bucket gesture
   const neonSwipeStartRef = useRef<{ y: number } | null>(null);
   const [showReactionFeedback, setShowReactionFeedback] = useState(false); // NEW: Double-tap feedback
@@ -474,12 +476,29 @@ const NeonBillboardCard = memo(({
     <button
       ref={cardRef}
       className="flex-shrink-0 w-32 h-16 rounded-lg relative overflow-hidden group"
-      onPointerDown={(e) => { neonSwipeStartRef.current = { y: e.clientY }; }}
+      onPointerDown={(e) => {
+        neonSwipeStartRef.current = { y: e.clientY };
+        // Hold 480ms → reveal "Add to mix" shimmer overlay
+        neonHoldTimerRef.current = setTimeout(() => {
+          setShowHoldOverlay(true);
+          try { navigator.vibrate?.(18); } catch {}
+        }, 480);
+      }}
       onPointerUp={(e) => {
+        clearTimeout(neonHoldTimerRef.current!);
+        if (showHoldOverlay) {
+          // Confirmed hold — add vibe to mix
+          setShowHoldOverlay(false);
+          if (onDragToQueue) {
+            setShowQueuedFeedback(true);
+            onDragToQueue();
+            setTimeout(() => setShowQueuedFeedback(false), 600);
+          }
+          return;
+        }
         if (neonSwipeStartRef.current) {
           const dy = e.clientY - neonSwipeStartRef.current.y;
           neonSwipeStartRef.current = null;
-          // Swipe up → bucket this vibe
           if (dy < -35 && onDragToQueue) {
             setIsDraggingToQueue(true);
             setShowQueuedFeedback(true);
@@ -490,7 +509,11 @@ const NeonBillboardCard = memo(({
           }
         }
       }}
-      onPointerCancel={() => { neonSwipeStartRef.current = null; }}
+      onPointerCancel={() => {
+        clearTimeout(neonHoldTimerRef.current!);
+        neonSwipeStartRef.current = null;
+        setShowHoldOverlay(false);
+      }}
       onClick={() => {
         if (isDraggingToQueue) return; // Don't trigger tap if we just dragged
 
@@ -578,8 +601,36 @@ const NeonBillboardCard = memo(({
         )}
       
 
+      {/* HOLD OVERLAY — shimmer + "Add to mix" confirmation. Appears after 480ms hold. */}
+      {showHoldOverlay && (
+        <div
+          className="absolute inset-0 rounded-lg overflow-hidden pointer-events-none"
+          style={{ zIndex: 20 }}
+        >
+          {/* Shimmer wash */}
+          <div
+            className="absolute inset-0"
+            style={{
+              background: 'linear-gradient(105deg, transparent 30%, rgba(255,255,255,0.18) 50%, transparent 70%)',
+              animation: 'voyo-played-shimmer 1.2s ease-in-out infinite',
+            }}
+          />
+          <div
+            className="absolute inset-0 flex items-center justify-center"
+            style={{ background: 'rgba(0,0,0,0.38)' }}
+          >
+            <span
+              className="text-[10px] font-black tracking-[0.12em] uppercase"
+              style={{ color: neon, textShadow: `0 0 10px ${neon}` }}
+            >
+              Add to mix ↑
+            </span>
+          </div>
+        </div>
+      )}
+
       {/* QUEUED FEEDBACK - Shows after drag-to-queue */}
-      
+
         {showQueuedFeedback && (
           <div
             className="absolute -top-8 left-1/2 -translate-x-1/2 z-50"
@@ -1558,7 +1609,7 @@ const SmallCard = memo(({ track, onTap, isPlayed, isNextUp }: {
   return (
   <button
     className="relative flex-shrink-0 group"
-    style={{ width: 78, height: 78, opacity: isPlayed ? 0.58 : 1, transition: 'opacity 300ms ease' }}
+    style={{ width: 78, height: 78, opacity: isPlayed ? 0.65 : 1, transition: 'opacity 300ms ease' }}
     onClick={onTap}
   >
     {/* Apple-style double-sided ring glow on the next-up queue card.
@@ -1600,17 +1651,16 @@ const SmallCard = memo(({ track, onTap, isPlayed, isNextUp }: {
         lazy={true}
       />
 
-      {/* ELEMENT AMBIENT GLOW — enter 70%→peak 100%→dip 65% then loops.
-          Each element has its own color, speed, and phase offset so a
-          history rail of 3 cards pulses asynchronously, feeling alive
-          rather than mechanical. Intensity capped at 70% max opacity
-          per the pattern (screen blend keeps it additive/non-destructive). */}
+      {/* ELEMENT AMBIENT GLOW — animated only on played cards (the ghost of
+          the vibe it was heard on). Queue cards get a static glow so they
+          feel warm but not noisy/heavy. */}
       <div
         className="absolute inset-0 pointer-events-none"
         style={{
-          background: `radial-gradient(ellipse at 50% 80%, rgba(${color},0.55) 0%, rgba(${color},0.18) 50%, transparent 75%)`,
+          background: `radial-gradient(ellipse at 50% 80%, rgba(${color},0.45) 0%, rgba(${color},0.12) 50%, transparent 75%)`,
           mixBlendMode: blend as React.CSSProperties['mixBlendMode'],
-          animation: `voyo-el-${element} ${dur} ease-in-out ${phaseDelay} infinite`,
+          animation: isPlayed ? `voyo-el-${element} ${dur} ease-in-out ${phaseDelay} infinite` : 'none',
+          opacity: isPlayed ? undefined : 0.6,
         }}
       />
 
@@ -4560,6 +4610,8 @@ export const VoyoPortraitPlayer = ({
   // After ~3.5s of idle the row balances back to 50/50.
   const unifiedRowRef = useRef<HTMLDivElement>(null);
   const depthRafRef = useRef<number | null>(null);
+  const queueDragRef = useRef<{ idx: number; startX: number; el: HTMLDivElement } | null>(null);
+  const queueHoldTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const applyDepth = useCallback(() => {
     const row = unifiedRowRef.current;
@@ -5891,12 +5943,68 @@ export const VoyoPortraitPlayer = ({
               <div
                 key={`q-${track.id}`}
                 data-depth-card
-                style={{ flexShrink: 0, scrollSnapAlign: 'start', transition: 'transform 140ms ease-out', transformOrigin: 'center center' }}
+                style={{ flexShrink: 0, scrollSnapAlign: 'start', transition: 'transform 140ms ease-out', transformOrigin: 'center center', touchAction: 'pan-y' }}
+                onPointerDown={(e) => {
+                  const el = e.currentTarget as HTMLDivElement;
+                  queueHoldTimerRef.current = setTimeout(() => {
+                    queueDragRef.current = { idx: i, startX: e.clientX, el };
+                    el.style.transition = 'none';
+                    el.style.transform = 'scale(1.07) translateZ(0)';
+                    el.style.zIndex = '30';
+                    el.style.filter = 'drop-shadow(0 6px 18px rgba(212,160,83,0.45))';
+                    el.style.touchAction = 'none';
+                    try { el.setPointerCapture(e.pointerId); } catch {}
+                    haptics.light();
+                  }, 480);
+                }}
+                onPointerMove={(e) => {
+                  const drag = queueDragRef.current;
+                  if (!drag || drag.idx !== i) return;
+                  const dx = e.clientX - drag.startX;
+                  drag.el.style.transform = `scale(1.07) translate3d(${dx}px, 0, 0)`;
+                  // Show neighbour nudge
+                  const CARD_W = 88;
+                  const targetIdx = Math.max(0, Math.min(queueTracks.length - 1, i + Math.round(dx / CARD_W)));
+                  unifiedRowRef.current?.querySelectorAll<HTMLDivElement>('[data-queue-card]').forEach((c, ci) => {
+                    if (ci === i) return;
+                    const nudge = ci < i && targetIdx <= ci ? 12 : ci > i && targetIdx >= ci ? -12 : 0;
+                    c.style.transform = nudge !== 0 ? `scale(${parseFloat(c.style.transform?.match(/scale\(([^)]+)\)/)?.[1] ?? '1') || 1}) translate3d(${nudge}px,0,0)` : '';
+                  });
+                }}
+                onPointerUp={(e) => {
+                  clearTimeout(queueHoldTimerRef.current!);
+                  const drag = queueDragRef.current;
+                  if (!drag || drag.idx !== i) return;
+                  const dx = e.clientX - drag.startX;
+                  const CARD_W = 88;
+                  const toIdx = Math.max(0, Math.min(queueTracks.length - 1, i + Math.round(dx / CARD_W)));
+                  if (toIdx !== i) usePlayerStore.getState().reorderQueue(i, toIdx);
+                  drag.el.style.transition = 'transform 140ms ease-out';
+                  drag.el.style.transform = '';
+                  drag.el.style.zIndex = '';
+                  drag.el.style.filter = '';
+                  drag.el.style.touchAction = '';
+                  unifiedRowRef.current?.querySelectorAll<HTMLDivElement>('[data-queue-card]').forEach(c => { c.style.transform = ''; });
+                  queueDragRef.current = null;
+                }}
+                onPointerCancel={() => {
+                  clearTimeout(queueHoldTimerRef.current!);
+                  const drag = queueDragRef.current;
+                  if (!drag || drag.idx !== i) return;
+                  drag.el.style.transition = 'transform 140ms ease-out';
+                  drag.el.style.transform = '';
+                  drag.el.style.zIndex = '';
+                  drag.el.style.filter = '';
+                  drag.el.style.touchAction = '';
+                  unifiedRowRef.current?.querySelectorAll<HTMLDivElement>('[data-queue-card]').forEach(c => { c.style.transform = ''; });
+                  queueDragRef.current = null;
+                }}
+                data-queue-card
               >
                 <SmallCard
                   track={track}
-                  onTap={() => playTrack(track)}
-                  isPlayed={playedTrackIds.has(track.id)}
+                  onTap={() => { if (!queueDragRef.current) playTrack(track); }}
+                  isPlayed={false}
                   isNextUp={i === 0}
                 />
               </div>
@@ -6298,7 +6406,7 @@ export const VoyoPortraitPlayer = ({
               boxShadow: isHotBeltActive
                 ? '0 0 15px rgba(181,74,46,0.4), inset 0 0 10px rgba(181,74,46,0.2)'
                 : undefined,
-              animation: isHotBeltActive ? undefined : 'voyo-hot-breathe 3.2s ease-in-out infinite',
+              animation: undefined,
             }}
           >
             <div>
@@ -6329,7 +6437,7 @@ export const VoyoPortraitPlayer = ({
               boxShadow: isDiscoveryBeltActive
                 ? '0 0 15px rgba(212,160,83,0.4), inset 0 0 10px rgba(212,160,83,0.2)'
                 : undefined,
-              animation: isDiscoveryBeltActive ? undefined : 'voyo-discover-breathe 4.0s ease-in-out 0.8s infinite',
+              animation: undefined,
             }}
           >
             {/* DISCOVER glyph + GPU-promoted halo. Was a text-shadow

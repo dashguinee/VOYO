@@ -393,9 +393,9 @@ export const BoostSettings = ({ isOpen, onClose, backdropEnabled, onToggleBackdr
                   className="text-[11px] font-bold"
                   style={{ color: boostProfile === 'boosted' ? '#E6B865' : 'rgba(255,255,255,0.55)' }}
                 >
-                  True Feel
+                  Real Feel
                 </span>
-                <span className="text-[9px] opacity-60 text-white">Roots Audio</span>
+                <span className="text-[9px] opacity-60 text-white">Boosted</span>
               </button>
 
               <button
@@ -463,7 +463,7 @@ export const BoostSettings = ({ isOpen, onClose, backdropEnabled, onToggleBackdr
               </button>
             </div>
             <div className="text-[10px] text-gray-500 mt-3 text-center">
-              {boostProfile === 'boosted' && 'Roots™ Audio — True Feel'}
+              {boostProfile === 'boosted' && 'Boosted'}
               {boostProfile === 'calm' && 'Perfectly Balanced · Daily enjoyment'}
               {boostProfile === 'voyex' && 'Studio energy — full immersion'}
             </div>
