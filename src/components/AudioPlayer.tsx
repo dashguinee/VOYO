@@ -661,7 +661,7 @@ export const AudioPlayer = () => {
             gainNodeRef.current.gain.cancelScheduledValues(_now);
             gainNodeRef.current.gain.setValueAtTime(0.0001, _now);
           }
-          fadeInMasterGain(7000);
+          fadeInMasterGain(3000);
         } else {
           fadeInMasterGain(fadeMs);
         }
