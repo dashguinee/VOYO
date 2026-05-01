@@ -519,10 +519,11 @@ export async function warmLastResortPool(): Promise<void> {
   } catch {}
 
   try {
+    // Last-resort pool: no r2_cached filter — this is a fallback, not a gate.
+    // r2Gate enforces cache status at play time; here we just want popular tracks.
     const { data, error } = await supabase
       .from('video_intelligence')
       .select('youtube_id,title,artist,channel_name,duration_seconds,thumbnail_url,genres,moods,region,voyo_play_count,created_at')
-      .eq('r2_cached', true)
       .order('voyo_play_count', { ascending: false })
       .limit(500);
     if (error || !data || data.length === 0) return;

@@ -28,10 +28,11 @@ const CC_SUPABASE_KEY =
   import.meta.env.VITE_COMMAND_CENTER_KEY ||
   '';
 
-// Reuse main client when no separate CC credentials are configured
+// null when CC credentials are absent — callers guard with `if (!ccSupabase)`
+// so they skip gracefully instead of hitting VOYO tables that don't exist there.
 export const ccSupabase = (CC_SUPABASE_URL && CC_SUPABASE_KEY)
   ? createClient(CC_SUPABASE_URL, CC_SUPABASE_KEY)
-  : supabase;
+  : null;
 
 export const isDahubConfigured = true;
 
