@@ -4618,6 +4618,7 @@ export const VoyoPortraitPlayer = ({
     if (!row) return;
     const cx = row.scrollLeft + row.offsetWidth / 2;
     row.querySelectorAll<HTMLDivElement>('[data-depth-card]').forEach(card => {
+      if (queueDragRef.current?.el === card) return; // don't overwrite active drag transform
       const cardCx = card.offsetLeft + card.offsetWidth / 2;
       const dist = Math.abs(cardCx - cx);
       const t = Math.min(1, dist / (row.offsetWidth * 0.55));
@@ -4630,6 +4631,28 @@ export const VoyoPortraitPlayer = ({
     requestAnimationFrame(applyDepth);
     return () => {
       if (depthRafRef.current) cancelAnimationFrame(depthRafRef.current);
+    };
+  }, []);
+
+  // Safety net — ensures queueDragRef can never stay stuck if a pointer
+  // ends outside the card or the browser swallows the pointerup/cancel.
+  useEffect(() => {
+    const cleanup = () => {
+      clearTimeout(queueHoldTimerRef.current!);
+      const drag = queueDragRef.current;
+      if (!drag) return;
+      drag.el.style.transition = 'transform 140ms ease-out';
+      drag.el.style.transform = '';
+      drag.el.style.zIndex = '';
+      drag.el.style.filter = '';
+      drag.el.style.touchAction = '';
+      queueDragRef.current = null;
+    };
+    document.addEventListener('pointerup', cleanup, { passive: true });
+    document.addEventListener('pointercancel', cleanup, { passive: true });
+    return () => {
+      document.removeEventListener('pointerup', cleanup);
+      document.removeEventListener('pointercancel', cleanup);
     };
   }, []);
 
@@ -5946,15 +5969,18 @@ export const VoyoPortraitPlayer = ({
                 data-depth-card
                 style={{ flexShrink: 0, scrollSnapAlign: 'start', transition: 'transform 140ms ease-out', transformOrigin: 'center center', touchAction: 'pan-y' }}
                 onPointerDown={(e) => {
+                  clearTimeout(queueHoldTimerRef.current!);
                   const el = e.currentTarget as HTMLDivElement;
+                  const pid = e.pointerId;
+                  const sx = e.clientX;
                   queueHoldTimerRef.current = setTimeout(() => {
-                    queueDragRef.current = { idx: i, startX: e.clientX, el };
+                    queueDragRef.current = { idx: i, startX: sx, el };
                     el.style.transition = 'none';
                     el.style.transform = 'scale(1.07) translateZ(0)';
                     el.style.zIndex = '30';
                     el.style.filter = 'drop-shadow(0 6px 18px rgba(212,160,83,0.45))';
                     el.style.touchAction = 'none';
-                    try { el.setPointerCapture(e.pointerId); } catch {}
+                    try { el.setPointerCapture(pid); } catch {}
                     haptics.light();
                   }, 480);
                 }}
