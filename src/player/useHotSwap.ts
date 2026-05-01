@@ -38,7 +38,7 @@ const HOT_SWAP_POLL_MS = 2_000;
 // One unified swap: always position-matched (no rewind), equal-power curve
 // (constant perceived loudness, no dip), 2s fade. Iframe fades out on
 // cos(p·π/2), R2 fades in on sin(p·π/2) — sum of squares stays ≈1.
-const HOT_SWAP_FADE_MS = 2_000;
+const HOT_SWAP_FADE_MS = 1_400;
 
 // Monotonic counter — incremented at the START of every performHotSwap call.
 // Captured at canplay-listener registration; if the value differs at callback

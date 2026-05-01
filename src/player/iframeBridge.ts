@@ -26,20 +26,21 @@ class IframeBridge {
   }
 
   /**
-   * Linear volume ramp from the current volume to 0 over `durationMs`.
-   * Runs via setInterval rather than Web Audio because YouTube iframes don't
-   * expose a MediaElement handle we can route through the Audio graph.
+   * Equal-power fade-out: cos(p·π/2) from 100→0 over `durationMs`.
+   * Mirrors the sin(p·π/2) R2 fade-in so combined loudness stays constant
+   * through the crossfade. Linear was causing a ~3dB dip mid-swap.
    */
   fadeOut(durationMs: number = 400): Promise<void> {
     const player = this.player;
     if (!player) return Promise.resolve();
     return new Promise((resolve) => {
-      const steps = 16;
+      const steps = 28;
       const stepMs = Math.max(1, Math.round(durationMs / steps));
       let i = 0;
       const tick = () => {
         i++;
-        const v = Math.max(0, Math.round(100 * (1 - i / steps)));
+        const p = i / steps;
+        const v = Math.max(0, Math.round(100 * Math.cos((p * Math.PI) / 2)));
         try { player.setVolume(v); } catch {}
         if (i >= steps) { resolve(); return; }
         setTimeout(tick, stepMs);
