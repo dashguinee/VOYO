@@ -1609,7 +1609,7 @@ const SmallCard = memo(({ track, onTap, isPlayed, isNextUp }: {
   return (
   <button
     className="relative flex-shrink-0 group"
-    style={{ width: 78, height: 78, opacity: isPlayed ? 0.65 : 1, transition: 'opacity 300ms ease' }}
+    style={{ width: 84, height: 84, opacity: isPlayed ? 0.65 : 1, transition: 'opacity 300ms ease' }}
     onClick={onTap}
   >
     {/* Apple-style double-sided ring glow on the next-up queue card.
@@ -5884,9 +5884,9 @@ export const VoyoPortraitPlayer = ({
            and the warm-it-up philosophy says: when the user goes video,
            the queue gets out of the way. */}
       <div
-        className="z-20 h-[14%]"
+        className="z-20 h-[17%]"
         style={{
-          paddingTop: 'max(calc(env(safe-area-inset-top, 0px) + 4px), 36px)',
+          paddingTop: 'max(calc(env(safe-area-inset-top, 0px) + 4px), 20px)',
           opacity: videoTarget === 'portrait'
             ? 0
             : Math.max(0, 1 - Math.max(0, (portalProgress - 0.55) / 0.35)),
@@ -5910,7 +5910,7 @@ export const VoyoPortraitPlayer = ({
           style={{
             display: 'flex',
             alignItems: 'center',
-            gap: 10,
+            gap: 13,
             paddingInline: 4,
             paddingBottom: 6,
             scrollSnapType: 'x proximity',
@@ -5963,7 +5963,7 @@ export const VoyoPortraitPlayer = ({
                   const dx = e.clientX - drag.startX;
                   drag.el.style.transform = `scale(1.07) translate3d(${dx}px, 0, 0)`;
                   // Show neighbour nudge
-                  const CARD_W = 88;
+                  const CARD_W = 97;
                   const targetIdx = Math.max(0, Math.min(queueTracks.length - 1, i + Math.round(dx / CARD_W)));
                   unifiedRowRef.current?.querySelectorAll<HTMLDivElement>('[data-queue-card]').forEach((c, ci) => {
                     if (ci === i) return;
@@ -5976,7 +5976,7 @@ export const VoyoPortraitPlayer = ({
                   const drag = queueDragRef.current;
                   if (!drag || drag.idx !== i) return;
                   const dx = e.clientX - drag.startX;
-                  const CARD_W = 88;
+                  const CARD_W = 97;
                   const toIdx = Math.max(0, Math.min(queueTracks.length - 1, i + Math.round(dx / CARD_W)));
                   if (toIdx !== i) usePlayerStore.getState().reorderQueue(i, toIdx);
                   drag.el.style.transition = 'transform 140ms ease-out';

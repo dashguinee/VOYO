@@ -651,20 +651,30 @@ export const AudioPlayer = () => {
       lastTrackChangeAtRef.current > 0 &&
       sinceTrackChange < lastFadeOutMsRef.current - 20;
     if (!withinFadeWindow) {
-      if (!_coldBootRiseDone) {
-        _coldBootRiseDone = true;
-        // Cold-boot: zero the gain first so the 7s rise starts from silence.
-        // Setting setValueAtTime(0.0001) BEFORE fadeInMasterGain means
-        // fadeInMasterGain reads param.value ≈ 0 and ramps from there.
-        if (gainNodeRef.current && audioContextRef.current) {
-          const _ctx = audioContextRef.current;
-          const _now = _ctx.currentTime;
-          gainNodeRef.current.gain.cancelScheduledValues(_now);
-          gainNodeRef.current.gain.setValueAtTime(0.0001, _now);
+      const doFadeIn = () => {
+        if (!_coldBootRiseDone) {
+          _coldBootRiseDone = true;
+          // Cold-boot: zero gain first so the 7s rise starts from silence.
+          if (gainNodeRef.current && audioContextRef.current) {
+            const _ctx = audioContextRef.current;
+            const _now = _ctx.currentTime;
+            gainNodeRef.current.gain.cancelScheduledValues(_now);
+            gainNodeRef.current.gain.setValueAtTime(0.0001, _now);
+          }
+          fadeInMasterGain(7000);
+        } else {
+          fadeInMasterGain(fadeMs);
         }
-        fadeInMasterGain(7000);
+      };
+      // Screen-lock path: AudioContext may be suspended/interrupted when canplay
+      // fires on a BG track change. Scheduling gain ramps against a frozen clock
+      // means gain stays at 0 until the 2s heartbeat forces a recovery — causing
+      // the audible delay + choqué jump. Resume first so the ramp clock is live.
+      const ctx = audioContextRef.current;
+      if (ctx && ctx.state !== 'running') {
+        ctx.resume().then(doFadeIn).catch(doFadeIn);
       } else {
-        fadeInMasterGain(fadeMs);
+        doFadeIn();
       }
     }
     // New track has data ready → track-change is fully committed. Clear
