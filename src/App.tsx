@@ -1115,8 +1115,7 @@ function App() {
       {/* Main Content */}
       
         {/* GLOBAL LANDSCAPE OVERRIDE - When landscape, always show video player */}
-        {/* Hidden when search is open — iframes bleed through CSS z-index on mobile */}
-        {isLandscape && currentTrack && !isSearchOpen ? (
+        {isLandscape && currentTrack ? (
           <LandscapeVOYO onVideoMode={handleVideoModeEnter} />
         ) : appMode === 'classic' ? (
           <div
@@ -1237,7 +1236,7 @@ function App() {
 
             {/* VOYO Mode Content - Portrait or Landscape */}
             <div className="flex-1 overflow-hidden">
-              {isLandscape && !isSearchOpen ? (
+              {isLandscape ? (
                 <LandscapeVOYO onVideoMode={handleVideoModeEnter} />
               ) : (
                 <PortraitVOYO

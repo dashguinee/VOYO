@@ -776,14 +776,14 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap, onEnterVideoMode
               jank-causing version). Eliminates the landscape leak Dash
               spotted in v803. */}
           <div
-            className="fixed inset-0 z-40 bg-black/95"
+            className="fixed inset-0 z-[65] bg-black/95"
             style={{ backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)' }}
             onClick={onClose}
           />
 
           {/* Main Container - Full width, no portal zones */}
           <div
-            className="fixed inset-x-0 top-0 bottom-0 z-50 flex flex-col pb-0"
+            className="fixed inset-x-0 top-0 bottom-0 z-[70] flex flex-col pb-0"
             style={{
               paddingTop: 'max(16px, env(safe-area-inset-top, 16px))',
               paddingInline: 'max(1rem, var(--safe-x))',
