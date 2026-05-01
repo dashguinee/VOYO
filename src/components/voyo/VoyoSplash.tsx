@@ -8,96 +8,67 @@ interface VoyoSplashProps {
   minDuration?: number;
 }
 
-export const VoyoSplash = ({ onComplete, minDuration = 1200 }: VoyoSplashProps) => {
+export const VoyoSplash = ({ onComplete, minDuration = 900 }: VoyoSplashProps) => {
   const [phase, setPhase] = useState<'bar' | 'pulse' | 'out'>('bar');
-  const [isDataReady, setIsDataReady] = useState(false);
-  const hasCompletedRef = useRef(false);
-  const isDataReadyRef = useRef(false);
+  const doneRef = useRef(false);
 
   const initDownloads = useDownloadStore((s) => s.initialize);
-  const trackPreferences = usePreferenceStore((s) => s.trackPreferences);
+  // Touch selector to mount the store — do NOT put in effect deps (object
+  // reference changes every render after initDownloads mutates the store,
+  // causing an infinite re-run loop).
+  usePreferenceStore((s) => s.trackPreferences);
 
-  // Store init in background
+  // Init stores once on mount. Hard 3s cap — never blocks the splash.
   useEffect(() => {
+    let cancelled = false;
     const run = async () => {
       try {
-        devLog('BOOT: init stores…');
+        devLog('BOOT: init stores');
         await Promise.race([
           initDownloads(),
-          new Promise((_, r) => setTimeout(() => r(new Error('timeout')), 3000)),
-        ]).catch((e) => devWarn('BOOT: IndexedDB timeout', e));
-        devLog('BOOT: stores ready', Object.keys(trackPreferences).length, 'tracks');
+          new Promise<void>((_, r) => setTimeout(() => r(new Error('timeout')), 3000)),
+        ]).catch((e) => devWarn('BOOT: init timeout', e));
       } catch (e) {
         devWarn('BOOT: init error', e);
       }
-      isDataReadyRef.current = true;
-      setIsDataReady(true);
+      if (!cancelled) devLog('BOOT: stores ready');
     };
-    run();
-    const safety = setTimeout(() => {
-      if (!isDataReadyRef.current) { isDataReadyRef.current = true; setIsDataReady(true); }
-    }, 5000);
-    return () => clearTimeout(safety);
-  }, [initDownloads, trackPreferences]);
+    void run();
+    return () => { cancelled = true; };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Phase 1 → bar for minDuration, then switch to pulse
+  // Phase timeline: bar → pulse → out → done
+  // Total guaranteed exit: minDuration + 500ms pulse + 220ms fade
   useEffect(() => {
-    const t = setTimeout(() => setPhase('pulse'), minDuration);
-    return () => clearTimeout(t);
-  }, [minDuration]);
-
-  // Phase 2 → pulse for 500ms, then fade out
-  useEffect(() => {
-    if (phase !== 'pulse') return;
-    const t = setTimeout(() => setPhase('out'), 500);
-    return () => clearTimeout(t);
-  }, [phase]);
-
-  // Phase 3 → out: wait for data + fade, then complete
-  useEffect(() => {
-    if (phase !== 'out' || hasCompletedRef.current) return;
-    if (!isDataReady) return;
-    hasCompletedRef.current = true;
-    const t = setTimeout(() => onComplete(), 220);
-    return () => clearTimeout(t);
-  }, [phase, isDataReady, onComplete]);
-
-  // If data isn't ready yet when we hit 'out', wait for it
-  useEffect(() => {
-    if (phase === 'out' && isDataReady && !hasCompletedRef.current) {
-      hasCompletedRef.current = true;
-      const t = setTimeout(() => onComplete(), 220);
-      return () => clearTimeout(t);
-    }
-  }, [phase, isDataReady, onComplete]);
-
-  const isOut = phase === 'out';
+    const t1 = setTimeout(() => setPhase('pulse'), minDuration);
+    const t2 = setTimeout(() => setPhase('out'),   minDuration + 500);
+    const t3 = setTimeout(() => {
+      if (doneRef.current) return;
+      doneRef.current = true;
+      onComplete();
+    }, minDuration + 500 + 220);
+    return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div
       className="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-[#050508]"
       style={{
-        opacity: isOut ? 0 : 1,
+        opacity: phase === 'out' ? 0 : 1,
         transition: 'opacity 220ms ease-out',
-        pointerEvents: isOut ? 'none' : 'auto',
+        pointerEvents: phase === 'out' ? 'none' : 'auto',
         fontFamily: "'Satoshi', system-ui, sans-serif",
       }}
     >
       {phase === 'bar' && (
         <div className="flex flex-col items-center gap-2">
-          <h1
-            className="text-lg font-bold text-white"
-            style={{ letterSpacing: '0.05em' }}
-          >
+          <h1 className="text-lg font-bold text-white" style={{ letterSpacing: '0.05em' }}>
             VOYO
           </h1>
           <div className="w-10 h-[2px] rounded-full overflow-hidden bg-white/5">
             <div
               className="h-full w-full rounded-full"
-              style={{
-                background: 'rgba(139, 92, 246, 0.5)',
-                animation: 'voyo-loading-bar 1.5s ease-in-out infinite',
-              }}
+              style={{ background: 'rgba(139, 92, 246, 0.5)', animation: 'voyo-loading-bar 1.5s ease-in-out infinite' }}
             />
           </div>
         </div>
