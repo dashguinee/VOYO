@@ -4690,28 +4690,40 @@ export const VoyoPortraitPlayer = ({
       catch { return 0; }
     })()
   );
+  // Per-gesture label show counts — max 2 shows each then label is suppressed.
+  // Same localStorage pattern as likeCountRef so it persists across sessions.
+  const GESTURE_SHOW_KEY = 'voyo-gesture-label-shows-v1';
+  const gestureShowsRef = useRef<Record<string, number>>(
+    (() => { try { return JSON.parse(localStorage.getItem(GESTURE_SHOW_KEY) || '{}'); } catch { return {}; } })()
+  );
+  const MAX_LABEL_SHOWS = 2;
   const swipeLabelRef = useRef<HTMLDivElement>(null);
   const setSwipeLabel = (text: string, color: string, alpha: number, dx = 0, accent?: string) => {
     const el = swipeLabelRef.current;
     if (!el) return;
+    // Canonical key for show-count gating
+    const gk = text.startsWith('I like') || text === 'like' ? 'like'
+      : text === 'Discover' ? 'discover'
+      : text === 'Drift' ? 'drift'
+      : 'less';
+    if ((gestureShowsRef.current[gk] ?? 0) >= MAX_LABEL_SHOWS) {
+      el.style.opacity = '0';
+      return;
+    }
     el.textContent = text;
     el.style.color = color;
     // v881 — optional ACCENT halo (cross-tone). For LIKE we mix in
-    // a soft purple so the pill reads unisex, not gendered pink.
+    // a soft purple so the text reads unisex, not gendered pink.
     if (accent) {
       el.style.textShadow = `0 0 10px ${color}, 0 0 16px ${color}, 0 0 22px ${accent}`;
-      el.style.boxShadow = `0 0 22px ${color}33, 0 0 30px ${accent}28, 0 4px 16px rgba(0,0,0,0.45)`;
     } else {
       el.style.textShadow = `0 0 10px ${color}, 0 0 18px ${color}`;
-      el.style.boxShadow = `0 0 22px ${color}33, 0 4px 16px rgba(0,0,0,0.45)`;
     }
-    el.style.opacity = String(alpha);
+    // Entry 30% dimmer: alpha*(0.7 + 0.3*alpha) → approaches 1.0 only at full commit.
+    // Fades out naturally when clearSwipeLabel sets opacity back to 0.
+    el.style.opacity = String(alpha * (0.7 + 0.3 * alpha));
     const scale = 0.9 + alpha * 0.14;
     const ty = 6 - alpha * 6;
-    // Take-Out style: label rides INTO the active wall side. Big
-    // horizontal shift puts it inside the glow zone (~16% from
-    // viewport edge). Magnitude scales with eased alpha so it
-    // emerges with the wall, not slammed in pre-commit.
     const sideShift = (window.innerWidth ? window.innerWidth : 360) * 0.34;
     const tx = dx === 0 ? 0 : (dx > 0 ? sideShift : -sideShift) * alpha;
     el.style.transform = `translate(${tx}px, ${ty}px) scale(${scale})`;
@@ -4792,6 +4804,10 @@ export const VoyoPortraitPlayer = ({
       likeCountRef.current += 1;
       try { localStorage.setItem(LIKE_COUNT_KEY, String(likeCountRef.current)); }
       catch { /* private mode / quota */ }
+      // Gesture label show-count: suppress after MAX_LABEL_SHOWS commits.
+      gestureShowsRef.current['like'] = (gestureShowsRef.current['like'] ?? 0) + 1;
+      try { localStorage.setItem(GESTURE_SHOW_KEY, JSON.stringify(gestureShowsRef.current)); }
+      catch { /* private mode */ }
       if (el) {
         el.style.transition = 'transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.18s ease-out';
         el.style.transform = `translateX(${dx * 0.3}px) rotate(${dir * 4}deg) scale(1.04)`;
@@ -4804,6 +4820,13 @@ export const VoyoPortraitPlayer = ({
       }
       return;
     }
+
+    // Gesture label show-count for non-like actions.
+    const gkMap: Record<string, string> = { skip: 'drift', discover: 'discover', less: 'less' };
+    const gk = gkMap[action] ?? action;
+    gestureShowsRef.current[gk] = (gestureShowsRef.current[gk] ?? 0) + 1;
+    try { localStorage.setItem(GESTURE_SHOW_KEY, JSON.stringify(gestureShowsRef.current)); }
+    catch { /* private mode */ }
 
     if (el) {
       el.style.transition = 'transform 0.28s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.24s ease-out';
@@ -5533,10 +5556,8 @@ export const VoyoPortraitPlayer = ({
         }}
       />
 
-      {/* v874 GESTURE PILL — refined. Repositioned from old bottom 22%
-          to TOP region (above the BigCenterCard, in the natural
-          eye-line). Drifts counter-swipe so it stays visible while
-          the finger pulls the wall side. Glass language preserved. */}
+      {/* Gesture label — bare glowing text, lives INSIDE the wall fade.
+          No pill. Shows max 2× per gesture then suppressed (gestureShowsRef). */}
       <div
         aria-hidden
         style={{
@@ -5553,12 +5574,6 @@ export const VoyoPortraitPlayer = ({
           ref={swipeLabelRef}
           aria-hidden
           style={{
-            background: 'rgba(15,15,22,0.62)',
-            backdropFilter: 'blur(20px) saturate(150%)',
-            WebkitBackdropFilter: 'blur(20px) saturate(150%)',
-            border: '1px solid rgba(255,255,255,0.10)',
-            borderRadius: 999,
-            padding: '7px 18px',
             fontFamily: "'Fraunces', 'Satoshi', system-ui, serif",
             fontStyle: 'italic',
             fontSize: 15,
@@ -5566,9 +5581,8 @@ export const VoyoPortraitPlayer = ({
             letterSpacing: '0.05em',
             opacity: 0,
             transform: 'translate(0, 4px) scale(0.92)',
-            transition: 'opacity 220ms cubic-bezier(0.16, 1, 0.3, 1), transform 320ms cubic-bezier(0.16, 1, 0.3, 1), color 200ms ease, box-shadow 220ms ease',
+            transition: 'opacity 220ms cubic-bezier(0.16, 1, 0.3, 1), transform 320ms cubic-bezier(0.16, 1, 0.3, 1), color 200ms ease',
             textShadow: '0 0 10px currentColor, 0 0 18px currentColor',
-            boxShadow: '0 0 0 rgba(0,0,0,0)',
             whiteSpace: 'nowrap',
           }}
         />
