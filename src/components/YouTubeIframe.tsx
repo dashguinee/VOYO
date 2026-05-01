@@ -20,6 +20,7 @@ import { devLog } from '../utils/logger';
 import { pipService } from '../services/pipService';
 import { haptics } from '../utils/haptics';
 import { CubeGestureHint } from './voyo/CubeGestureHint';
+import { ScrollText } from './ui/ScrollText';
 
 const YT_STATES = {
   UNSTARTED: -1,
@@ -1307,12 +1308,15 @@ export const YouTubeIframe = memo(() => {
           <p style={{ color: 'rgba(216,180,254,0.9)', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.15em', fontWeight: 500, marginBottom: 2 }}>
             Now Playing
           </p>
-          <p style={{ color: 'white', fontWeight: 'bold', fontSize: videoTarget === 'landscape' ? 18 : 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {currentTrack.title}
-          </p>
-          <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: videoTarget === 'landscape' ? 14 : 11, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {currentTrack.artist}
-          </p>
+          <ScrollText
+            text={currentTrack.title}
+            style={{ color: 'white', fontWeight: 'bold', fontSize: videoTarget === 'landscape' ? 18 : 13, marginBottom: 1 }}
+          />
+          <ScrollText
+            text={currentTrack.artist}
+            style={{ color: 'rgba(255,255,255,0.7)', fontSize: videoTarget === 'landscape' ? 14 : 11 }}
+            delay={5400}
+          />
         </div>
       )}
 
@@ -1331,12 +1335,15 @@ export const YouTubeIframe = memo(() => {
           <p style={{ color: 'rgba(251,191,36,0.9)', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.15em', fontWeight: 500, marginBottom: 2 }}>
             Next Up
           </p>
-          <p style={{ color: 'white', fontWeight: 'bold', fontSize: videoTarget === 'landscape' ? 18 : 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {upcomingTrack.title}
-          </p>
-          <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: videoTarget === 'landscape' ? 14 : 11, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {upcomingTrack.artist}
-          </p>
+          <ScrollText
+            text={upcomingTrack.title}
+            style={{ color: 'white', fontWeight: 'bold', fontSize: videoTarget === 'landscape' ? 18 : 13, marginBottom: 1 }}
+          />
+          <ScrollText
+            text={upcomingTrack.artist}
+            style={{ color: 'rgba(255,255,255,0.7)', fontSize: videoTarget === 'landscape' ? 14 : 11 }}
+            delay={5400}
+          />
         </div>
       )}
 
@@ -1352,12 +1359,15 @@ export const YouTubeIframe = memo(() => {
             pointerEvents: 'none',
           }}
         >
-          <p style={{ color: 'white', fontWeight: 'bold', fontSize: videoTarget === 'landscape' ? 20 : 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {currentTrack.title}
-          </p>
-          <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: videoTarget === 'landscape' ? 16 : 10, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {currentTrack.artist}
-          </p>
+          <ScrollText
+            text={currentTrack.title}
+            style={{ color: 'white', fontWeight: 'bold', fontSize: videoTarget === 'landscape' ? 20 : 12, marginBottom: 1 }}
+          />
+          <ScrollText
+            text={currentTrack.artist}
+            style={{ color: 'rgba(255,255,255,0.7)', fontSize: videoTarget === 'landscape' ? 16 : 10 }}
+            delay={5400}
+          />
         </div>
       )}
 
