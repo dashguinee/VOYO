@@ -1512,6 +1512,16 @@ const injectElementStyles = () => {
       0%,100% { box-shadow: 0 0 8px rgba(212,160,83,0.20); }
       50%     { box-shadow: 0 0 18px rgba(212,160,83,0.55), inset 0 0 10px rgba(212,160,83,0.25); }
     }
+    @keyframes voyo-played-shimmer {
+      0%   { transform: translateX(-160%) skewX(-18deg); opacity: 0; }
+      4%   { opacity: 0.55; }
+      30%  { transform: translateX(230%) skewX(-18deg); opacity: 0; }
+      100% { transform: translateX(230%) skewX(-18deg); opacity: 0; }
+    }
+    @keyframes voyo-nextup-pulse {
+      0%,100% { opacity: 0.7; }
+      50%     { opacity: 1.0; }
+    }
   `;
   document.head.appendChild(el);
 };
@@ -1536,10 +1546,19 @@ const SmallCard = memo(({ track, onTap, isPlayed, isNextUp }: {
   // Entrance: different stagger per element so rails don't all pulse in unison
   const phaseDelay = element === 'fire' ? '0s' : element === 'water' ? '0.9s' : element === 'earth' ? '0.45s' : '1.4s';
 
+  // Element-specific dark tint for played cards — each element has its own
+  // colour temperature so played fire tracks feel warm-charcoal, water cool-navy, etc.
+  const PLAYED_TINT: Record<TrackElement, string> = {
+    fire:  'rgba(90,22,8,0.72)',
+    water: 'rgba(8,18,70,0.70)',
+    earth: 'rgba(55,30,4,0.70)',
+    air:   'rgba(22,18,48,0.68)',
+  };
+
   return (
   <button
     className="relative flex-shrink-0 group"
-    style={{ width: 78, height: 78 }}
+    style={{ width: 78, height: 78, opacity: isPlayed ? 0.58 : 1, transition: 'opacity 300ms ease' }}
     onClick={onTap}
   >
     {/* Apple-style double-sided ring glow on the next-up queue card.
@@ -1595,27 +1614,42 @@ const SmallCard = memo(({ track, onTap, isPlayed, isNextUp }: {
         }}
       />
 
-      {/* PLAYED TINT — deeper purple wash over the whole card so the
-          eye can immediately separate "already heard" from "queued."
-          No more checkmark badge. */}
+      {/* PLAYED TINT — element-temperature dark wash. Each element has its
+          own colour so played fire tracks feel warm-charcoal, water cool-navy.
+          Outer button opacity (0.58) does the heavy fading; this overlay
+          adds the tonal identity. */}
       {isPlayed && (
-        <div
-          className="absolute inset-0 pointer-events-none"
-          style={{
-            background: 'linear-gradient(160deg, rgba(76,29,149,0.55) 0%, rgba(45,18,90,0.65) 60%, rgba(28,12,55,0.78) 100%)',
-            mixBlendMode: 'multiply',
-          }}
-        />
+        <>
+          <div
+            className="absolute inset-0 pointer-events-none"
+            style={{
+              background: PLAYED_TINT[element],
+              mixBlendMode: 'multiply',
+            }}
+          />
+          {/* Shimmer sweep — a thin vinyl-glint highlight every ~7s */}
+          <div
+            className="absolute inset-0 pointer-events-none overflow-hidden rounded-2xl"
+          >
+            <div
+              style={{
+                position: 'absolute',
+                top: 0, bottom: 0,
+                width: '28%',
+                background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.13), transparent)',
+                animation: `voyo-played-shimmer 7s ease-in-out ${phaseDelay} infinite`,
+              }}
+            />
+          </div>
+        </>
       )}
 
-      {/* QUEUED TINT — subtler bronze warmth on tracks waiting their
-          turn. Just enough to feel "next" without competing with the
-          played-tint contrast. */}
+      {/* QUEUED TINT — warm bronze at the base, keeps the "coming" feel. */}
       {!isPlayed && (
         <div
           className="absolute inset-0 pointer-events-none"
           style={{
-            background: 'linear-gradient(180deg, transparent 55%, rgba(212,160,83,0.18) 100%)',
+            background: 'linear-gradient(180deg, transparent 50%, rgba(212,160,83,0.22) 100%)',
           }}
         />
       )}
@@ -4524,18 +4558,26 @@ export const VoyoPortraitPlayer = ({
   // how the "scroll lock" requirement is satisfied — the inactive side
   // is too small to grab, so only one rail scrolls at a time.
   // After ~3.5s of idle the row balances back to 50/50.
-  const [topRowActive, setTopRowActive] = useState<'history' | 'queue' | null>(null);
-  const topRowIdleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const unifiedRowRef = useRef<HTMLDivElement>(null);
+  const depthRafRef = useRef<number | null>(null);
 
-  const activateTopRow = useCallback((side: 'history' | 'queue') => {
-    setTopRowActive(side);
-    if (topRowIdleTimer.current) clearTimeout(topRowIdleTimer.current);
-    topRowIdleTimer.current = setTimeout(() => setTopRowActive(null), 3500);
+  const applyDepth = useCallback(() => {
+    const row = unifiedRowRef.current;
+    if (!row) return;
+    const cx = row.scrollLeft + row.offsetWidth / 2;
+    row.querySelectorAll<HTMLDivElement>('[data-depth-card]').forEach(card => {
+      const cardCx = card.offsetLeft + card.offsetWidth / 2;
+      const dist = Math.abs(cardCx - cx);
+      const t = Math.min(1, dist / (row.offsetWidth * 0.55));
+      card.style.transform = `scale(${(1 - t * 0.10).toFixed(3)})`;
+    });
   }, []);
 
   useEffect(() => {
+    // Run once on mount so depth is correct before first scroll
+    requestAnimationFrame(applyDepth);
     return () => {
-      if (topRowIdleTimer.current) clearTimeout(topRowIdleTimer.current);
+      if (depthRafRef.current) cancelAnimationFrame(depthRafRef.current);
     };
   }, []);
 
@@ -5487,11 +5529,11 @@ export const VoyoPortraitPlayer = ({
     };
   }, []);
 
-  // Get actual history tracks (these are "played")
-  const historyTracks = history.slice(-2).map(h => h.track).reverse();
+  // Show last 5 played (oldest → newest, so right edge = most recent)
+  const historyTracks = history.slice(-5).map(h => h.track).reverse();
 
-  // Get actual queue tracks (FIX 1: Show more queue items for better UX)
-  const queueTracks = queue.slice(0, 3).map(q => q.track);
+  // Show next 5 in queue
+  const queueTracks = queue.slice(0, 5).map(q => q.track);
 
   // Track IDs that have been played (for overlay)
   const playedTrackIds = new Set(history.map(h => h.track.id));
@@ -5790,7 +5832,7 @@ export const VoyoPortraitPlayer = ({
            and the warm-it-up philosophy says: when the user goes video,
            the queue gets out of the way. */}
       <div
-        className="px-3 flex items-start gap-3 z-20 h-[14%]"
+        className="z-20 h-[14%]"
         style={{
           paddingTop: 'max(calc(env(safe-area-inset-top, 0px) + 4px), 36px)',
           opacity: videoTarget === 'portrait'
@@ -5804,92 +5846,74 @@ export const VoyoPortraitPlayer = ({
         }}
       >
 
-        {/* Left: History (scrollable). Width shifts based on active side.
-            v789: overflow-x clipped (carousel needs horizontal containment)
-            but overflow-y visible — was clipping next-up bronze halo on
-            small cards (Dash 2026-04-28). */}
+        {/* Unified history + queue row. Played cards (faded, element shimmer)
+            flow left → right oldest→newest; queue cards follow with golden
+            next-up ring. Depth wobble: scroll handler scales cards by
+            distance from viewport center — closest = full size, edges shrink
+            ~10% — giving the carousel a gentle sense of depth without 3D. */}
         <div
-          className="relative"
-          style={{
-            flexBasis: topRowActive === 'history' ? '68%' : topRowActive === 'queue' ? '30%' : '49%',
-            transition: 'flex-basis 0.42s cubic-bezier(0.16, 1, 0.3, 1)',
-            overflowX: 'clip',
-            overflowY: 'visible',
-          }}
+          ref={unifiedRowRef}
           data-no-canvas-swipe="true"
-          onPointerDown={() => activateTopRow('history')}
-          onTouchStart={() => activateTopRow('history')}
-        >
-          <div
-            className="flex gap-3 overflow-x-auto scrollbar-hide"
-            style={{
-              // Proximity (not mandatory) — matches HomeFeed rails so
-              // small horizontal gestures let the user peek at the next
-              // item without forced snap.
-              scrollSnapType: 'x proximity',
-              pointerEvents: topRowActive === 'queue' ? 'none' : 'auto',
-            }}
-            onScroll={() => activateTopRow('history')}
-          >
-            {historyTracks.length > 0 ? (
-              historyTracks.slice(0, 10).map((track, i) => (
-                <div key={track.id} style={{ scrollSnapAlign: 'start', flexShrink: 0 }}>
-                  <SmallCard track={track} onTap={() => playTrack(track)} isPlayed={true} />
-                </div>
-              ))
-            ) : (
-              // Empty state - show DASH placeholders
-              <>
-                <DashPlaceholder onClick={onSearch} label="history" />
-                <DashPlaceholder onClick={onSearch} label="history" />
-              </>
-            )}
-          </div>
-        </div>
-
-        {/* Right: Queue + Add (scrollable, reversed). Side-shift mirror.
-            v789: same overflow fix as History — vertical overflow visible
-            so the next-up halo isn't clipped at the top. */}
-        <div
-          className="relative"
+          className="overflow-x-auto no-scrollbar w-full"
           style={{
-            flexBasis: topRowActive === 'queue' ? '68%' : topRowActive === 'history' ? '30%' : '49%',
-            transition: 'flex-basis 0.42s cubic-bezier(0.16, 1, 0.3, 1)',
-            overflowX: 'clip',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            paddingInline: 4,
+            paddingBottom: 6,
+            scrollSnapType: 'x proximity',
             overflowY: 'visible',
           }}
-          onPointerDown={() => activateTopRow('queue')}
-          onTouchStart={() => activateTopRow('queue')}
+          onScroll={() => {
+            if (depthRafRef.current) cancelAnimationFrame(depthRafRef.current);
+            depthRafRef.current = requestAnimationFrame(applyDepth);
+          }}
         >
-          <div
-            className="flex gap-3 overflow-x-auto scrollbar-hide flex-row-reverse"
-            style={{
-              scrollSnapType: 'x proximity',
-              pointerEvents: topRowActive === 'history' ? 'none' : 'auto',
-            }}
-            onScroll={() => activateTopRow('queue')}
-          >
-            {/* Add button always visible at end. Was bg-white/5 + border
-                white/5 — nearly invisible on dark canvas. Bumped border to
-                purple/20 so empty-queue users can see the affordance. */}
+          {historyTracks.length > 0 ? (
+            historyTracks.map((track) => (
+              <div
+                key={`h-${track.id}`}
+                data-depth-card
+                style={{ flexShrink: 0, scrollSnapAlign: 'start', transition: 'transform 140ms ease-out', transformOrigin: 'center center' }}
+              >
+                <SmallCard track={track} onTap={() => playTrack(track)} isPlayed={true} />
+              </div>
+            ))
+          ) : (
+            <>
+              <DashPlaceholder onClick={onSearch} label="history" />
+              <DashPlaceholder onClick={onSearch} label="history" />
+            </>
+          )}
+
+          {queueTracks.length > 0 ? (
+            queueTracks.map((track, i) => (
+              <div
+                key={`q-${track.id}`}
+                data-depth-card
+                style={{ flexShrink: 0, scrollSnapAlign: 'start', transition: 'transform 140ms ease-out', transformOrigin: 'center center' }}
+              >
+                <SmallCard
+                  track={track}
+                  onTap={() => playTrack(track)}
+                  isPlayed={playedTrackIds.has(track.id)}
+                  isNextUp={i === 0}
+                />
+              </div>
+            ))
+          ) : (
+            <DashPlaceholder onClick={onSearch} label="bucket" />
+          )}
+
+          {/* Add to queue — faint, at the far right */}
+          <div style={{ flexShrink: 0 }}>
             <button
               onClick={onSearch}
-              className="flex-shrink-0 w-[70px] h-[70px] rounded-2xl bg-white/10 border border-purple-500/20 flex items-center justify-center hover:bg-white/15 transition-colors"
-              style={{ scrollSnapAlign: 'start' }}
+              className="w-[62px] h-[62px] rounded-2xl flex items-center justify-center"
+              style={{ border: '1px dashed rgba(255,255,255,0.12)', background: 'rgba(255,255,255,0.03)' }}
             >
-              <Plus size={24} className="text-gray-400" />
+              <Plus size={18} className="text-white/25" />
             </button>
-
-            {queueTracks.length > 0 ? (
-              queueTracks.slice(0, 10).map((track, i) => (
-                <div key={track.id} style={{ scrollSnapAlign: 'start', flexShrink: 0 }}>
-                  <SmallCard track={track} onTap={() => playTrack(track)} isPlayed={playedTrackIds.has(track.id)} isNextUp={i === 0} />
-                </div>
-              ))
-            ) : (
-              // Empty queue - show DASH placeholder
-              <DashPlaceholder onClick={onSearch} label="bucket" />
-            )}
           </div>
         </div>
       </div>
