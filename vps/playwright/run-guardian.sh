@@ -12,5 +12,8 @@ exec >>"$LOG" 2>&1
 export VOYO_SUPABASE_URL="${VOYO_SUPABASE_URL:-https://anmgyxhnyhbyxzpjhxgx.supabase.co}"
 export VOYO_SUPABASE_ANON_KEY="${VOYO_SUPABASE_ANON_KEY:-}"
 
+# Browsers installed under ubuntu user — works whether cron runs as root or ubuntu
+export PLAYWRIGHT_BROWSERS_PATH=/home/ubuntu/.cache/ms-playwright
+
 cd /opt/voyo/playwright
 node session-guardian.js
