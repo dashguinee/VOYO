@@ -503,8 +503,8 @@ function viRowToTrack(row: VideoIntelligenceRow): Track {
     tags: [],
     mood: 'afro',
     region: undefined,
-    oyeScore: row.play_count,
-    createdAt: row.first_seen,
+    oyeScore: row.play_count ?? 0,
+    createdAt: row.first_seen ?? new Date().toISOString(),
   };
 }
 
