@@ -168,6 +168,51 @@ export const VoyoBottomNav = ({ onDahub, onHome, oyoSurface = 'home', playerMode
   const handlePointerDown = (id: string) => setPressedBtn(id);
   const handlePointerUp = () => setPressedBtn(null);
 
+  // -- playerMode: swipe passthrough --
+  // In playerMode the pill must be pointer-events-none so swipes starting in
+  // the bottom zone reach the canvas underneath. Taps on Home/Dahub are
+  // restored via document-level hit-testing: track pointerdown position,
+  // confirm tap on pointerup (< 12px dx, < 20px dy, < 400ms), then check
+  // if the release landed inside a button rect.
+  const homeButtonRef = useRef<HTMLButtonElement>(null);
+  const dahubButtonRef = useRef<HTMLButtonElement>(null);
+  const onHomeRef = useRef(onHome);
+  const onDahubRef = useRef(onDahub);
+  useEffect(() => { onHomeRef.current = onHome; }, [onHome]);
+  useEffect(() => { onDahubRef.current = onDahub; }, [onDahub]);
+
+  useEffect(() => {
+    if (!playerMode) return;
+    let tapStart: { x: number; y: number; t: number } | null = null;
+
+    const onDown = (e: PointerEvent) => {
+      tapStart = { x: e.clientX, y: e.clientY, t: Date.now() };
+    };
+    const onUp = (e: PointerEvent) => {
+      const s = tapStart;
+      tapStart = null;
+      if (!s) return;
+      if (Math.abs(e.clientX - s.x) > 12 || Math.abs(e.clientY - s.y) > 20 || Date.now() - s.t > 400) return;
+      const x = e.clientX, y = e.clientY;
+      const homeRect = homeButtonRef.current?.getBoundingClientRect();
+      if (homeRect && x >= homeRect.left && x <= homeRect.right && y >= homeRect.top && y <= homeRect.bottom) {
+        onHomeRef.current?.();
+        return;
+      }
+      const dahubRect = dahubButtonRef.current?.getBoundingClientRect();
+      if (dahubRect && x >= dahubRect.left && x <= dahubRect.right && y >= dahubRect.top && y <= dahubRect.bottom) {
+        onDahubRef.current?.();
+      }
+    };
+
+    document.addEventListener('pointerdown', onDown, { passive: true });
+    document.addEventListener('pointerup', onUp, { passive: true });
+    return () => {
+      document.removeEventListener('pointerdown', onDown);
+      document.removeEventListener('pointerup', onUp);
+    };
+  }, [playerMode]);
+
   // -- OYO long-press summon (Phase 2) --
   // Auto-pick the surface from current playback context if caller didn't override.
   const inferredSurface: InvocationSurface =
@@ -275,7 +320,7 @@ export const VoyoBottomNav = ({ onDahub, onHome, oyoSurface = 'home', playerMode
     >
       <div
         ref={holdNavRef}
-        className="pointer-events-auto max-w-[280px] mx-auto h-[54px] rounded-full flex items-center justify-around px-3"
+        className={`${playerMode ? 'pointer-events-none' : 'pointer-events-auto'} max-w-[280px] mx-auto h-[54px] rounded-full flex items-center justify-around px-3`}
         style={
           playerMode
             ? {
@@ -294,6 +339,7 @@ export const VoyoBottomNav = ({ onDahub, onHome, oyoSurface = 'home', playerMode
       >
         {/* LEFT: HOME */}
         <button
+          ref={homeButtonRef}
           className="relative flex items-center justify-center flex-1 h-full"
           onPointerDown={() => handlePointerDown('home')}
           onPointerUp={handlePointerUp}
@@ -452,6 +498,7 @@ export const VoyoBottomNav = ({ onDahub, onHome, oyoSurface = 'home', playerMode
 
         {/* RIGHT: DAHUB */}
         <button
+          ref={dahubButtonRef}
           className="relative flex items-center justify-center flex-1 h-full"
           onPointerDown={() => handlePointerDown('dahub')}
           onPointerUp={handlePointerUp}
