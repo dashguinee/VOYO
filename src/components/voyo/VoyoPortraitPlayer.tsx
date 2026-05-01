@@ -6637,7 +6637,7 @@ export const VoyoPortraitPlayer = ({
                 className="text-[10px] font-black tracking-[0.18em] uppercase"
                 style={{ color: 'rgba(230,197,138,0.62)' }}
               >
-                Mix Board
+                Vibes Board
               </span>
               <span style={{ color: 'rgba(230,197,138,0.20)' }}>·</span>
               {/* v842 (Dash 2026-04-29 "fade your vibes text by 10%"):
