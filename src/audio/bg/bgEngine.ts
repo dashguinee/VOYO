@@ -156,20 +156,20 @@ export function useBgEngine(params: UseBgEngineParams): BgEngineApi {
     // Pure silence (-∞ dBFS) doesn't exempt the tab from intensive throttling,
     // so after ~30 s of silence Chrome throttles MessageChannel itself — the
     // heartbeat dies. A sub-perceptible tone keeps the tab above Chrome's
-    // ~-60 dBFS audibility threshold. At volume=0.02 (2 %) on the keeper
-    // element the total output is ≈ 0.05 × 0.02 = 0.001 = -60 dBFS: right
-    // at the edge. Using 5 % amplitude keeps us safely above the threshold
-    // while remaining completely inaudible when real music is playing, and
-    // barely perceptible as a faint hum when the gap occurs in silence.
+    // ~-60 dBFS audibility threshold.
+    // Math: 5 % WAV amplitude → peak = 0.05 × 127 ≈ 6 PCM units → -26 dBFS.
+    // × volume=0.1 → output = 0.005 full-scale → -46 dBFS.
+    // 14 dB margin above Chrome's ~-60 dBFS threshold. Inaudible during music
+    // (music typically -14 LUFS → keeper is 32 dB below music level).
     const keeperUrl = makeWav(8000, 2, (i) =>
       Math.round(128 + 0.05 * 127 * Math.sin(2 * Math.PI * 200 * i / 8000))
     );
 
     // Bypass keeper: raw <audio>, NOT connected to the Web Audio chain.
-    // Volume 0.02 (2 %) → total output ≈ -54 dBFS → above Chrome's threshold.
+    // Volume 0.1 → output -46 dBFS → 14 dB above Chrome's audibility threshold.
     const keeper = document.createElement('audio');
     keeper.loop = true;
-    keeper.volume = 0.02;
+    keeper.volume = 0.1;
     keeper.src = keeperUrl;
     bypassKeeperRef.current = keeper;
 
