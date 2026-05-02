@@ -566,7 +566,14 @@ export const YouTubeIframe = memo(() => {
             // track. Now we poll R2 HEAD up to 25s. If it lands, don't skip
             // — useHotSwap moves us off iframe to R2 audio. If 25s elapses
             // without R2, give up and skip (the track is genuinely dead).
-            devLog('[YouTubeIframe] Embed blocked — waiting for R2 (up to 25s):', videoId);
+            //
+            // Hide the iframe immediately so YouTube's related-video autoplay
+            // (which fires even with rel=0 when the primary video can't embed)
+            // doesn't show/play unrelated content while we wait for R2.
+            // Cover art takes over; hot-swap re-shows video once R2 lands.
+            store.setVideoBlocked(true);
+            store.setVideoTarget('hidden');
+            devLog('[YouTubeIframe] Embed blocked — hiding iframe, waiting for R2 (up to 25s):', videoId);
             const blockedTrackId = videoId;
             const blockedAt = Date.now();
             const R2_GRACE_MS = 25_000;
