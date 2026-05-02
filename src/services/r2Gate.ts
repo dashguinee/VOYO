@@ -84,9 +84,18 @@ export async function queueForExtraction(
 const R2_AUDIO = 'https://voyo-edge.dash-webtv.workers.dev/audio';
 export async function r2HasTrack(trackId: string, quality: string = 'high'): Promise<boolean> {
   try {
-    // R2 stores by raw YouTube ID; trackId may be a VOYO ID.
-    const res = await fetch(`${R2_AUDIO}/${getYouTubeId(trackId)}?q=${quality}`, { method: 'HEAD' });
-    return res.ok;
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 3000);
+    try {
+      // R2 stores by raw YouTube ID; trackId may be a VOYO ID.
+      const res = await fetch(`${R2_AUDIO}/${getYouTubeId(trackId)}?q=${quality}`, {
+        method: 'HEAD',
+        signal: ctrl.signal,
+      });
+      return res.ok;
+    } finally {
+      clearTimeout(timer);
+    }
   } catch {
     return false;
   }

@@ -873,7 +873,7 @@ export const AudioPlayer = () => {
         const bgNext = usePlayerStore.getState().predictNextTrack();
         if (bgNext) {
           const bgNextId = getYouTubeId(bgNext.trackId || bgNext.id || '');
-          if (bgNextId && bgNextId !== nextPreloadedIdRef.current && useR2KnownStore.getState().has(bgNextId)) {
+          if (bgNextId && bgNextId !== nextPreloadedIdRef.current) {
             nextPreloadedIdRef.current = bgNextId;
             if (!nextTrackPreloadRef.current) {
               const preEl = document.createElement('audio');
@@ -883,6 +883,7 @@ export const AudioPlayer = () => {
             }
             nextTrackPreloadRef.current.src = `${R2_AUDIO}/${bgNextId}?q=high`;
             nextTrackPreloadRef.current.load();
+            nextTrackPreloadRef.current.oncanplay = () => { useR2KnownStore.getState().add(bgNextId); };
           }
         }
       }
@@ -957,7 +958,7 @@ export const AudioPlayer = () => {
       const nextTrack = usePlayerStore.getState().predictNextTrack();
       if (nextTrack) {
         const nextYtId = getYouTubeId(nextTrack.trackId || nextTrack.id || '');
-        if (nextYtId && nextYtId !== nextPreloadedIdRef.current && useR2KnownStore.getState().has(nextYtId)) {
+        if (nextYtId && nextYtId !== nextPreloadedIdRef.current) {
           nextPreloadedIdRef.current = nextYtId;
           if (!nextTrackPreloadRef.current) {
             const el = document.createElement('audio');
@@ -967,6 +968,7 @@ export const AudioPlayer = () => {
           }
           nextTrackPreloadRef.current.src = `${R2_AUDIO}/${nextYtId}?q=high`;
           nextTrackPreloadRef.current.load(); // explicit load() triggers BG fetch
+          nextTrackPreloadRef.current.oncanplay = () => { useR2KnownStore.getState().add(nextYtId); };
         }
       }
     }
