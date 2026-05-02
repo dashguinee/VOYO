@@ -113,6 +113,18 @@ export function useBgEngine(params: UseBgEngineParams): BgEngineApi {
   // 2-second silent WAV blob URL. Set on mount, revoked on unmount.
   // 8kHz 8-bit mono = ~16KB — cheap to hold in memory.
   const silentKeeperUrlRef = useRef<string | null>(null);
+  // Bypass keeper: a second <audio> element NOT connected to the Web Audio
+  // chain. It plays silentWav directly to the OS at near-zero volume.
+  // Purpose: maintain OS audio-focus regardless of AudioContext state.
+  // When the AudioContext suspends during a BG track transition, the main
+  // element's audio output drops to zero and Chrome may revoke the tab's
+  // "audible" exemption from intensive throttling — killing the heartbeat MC
+  // and all timer-based recovery. The bypass keeper is always playing (while
+  // isPlaying=true) and is invisible to the AudioContext, so suspension of
+  // the Web Audio chain has no effect on it. Chrome sees continuous audio
+  // activity from the tab and keeps throttling exemptions active.
+  const bypassKeeperRef = useRef<HTMLAudioElement | null>(null);
+
   useEffect(() => {
     const sampleRate = 8000;
     const durationSec = 2;
@@ -139,14 +151,40 @@ export function useBgEngine(params: UseBgEngineParams): BgEngineApi {
     // 8-bit unsigned PCM uses 128 as silent midpoint.
     for (let i = 0; i < numSamples; i++) dv.setUint8(44 + i, 128);
     const blob = new Blob([ab], { type: 'audio/wav' });
-    silentKeeperUrlRef.current = URL.createObjectURL(blob);
+    const url = URL.createObjectURL(blob);
+    silentKeeperUrlRef.current = url;
+
+    // Bypass keeper: raw <audio>, no Web Audio connection, volume near-zero.
+    const keeper = document.createElement('audio');
+    keeper.loop = true;
+    keeper.volume = 0.001;
+    keeper.src = url;
+    bypassKeeperRef.current = keeper;
+
     return () => {
-      if (silentKeeperUrlRef.current) {
-        URL.revokeObjectURL(silentKeeperUrlRef.current);
-        silentKeeperUrlRef.current = null;
-      }
+      keeper.pause();
+      keeper.src = '';
+      bypassKeeperRef.current = null;
+      URL.revokeObjectURL(url);
+      silentKeeperUrlRef.current = null;
     };
   }, []);
+
+  // Start/stop the bypass keeper with isPlaying. First play() must happen
+  // inside a user-gesture context — since isPlaying only becomes true after
+  // the user taps play, this useEffect fires within that gesture window.
+  useEffect(() => {
+    const keeper = bypassKeeperRef.current;
+    if (!keeper) return;
+    if (isPlaying) {
+      keeper.play().catch(() => {
+        // NotAllowedError if gesture context expired — non-critical, main
+        // element's engageSilentWav path still maintains the audio session.
+      });
+    } else {
+      keeper.pause();
+    }
+  }, [isPlaying]);
 
   // ── ENGAGE SILENT WAV (one helper used everywhere) ───────────────────
   const engageSilentWav = (reason: string, trackId?: string | null) => {
@@ -157,6 +195,8 @@ export function useBgEngine(params: UseBgEngineParams): BgEngineApi {
       el.loop = true;
       el.src = url;
       el.play().catch(() => {});
+      // Also ensure the bypass keeper is running — belt-and-suspenders.
+      bypassKeeperRef.current?.play().catch(() => {});
       trace('silent_wav_engage', trackId || null, { why: reason });
       playbackState.transition('bridge', trackId ?? null, `silent_wav_${reason}`);
     } catch {}
