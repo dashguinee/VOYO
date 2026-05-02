@@ -522,6 +522,16 @@ export const AudioPlayer = () => {
           if (ctx2 && ctx2.state !== 'running') ctx2.resume().catch(() => {});
           el2.play().catch(() => {});
           logPlaybackEvent({ event_type: 'play_start', track_id: currentTrack.trackId, source: 'r2', meta: { subtype: 'bg_r2_direct' } });
+          // Safety valve: if canplay never fires (R2 slow in BG), clear the
+          // swap flag so the heartbeat gain-rescue + kick can intervene.
+          // Mirrors the knownInR2Sync BG branch above.
+          if (bgSwapSafetyTimerRef.current) clearTimeout(bgSwapSafetyTimerRef.current);
+          bgSwapSafetyTimerRef.current = setTimeout(() => {
+            bgSwapSafetyTimerRef.current = null;
+            if (isStale() || !trackSwapInProgressRef.current) return;
+            trackSwapInProgressRef.current = false;
+            logPlaybackEvent({ event_type: 'trace', track_id: currentTrack.trackId, meta: { subtype: 'bg_swap_safety_released' } });
+          }, 5_000);
         } else {
           // FG: probe R2 first. Found → R2 fast path. Missed → iframe,
           // useHotSwap upgrades to R2 the moment extraction lands.
