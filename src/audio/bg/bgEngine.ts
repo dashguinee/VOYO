@@ -126,46 +126,59 @@ export function useBgEngine(params: UseBgEngineParams): BgEngineApi {
   const bypassKeeperRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
-    const sampleRate = 8000;
-    const durationSec = 2;
-    const numSamples = sampleRate * durationSec;
-    const bufSize = 44 + numSamples;
-    const ab = new ArrayBuffer(bufSize);
-    const dv = new DataView(ab);
-    const writeStr = (off: number, s: string) => {
-      for (let i = 0; i < s.length; i++) dv.setUint8(off + i, s.charCodeAt(i));
+    const makeWav = (sampleRate: number, durationSec: number, fillFn: (i: number) => number) => {
+      const numSamples = sampleRate * durationSec;
+      const bufSize = 44 + numSamples;
+      const ab = new ArrayBuffer(bufSize);
+      const dv = new DataView(ab);
+      const writeStr = (off: number, s: string) => {
+        for (let i = 0; i < s.length; i++) dv.setUint8(off + i, s.charCodeAt(i));
+      };
+      writeStr(0, 'RIFF'); dv.setUint32(4, bufSize - 8, true);
+      writeStr(8, 'WAVE'); writeStr(12, 'fmt ');
+      dv.setUint32(16, 16, true); dv.setUint16(20, 1, true);
+      dv.setUint16(22, 1, true);  dv.setUint32(24, sampleRate, true);
+      dv.setUint32(28, sampleRate, true); dv.setUint16(32, 1, true);
+      dv.setUint16(34, 8, true);  writeStr(36, 'data');
+      dv.setUint32(40, numSamples, true);
+      for (let i = 0; i < numSamples; i++) dv.setUint8(44 + i, fillFn(i));
+      return URL.createObjectURL(new Blob([ab], { type: 'audio/wav' }));
     };
-    writeStr(0, 'RIFF');
-    dv.setUint32(4, bufSize - 8, true);
-    writeStr(8, 'WAVE');
-    writeStr(12, 'fmt ');
-    dv.setUint32(16, 16, true);
-    dv.setUint16(20, 1, true);
-    dv.setUint16(22, 1, true);
-    dv.setUint32(24, sampleRate, true);
-    dv.setUint32(28, sampleRate, true);
-    dv.setUint16(32, 1, true);
-    dv.setUint16(34, 8, true);
-    writeStr(36, 'data');
-    dv.setUint32(40, numSamples, true);
-    // 8-bit unsigned PCM uses 128 as silent midpoint.
-    for (let i = 0; i < numSamples; i++) dv.setUint8(44 + i, 128);
-    const blob = new Blob([ab], { type: 'audio/wav' });
-    const url = URL.createObjectURL(blob);
-    silentKeeperUrlRef.current = url;
 
-    // Bypass keeper: raw <audio>, no Web Audio connection, volume near-zero.
+    // Main silentWav: truly silent (all-128 PCM = 0 AC amplitude).
+    // Used by engageSilentWav on the main audio element which routes through
+    // the Web Audio chain at full gain — must be silent to avoid audible click.
+    const silentUrl = makeWav(8000, 2, () => 128);
+    silentKeeperUrlRef.current = silentUrl;
+
+    // Keeper WAV: 200 Hz tone at 5 % amplitude (-26 dBFS).
+    // Chrome's audibility check is OS power-level (dBFS), not element state.
+    // Pure silence (-∞ dBFS) doesn't exempt the tab from intensive throttling,
+    // so after ~30 s of silence Chrome throttles MessageChannel itself — the
+    // heartbeat dies. A sub-perceptible tone keeps the tab above Chrome's
+    // ~-60 dBFS audibility threshold. At volume=0.02 (2 %) on the keeper
+    // element the total output is ≈ 0.05 × 0.02 = 0.001 = -60 dBFS: right
+    // at the edge. Using 5 % amplitude keeps us safely above the threshold
+    // while remaining completely inaudible when real music is playing, and
+    // barely perceptible as a faint hum when the gap occurs in silence.
+    const keeperUrl = makeWav(8000, 2, (i) =>
+      Math.round(128 + 0.05 * 127 * Math.sin(2 * Math.PI * 200 * i / 8000))
+    );
+
+    // Bypass keeper: raw <audio>, NOT connected to the Web Audio chain.
+    // Volume 0.02 (2 %) → total output ≈ -54 dBFS → above Chrome's threshold.
     const keeper = document.createElement('audio');
     keeper.loop = true;
-    keeper.volume = 0.001;
-    keeper.src = url;
+    keeper.volume = 0.02;
+    keeper.src = keeperUrl;
     bypassKeeperRef.current = keeper;
 
     return () => {
       keeper.pause();
       keeper.src = '';
       bypassKeeperRef.current = null;
-      URL.revokeObjectURL(url);
+      URL.revokeObjectURL(silentUrl);
+      URL.revokeObjectURL(keeperUrl);
       silentKeeperUrlRef.current = null;
     };
   }, []);
