@@ -15,7 +15,7 @@
  *       via ENERGY_TO_VIBE — vibe_afro_heat, vibe_chill_vibes, etc.
  *
  * The conductor doesn't re-architect the existing hot/discovery pools.
- * It filters the in-memory raw pool (getRawCachedPool) and returns
+ * It queries the full 324K video_intelligence DB via RPC and returns
  * candidates that fit the current moment. Falls back to existing pools
  * if filtering produces < MIN_CONDUCTOR_POOL tracks.
  *
@@ -31,7 +31,7 @@ import {
   selectArc, getArc, PHASE_ORDER, ENERGY_TO_VIBE,
 } from './arc';
 import {
-  getRawCachedPool, rawEntryToTrack, warmConductorPool, type RawPoolEntry,
+  getConductorCandidates, rawEntryToTrack, type RawPoolEntry,
 } from '../databaseDiscovery';
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -359,17 +359,9 @@ export async function conductorFetch(
   excludeIds: Set<string>,
   limit: number = 10,
 ): Promise<Track[]> {
-  let pool = getRawCachedPool();
-  if (!pool.length) {
-    // Pool not yet warm (cold start race). Load it inline — getCachedTracks
-    // is cheap (~100ms) and subsequent calls hit the 60s in-memory cache.
-    await warmConductorPool();
-    pool = getRawCachedPool();
-    if (!pool.length) return [];
-  }
-
-  // Step 1: exclude played IDs
-  pool = pool.filter(e => !excludeIds.has(e.youtube_id));
+  // Full 324K DB via RPC — no r2_cached gate. Player handles non-R2 tracks
+  // via iframe + hotswap. excludeIds applied inside getConductorCandidates.
+  const pool = await getConductorCandidates(Array.from(excludeIds), limit * 8);
   if (!pool.length) return [];
 
   // Step 2 (W): energy filter via vibe columns

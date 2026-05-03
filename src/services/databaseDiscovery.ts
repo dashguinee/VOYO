@@ -572,9 +572,68 @@ export function getRawCachedPool(): RawPoolEntry[] {
   return _cachedPoolCache.rows as unknown as RawPoolEntry[];
 }
 
-/** Prime the in-memory conductor pool without returning tracks. */
-export async function warmConductorPool(): Promise<void> {
-  await getCachedTracks(1, 'heat_score');
+// ── Conductor full-DB pool ────────────────────────────────────────────────
+
+let _conductorPoolCache: { rows: RawPoolEntry[]; at: number } | null = null;
+const CONDUCTOR_POOL_TTL_MS = 120_000; // 2 min — longer than R2 pool, full DB changes slowly
+
+/**
+ * Fetch conductor candidates from the full 324K video_intelligence DB via
+ * the get_discovery_tracks RPC. No r2_cached gate — the player handles
+ * non-R2 tracks via iframe + hotswap. Returns RawPoolEntry[] with vibe
+ * columns nulled (RPC does server-side vibe matching, in-memory cultural /
+ * tier / echo filters still apply to the returned set).
+ */
+export async function getConductorCandidates(
+  excludeIds: string[] = [],
+  limit: number = 60,
+): Promise<RawPoolEntry[]> {
+  if (!supabaseConfigured) return [];
+
+  const now = Date.now();
+  if (!_conductorPoolCache || now - _conductorPoolCache.at > CONDUCTOR_POOL_TTL_MS) {
+    try {
+      const essence = getVibeEssence();
+      const dominant = essence.dominantVibes[0] || 'afro_heat';
+      const { data, error } = await getSupabase().rpc('get_discovery_tracks', {
+        p_afro_heat: essence.afro_heat,
+        p_chill: essence.chill,
+        p_party: essence.party,
+        p_workout: essence.workout,
+        p_late_night: essence.late_night,
+        p_dominant_vibe: dominant,
+        p_limit: Math.max(limit, 100), // always fetch ≥100 for conductor diversity
+        p_exclude_ids: [],
+        p_played_ids: [],
+      });
+      if (error || !data) return [];
+      _conductorPoolCache = {
+        rows: (data as DiscoveryTrack[]).map(r => ({
+          youtube_id: r.youtube_id,
+          title: r.title,
+          artist: r.artist,
+          thumbnail_url: r.thumbnail_url ?? null,
+          artist_tier: r.artist_tier ?? null,
+          primary_genre: r.primary_genre ?? null,
+          cultural_tags: r.cultural_tags ?? null,
+          heat_score: r.heat_score ?? null,
+          // vibe columns not returned by RPC — energy filter falls back to
+          // unfiltered pool gracefully (MIN_CONDUCTOR_POOL guard in conductorFetch)
+          vibe_afro_heat: null,
+          vibe_chill_vibes: null,
+          vibe_party_mode: null,
+          vibe_late_night: null,
+          vibe_workout: null,
+        })),
+        at: now,
+      };
+    } catch {
+      return [];
+    }
+  }
+
+  const excludeSet = new Set(excludeIds);
+  return _conductorPoolCache.rows.filter(r => !excludeSet.has(r.youtube_id));
 }
 
 /** Convert a RawPoolEntry to Track for playback. */

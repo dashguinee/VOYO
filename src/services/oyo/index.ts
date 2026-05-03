@@ -108,8 +108,8 @@ function recordRemoteSignal(trackId: string, action: SignalAction): void {
 //            changed (e.g. afternoon→evening). Reset the DJ session so the
 //            next track uses the correct arc, and purge the stale conductor
 //            queue (tracks were pre-selected for the OLD arc).
-// Refill   : fires freely in both FG and BG. conductorFetch is in-memory
-//            (getRawCachedPool) — no network cost, no throttle risk.
+// Refill   : fires freely in FG. In BG, conductorFetch calls the full-DB
+//            RPC (2min TTL cache) — one fetch warms the pool for many tracks.
 
 const ARC_STALE_MS = 20 * 60 * 1000; // 20 min
 
