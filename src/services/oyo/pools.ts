@@ -45,8 +45,11 @@ function seededShuffle<T extends Track>(tracks: T[], seed: number): T[] {
   return [...tracks].sort((a, b) => {
     const keyA = a.trackId || a.id || '';
     const keyB = b.trackId || b.id || '';
-    const hashA = ((keyA.charCodeAt(0) || 0) * 31 + (keyA.charCodeAt(1) || 0)) * seed % 1_000_003;
-    const hashB = ((keyB.charCodeAt(0) || 0) * 31 + (keyB.charCodeAt(1) || 0)) * seed % 1_000_003;
+    // JS % preserves sign — use double-modulo to guarantee positive hashes
+    // and consistent sort order. Negative hashes produced undefined ordering.
+    const raw = 1_000_003;
+    const hashA = (((keyA.charCodeAt(0) || 0) * 31 + (keyA.charCodeAt(1) || 0)) * seed % raw + raw) % raw;
+    const hashB = (((keyB.charCodeAt(0) || 0) * 31 + (keyB.charCodeAt(1) || 0)) * seed % raw + raw) % raw;
     return hashA - hashB;
   });
 }
