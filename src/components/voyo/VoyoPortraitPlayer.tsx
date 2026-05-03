@@ -4204,44 +4204,26 @@ const DiscoGlow = memo(({ exiting = false, onExitComplete }: {
   };
 
   return (
-    <>
-      <div
-        className="fixed inset-0 pointer-events-none"
-        style={{
-          zIndex: 48,
-          boxShadow: settled && !exiting
-            ? 'inset 0 0 90px rgba(139,92,246,0.10), inset 0 0 30px rgba(139,92,246,0.06)'
-            : undefined,
-          animation: exiting
-            ? 'disco-glow-exit 2.4s ease-in-out forwards'
-            : settled
-            ? 'none'
-            : 'disco-glow-pulse 2s ease-in-out 3 forwards',
-        }}
-        onAnimationEnd={handleAnimEnd}
-      />
-      {(!settled || exiting) && (
-        <style>{`
-          @keyframes disco-glow-pulse {
-            0%, 100% { box-shadow: inset 0 0 90px rgba(139,92,246,0.08), inset 0 0 30px rgba(139,92,246,0.04); }
-            50%       { box-shadow: inset 0 0 90px rgba(139,92,246,0.38), inset 0 0 40px rgba(139,92,246,0.18); }
-          }
-          @keyframes disco-glow-exit {
-            0%   { box-shadow: inset 0 0 90px rgba(139,92,246,0.10), inset 0 0 30px rgba(139,92,246,0.06); }
-            16%  { box-shadow: inset 0 0 90px rgba(139,92,246,0.35), inset 0 0 40px rgba(139,92,246,0.18); }
-            33%  { box-shadow: inset 0 0 90px rgba(139,92,246,0.05), inset 0 0 20px rgba(139,92,246,0.03); }
-            50%  { box-shadow: inset 0 0 90px rgba(139,92,246,0.28), inset 0 0 36px rgba(139,92,246,0.14); }
-            66%  { box-shadow: inset 0 0 90px rgba(139,92,246,0.04), inset 0 0 16px rgba(139,92,246,0.02); }
-            83%  { box-shadow: inset 0 0 90px rgba(139,92,246,0.18), inset 0 0 26px rgba(139,92,246,0.09); }
-            100% { box-shadow: inset 0 0 0 transparent; }
-          }
-          @keyframes disco-dot-pulse {
-            0%, 100% { opacity: 0.6; transform: scale(1); }
-            50%       { opacity: 1; transform: scale(1.5); }
-          }
-        `}</style>
-      )}
-    </>
+    // key forces a remount when exiting starts: guarantees the browser
+    // sees a fresh element with the new animation rather than patching
+    // the existing one (which can silently skip animationend if the
+    // element previously had animation:none in the settled state).
+    <div
+      key={exiting ? 'exit' : 'enter'}
+      className="fixed inset-0 pointer-events-none"
+      style={{
+        zIndex: 48,
+        boxShadow: settled && !exiting
+          ? 'inset 0 0 90px rgba(139,92,246,0.10), inset 0 0 30px rgba(139,92,246,0.06)'
+          : undefined,
+        animation: exiting
+          ? 'disco-glow-exit 2.4s ease-in-out forwards'
+          : settled
+          ? 'none'
+          : 'disco-glow-pulse 2s ease-in-out 3 forwards',
+      }}
+      onAnimationEnd={handleAnimEnd}
+    />
   );
 });
 DiscoGlow.displayName = 'DiscoGlow';

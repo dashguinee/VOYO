@@ -55,6 +55,10 @@ async function queueUpsertForPreWarm(
   const url = import.meta.env.VITE_SUPABASE_URL;
   const key = import.meta.env.VITE_SUPABASE_ANON_KEY;
   if (!url || !key) return;
+  // Decode vyo_* to raw YouTube ID before sending to DB — the queue
+  // table's youtube_id column expects a plain 11-char YouTube ID; storing
+  // a vyo_<base64> value creates a row the worker can never claim.
+  const ytId = getYouTubeId(track.trackId);
   // Use bump_queue_priority RPC (migration 022) — atomic GREATEST escalation
   // so user clicks at p=10 beat any prior prefetch at p=7. Also resets
   // failed rows back to pending on user intent.
@@ -66,7 +70,7 @@ async function queueUpsertForPreWarm(
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      p_youtube_id: track.trackId,
+      p_youtube_id: ytId,
       p_priority:   priority,
       p_title:      track.title ?? null,
       p_artist:     track.artist ?? null,
@@ -106,6 +110,10 @@ export async function ensureTrackReady(
   // For cold tracks it forces p>=10 so the lane jumps it to front.
   queueUpsertForPreWarm(track, sessionId, opts.priority ?? 10).catch(() => {});
 
+  // Decode once — all downstream URLs (R2 HEAD, queue poll) need the raw
+  // YouTube ID. vyo_<base64> prefixes are rejected by the edge worker.
+  const ytId = getYouTubeId(track.trackId);
+
   // Fast path: R2 already has it → return immediately (caller plays via
   // audio.src = R2 URL or lets iframe start first with hot-swap later).
   // v938: also populate r2KnownStore on HEAD success. Without this, the
@@ -114,10 +122,11 @@ export async function ensureTrackReady(
   // (line 327) reads false → falls through to its own slow probe path.
   // Net effect: pre-warm worked, but next-track-tap still paid 100-1500ms
   // for a redundant HEAD probe. One markR2Known call closes that gap.
+
   try {
-    const res = await fetch(`${R2_EDGE}/${track.trackId}?q=high`, { method: 'HEAD' });
+    const res = await fetch(`${R2_EDGE}/${ytId}?q=high`, { method: 'HEAD' });
     if (res.ok) {
-      markR2Known(getYouTubeId(track.trackId));
+      markR2Known(ytId);
       return;
     }
   } catch { /* fall through to poll */ }
@@ -129,9 +138,9 @@ export async function ensureTrackReady(
   const start = Date.now();
   while (Date.now() - start < SEARCH_WAIT_MS) {
     try {
-      const res = await fetch(`${R2_EDGE}/${track.trackId}?q=high`, { method: 'HEAD' });
+      const res = await fetch(`${R2_EDGE}/${ytId}?q=high`, { method: 'HEAD' });
       if (res.ok) {
-        markR2Known(getYouTubeId(track.trackId));
+        markR2Known(ytId);
         return;
       }
     } catch { /* transient */ }
@@ -139,7 +148,7 @@ export async function ensureTrackReady(
     if (supaUrl && supaKey) {
       try {
         const r = await fetch(
-          `${supaUrl}/rest/v1/voyo_upload_queue?youtube_id=eq.${track.trackId}&select=status`,
+          `${supaUrl}/rest/v1/voyo_upload_queue?youtube_id=eq.${ytId}&select=status`,
           { headers: { apikey: supaKey, Authorization: `Bearer ${supaKey}` } },
         );
         const rows = await r.json();

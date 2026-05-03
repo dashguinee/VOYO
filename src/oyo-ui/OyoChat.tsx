@@ -111,7 +111,7 @@ export const OyoChat = forwardRef<OyoChatHandle, OyoChatProps>(function OyoChat(
       setTurns((prev) => [
         ...prev,
         { id: makeId(), role: 'user', text: message, timestamp: Date.now() },
-        { id: makeId(), role: 'oyo', text: 'Stay good. I got you.', timestamp: Date.now() },
+        { id: makeId(), role: 'oyo', text: 'Later.', timestamp: Date.now() },
       ]);
       setInput('');
       setTimeout(() => onDismiss(), 900);
@@ -143,7 +143,7 @@ export const OyoChat = forwardRef<OyoChatHandle, OyoChatProps>(function OyoChat(
         {
           id: makeId(),
           role: 'oyo',
-          text: "Mmm. Lost the signal a sec. Try me again?",
+          text: "Signal dropped. Say it again.",
           timestamp: Date.now(),
         },
       ]);

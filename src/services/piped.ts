@@ -154,67 +154,77 @@ export interface PipedTrack {
 
 /**
  * Search for albums (playlists) on YouTube via Piped
+ * Tries each instance in order — primary is often 502 under load.
  */
 export async function searchAlbums(query: string, limit: number = 10): Promise<PipedPlaylist[]> {
-  try {
-    const response = await fetch(
-      `${PIPED_API}/search?q=${encodeURIComponent(query + ' album')}&filter=playlists`,
-      { signal: AbortSignal.timeout(15000) }
-    );
+  for (const instance of PIPED_INSTANCES) {
+    try {
+      const response = await fetch(
+        `${instance}/search?q=${encodeURIComponent(query + ' album')}&filter=playlists`,
+        { signal: AbortSignal.timeout(10000) }
+      );
 
-    if (!response.ok) {
-      throw new Error(`Album search failed: ${response.status}`);
+      if (!response.ok) {
+        devWarn(`Piped instance ${instance} returned ${response.status} for album search`);
+        continue;
+      }
+
+      const data = await response.json();
+
+      return (data.items || [])
+        .filter((item: any) => item.type === 'playlist')
+        .slice(0, limit)
+        .map((item: any) => ({
+          id: extractPlaylistId(item.url),
+          name: cleanAlbumName(item.name),
+          artist: cleanArtistName(item.uploaderName || item.uploader || 'Unknown Artist'),
+          thumbnail: item.thumbnail || '',
+          trackCount: item.videos || 0,
+        }));
+    } catch (error) {
+      devWarn(`Piped instance ${instance} failed for album search:`, error);
+      continue;
     }
-
-    const data = await response.json();
-
-    return (data.items || [])
-      .filter((item: any) => item.type === 'playlist')
-      .slice(0, limit)
-      .map((item: any) => ({
-        id: extractPlaylistId(item.url),
-        name: cleanAlbumName(item.name),
-        artist: cleanArtistName(item.uploaderName || item.uploader || 'Unknown Artist'),
-        thumbnail: item.thumbnail || '',
-        trackCount: item.videos || 0,
-      }));
-  } catch (error) {
-    devWarn('Album search failed:', error);
-    return []; // Return empty array, don't crash
   }
+  return []; // All instances failed
 }
 
 /**
  * Get tracks from an album/playlist
+ * Tries each instance in order — primary is often 502 under load.
  */
 export async function getAlbumTracks(playlistId: string): Promise<PipedTrack[]> {
-  try {
-    const response = await fetch(`${PIPED_API}/playlists/${playlistId}`, {
-      signal: AbortSignal.timeout(15000)
-    });
+  for (const instance of PIPED_INSTANCES) {
+    try {
+      const response = await fetch(`${instance}/playlists/${playlistId}`, {
+        signal: AbortSignal.timeout(10000)
+      });
 
-    if (!response.ok) {
-      throw new Error(`Album fetch failed: ${response.status}`);
+      if (!response.ok) {
+        devWarn(`Piped instance ${instance} returned ${response.status} for playlist ${playlistId}`);
+        continue;
+      }
+
+      const data = await response.json();
+
+      if (!data.relatedStreams || !Array.isArray(data.relatedStreams)) {
+        devWarn('Invalid album data structure from', instance);
+        continue;
+      }
+
+      return data.relatedStreams.map((stream: any) => ({
+        videoId: extractVideoId(stream.url),
+        title: stream.title || 'Unknown Track',
+        artist: cleanArtistName(stream.uploaderName || data.uploader || 'Unknown Artist'),
+        duration: stream.duration || 0,
+        thumbnail: stream.thumbnail || data.thumbnailUrl || '',
+      }));
+    } catch (error) {
+      devWarn(`Piped instance ${instance} failed for playlist ${playlistId}:`, error);
+      continue;
     }
-
-    const data = await response.json();
-
-    if (!data.relatedStreams || !Array.isArray(data.relatedStreams)) {
-      devWarn('Invalid album data structure');
-      return [];
-    }
-
-    return data.relatedStreams.map((stream: any) => ({
-      videoId: extractVideoId(stream.url),
-      title: stream.title || 'Unknown Track',
-      artist: cleanArtistName(stream.uploaderName || data.uploader || 'Unknown Artist'),
-      duration: stream.duration || 0,
-      thumbnail: stream.thumbnail || data.thumbnailUrl || '',
-    }));
-  } catch (error) {
-    devWarn('Album fetch failed:', error);
-    return []; // Return empty array, don't crash
   }
+  return []; // All instances failed
 }
 
 /**

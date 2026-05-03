@@ -1,17 +1,15 @@
 /**
- * OYO Island - Voice Search & Chat
+ * OYO Island - Chat & Voice Search
  *
  * Features:
- * 1. Voice Search - Hold to sing/hum, find songs phonetically (Shazam killer)
- * 2. Chat Mode - Text with OYO for requests ("play Burna Boy")
- * 3. Lyrics Preview - Shows current phonetic lyrics
+ * 1. Chat Mode - Text with OYO for requests ("play Burna Boy") — opens immediately on show
+ * 2. Voice Search - Hum/sing to find songs phonetically (reachable via handleVoiceSearch)
+ * 3. Lyrics Preview - Shows current phonetic lyrics when available
  *
- * TAP-TO-SHOW BEHAVIOR:
- * - Starts hidden
- * - Single tap on screen → appears
- * - Auto-hides after 5s of inactivity
- * - Tap OYO → chat opens
- * - Tap mic → voice search
+ * SHOW/HIDE BEHAVIOR:
+ * - Starts hidden; parent controls `visible`
+ * - Single tap on player canvas → appears, opens directly to chat, clears previous history
+ * - × button (or cancel in voice mode) → parent notified via onHide()
  */
 
 import { useState, useEffect, useRef, useCallback, memo } from 'react';
@@ -31,9 +29,6 @@ import { usePlayerStore } from '../../store/playerStore';
 import { app } from '../../services/oyo';
 import { searchAlbums, getAlbumTracks } from '../../services/piped';
 import { pipedTrackToVoyoTrack } from '../../data/tracks';
-
-// Auto-hide timeout
-const AUTO_HIDE_DELAY = 5000; // 5 seconds
 
 async function getCulturalContext(phonetics: string, matchedSong?: string, matchedArtist?: string): Promise<string> {
   try {
@@ -78,51 +73,28 @@ export function OyoIsland({ visible, onHide, onActivity }: OyoIslandProps) {
   const [chatHistory, setChatHistory] = useState<Array<{ role: 'user' | 'oyo'; message: string }>>([]);
   const [lyrics, setLyrics] = useState<EnrichedLyrics | null>(null);
   const [currentLyricSegment, setCurrentLyricSegment] = useState<TranslatedSegment | null>(null);
-  const autoHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const currentTrack = usePlayerStore(state => state.currentTrack);
-  // currentTime is NOT subscribed here — LyricsSegmentSync (render-null sub-component)
-  // handles it in isolation so the ~900-line tree doesn't re-render at 4Hz.
+  // currentTime and currentTrack are NOT subscribed here — LyricsSegmentSync
+  // (render-null sub-component) handles currentTime in isolation so the
+  // OyoIsland body doesn't re-render at 4Hz during playback.
 
   const djProfile = getProfile();
 
-  // Open directly to chat whenever the island becomes visible
+  // Open directly to chat whenever the island becomes visible.
+  // Also clear chat history on each new invocation so users don't land on
+  // stale context from a previous session — OYO always starts fresh.
+  const prevVisibleRef = useRef(false);
   useEffect(() => {
-    if (visible) setMode('chat');
+    if (visible && !prevVisibleRef.current) {
+      setMode('chat');
+      setChatHistory([]);
+    }
+    prevVisibleRef.current = visible;
   }, [visible]);
 
-  // Auto-hide when in collapsed mode and visible
-  useEffect(() => {
-    if (visible && mode === 'collapsed') {
-      // Clear existing timer
-      if (autoHideTimerRef.current) {
-        clearTimeout(autoHideTimerRef.current);
-      }
-      // Set new auto-hide timer
-      autoHideTimerRef.current = setTimeout(() => {
-        onHide();
-      }, AUTO_HIDE_DELAY);
-    }
-
-    return () => {
-      if (autoHideTimerRef.current) {
-        clearTimeout(autoHideTimerRef.current);
-      }
-    };
-  }, [visible, mode, onHide]);
-
-  // Reset timer on any activity
+  // Notify parent of in-island activity (parent may reset its own auto-hide)
   const handleActivity = useCallback(() => {
-    if (autoHideTimerRef.current) {
-      clearTimeout(autoHideTimerRef.current);
-    }
-    if (mode === 'collapsed') {
-      autoHideTimerRef.current = setTimeout(() => {
-        onHide();
-      }, AUTO_HIDE_DELAY);
-    }
     onActivity?.();
-  }, [mode, onHide, onActivity]);
+  }, [onActivity]);
 
   // Lyrics-segment sync is handled by the LyricsSegmentSync sub-component
   // (rendered below). It subscribes to currentTime independently so the
@@ -312,21 +284,13 @@ export function OyoIsland({ visible, onHide, onActivity }: OyoIslandProps) {
     }
   }, [chatInput]);
 
-  // Mode change handlers that also trigger activity
-  const expandToChat = useCallback(() => {
-    handleActivity();
-    setMode('chat');
-  }, [handleActivity]);
-
-  const expandToLyrics = useCallback(() => {
-    handleActivity();
-    setMode('lyrics');
-  }, [handleActivity]);
-
+  // Collapse (×, cancel) = dismiss the island entirely. Calling onHide
+  // lets the parent know to update its showOyoIsland state, which drives
+  // the `visible` prop — so the island unmounts cleanly instead of going
+  // dark while still technically mounted.
   const collapseToIsland = useCallback(() => {
-    setMode('collapsed');
-    // Timer will auto-start via useEffect
-  }, []);
+    onHide();
+  }, [onHide]);
 
   // Don't render if not visible
   if (!visible) return null;
@@ -334,17 +298,6 @@ export function OyoIsland({ visible, onHide, onActivity }: OyoIslandProps) {
   // Render based on mode
   return (
     <>
-      {mode === 'collapsed' && (
-        <CollapsedIsland
-          key="collapsed"
-          djName={djProfile.name}
-          onExpand={expandToChat}
-          onVoicePress={handleVoiceSearch}
-          hasLyrics={!!lyrics}
-          onLyricsPress={expandToLyrics}
-        />
-      )}
-
       {mode === 'voice' && (
         <VoiceIsland
           key="voice"
@@ -409,107 +362,6 @@ const LyricsSegmentSync = memo(({
   return null;
 });
 LyricsSegmentSync.displayName = 'LyricsSegmentSync';
-
-function CollapsedIsland({
-  djName,
-  onExpand,
-  onVoicePress,
-  hasLyrics,
-  onLyricsPress,
-}: {
-  djName: string;
-  onExpand: () => void;
-  onVoicePress: () => void;
-  hasLyrics: boolean;
-  onLyricsPress: () => void;
-}) {
-  // Decontracted = circle/pill (resting). Clean glass bar.
-  // VOYO DNA: same material language as the nav bar glass.
-  return (
-    <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 animate-[voyo-fade-in_0.3s_ease-out]">
-      <div
-        style={{
-          background: 'rgba(10,10,14,0.85)',
-          borderRadius: '999px',
-          padding: '6px 6px 6px 14px',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '10px',
-          backdropFilter: 'blur(24px)',
-          WebkitBackdropFilter: 'blur(24px)',
-          border: '1px solid rgba(255,255,255,0.08)',
-          boxShadow: '0 8px 32px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.04)',
-        }}
-      >
-        {/* DJ Name — tap to expand chat */}
-        <button
-          onClick={onExpand}
-          className="active:scale-95 transition-transform"
-          style={{
-            background: 'none',
-            border: 'none',
-            color: 'rgba(255,255,255,0.85)',
-            fontSize: '13px',
-            fontWeight: '600',
-            cursor: 'pointer',
-            letterSpacing: '0.02em',
-          }}
-        >
-          {djName}
-        </button>
-
-        {/* Action buttons — pill-shaped, minimal */}
-        <div style={{ display: 'flex', gap: '4px' }}>
-          {/* Voice */}
-          <button
-            onClick={onVoicePress}
-            className="active:scale-90 transition-transform"
-            style={{
-              width: '34px',
-              height: '34px',
-              borderRadius: '50%',
-              background: 'rgba(255,255,255,0.06)',
-              border: '1px solid rgba(255,255,255,0.08)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              cursor: 'pointer',
-              color: 'rgba(255,255,255,0.6)',
-              fontSize: '15px',
-            }}
-            aria-label="Voice search"
-          >
-            🎤
-          </button>
-
-          {/* Lyrics (if available) */}
-          {hasLyrics && (
-            <button
-              onClick={onLyricsPress}
-              className="active:scale-90 transition-transform"
-              style={{
-                width: '34px',
-                height: '34px',
-                borderRadius: '50%',
-                background: 'rgba(255,255,255,0.06)',
-                border: '1px solid rgba(255,255,255,0.08)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                cursor: 'pointer',
-                color: 'rgba(255,255,255,0.6)',
-                fontSize: '15px',
-              }}
-              aria-label="Show lyrics"
-            >
-              📝
-            </button>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
 
 
 function VoiceIsland({

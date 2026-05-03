@@ -336,24 +336,33 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap, onEnterVideoMode
     // first; the cleanup below aborts it regardless of which branch
     // we took.
     if (results.length === 0) { setCachedSet(new Set()); return () => { cancelled = true; controller.abort(); }; }
-    const ids = results.map(r => r.voyoId).filter(id => /^[A-Za-z0-9_-]{11}$/.test(id));
-    const checkOne = async (id: string): Promise<[string, boolean]> => {
+    // Build a map of voyoId → decoded YouTube ID. Both plain 11-char YouTube
+    // IDs and vyo_<base64> encoded IDs are included; the edge worker /exists/
+    // endpoint always expects a raw YouTube ID, so we decode before fetching.
+    // The filter drops anything that can't produce a valid 11-char YouTube ID.
+    const idPairs = results
+      .map(r => ({ voyoId: r.voyoId, ytId: getYouTubeId(r.voyoId) }))
+      .filter(({ ytId }) => /^[A-Za-z0-9_-]{11}$/.test(ytId));
+    const checkOne = async ({ voyoId, ytId }: { voyoId: string; ytId: string }): Promise<[string, string, boolean]> => {
       try {
         const timeoutSignal = AbortSignal.timeout(4000);
         // AbortSignal.any combines effect-cleanup abort + per-fetch timeout
         const signal = (AbortSignal as { any?: (sigs: AbortSignal[]) => AbortSignal }).any
           ? (AbortSignal as { any: (sigs: AbortSignal[]) => AbortSignal }).any([controller.signal, timeoutSignal])
           : controller.signal;
-        const res = await fetch(`https://voyo-edge.dash-webtv.workers.dev/exists/${id}`, { signal });
-        if (!res.ok) return [id, false];
+        const res = await fetch(`https://voyo-edge.dash-webtv.workers.dev/exists/${ytId}`, { signal });
+        if (!res.ok) return [voyoId, ytId, false];
         const data = await res.json();
-        return [id, !!(data?.exists && (data?.high || data?.low))];
-      } catch { return [id, false]; }
+        return [voyoId, ytId, !!(data?.exists && (data?.high || data?.low))];
+      } catch { return [voyoId, ytId, false]; }
     };
-    Promise.all(ids.map(checkOne)).then(pairs => {
+    Promise.all(idPairs.map(checkOne)).then(triples => {
       if (cancelled) return;
-      const next = new Set<string>();
-      for (const [id, ok] of pairs) if (ok) next.add(id);
+      const next = new Set<string>();        // keyed by voyoId (for isCached check)
+      const ytIds: string[] = [];            // decoded IDs for r2KnownStore
+      for (const [voyoId, ytId, ok] of triples) {
+        if (ok) { next.add(voyoId); ytIds.push(ytId); }
+      }
       setCachedSet(next);
       // Propagate to the GLOBAL r2KnownStore so AudioPlayer's fast path
       // engages on first tap. Without this sync the search overlay knew
@@ -362,7 +371,7 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap, onEnterVideoMode
       // (silent WAV → HEAD probe → swap, ~100-1500ms). Manifested as
       // "song doesn't play instantly, but the next one from Keep the
       // Energy plays clean" — by then gateToR2 had populated the store.
-      if (next.size) markR2KnownMany(Array.from(next));
+      if (ytIds.length) markR2KnownMany(ytIds);
     });
     return () => { cancelled = true; controller.abort(); };
   }, [results]);
@@ -497,14 +506,25 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap, onEnterVideoMode
           p_late_night: essence.late_night,
           p_limit: 35,
         }).then(
-          ({ data }) => (data || []).map((t: any) => ({
-            voyoId: t.youtube_id,
-            title: t.title,
-            artist: t.artist || 'Unknown Artist',
-            thumbnail: t.thumbnail_url || `https://i.ytimg.com/vi/${t.youtube_id}/hqdefault.jpg`,
-            views: Math.round((t.vibe_match_score || 0) * 100),
-            source: 'library' as const,
-          } as SearchResult)),
+          ({ data }) => (data || []).map((t: any) => {
+            // Decode vyo_* to raw YouTube ID for thumbnail URL construction.
+            // t.youtube_id may be either a plain YT ID or a vyo_<base64> value;
+            // hqdefault.jpg requires the raw 11-char ID. Also, voyo-music-api.fly.dev
+            // is down so we always use ytimg.com as the source of truth — the
+            // SmartImage component will surface the right art regardless.
+            const rawYtId = getYouTubeId(t.youtube_id);
+            const thumbnail = (t.thumbnail_url && !t.thumbnail_url.includes('fly.dev'))
+              ? t.thumbnail_url
+              : `https://i.ytimg.com/vi/${rawYtId}/hqdefault.jpg`;
+            return {
+              voyoId: t.youtube_id,
+              title: t.title,
+              artist: t.artist || 'Unknown Artist',
+              thumbnail,
+              views: Math.round((t.vibe_match_score || 0) * 100),
+              source: 'library' as const,
+            } as SearchResult;
+          }),
           (err: unknown) => { devWarn('[Search] DB error:', err); return []; }
         )
       : Promise.resolve([] as SearchResult[]);
