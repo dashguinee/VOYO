@@ -28,6 +28,10 @@ export interface LyricsCanvasProps {
   currentTime: number;
 }
 
+// Highlight the active line this many seconds before its timestamp —
+// gives the eye time to land on the line before the vocalist sings it.
+const LOOKAHEAD_SEC = 0.30;
+
 export const LyricsCanvas = memo(({ lyrics, currentTime }: LyricsCanvasProps) => {
   const segments = lyrics.translated;
   const seekTo = usePlayerStore((s) => s.seekTo);
@@ -36,9 +40,11 @@ export const LyricsCanvas = memo(({ lyrics, currentTime }: LyricsCanvasProps) =>
   // across re-renders unless the track changes).
   const hookSet = useMemo(() => detectHooks(segments), [segments]);
 
-  // Active bar — the one whose [start, end] window covers currentTime, or
-  // the closest upcoming. Drives the centerpoint of the canvas.
-  const activeIndex = findActiveIndex(segments, currentTime);
+  // Shift time forward so bars go "live" 300ms before their actual start.
+  const effectiveTime = currentTime + LOOKAHEAD_SEC;
+
+  // Active bar driven by the lookahead-shifted clock.
+  const activeIndex = findActiveIndex(segments, effectiveTime);
 
   // Visible window — 2 above + active + 2 below. Limited render cost.
   const visibleIndexes = pickVisibleIndexes(segments.length, activeIndex);
@@ -60,7 +66,7 @@ export const LyricsCanvas = memo(({ lyrics, currentTime }: LyricsCanvasProps) =>
       {visibleIndexes.map((i) => {
         const seg = segments[i];
         if (!seg) return null;
-        const stage = computeBarStage(seg, currentTime);
+        const stage = computeBarStage(seg, effectiveTime);
         const offset = i - activeIndex;
         return (
           <div key={`${seg.startTime}-${i}`} style={{ pointerEvents: 'auto' }}>

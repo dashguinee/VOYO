@@ -18,7 +18,7 @@ export type BarStage =
   | 'gone';     // fully out of the visible window
 
 /** Lookahead window before in-point — the bar arrives this many seconds early. */
-export const ARRIVE_LEAD_SEC = 0.22;
+export const ARRIVE_LEAD_SEC = 0.40;
 /** Decay window after out-point — the bar lingers visibly this long before gone. */
 export const DECAY_TAIL_SEC = 1.2;
 /** How far above/below the live bar we render (in bar-count). */

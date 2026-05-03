@@ -3756,10 +3756,14 @@ interface LyricsOverlayProps {
   track: Track;
   isOpen: boolean;
   onClose: () => void;
-  currentTime: number;
 }
 
-const LyricsOverlay = memo(({ track, isOpen, onClose, currentTime }: LyricsOverlayProps) => {
+const LyricsOverlay = memo(({ track, isOpen, onClose }: LyricsOverlayProps) => {
+  // Subscribe to the live playback clock — the prop passed from the
+  // parent was a one-time snapshot (usePlayerStore.getState()) that
+  // never re-rendered, so lyrics were permanently frozen at t=0.
+  const currentTime = usePlayerStore(s => s.currentTime);
+
   const [lyrics, setLyrics] = useState<EnrichedLyrics | null>(null);
   const [progress, setProgress] = useState<LyricsGenerationProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -7139,7 +7143,6 @@ export const VoyoPortraitPlayer = ({
             track={currentTrack}
             isOpen={showLyricsOverlay}
             onClose={() => setShowLyricsOverlay(false)}
-            currentTime={usePlayerStore.getState().currentTime}
           />
         </div>
       )}
