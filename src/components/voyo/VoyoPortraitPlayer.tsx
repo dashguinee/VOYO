@@ -4187,6 +4187,38 @@ const LyricsOverlay = memo(({ track, isOpen, onClose }: LyricsOverlayProps) => {
 LyricsOverlay.displayName = 'LyricsOverlay';
 
 // ============================================
+// DISCO GLOW — screen-edge ambient pulse when Disco Mode is active
+// ============================================
+const DiscoGlow = memo(() => {
+  const [settled, setSettled] = useState(false);
+  return (
+    <>
+      <div
+        className="fixed inset-0 pointer-events-none"
+        style={{
+          zIndex: 48,
+          // After 3 pulses (6s) onAnimationEnd fires → swap to static settled glow
+          boxShadow: settled
+            ? 'inset 0 0 90px rgba(139,92,246,0.10), inset 0 0 30px rgba(139,92,246,0.06)'
+            : undefined,
+          animation: settled ? 'none' : 'disco-glow-pulse 2s ease-in-out 3 forwards',
+        }}
+        onAnimationEnd={() => setSettled(true)}
+      />
+      {!settled && (
+        <style>{`
+          @keyframes disco-glow-pulse {
+            0%, 100% { box-shadow: inset 0 0 90px rgba(139,92,246,0.08), inset 0 0 30px rgba(139,92,246,0.04); }
+            50%       { box-shadow: inset 0 0 90px rgba(139,92,246,0.38), inset 0 0 40px rgba(139,92,246,0.18); }
+          }
+        `}</style>
+      )}
+    </>
+  );
+});
+DiscoGlow.displayName = 'DiscoGlow';
+
+// ============================================
 // MAIN COMPONENT - Clean V2 Style (matching screenshot)
 // ============================================
 export const VoyoPortraitPlayer = ({
@@ -4203,6 +4235,7 @@ export const VoyoPortraitPlayer = ({
   const isPlaying = usePlayerStore(s => s.isPlaying);
   const videoTarget = usePlayerStore(s => s.videoTarget);
   const setVideoTarget = usePlayerStore(s => s.setVideoTarget);
+  const isDiscoMode = usePlayerStore(s => s.isDiscoMode);
 
   // v890 (Dash 2026-04-29): on pause, always go back to poster.
   // Locks "ON PAUSE we show the classic poster mode static" — without
@@ -7265,7 +7298,12 @@ export const VoyoPortraitPlayer = ({
           />
         </div>
       )}
-      
+
+      {/* DISCO MODE GLOW — screen-edge purple pulse that settles into
+          a subtle ambient halo. 3 soft pulses at 2s each, then forwards
+          fill holds at the low-opacity settled state. pointer-events-none
+          so it never interrupts gestures. */}
+      {isDiscoMode && <DiscoGlow />}
 
     </div>
   );

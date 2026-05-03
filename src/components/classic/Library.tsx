@@ -435,9 +435,10 @@ const SongRow = ({
 
 interface LibraryProps {
   onTrackClick: (track: Track) => void;
+  onDiscoMode?: () => void;
 }
 
-export const Library = ({ onTrackClick }: LibraryProps) => {
+export const Library = ({ onTrackClick, onDiscoMode }: LibraryProps) => {
   const [activeFilter, setActiveFilterRaw] = useState('my-disco');
   // Wrapper: save outgoing filter's scroll position, restore incoming
   // filter's. Runs even on the initial tap-to-switch gesture so user
@@ -648,11 +649,20 @@ export const Library = ({ onTrackClick }: LibraryProps) => {
     // ── Step 1: base set by primary filter ───────────────────────
     let base: Track[];
     switch (activeFilter) {
-      case 'just-played':
+      case 'just-played': {
         // v915 — filter out missing track entries; downstream
         // matchesSearch reads track.title which would null-deref.
-        base = [...history].reverse().map(h => h.track).filter((t): t is Track => !!t);
+        const fromHistory = [...history].reverse().map(h => h.track).filter((t): t is Track => !!t);
+        // Prepend currently playing track if it's not already first —
+        // history only captures tracks after they finish/skip, so the
+        // track playing RIGHT NOW would be missing without this.
+        if (currentTrack && (fromHistory.length === 0 || fromHistory[0].id !== currentTrack.id)) {
+          base = [currentTrack, ...fromHistory];
+        } else {
+          base = fromHistory;
+        }
         break;
+      }
       case 'oyed': {
         // Union of "in your gravity right now": current bucket (queue) ∪
         // Disco (locally cached / offline-ready). Queue first so the
@@ -863,6 +873,7 @@ export const Library = ({ onTrackClick }: LibraryProps) => {
   const playTrackAction = usePlayerStore(s => s.playTrack);
   const clearQueue = usePlayerStore(s => s.clearQueue);
   const addToQueue = usePlayerStore(s => s.addToQueue);
+  const setDiscoMode = usePlayerStore(s => s.setDiscoMode);
   const handlePlayAll = useCallback(() => {
     if (orderedTracks.length === 0) return;
     try { clearQueue?.(); } catch { /* optional */ }
@@ -870,7 +881,11 @@ export const Library = ({ onTrackClick }: LibraryProps) => {
     playTrackAction(first);
     for (const t of rest) { addToQueue(t); }
     setPlayMenuOpen(false);
-  }, [orderedTracks, playTrackAction, clearQueue, addToQueue]);
+    if (activeFilter === 'my-disco') {
+      setDiscoMode(true);
+      onDiscoMode?.();
+    }
+  }, [orderedTracks, playTrackAction, clearQueue, addToQueue, activeFilter, setDiscoMode, onDiscoMode]);
 
   const handleLoopPlay = useCallback((track: Track) => {
     if (inYourLoop.length === 0) return;

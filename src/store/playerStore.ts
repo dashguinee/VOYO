@@ -286,6 +286,9 @@ interface PlayerStore {
   // Flag to signal that a track was selected (from search, etc.) and NowPlaying should open
   shouldOpenNowPlaying: boolean;
 
+  // Disco Mode — set when user hits Play on My Disco in Library; drives the portrait-player glow
+  isDiscoMode: boolean;
+
   // SKEEP (Fast-forward) State
   playbackRate: number; // 1 = normal, 2/4/8 = SKEEP mode
   isSkeeping: boolean; // True when holding skip button
@@ -356,6 +359,7 @@ interface PlayerStore {
   seekTo: (time: number) => void;
   clearSeekPosition: () => void;
   setShouldOpenNowPlaying: (should: boolean) => void;
+  setDiscoMode: (on: boolean) => void;
   setVolume: (volume: number) => void;
   nextTrack: () => void;
   prevTrack: () => void;
@@ -446,6 +450,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   volume: parseInt(localStorage.getItem('voyo-volume') || '100', 10),
   seekPosition: null,
   shouldOpenNowPlaying: false,
+  isDiscoMode: false,
   viewMode: 'card',
   videoTarget: 'hidden',
   videoPolitePosition: 'center',
@@ -788,6 +793,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   clearSeekPosition: () => set({ seekPosition: null }),
 
   setShouldOpenNowPlaying: (should) => set({ shouldOpenNowPlaying: should }),
+  setDiscoMode: (on) => set({ isDiscoMode: on }),
 
   setVolume: (volume) => {
     set({ volume });

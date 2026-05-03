@@ -284,7 +284,10 @@ export const ClassicMode = ({ onSwitchToVOYO, onSearch }: ClassicModeProps) => {
             )
           )}
           {activeTab === 'library' && (
-            <Library onTrackClick={handleTrackClick} />
+            <Library
+              onTrackClick={handleTrackClick}
+              onDiscoMode={() => onSwitchToVOYO()}
+            />
           )}
         </div>
       
