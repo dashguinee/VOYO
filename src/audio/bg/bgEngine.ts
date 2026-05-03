@@ -126,39 +126,43 @@ export function useBgEngine(params: UseBgEngineParams): BgEngineApi {
   const bypassKeeperRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
-    const makeWav = (sampleRate: number, durationSec: number, fillFn: (i: number) => number) => {
+    // 16-bit signed PCM WAV — silence = 0, no decoder ambiguity.
+    // 8-bit unsigned (value 128 = silence) was being misread by Chrome as
+    // signed -128 = full-negative DC, causing an audible buzz through headsets.
+    // ArrayBuffer is zero-initialised by spec, so no fill loop needed.
+    const makeSilentWav = (sampleRate: number, durationSec: number): string => {
       const numSamples = sampleRate * durationSec;
-      const bufSize = 44 + numSamples;
-      const ab = new ArrayBuffer(bufSize);
+      const bufSize = 44 + numSamples * 2;          // 16-bit = 2 bytes/sample
+      const ab = new ArrayBuffer(bufSize);           // all zeros = silence
       const dv = new DataView(ab);
       const writeStr = (off: number, s: string) => {
         for (let i = 0; i < s.length; i++) dv.setUint8(off + i, s.charCodeAt(i));
       };
       writeStr(0, 'RIFF'); dv.setUint32(4, bufSize - 8, true);
       writeStr(8, 'WAVE'); writeStr(12, 'fmt ');
-      dv.setUint32(16, 16, true); dv.setUint16(20, 1, true);
-      dv.setUint16(22, 1, true);  dv.setUint32(24, sampleRate, true);
-      dv.setUint32(28, sampleRate, true); dv.setUint16(32, 1, true);
-      dv.setUint16(34, 8, true);  writeStr(36, 'data');
-      dv.setUint32(40, numSamples, true);
-      for (let i = 0; i < numSamples; i++) dv.setUint8(44 + i, fillFn(i));
+      dv.setUint32(16, 16, true);             // fmt chunk size
+      dv.setUint16(20, 1, true);              // PCM
+      dv.setUint16(22, 1, true);              // mono
+      dv.setUint32(24, sampleRate, true);     // sample rate
+      dv.setUint32(28, sampleRate * 2, true); // byte rate (16-bit mono)
+      dv.setUint16(32, 2, true);              // block align
+      dv.setUint16(34, 16, true);             // bits per sample
+      writeStr(36, 'data');
+      dv.setUint32(40, numSamples * 2, true); // data chunk size
       return URL.createObjectURL(new Blob([ab], { type: 'audio/wav' }));
     };
 
-    // Main silentWav: truly silent (all-128 PCM = 0 AC amplitude).
-    // Used by engageSilentWav on the main audio element which routes through
-    // the Web Audio chain at full gain — must be silent to avoid audible click.
-    const silentUrl = makeWav(8000, 2, () => 128);
+    // 10-second duration: less frequent loop boundary (was 2s every loop).
+    const silentUrl = makeSilentWav(8000, 10);
     silentKeeperUrlRef.current = silentUrl;
 
-    // Bypass keeper: second <audio> using the SAME silent WAV, NOT the Web Audio
-    // chain. Keeps Chrome's audio-activity flag alive during AudioContext gaps.
-    // Chrome's BG throttling exemption is based on playback STATE (playing vs
-    // paused), NOT audibility level — a silent WAV that's actively playing is
-    // sufficient. No tone needed; no volume tricks needed; nothing audible ever.
+    // Bypass keeper: second <audio> NOT connected to Web Audio chain.
+    // volume=0: Chrome's BG throttle exemption checks playback STATE not
+    // audible output — volume=0 is sufficient to hold the exemption while
+    // being completely inaudible through any headset or speaker.
     const keeper = document.createElement('audio');
     keeper.loop = true;
-    keeper.volume = 1.0;
+    keeper.volume = 0;
     keeper.src = silentUrl;
     bypassKeeperRef.current = keeper;
 
