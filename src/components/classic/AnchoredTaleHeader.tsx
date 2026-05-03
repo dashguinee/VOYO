@@ -19,6 +19,7 @@
  */
 
 import { useEffect, useRef, useState, useCallback } from 'react';
+import { useShallow } from 'zustand/shallow';
 import { usePlayerStore } from '../../store/playerStore';
 import { useTrackPoolStore } from '../../store/trackPoolStore';
 
@@ -48,8 +49,8 @@ const ACCENTS: Record<Accent, { bg: string; halo: string; shadow: string; text: 
 
 export const AnchoredTaleHeader = () => {
   const currentTrack = usePlayerStore(s => s.currentTrack);
-  const queue = usePlayerStore(s => s.queue);
-  const history = usePlayerStore(s => s.history);
+  const queue = usePlayerStore(useShallow(s => s.queue));
+  const history = usePlayerStore(useShallow(s => s.history));
   const isPlaying = usePlayerStore(s => s.isPlaying);
   const hotPool = useTrackPoolStore(s => s.hotPool);
 

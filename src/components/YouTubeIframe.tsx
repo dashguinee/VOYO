@@ -12,6 +12,7 @@
  */
 
 import { useEffect, useRef, useCallback, memo, useState, type Dispatch, type SetStateAction } from 'react';
+import { useShallow } from 'zustand/shallow';
 import { usePlayerStore } from '../store/playerStore';
 import { iframeBridge } from '../player/iframeBridge';
 import { markTrackAsFailed } from '../services/trackVerifier';
@@ -178,7 +179,7 @@ export const YouTubeIframe = memo(() => {
   // subscribed at top-level but only referenced inside child components
   // (OverlayTimingSync owns its own subscription) or via setState
   // direct calls below. Pure subscription churn.
-  const queue = usePlayerStore((s) => s.queue);
+  const queue = usePlayerStore(useShallow((s) => s.queue));
 
   const setDuration = usePlayerStore((s) => s.setDuration);
   const nextTrack = usePlayerStore((s) => s.nextTrack);

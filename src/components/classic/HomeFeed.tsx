@@ -3011,15 +3011,15 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onNavVisibilityChange, onSwitc
       const dedup = Array.isArray(discoverMoreTracks) ? discoverMoreTracks : [];
       const usedIds = new Set(dedup.map(t => t?.id).filter(Boolean));
       const filtered = hot.filter(t => t?.id && !usedIds.has(t.id));
-      return [
-        ...filtered.filter(t => favs.has((t.artist ?? '').toLowerCase())),
-        ...filtered.filter(t => !favs.has((t.artist ?? '').toLowerCase())),
-      ].slice(0, 15);
+      // Shuffle within each group so repeated sessions surface variety.
+      const favGroup = seededShuffle(filtered.filter(t => favs.has((t.artist ?? '').toLowerCase())), sessionSeed);
+      const restGroup = seededShuffle(filtered.filter(t => !favs.has((t.artist ?? '').toLowerCase())), sessionSeed + 1);
+      return [...favGroup, ...restGroup].slice(0, 15);
     } catch (e) {
       devWarn('[HomeFeed] oyosPicks failed:', e);
       return [];
     }
-  }, [pools.hot, discoverMoreTracks]);
+  }, [pools.hot, discoverMoreTracks, sessionSeed]);
 
   // African Vibes: West African tags + user's afro-heat preference weighting.
   // Empty pool / any failure → empty shelf, no crash.
@@ -3027,7 +3027,11 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onNavVisibilityChange, onSwitc
     try {
       const pool = Array.isArray(hotPool) ? hotPool : [];
       if (pool.length === 0) return [];
-      const curated = getWestAfricanTracks(pool, 60);
+      // Exclude tracks already shown in OYO's Picks — prevents the same
+      // track (e.g. Oye Africa) appearing in two shelves on the same load.
+      const picksIds = new Set((Array.isArray(oyosPicks) ? oyosPicks : []).map(t => t?.id).filter(Boolean));
+      const deduped = pool.filter(t => t?.id && !picksIds.has(t.id));
+      const curated = getWestAfricanTracks(deduped, 60);
       if (curated.length >= 5) {
         const scored = curated.map(track => ({
           track,
@@ -3037,7 +3041,7 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onNavVisibilityChange, onSwitc
         const topBand = scored.map(s => s.track).slice(0, 30);
         return seededShuffle(topBand, sessionSeed).slice(0, 15);
       }
-      const afroPool = pool.filter(t =>
+      const afroPool = deduped.filter(t =>
         t?.detectedMode === 'afro-heat' || t?.tags?.some((tag: string) =>
           ['afrobeats', 'afro', 'african', 'lagos', 'naija'].includes(tag.toLowerCase())
         )
@@ -3046,12 +3050,12 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onNavVisibilityChange, onSwitc
         return seededShuffle(afroPool as Track[], sessionSeed).slice(0, 15);
       }
       const fallback = getPoolAwareHotTracks(45) || [];
-      return seededShuffle(fallback, sessionSeed).slice(0, 15);
+      return seededShuffle(fallback.filter(t => t?.id && !picksIds.has(t.id)), sessionSeed).slice(0, 15);
     } catch (e) {
       devWarn('[HomeFeed] africanVibes failed:', e);
       return [];
     }
-  }, [hotPool, trackPreferences, sessionSeed]);
+  }, [hotPool, oyosPicks, trackPreferences, sessionSeed]);
 
   // All-Time Classics: shelved Apr 28 2026. The classicsTracks useMemo +
   // related state used to live here. To revive, restore from git history

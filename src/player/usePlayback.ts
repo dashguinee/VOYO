@@ -25,6 +25,7 @@
  */
 
 import { useMemo } from 'react';
+import { useShallow } from 'zustand/shallow';
 import { usePlayerStore } from '../store/playerStore';
 import { ensureTrackReady } from '../services/voyoStream';
 import type { Track } from '../types';
@@ -54,7 +55,7 @@ export function usePlayback(): Playback {
   const isPlaying       = usePlayerStore(s => s.isPlaying);
   const currentTime     = usePlayerStore(s => s.currentTime);
   const duration        = usePlayerStore(s => s.duration);
-  const queue           = usePlayerStore(s => s.queue);
+  const queue           = usePlayerStore(useShallow(s => s.queue));
   const playbackSource  = usePlayerStore(s => s.playbackSource);
 
   // Actions are stable — pull them once.

@@ -7,6 +7,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { Play } from 'lucide-react';
+import { useShallow } from 'zustand/shallow';
 import { usePlayerStore } from '../../store/playerStore';
 import { useAuth } from '../../hooks/useAuth';
 import { friendsAPI, activityAPI, Friend, FriendActivity } from '../../lib/voyo-api';
@@ -158,7 +159,7 @@ export const VoyoLiveCard = ({ onSwitchToVOYO }: VoyoLiveCardProps = {}) => {
   const passedThresholdsCount = usePlayerStore(s =>
     NEXT_SHOW_AT.filter(t => s.progress >= t).length
   );
-  const queue = usePlayerStore(s => s.queue);
+  const queue = usePlayerStore(useShallow(s => s.queue));
   const { dashId, isLoggedIn } = useAuth();
 
   // Real data

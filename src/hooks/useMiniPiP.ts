@@ -24,6 +24,7 @@
  */
 
 import { useRef, useCallback, useEffect } from 'react';
+import { useShallow } from 'zustand/shallow';
 import { usePlayerStore } from '../store/playerStore';
 import { pipService } from '../services/pipService';
 import { getAnalyser } from '../services/audioEngine';
@@ -52,7 +53,7 @@ export function useMiniPiP() {
 
   const currentTrack = usePlayerStore(s => s.currentTrack);
   const isPlaying = usePlayerStore(s => s.isPlaying);
-  const queue = usePlayerStore(s => s.queue);
+  const queue = usePlayerStore(useShallow(s => s.queue));
   const upcomingTrack = queue[0]?.track ?? null;
 
   const isSupported = useCallback(() => {

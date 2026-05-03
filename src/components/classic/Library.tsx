@@ -12,6 +12,7 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { Search, Heart, Clock, Play } from 'lucide-react';
 import { VoyoIcon } from '../ui/VoyoIcon';
+import { useShallow } from 'zustand/shallow';
 import { usePlayerStore } from '../../store/playerStore';
 import { useDownloadStore } from '../../store/downloadStore';
 import { usePreferenceStore } from '../../store/preferenceStore';
@@ -481,7 +482,7 @@ export const Library = ({ onTrackClick }: LibraryProps) => {
   const [ytResults, setYtResults] = useState<SearchResult[]>([]);
   const [ytLoading, setYtLoading] = useState(false);
   const ytSearchIdRef = useRef(0);
-  const queue = usePlayerStore(s => s.queue);
+  const queue = usePlayerStore(useShallow(s => s.queue));
   const history = usePlayerStore(s => s.history);
   const playlists = usePlaylistStore(s => s.playlists);
   const knowledgeTracks = useKnowledgeStore(s => s.tracks);
