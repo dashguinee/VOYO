@@ -19,6 +19,7 @@ import { useTabHistory } from '../../hooks/useTabHistory';
 import { APP_CODES } from '../../lib/dahub/dahub-api';
 import { VoyoLoadOrb } from './VoyoLoadOrb';
 import { VoyoCloseX } from '../ui/VoyoCloseX';
+import { Safe } from '../ui/Safe';
 
 // Lightweight — always loaded
 import { VoyoBottomNav } from './navigation/VoyoBottomNav';
@@ -294,12 +295,21 @@ export const PortraitVOYO = ({ onSearch, onDahub, onHome }: PortraitVOYOProps) =
               <VoyoLoadOrb size={56} />
             </div>
           }>
-            <VoyoPortraitPlayer
-              onVoyoFeed={() => setVoyoTab('feed')}
-              djMode={djMode === 'listening' || djMode === 'responding'}
-              onToggleDJMode={handleListenMode}
-              onSearch={onSearch}
-            />
+            <Safe name="VoyoPortraitPlayer" fallback={
+              <div className="h-full flex items-center justify-center px-6 text-center">
+                <div>
+                  <p className="text-white/60 text-sm mb-1">Player crashed.</p>
+                  <p className="text-white/30 text-xs">Pull to refresh.</p>
+                </div>
+              </div>
+            }>
+              <VoyoPortraitPlayer
+                onVoyoFeed={() => setVoyoTab('feed')}
+                djMode={djMode === 'listening' || djMode === 'responding'}
+                onToggleDJMode={handleListenMode}
+                onSearch={onSearch}
+              />
+            </Safe>
           </Suspense>
         </div>
 
