@@ -2071,22 +2071,27 @@ const StreamCard = memo(({ track, onTap, isPlayed, modeColor }: {
   const addToQueue = usePlayerStore(s => s.addToQueue);
   const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const ptrStartRef = useRef<{ x: number; y: number } | null>(null);
-  const holdFiredRef = useRef(false);
-  const [showHoldHint, setShowHoldHint] = useState(false);
+  const [overlayOpen, setOverlayOpen] = useState(false);
   const [showFeedback, setShowFeedback] = useState(false);
   const feedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const overlayDismissRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Set on hold-fire to eat the click that bubbles after pointerUp
+  const preventClickRef = useRef(false);
 
   const clearHold = () => {
     if (holdTimerRef.current) { clearTimeout(holdTimerRef.current); holdTimerRef.current = null; }
-    setShowHoldHint(false);
-    holdFiredRef.current = false;
     ptrStartRef.current = null;
+  };
+
+  const closeOverlay = () => {
+    if (overlayDismissRef.current) { clearTimeout(overlayDismissRef.current); overlayDismissRef.current = null; }
+    setOverlayOpen(false);
   };
 
   const triggerAdd = () => {
     addToQueue(track);
     try { navigator.vibrate?.([15, 8, 15]); } catch {}
-    setShowHoldHint(false);
+    closeOverlay();
     setShowFeedback(true);
     if (feedbackTimerRef.current) clearTimeout(feedbackTimerRef.current);
     feedbackTimerRef.current = window.setTimeout(() => setShowFeedback(false), 800);
@@ -2095,15 +2100,18 @@ const StreamCard = memo(({ track, onTap, isPlayed, modeColor }: {
   useEffect(() => () => {
     clearHold();
     if (feedbackTimerRef.current) clearTimeout(feedbackTimerRef.current);
+    if (overlayDismissRef.current) clearTimeout(overlayDismissRef.current);
   }, []);
 
   const onPointerDown = (e: React.PointerEvent) => {
+    if (overlayOpen) return;
     ptrStartRef.current = { x: e.clientX, y: e.clientY };
-    holdFiredRef.current = false;
     holdTimerRef.current = window.setTimeout(() => {
-      holdFiredRef.current = true;
-      setShowHoldHint(true);
+      holdTimerRef.current = null;
+      preventClickRef.current = true;
       try { navigator.vibrate?.(18); } catch {}
+      setOverlayOpen(true);
+      overlayDismissRef.current = window.setTimeout(() => setOverlayOpen(false), 3600);
     }, 480);
   };
 
@@ -2111,26 +2119,40 @@ const StreamCard = memo(({ track, onTap, isPlayed, modeColor }: {
     if (!ptrStartRef.current) return;
     const dx = e.clientX - ptrStartRef.current.x;
     const dy = e.clientY - ptrStartRef.current.y;
-    if (Math.abs(dx) > 8) { clearHold(); return; } // horizontal → belt drag
-    if (dy < -35) { clearHold(); triggerAdd(); } // swipe up
+    if (Math.abs(dx) > 8) { clearHold(); return; }
+    if (dy < -35) { clearHold(); triggerAdd(); }
   };
 
-  const onPointerUp = () => {
-    if (holdFiredRef.current) { triggerAdd(); }
-    clearHold();
+  const onPointerUp = () => { clearHold(); };
+
+  const handleTap = () => {
+    if (preventClickRef.current) { preventClickRef.current = false; return; }
+    onTap();
   };
 
   return (
     <div
       className="flex-shrink-0 flex flex-col items-center w-16 relative"
+      style={{ touchAction: 'manipulation', userSelect: 'none', WebkitUserSelect: 'none' } as React.CSSProperties}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
       onPointerCancel={clearHold}
     >
+      {/* Queued feedback toast — above the card */}
+      {showFeedback && (
+        <div className="absolute -top-6 left-1/2 -translate-x-1/2 pointer-events-none z-50"
+          style={{ animation: 'voyo-gesture-fade-in 150ms ease-out both' }}>
+          <div className="text-[8px] font-bold px-2 py-1 rounded-full whitespace-nowrap"
+            style={{ background: 'linear-gradient(135deg,#a78bfa,#7c3aed)', color: '#fff', boxShadow: '0 0 10px rgba(167,139,250,0.5)' }}>
+            ✓ Queued
+          </div>
+        </div>
+      )}
+
       <button
         className="flex flex-col items-center group w-full"
-        onClick={onTap}
+        onClick={handleTap}
       >
         <div
           className="w-14 h-14 rounded-xl overflow-hidden mb-1.5 relative shadow-md bg-gradient-to-br from-purple-900/30 to-violet-900/20"
@@ -2152,9 +2174,7 @@ const StreamCard = memo(({ track, onTap, isPlayed, modeColor }: {
             title={track.title}
             lazy={true}
           />
-          {/* VOYO Brand Tint - fades on hover */}
           <VoyoBrandTint isPlayed={isPlayed} />
-          {/* Mode Color Indicator - subtle corner accent */}
           {modeColor && (
             <div
               className="absolute top-0 left-0 w-2 h-2"
@@ -2166,7 +2186,6 @@ const StreamCard = memo(({ track, onTap, isPlayed, modeColor }: {
                 }}
             />
           )}
-          {/* Played checkmark overlay */}
           {isPlayed && (
             <div className="absolute inset-0 flex items-center justify-center">
               <div className="w-4 h-4 rounded-full bg-purple-500/80 flex items-center justify-center shadow-lg">
@@ -2176,31 +2195,63 @@ const StreamCard = memo(({ track, onTap, isPlayed, modeColor }: {
               </div>
             </div>
           )}
-          {/* Hold hint — 480ms hold reveals "Add ↑" cue */}
-          {showHoldHint && (
-            <div className="absolute inset-0 rounded-xl flex items-center justify-center pointer-events-none"
-              style={{ background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(4px)' }}>
-              <span className="text-[9px] font-black tracking-widest uppercase text-white/90">Add ↑</span>
-            </div>
-          )}
-          {/* Queued feedback toast */}
-          {showFeedback && (
-            <div className="absolute -top-6 left-1/2 -translate-x-1/2 pointer-events-none z-50"
-              style={{ animation: 'voyo-gesture-fade-in 150ms ease-out both' }}>
-              <div className="text-[8px] font-bold px-2 py-1 rounded-full whitespace-nowrap"
-                style={{ background: 'linear-gradient(135deg,#a78bfa,#7c3aed)', color: '#fff', boxShadow: '0 0 10px rgba(167,139,250,0.5)' }}>
-                ✓ Queued
-              </div>
-            </div>
-          )}
         </div>
         <h4 className={`text-[9px] font-bold truncate w-full text-center ${isPlayed ? 'text-gray-400' : 'text-white'}`}>{track.title}</h4>
         <p className="text-[7px] text-gray-500 truncate w-full text-center uppercase">{track.artist}</p>
       </button>
+
+      {/* Hold overlay — glass pill + shimmer, matches TrackCardGestures */}
+      {overlayOpen && (
+        <div
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => e.stopPropagation()}
+          className="absolute inset-0 rounded-xl flex items-center justify-center z-20"
+          style={{
+            background: 'rgba(28, 28, 32, 0.52)',
+            backdropFilter: 'blur(10px) saturate(120%)',
+            WebkitBackdropFilter: 'blur(10px) saturate(120%)',
+            border: '1px solid rgba(255,255,255,0.10)',
+            boxShadow: '0 10px 32px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.06)',
+            animation: 'voyo-gesture-fade-in 180ms ease-out both',
+          }}
+        >
+          <div
+            className="absolute inset-0 rounded-xl pointer-events-none"
+            style={{
+              background: 'linear-gradient(115deg, transparent 0%, rgba(255,255,255,0.14) 40%, rgba(255,255,255,0.05) 55%, transparent 75%)',
+              animation: 'voyo-gesture-shimmer 1800ms linear infinite',
+              mixBlendMode: 'screen',
+            }}
+          />
+          <div className="flex flex-col items-center gap-1.5 pointer-events-auto">
+            <button
+              onClick={triggerAdd}
+              className="flex items-center gap-1 px-1.5 py-1 rounded-full text-[8px] font-semibold text-white/95 active:scale-95 transition-transform"
+              style={{
+                background: 'linear-gradient(135deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0.08) 100%)',
+                backdropFilter: 'blur(14px) saturate(160%)',
+                WebkitBackdropFilter: 'blur(14px) saturate(160%)',
+                border: '1px solid rgba(255,255,255,0.22)',
+                boxShadow: '0 8px 24px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.28)',
+                letterSpacing: '0.01em',
+              }}
+            >
+              <Plus className="w-2.5 h-2.5 text-white/90 flex-shrink-0" strokeWidth={2.2} />
+              Add to Deck
+            </button>
+            <button
+              onClick={(e) => { e.stopPropagation(); closeOverlay(); }}
+              className="text-[7px] font-medium text-white/55 px-2 py-0.5 rounded-full"
+              style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)' }}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 });
-// memo comparison function for StreamCard
 StreamCard.displayName = 'StreamCard';
 
 // ============================================
