@@ -151,23 +151,15 @@ export function useBgEngine(params: UseBgEngineParams): BgEngineApi {
     const silentUrl = makeWav(8000, 2, () => 128);
     silentKeeperUrlRef.current = silentUrl;
 
-    // Keeper WAV: 150ms pulse every 3s instead of continuous 200Hz tone.
-    // Same peak (-46 dBFS) so Chrome still grants the audibility exemption,
-    // but 95% duty-cycle silence means no perceptible continuous buzz.
-    // Envelope: 10ms fade-in, 130ms full, 10ms fade-out → no click artifacts.
-    // Math: 20% WAV amp × volume 0.1 → peak -46 dBFS, 14dB above Chrome threshold.
-    const keeperUrl = makeWav(8000, 3, (i) => {
-      if (i >= 1200) return 128; // silence for remaining 2.85s
-      const env = i < 80 ? i / 80 : (i < 1120 ? 1.0 : (1200 - i) / 80);
-      return Math.round(128 + 0.20 * 127 * env * Math.sin(2 * Math.PI * 200 * i / 8000));
-    });
-
-    // Bypass keeper: raw <audio>, NOT connected to the Web Audio chain.
-    // Volume 0.1 → output -46 dBFS → 14 dB above Chrome's audibility threshold.
+    // Bypass keeper: second <audio> using the SAME silent WAV, NOT the Web Audio
+    // chain. Keeps Chrome's audio-activity flag alive during AudioContext gaps.
+    // Chrome's BG throttling exemption is based on playback STATE (playing vs
+    // paused), NOT audibility level — a silent WAV that's actively playing is
+    // sufficient. No tone needed; no volume tricks needed; nothing audible ever.
     const keeper = document.createElement('audio');
     keeper.loop = true;
-    keeper.volume = 0.1;
-    keeper.src = keeperUrl;
+    keeper.volume = 1.0;
+    keeper.src = silentUrl;
     bypassKeeperRef.current = keeper;
 
     return () => {
@@ -175,32 +167,20 @@ export function useBgEngine(params: UseBgEngineParams): BgEngineApi {
       keeper.src = '';
       bypassKeeperRef.current = null;
       URL.revokeObjectURL(silentUrl);
-      URL.revokeObjectURL(keeperUrl);
       silentKeeperUrlRef.current = null;
     };
   }, []);
 
-  // Start/stop the bypass keeper with isPlaying. Volume is 0 in FG (music
-  // itself satisfies Chrome's audibility check) and 0.1 in BG (needed to
-  // keep the tab above Chrome's ~-60 dBFS throttle threshold). This
-  // eliminates the audible buzz while preserving BG continuity.
+  // Start/stop the bypass keeper with isPlaying. Content is always silent
+  // so no volume switching — just play/pause with playback state.
   useEffect(() => {
     const keeper = bypassKeeperRef.current;
     if (!keeper) return;
     if (isPlaying) {
-      keeper.volume = document.hidden ? 0.1 : 0;
-      keeper.play().catch(() => {
-        // NotAllowedError if gesture context expired — non-critical, main
-        // element's engageSilentWav path still maintains the audio session.
-      });
+      keeper.play().catch(() => {});
     } else {
       keeper.pause();
     }
-    const onVisibility = () => {
-      if (keeper && isPlaying) keeper.volume = document.hidden ? 0.1 : 0;
-    };
-    document.addEventListener('visibilitychange', onVisibility);
-    return () => document.removeEventListener('visibilitychange', onVisibility);
   }, [isPlaying]);
 
   // ── ENGAGE SILENT WAV (one helper used everywhere) ───────────────────
