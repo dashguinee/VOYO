@@ -109,7 +109,10 @@ const OverlayTimingSync = memo(({
     const timeRemaining = duration - currentTime;
     const midTrack = currentTime > 30 && duration > 60 && currentTime >= duration * 0.45 && currentTime < duration * 0.55;
     const endTrack = timeRemaining > 0 && timeRemaining < 20;
-    const nu = (midTrack || endTrack) && !!upcomingTrack;
+    // Guard: never show "Next Up" for the track that IS the current track.
+    // The oyeCommit→playTrack race could briefly put the selected track in
+    // queue[0] before playTrack purges it — this is the last line of defence.
+    const nu = (midTrack || endTrack) && !!upcomingTrack && upcomingTrack.id !== currentTrackId;
 
     // Track change → reset the portrait-overlay latch so the next track's
     // end zone can fire fresh.

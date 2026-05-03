@@ -634,9 +634,13 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap, onEnterVideoMode
     // upgrades to direct R2 the moment R2 confirms — no UI seam, no extra
     // tap. ensureTrackReady at priority 10 keeps the lane prioritization.
     void ensureTrackReady(track, null, { priority: 10 });
-    app.oyeCommit(track);
     markWarming(track.trackId);
+    // playTrack BEFORE oyeCommit — oyeCommit calls addToQueue, which would
+    // create a render window where currentTrack=old and queue[0]=selected,
+    // showing "Next Up" for the track the user just tapped. Playing first
+    // makes the track currentTrack before oyeCommit's queue-add fires.
     app.playTrack(track, 'search');
+    app.oyeCommit(track);
     oyaPlanSignal('search_play', track.artist ?? '');
     onEnterVideoMode?.();
 

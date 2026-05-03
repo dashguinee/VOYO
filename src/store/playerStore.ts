@@ -542,7 +542,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
         recordPoolEngagement(state.currentTrack.id, 'complete', { completionRate });
       }
     }
-    set({
+    set((state) => ({
       currentTrack: track,
       progress: 0,
       currentTime: 0,
@@ -552,7 +552,12 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       // Reset source so AudioPlayer re-evaluates fresh — stale 'cached' value mutes YouTubeIframe
       playbackSource: null,
       bufferHealth: 0,
-    });
+      // Remove the incoming track from the queue — oyeCommit adds it before
+      // playTrack fires, creating a render window where currentTrack=old and
+      // queue[0]=selected, which makes the "Next Up" card show the track the
+      // user just tapped. Purge it here so the queue never contains currentTrack.
+      queue: state.queue.filter(q => q.track.id !== track.id),
+    }));
 
     // POOL ENGAGEMENT: Record play (check abort before async op)
     if (!signal.aborted) {
@@ -1436,6 +1441,12 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   // Queue Actions
   addToQueue: (track, position) => {
     set((state) => {
+      // Don't queue a track that is already the currentTrack — calling
+      // oyeCommit before playTrack was causing a render window where
+      // queue[0] === currentTrack, making "Next Up" show the playing track.
+      if (state.currentTrack?.id === track.id) {
+        return state;
+      }
       // Duplicate detection
       if (state.queue.some(q => q.track.id === track.id)) {
         return state;
