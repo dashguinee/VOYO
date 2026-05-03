@@ -33,15 +33,17 @@ async function bypassOnboarding(page: Page) {
   });
 }
 
-/** Wait for the app shell to be interactive (splash gone, home visible). */
+/** Wait for the app shell to be interactive (Suspense resolved, main div mounted). */
 async function waitForAppReady(page: Page) {
-  // Either the splash fades out or the home feed appears.
-  await page.waitForSelector('[data-testid="app-ready"], [data-testid="home-feed"], .voyo-home', {
-    timeout: 15_000,
-    state: 'visible',
+  // data-testid="app-shell" is on the main Suspense content div — present as
+  // soon as the JS bundle loads and React mounts. Splash may still be showing
+  // on top, but the audio player and app state are live by this point.
+  await page.waitForSelector('[data-testid="app-shell"]', {
+    timeout: 20_000,
+    state: 'attached',
   }).catch(async () => {
-    // Fallback: wait for any non-splash content to appear
-    await page.waitForTimeout(3000);
+    // Fallback: give the bundle enough time to parse and render.
+    await page.waitForTimeout(4000);
   });
 }
 

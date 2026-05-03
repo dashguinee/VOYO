@@ -244,6 +244,7 @@ async function performHotSwap(
       // Guard 4 — bail inside the fade loop. Leaves the new track's
       // lifecycle to take over cleanly; don't flip playbackSource here.
       if (!stillCurrent()) {
+        iframeBridge.cancelFade();
         iframeBridge.pause();
         iframeBridge.resetVolume();
         return bail('hotswap_abort_stale', { stage: 'fade', step: i });
@@ -257,6 +258,7 @@ async function performHotSwap(
 
     // Final guard — extremely narrow race but cheap to check.
     if (!stillCurrent()) {
+      iframeBridge.cancelFade();
       iframeBridge.pause();
       iframeBridge.resetVolume();
       return bail('hotswap_abort_stale', { stage: 'post_fade' });

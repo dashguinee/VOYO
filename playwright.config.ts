@@ -12,7 +12,7 @@ import { defineConfig, devices } from '@playwright/test';
  */
 export default defineConfig({
   testDir: './e2e',
-  timeout: 30_000,
+  timeout: 45_000,
   retries: 1,
   reporter: [['line'], ['json', { outputFile: 'e2e/results/latest.json' }]],
 

@@ -17,6 +17,7 @@ type YTPlayer = {
 
 class IframeBridge {
   private player: YTPlayer | null = null;
+  private _fadeCancelled = false;
 
   register(player: YTPlayer | null): void { this.player = player; }
   isReady(): boolean { return !!this.player; }
@@ -29,15 +30,21 @@ class IframeBridge {
    * Equal-power fade-out: cos(p·π/2) from 100→0 over `durationMs`.
    * Mirrors the sin(p·π/2) R2 fade-in so combined loudness stays constant
    * through the crossfade. Linear was causing a ~3dB dip mid-swap.
+   *
+   * Cancellable — call cancelFade() to stop the tick chain. Without this,
+   * a bail() mid-swap calls resetVolume() then the in-flight ticks drive
+   * volume back to 0, silencing the iframe after the reset. [AUDIT-3 #1]
    */
   fadeOut(durationMs: number = 400): Promise<void> {
     const player = this.player;
     if (!player) return Promise.resolve();
+    this._fadeCancelled = false;
     return new Promise((resolve) => {
       const steps = 28;
       const stepMs = Math.max(1, Math.round(durationMs / steps));
       let i = 0;
       const tick = () => {
+        if (this._fadeCancelled) { resolve(); return; }
         i++;
         const p = i / steps;
         const v = Math.max(0, Math.round(100 * Math.cos((p * Math.PI) / 2)));
@@ -48,6 +55,8 @@ class IframeBridge {
       tick();
     });
   }
+
+  cancelFade(): void { this._fadeCancelled = true; }
 
   play(): void {
     try { this.player?.unMute?.(); } catch {}

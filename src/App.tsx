@@ -1074,6 +1074,7 @@ function App() {
       </div>
     }>
     <div
+      data-testid="app-shell"
       className="relative h-full w-full bg-[#050508] overflow-hidden"
       onPointerDown={handleEdgeSwipeDown}
       onPointerUp={handleEdgeSwipeUp}
