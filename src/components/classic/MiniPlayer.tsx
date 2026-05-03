@@ -18,7 +18,7 @@
  * chrome without duplicating ~280 lines of state + behavior.
  */
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, memo } from 'react';
 import { Plus, Shuffle, Repeat, Repeat1, PictureInPicture2 } from 'lucide-react';
 import { usePlayerStore } from '../../store/playerStore';
 import { pipService } from '../../services/pipService';
@@ -41,11 +41,51 @@ interface MiniPlayerProps {
   variant?: 'docked' | 'inline';
 }
 
+// MiniPlayerSeekBar — renders null except for the progress track.
+// Isolated memo sub-component so the parent MiniPlayer body (swipe state,
+// bubble logic, title scroll detection) does NOT re-render at 4Hz during
+// playback — only this 20-line leaf does.
+const MiniPlayerSeekBar = memo(({ barRevealed }: { barRevealed: boolean }) => {
+  const progress = usePlayerStore(s => s.progress);
+  return (
+    <div
+      className="absolute bottom-1 left-2 right-2 h-1 overflow-hidden rounded-full"
+      style={{
+        background: barRevealed
+          ? 'rgba(139,92,246,0.28)'
+          : 'rgba(212,160,83, calc(0.19 + var(--voyo-bass, 0) * 0.25))',
+        transition: 'background 350ms ease-out',
+      }}
+    >
+      <div className="h-full relative" style={{ width: `${progress}%` }}>
+        <div
+          className="absolute inset-0"
+          style={{
+            background: barRevealed ? '#8b5cf6' : 'rgba(212,160,83,0.47)',
+            transition: 'background 350ms ease-out',
+          }}
+        />
+        <div
+          className="absolute right-0 top-0 bottom-0 w-4"
+          style={{
+            background: barRevealed
+              ? 'linear-gradient(to left, rgba(139,92,246,0.7), transparent)'
+              : 'linear-gradient(to left, rgba(212,160,83,0.38), transparent)',
+            transition: 'background 350ms ease-out',
+          }}
+        />
+      </div>
+    </div>
+  );
+});
+MiniPlayerSeekBar.displayName = 'MiniPlayerSeekBar';
+
 export const MiniPlayer = ({ onOpenFull, variant = 'docked' }: MiniPlayerProps) => {
-  // Battery fix: fine-grained selectors — progress updates every second
+  // progress is NOT subscribed here — MiniPlayerSeekBar handles it in isolation
+  // so the 4Hz tick doesn't re-render the full player chrome (swipe logic,
+  // bubble state, title scroll detection).
   const currentTrack = usePlayerStore(s => s.currentTrack);
   const isPlaying = usePlayerStore(s => s.isPlaying);
-  const progress = usePlayerStore(s => s.progress);
   const nextTrack = usePlayerStore(s => s.nextTrack);
   const prevTrack = usePlayerStore(s => s.prevTrack);
   const shuffleMode = usePlayerStore(s => s.shuffleMode);
@@ -260,38 +300,9 @@ export const MiniPlayer = ({ onOpenFull, variant = 'docked' }: MiniPlayerProps) 
         onPointerUp={handleSwipeUp}
         onPointerCancel={() => { swipeStartRef.current = null; }}
       >
-        {/* Seek bar — v939 simple two-state. Bronze rest is bass-reactive
-            via --voyo-bass (warm room rhythm on hot tracks, near-silent on
-            chill). On tap: whole bar → bold purple for 15s, then 350ms
-            fade back. The morph spectrum lives on the Takeout bubble now. */}
-        <div
-          className="absolute bottom-1 left-2 right-2 h-1 overflow-hidden rounded-full"
-          style={{
-            background: barRevealed
-              ? 'rgba(139,92,246,0.28)'
-              : 'rgba(212,160,83, calc(0.19 + var(--voyo-bass, 0) * 0.25))',
-            transition: 'background 350ms ease-out',
-          }}
-        >
-          <div className="h-full relative" style={{ width: `${progress}%` }}>
-            <div
-              className="absolute inset-0"
-              style={{
-                background: barRevealed ? '#8b5cf6' : 'rgba(212,160,83,0.47)',
-                transition: 'background 350ms ease-out',
-              }}
-            />
-            <div
-              className="absolute right-0 top-0 bottom-0 w-4"
-              style={{
-                background: barRevealed
-                  ? 'linear-gradient(to left, rgba(139,92,246,0.7), transparent)'
-                  : 'linear-gradient(to left, rgba(212,160,83,0.38), transparent)',
-                transition: 'background 350ms ease-out',
-              }}
-            />
-          </div>
-        </div>
+        {/* Seek bar — isolated sub-component (MiniPlayerSeekBar) subscribes to
+            progress at 4Hz; parent body stays off the render loop. */}
+        <MiniPlayerSeekBar barRevealed={barRevealed} />
 
         {/* Thumbnail + Info — keyed so they re-mount and fade in on track change */}
         <div key={currentTrack.trackId} className="flex items-center gap-2.5 flex-1 min-w-0 voyo-miniplayer-card-arrive">

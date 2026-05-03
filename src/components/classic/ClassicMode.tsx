@@ -21,7 +21,6 @@ import { usePlayerStore } from '../../store/playerStore';
 import { app } from '../../services/oyo';
 import { Track } from '../../types';
 import { useAuth } from '../../hooks/useAuth';
-import { useOyoInvocation } from '../../oyo-ui/useOyoInvocation';
 import { useTabHistory } from '../../hooks/useTabHistory';
 
 type ClassicTab = 'home' | 'hub' | 'library';
@@ -51,12 +50,6 @@ const BottomNav = ({
 
   // RIGHT: Always Library (highlighted when active)
   const isLibraryActive = activeTab === 'library';
-
-  // OYO long-press summon — surface depends on which classic tab we're on
-  const oyoSurface =
-    activeTab === 'hub' ? 'dahub' : activeTab === 'library' ? 'home' : 'home';
-  const { bindLongPress } = useOyoInvocation();
-  const oyoBindings = bindLongPress(oyoSurface);
 
   return (
     <nav
@@ -90,17 +83,11 @@ const BottomNav = ({
           />
         </button>
 
-        {/* CENTER: VOYO ORB — consistent with VoyoBottomNav.
-            Long-press (600ms) summons OYO via the bindLongPress() handlers. */}
+        {/* CENTER: VOYO ORB — tap to switch mode */}
         <button
           className="relative flex items-center justify-center active:scale-95 transition-transform duration-75"
-          aria-label="VOYO — tap to switch mode, long-press to summon OYO"
+          aria-label="VOYO — tap to switch mode"
           onClick={onVOYOClick}
-          onPointerDown={oyoBindings.onPointerDown}
-          onPointerUp={oyoBindings.onPointerUp}
-          onPointerLeave={oyoBindings.onPointerLeave}
-          onPointerCancel={oyoBindings.onPointerCancel}
-          onClickCapture={oyoBindings.onClickCapture}
           style={{ flex: '0 0 auto' }}
         >
           <div

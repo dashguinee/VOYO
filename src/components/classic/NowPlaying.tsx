@@ -346,7 +346,9 @@ export const NowPlaying = ({ isOpen, onClose, onSwitchToVoyo }: NowPlayingProps)
   const setVideoTarget = usePlayerStore(s => s.setVideoTarget);
   const predictUpcoming = usePlayerStore(s => s.predictUpcoming);
 
-  const trackPosition = Math.round(usePlayerStore(s => s.progress));
+  // trackPosition is only used in handleAddComment — snapshot read via getState()
+  // instead of a reactive subscription to avoid 4Hz re-renders of this 640-line
+  // component every time progress ticks during playback.
 
   const createReaction = useReactionStore(s => s.createReaction);
   const fetchTrackReactions = useReactionStore(s => s.fetchTrackReactions);
@@ -398,6 +400,9 @@ export const NowPlaying = ({ isOpen, onClose, onSwitchToVoyo }: NowPlayingProps)
   const handleAddComment = useCallback(async (text: string) => {
     if (!currentTrack) return;
     spawnReaction('🔥');
+    // Snapshot read — position is only needed at the moment the comment is
+    // submitted, not reactively. Keeps NowPlaying off the 4Hz render loop.
+    const trackPosition = Math.round(usePlayerStore.getState().progress);
     await createReaction({
       username: dashId || 'anonymous',
       trackId: currentTrack.id,
@@ -410,7 +415,7 @@ export const NowPlaying = ({ isOpen, onClose, onSwitchToVoyo }: NowPlayingProps)
       comment: text,
       trackPosition,
     });
-  }, [currentTrack, dashId, createReaction, spawnReaction, trackPosition]);
+  }, [currentTrack, dashId, createReaction, spawnReaction]);
 
   // Auto-spawn ambient reactions while playing + visible
   useEffect(() => {

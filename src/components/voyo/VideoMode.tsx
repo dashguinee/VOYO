@@ -14,7 +14,7 @@
  * - Inline: Like (explicit preference) + Boost (offline cache + EQ)
  */
 
-import { useRef, useEffect, useCallback } from 'react';
+import { useRef, useEffect, useCallback, memo } from 'react';
 import { Play, Pause, SkipBack, SkipForward, X, Volume2, VolumeX, Heart } from 'lucide-react';
 import { VoyoCloseX } from '../ui/VoyoCloseX';
 import { CubeGestureHint } from './CubeGestureHint';
@@ -23,18 +23,35 @@ import { usePreferenceStore } from '../../store/preferenceStore';
 import { getYouTubeThumbnail } from '../../data/tracks';
 import { BoostButton } from '../ui/BoostButton';
 
+// VideoModeProgressBar — isolated memo leaf so the VideoMode control
+// surface (play/pause/skip buttons, like/boost, mute) does NOT re-render
+// at 4Hz every time progress ticks during playback.
+const VideoModeProgressBar = memo(() => {
+  const progress = usePlayerStore(s => s.progress);
+  return (
+    <div className="absolute bottom-16 left-6 right-6">
+      <div className="h-1 bg-white/20 rounded-full overflow-hidden">
+        <div
+          className="h-full bg-white"
+          style={{ width: `${progress}%` }}
+        />
+      </div>
+    </div>
+  );
+});
+VideoModeProgressBar.displayName = 'VideoModeProgressBar';
+
 interface VideoModeProps {
   onExit: () => void;
 }
 
 export const VideoMode = ({ onExit }: VideoModeProps) => {
-  // Battery fix: fine-grained selectors
+  // progress NOT subscribed here — VideoModeProgressBar owns it in isolation.
   const currentTrack = usePlayerStore(s => s.currentTrack);
   const isPlaying = usePlayerStore(s => s.isPlaying);
   const togglePlay = usePlayerStore(s => s.togglePlay);
   const nextTrack = usePlayerStore(s => s.nextTrack);
   const prevTrack = usePlayerStore(s => s.prevTrack);
-  const progress = usePlayerStore(s => s.progress);
   const volume = usePlayerStore(s => s.volume);
   const setVolume = usePlayerStore(s => s.setVolume);
   const videoBlocked = usePlayerStore(s => s.videoBlocked);
@@ -162,15 +179,8 @@ export const VideoMode = ({ onExit }: VideoModeProps) => {
         </div>
       </div>
 
-      {/* Progress Bar (always visible) */}
-      <div className="absolute bottom-16 left-6 right-6">
-        <div className="h-1 bg-white/20 rounded-full overflow-hidden">
-          <div
-            className="h-full bg-white"
-            style={{ width: `${progress}%` }}
-          />
-        </div>
-      </div>
+      {/* Progress Bar — isolated sub-component to avoid 4Hz parent re-renders */}
+      <VideoModeProgressBar />
 
       {/* Overlay Controls — always visible (see comment above on why the
           auto-hide + tap-to-reveal behaviour was removed). */}

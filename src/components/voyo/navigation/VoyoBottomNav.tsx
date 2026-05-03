@@ -16,14 +16,10 @@ import { Home as House, MessageCircle as ChatCircle } from 'lucide-react';
 import { usePlayerStore } from '../../../store/playerStore';
 import { useAuth } from '../../../hooks/useAuth';
 import { messagesAPI } from '../../../lib/voyo-api';
-import { useOyoInvocation } from '../../../oyo-ui/useOyoInvocation';
-import type { InvocationSurface } from '../../../store/oyoStore';
 
 interface VoyoBottomNavProps {
   onDahub?: () => void;
   onHome?: () => void;
-  /** Surface to invoke OYO under when the VOYO orb gets long-pressed. */
-  oyoSurface?: InvocationSurface;
   /**
    * Player mode — when true, the bottom nav drops the central VOYO orb
    * (the carousel cube IS the player's VOYO control) and renders Home /
@@ -35,7 +31,7 @@ interface VoyoBottomNavProps {
   playerMode?: boolean;
 }
 
-export const VoyoBottomNav = ({ onDahub, onHome, oyoSurface = 'home', playerMode = false }: VoyoBottomNavProps) => {
+export const VoyoBottomNav = ({ onDahub, onHome, playerMode = false }: VoyoBottomNavProps) => {
   // Fine-grained selectors (battery fix)
   const voyoActiveTab = usePlayerStore(s => s.voyoActiveTab);
   // Ambient nav fade — when on feed and the dim signal is on, side
@@ -213,13 +209,6 @@ export const VoyoBottomNav = ({ onDahub, onHome, oyoSurface = 'home', playerMode
     };
   }, [playerMode]);
 
-  // -- OYO long-press summon (Phase 2) --
-  // Auto-pick the surface from current playback context if caller didn't override.
-  const inferredSurface: InvocationSurface =
-    oyoSurface !== 'home' ? oyoSurface : isPlaying ? 'player' : 'home';
-  const { bindLongPress } = useOyoInvocation();
-  const oyoBindings = bindLongPress(inferredSurface);
-
   // -- Unread DM count --
   useEffect(() => {
     if (!dashId || !isLoggedIn) {
@@ -378,41 +367,30 @@ export const VoyoBottomNav = ({ onDahub, onHome, oyoSurface = 'home', playerMode
           </div>
         </button>
 
-        {/* CENTER: VOYO ORB
-            Long-press (600ms) summons OYO via the bindLongPress() handlers.
-            Short tap continues to fire handleVoyoToggle (existing behaviour).
-            The onClickCapture inside oyoBindings will swallow the click if
-            the long-press threshold was crossed. */}
+        {/* CENTER: VOYO ORB — tap to toggle feed/music */}
         <button
           className="relative flex items-center justify-center"
           onPointerDown={(e) => {
             handlePointerDown('voyo');
-            oyoBindings.onPointerDown(e);
           }}
-          onPointerUp={(e) => {
+          onPointerUp={() => {
             handlePointerUp();
-            oyoBindings.onPointerUp(e);
           }}
-          onPointerLeave={(e) => {
+          onPointerLeave={() => {
             handlePointerUp();
-            oyoBindings.onPointerLeave(e);
           }}
-          onPointerCancel={(e) => {
+          onPointerCancel={() => {
             handlePointerUp();
-            oyoBindings.onPointerCancel(e);
           }}
-          onClickCapture={oyoBindings.onClickCapture}
           onClick={handleVoyoToggle}
           style={{ flex: '0 0 auto', opacity: orbOpacity, transition: `${holdTransition}, ${ambientTransition}` }}
-          aria-label="VOYO — tap to play, long-press to summon OYO"
+          aria-label="VOYO — tap to play"
         >
           <div
             className="relative w-12 h-12 flex flex-col items-center justify-center overflow-hidden"
             style={{
               background: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 50%, #6d28d9 100%)',
-              // Square morph: while pressed, the round orb "squares up"
-              // — OYO is forming. The full long-press fire still launches
-              // the actual OYO summon overlay; this is the entrance gesture.
+              // Square morph: while pressed, the round orb "squares up" — tactile lock-in.
               borderRadius: pressedBtn === 'voyo' ? '14px' : '999px',
               // Bass pulse on the orb: scale(1 + bass*0.04). When pressed,
               // the scale override takes priority. When at rest, the orb
