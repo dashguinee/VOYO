@@ -122,6 +122,11 @@ export function useAudioChain(params: UseAudioChainParams): AudioChainApi {
   // time restores the intent to 'idle' — but only if the intent is still
   // what this ramp set it to (some other helper may have taken over).
   const gainIntentRef = useRef<GainIntent>('idle');
+  // Monotonic epoch per ramp call — prevents a stale timer from clearing a
+  // successor's in-flight ramp when both use the same intent string literal.
+  // Each fadeInMasterGain/softFadeOut call captures its epoch; the timer only
+  // clears intent if the epoch hasn't advanced (i.e. no newer call has fired).
+  const gainEpochRef = useRef(0);
 
   // Spatial LFOs — stashed in refs so the unmount cleanup effect (Finding #5)
   // can .stop() them. Previously only local vars inside setupAudioEnhancement,
@@ -308,6 +313,7 @@ export function useAudioChain(params: UseAudioChainParams): AudioChainApi {
     const param = gainNodeRef.current.gain;
     const target = computeMasterTarget();
     gainIntentRef.current = 'fade-in';
+    const myEpoch = ++gainEpochRef.current;
     param.cancelScheduledValues(now);
     // Use param.value (actual current gain) not hardcoded 0.0001.
     // If pauseOutgoing() ran and left gain mid-ramp (e.g. 0.12), starting
@@ -316,11 +322,10 @@ export function useAudioChain(params: UseAudioChainParams): AudioChainApi {
     param.setValueAtTime(param.value, now);
     const seconds = Math.max(0.003, durationMs / 1000);
     param.linearRampToValueAtTime(target, now + seconds);
-    // Clear intent at ramp-end — but only if we still own it. Another
-    // helper may have taken over mid-flight (e.g. user paused → 'fade-out').
-    const ownedAt = gainIntentRef.current;
+    // Clear intent at ramp-end — only if we still own it (intent not taken
+    // over by another ramp AND epoch hasn't advanced to a newer call).
     setTimeout(() => {
-      if (gainIntentRef.current === ownedAt) gainIntentRef.current = 'idle';
+      if (gainEpochRef.current === myEpoch) gainIntentRef.current = 'idle';
     }, durationMs);
   }, [computeMasterTarget, disarmGainWatchdog]);
 
@@ -336,13 +341,13 @@ export function useAudioChain(params: UseAudioChainParams): AudioChainApi {
     const now = ctx.currentTime;
     const param = gainNodeRef.current.gain;
     gainIntentRef.current = 'fade-out';
+    const myEpoch = ++gainEpochRef.current;
     param.cancelScheduledValues(now);
     param.setValueAtTime(param.value, now);
     param.linearRampToValueAtTime(0.0001, now + durationMs / 1000);
-    // Clear intent at ramp-end — but only if we still own it.
-    const ownedAt = gainIntentRef.current;
+    // Clear intent at ramp-end — only if epoch hasn't advanced to a newer call.
     setTimeout(() => {
-      if (gainIntentRef.current === ownedAt) gainIntentRef.current = 'idle';
+      if (gainEpochRef.current === myEpoch) gainIntentRef.current = 'idle';
     }, durationMs);
   }, []);
 

@@ -90,10 +90,14 @@ let _saveScheduled = false;
 function saveProfile(): void {
   if (_saveScheduled) return;
   _saveScheduled = true;
+  // Snapshot JSON NOW — before the async gap. If resetDJ() or another write
+  // runs before the idle callback fires, we'd serialize the post-reset state,
+  // silently discarding whatever triggered this save.
+  const snapshot = JSON.stringify(djProfile);
   const w = window as unknown as { requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => void };
   const doSave = () => {
     _saveScheduled = false;
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(djProfile)); }
+    try { localStorage.setItem(STORAGE_KEY, snapshot); }
     catch (e) { devWarn('[OYO] Failed to save profile:', e); }
   };
   if (typeof w.requestIdleCallback === 'function') {
@@ -106,7 +110,21 @@ function saveProfile(): void {
 function loadProfile(): void {
   try {
     const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) djProfile = { ...DEFAULT_PROFILE, ...JSON.parse(saved) };
+    if (!saved) return;
+    const parsed: Partial<DJProfile> = JSON.parse(saved);
+    // Deep-merge `relationship` so any field added to DJRelationship after
+    // the user's profile was first stored falls back to DEFAULT values rather
+    // than being `undefined`. A top-level spread would replace the entire
+    // `relationship` object with the stored version, leaving new fields missing
+    // and crashing callers like `rel.learnedPreferences.push(...)`.
+    djProfile = {
+      ...DEFAULT_PROFILE,
+      ...parsed,
+      relationship: {
+        ...DEFAULT_PROFILE.relationship,
+        ...(parsed.relationship ?? {}),
+      },
+    };
   } catch (e) { devWarn('[OYO] Failed to load profile:', e); }
 }
 

@@ -12,6 +12,10 @@
 import { test, expect, Page } from '@playwright/test';
 import * as fs from 'fs';
 import * as path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // ─── Helpers ──────────────────────────────────────────────────────────────
 
@@ -24,6 +28,8 @@ async function bypassOnboarding(page: Page) {
   await page.addInitScript(() => {
     localStorage.setItem('voyo-user-name', 'TestUser');
     sessionStorage.setItem('voyo-audio-unlocked', '1');
+    // Skip the splash screen (gated by voyo-splash-v3 in sessionStorage)
+    sessionStorage.setItem('voyo-splash-v3', 'true');
   });
 }
 

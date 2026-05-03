@@ -40,10 +40,11 @@ const HOT_SWAP_POLL_MS = 2_000;
 // cos(p·π/2), R2 fades in on sin(p·π/2) — sum of squares stays ≈1.
 const HOT_SWAP_FADE_MS = 1_400;
 
-// Monotonic counter — incremented at the START of every performHotSwap call.
-// Captured at canplay-listener registration; if the value differs at callback
-// time (user skipped → new swap started) the listener discards the event.
-// Dual-check with el.src: both must match, defence-in-depth. [AUDIT-2 #1]
+// Module-level swap token. In production there is exactly one hook instance,
+// so sharing across instances is safe. In React StrictMode (dev), double-invoke
+// creates two instances that share this counter — the second instance's
+// increment makes the first instance's canplay check fail and bail immediately.
+// Only a dev-mode nuisance; production unaffected. [AUDIT-2 #1]
 let _swapToken = 0;
 const HOT_SWAP_STEPS   = 40;
 
@@ -327,6 +328,12 @@ export function useHotSwap(
   audioRef: RefObject<HTMLAudioElement | null>,
   engageSilentWav: (reason: string, trackId?: string | null) => void,
 ): void {
+  // Stable ref so closures inside the effect always call the current
+  // engageSilentWav without needing it in the dep array (which would
+  // re-mount watchers whenever the parent re-renders a new reference).
+  const engageSilentWavRef = useRef(engageSilentWav);
+  engageSilentWavRef.current = engageSilentWav;
+
   // Last-known iframe currentTime — for the iframe-cut resume case.
   const lastIframePosRef = useRef<{ trackId: string; seconds: number } | null>(null);
 
@@ -431,7 +438,7 @@ export function useHotSwap(
             // immediately so the keeper loop is live until the next poll
             // fires and sets the R2 src again.
             if (document.hidden) {
-              engageSilentWav('hotswap_bail_bg', trackId);
+              engageSilentWavRef.current('hotswap_bail_bg', trackId);
             }
           }
         });

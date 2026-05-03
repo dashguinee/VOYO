@@ -1,12 +1,6 @@
-@import "tailwindcss";
-
-/* v823 — N'Ko script for the OYÉ My People section header.
-   Soussou / Mandinka / Bambara heritage; Dash's roots. Used as a
-   restrained ornament glyph beside the bronze subtitle, never body
-   text (legibility). display: swap = no FOIT; if Google's CDN is
-   slow we fall back to system serif and the glyph re-renders when
-   the font lands. */
+/* N'Ko script — OYÉ My People section. display:swap = no FOIT. */
 @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+NKo&display=swap');
+@import "tailwindcss";
 
 /* VOYO Music — Mature Premium System (April 2026 redesign)
  *

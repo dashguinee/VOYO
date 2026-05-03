@@ -361,7 +361,7 @@ export async function conductorFetch(
 ): Promise<Track[]> {
   // Full 324K DB via RPC — no r2_cached gate. Player handles non-R2 tracks
   // via iframe + hotswap. excludeIds applied inside getConductorCandidates.
-  const pool = await getConductorCandidates(Array.from(excludeIds), limit * 8);
+  let pool = await getConductorCandidates(Array.from(excludeIds), limit * 8);
   if (!pool.length) return [];
 
   // Step 2 (W): energy filter via vibe columns

@@ -168,6 +168,9 @@ const initialCategoryPreferences: Record<ReactionCategory, CategoryPreference> =
   'workout': { category: 'workout', reactionCount: 0, likeCount: 0, oyeCount: 0, fireCount: 0, score: 50 },
 };
 
+// One active "reset hot" timer per category — cancel previous before setting new
+const _hotTimers: Partial<Record<ReactionCategory, ReturnType<typeof setTimeout>>> = {};
+
 export const useReactionStore = create<ReactionStore>((set, get) => ({
   // Initial state
   recentReactions: [],
@@ -494,8 +497,11 @@ export const useReactionStore = create<ReactionStore>((set, get) => ({
       },
     }));
 
-    // Reset hot state after 30 seconds
-    setTimeout(() => {
+    // One active timer per category — cancel the previous one so rapid pulses
+    // don't accumulate N unbounded 30s timers.
+    clearTimeout(_hotTimers[category]);
+    _hotTimers[category] = setTimeout(() => {
+      delete _hotTimers[category];
       set((state) => ({
         categoryPulse: {
           ...state.categoryPulse,

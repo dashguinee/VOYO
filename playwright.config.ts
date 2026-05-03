@@ -4,11 +4,11 @@ import { defineConfig, devices } from '@playwright/test';
  * VOYO Music — Playwright smoke test config.
  *
  * Tests run against the Vite dev server (port 5173).
- * Start the dev server first: `npm run dev`
- * Then run: `npx playwright test`
+ * The webServer block auto-starts it if not already running.
  *
- * For CI / autonomous audit rounds:
- *   npx playwright test --reporter=line
+ * Run:  npx playwright test --project=pixel7 --reporter=line
+ * Debug: npx playwright test --headed
+ * One test: npx playwright test -g "cold boot"
  */
 export default defineConfig({
   testDir: './e2e',
@@ -17,7 +17,7 @@ export default defineConfig({
   reporter: [['line'], ['json', { outputFile: 'e2e/results/latest.json' }]],
 
   use: {
-    baseURL: 'http://localhost:5174',
+    baseURL: 'http://localhost:5173',
     // Mobile-first — VOYO is a PWA, primary target is Pixel 7 (Dash's device)
     ...devices['Pixel 7'],
     // Headless by default; set PWDEBUG=1 or headless:false for visual
@@ -39,6 +39,12 @@ export default defineConfig({
     },
   ],
 
-  // Dev server is assumed to already be running (no webServer block).
-  // Run: npm run dev — then: npx playwright test
+  // Auto-start VOYO dev server before tests, tear down after.
+  // reuseExistingServer: skip restart if already running on 5173.
+  webServer: {
+    command: 'npm run dev',
+    url: 'http://localhost:5173',
+    reuseExistingServer: true,
+    timeout: 60_000,
+  },
 });

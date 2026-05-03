@@ -75,11 +75,16 @@ const DEFAULT_MEMORY = '# OYO Memory\n\nNew listener. No preferences learned yet
 // ---------------------------------------------------------------------------
 
 let dbInstance: IDBDatabase | null = null;
+// Store the in-flight open promise so concurrent callers (e.g. the three
+// dbGet calls in loadOyoState's Promise.all) share one IDB handle instead
+// of each opening a separate connection and leaking N-1 handles.
+let _dbOpenPromise: Promise<IDBDatabase> | null = null;
 
 export function openDB(): Promise<IDBDatabase> {
   if (dbInstance) return Promise.resolve(dbInstance);
+  if (_dbOpenPromise) return _dbOpenPromise;
 
-  return new Promise((resolve, reject) => {
+  _dbOpenPromise = new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, DB_VERSION);
 
     request.onupgradeneeded = (event) => {
@@ -91,13 +96,16 @@ export function openDB(): Promise<IDBDatabase> {
 
     request.onsuccess = (event) => {
       dbInstance = (event.target as IDBOpenDBRequest).result;
+      _dbOpenPromise = null;
       resolve(dbInstance);
     };
 
     request.onerror = (event) => {
+      _dbOpenPromise = null;
       reject((event.target as IDBOpenDBRequest).error);
     };
   });
+  return _dbOpenPromise;
 }
 
 export async function dbGet(key: string): Promise<unknown> {
