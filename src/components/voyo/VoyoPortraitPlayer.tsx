@@ -40,6 +40,7 @@ import { translateWord, type TranslationMatch } from '../../services/lexiconServ
 import { voiceSearch, recordFromMicrophone, isConfigured as isWhisperConfigured } from '../../services/whisperService';
 import { searchAlbums, getAlbumTracks } from '../../services/piped';
 import { pipedTrackToVoyoTrack } from '../../data/tracks';
+import { getYouTubeId } from '../../utils/voyoId';
 
 // FLYWHEEL: Central DJ vibe training
 import {
@@ -6326,7 +6327,7 @@ export const VoyoPortraitPlayer = ({
                       navigator.share({
                         title: currentTrack.title,
                         text: `${currentTrack.title} by ${currentTrack.artist} — listen on VOYO`,
-                        url: `https://voyomusic.com/?t=${currentTrack.trackId}`,
+                        url: `https://voyomusic.com/?t=${getYouTubeId(currentTrack.trackId)}`,
                       }).catch(() => {});
                     }
                     haptics.light();
