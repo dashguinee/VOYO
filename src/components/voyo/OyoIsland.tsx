@@ -86,6 +86,11 @@ export function OyoIsland({ visible, onHide, onActivity }: OyoIslandProps) {
 
   const djProfile = getProfile();
 
+  // Open directly to chat whenever the island becomes visible
+  useEffect(() => {
+    if (visible) setMode('chat');
+  }, [visible]);
+
   // Auto-hide when in collapsed mode and visible
   useEffect(() => {
     if (visible && mode === 'collapsed') {
@@ -150,7 +155,7 @@ export function OyoIsland({ visible, onHide, onActivity }: OyoIslandProps) {
       setChatHistory(prev => [
         ...prev,
         { role: 'user', message: `🎤 "${result.phonetics}"` },
-        { role: 'oyo', message: `Searching for: "${result.query}"...` },
+        { role: 'oyo', message: `"${result.query}"...` },
       ]);
 
       // Search for the song
@@ -177,24 +182,24 @@ export function OyoIsland({ visible, onHide, onActivity }: OyoIslandProps) {
 
             setChatHistory(prev => [
               ...prev.slice(0, -1),
-              { role: 'oyo', message: `🔥 Found "${match.name}" by ${match.artist}! Playing now...` },
+              { role: 'oyo', message: `Found it. Playing "${match.name}" — ${match.artist}.` },
             ]);
           } else {
             setChatHistory(prev => [
               ...prev.slice(0, -1),
-              { role: 'oyo', message: `Found "${match.name}" but couldn't get playable track. Try searching directly!` },
+              { role: 'oyo', message: `"${match.name}" — not loading right now. Try the search bar.` },
             ]);
           }
         } catch {
           setChatHistory(prev => [
             ...prev.slice(0, -1),
-            { role: 'oyo', message: `Found "${match.name}" by ${match.artist}! Search it to play.` },
+            { role: 'oyo', message: `"${match.name}" by ${match.artist}. Tap to play it.` },
           ]);
         }
       } else {
         setChatHistory(prev => [
           ...prev.slice(0, -1),
-          { role: 'oyo', message: `Couldn't find that one. Try humming a bit more, or tell me what you're looking for!` },
+          { role: 'oyo', message: `Nothing came back. Hum it again or give me different words.` },
         ]);
       }
 
@@ -227,39 +232,39 @@ export function OyoIsland({ visible, onHide, onActivity }: OyoIslandProps) {
     if (!musicIntent) {
       // Greetings
       if (/^(hey|hi|hello|yo|sup|what'?s? ?up|wazzguan|wazguan)/i.test(lowerMessage)) {
-        setChatHistory(prev => [...prev, { role: 'oyo', message: "Yo! What's good? 🎧 Need a vibe or just chillin'?" }]);
+        setChatHistory(prev => [...prev, { role: 'oyo', message: "What's good." }]);
         return;
       }
       // How are you
       if (/how (are|r) (you|u)|how('?s| is) it going/i.test(lowerMessage)) {
-        setChatHistory(prev => [...prev, { role: 'oyo', message: "I'm vibin'! 🔥 Ready to drop some heat. What you wanna hear?" }]);
+        setChatHistory(prev => [...prev, { role: 'oyo', message: "In the mix. What do you need?" }]);
         return;
       }
       // Thanks
       if (/^(thanks|thank you|thx|ty|appreciate)/i.test(lowerMessage)) {
-        setChatHistory(prev => [...prev, { role: 'oyo', message: "Anytime fam! 🤙 Hit me up when you need more vibes" }]);
+        setChatHistory(prev => [...prev, { role: 'oyo', message: "That's what I'm here for." }]);
         return;
       }
       // What can you do
       if (/what (can|do) you do|help|commands/i.test(lowerMessage)) {
-        setChatHistory(prev => [...prev, { role: 'oyo', message: "I'm your DJ! 🎵 Say 'play [song]' to hear something, or just chat. I can also hum-search with 🎤!" }]);
+        setChatHistory(prev => [...prev, { role: 'oyo', message: "Play something, find something, read a room. Say a name, hum a melody, or just describe the feeling." }]);
         return;
       }
       // Mood/recommendation request
       if (/recommend|suggest|something (good|fire|chill|hype)|what should i/i.test(lowerMessage)) {
-        setChatHistory(prev => [...prev, { role: 'oyo', message: "What's the vibe? Chill? Hype? Afrobeats? Tell me the mood and I'll hook you up! 🎯" }]);
+        setChatHistory(prev => [...prev, { role: 'oyo', message: "Tell me the feeling. I'll handle it." }]);
         return;
       }
       // Fallback for short non-music messages
       if (userMessage.length < 15 && !/[A-Z]/.test(userMessage.slice(1))) {
-        setChatHistory(prev => [...prev, { role: 'oyo', message: "I'm here! 🎧 Want me to play something? Just say 'play [song name]'" }]);
+        setChatHistory(prev => [...prev, { role: 'oyo', message: "I'm here. Name it." }]);
         return;
       }
     }
 
     // Music search flow
     const searchQuery = playIntent ? userMessage.replace(/^(play|queue|hit|drop|spin)\s+/i, '') : userMessage;
-    setChatHistory(prev => [...prev, { role: 'oyo', message: `Searching for "${searchQuery}"...` }]);
+    setChatHistory(prev => [...prev, { role: 'oyo', message: `"${searchQuery}"...` }]);
 
     // Search for the track
     const searchResults = await searchAlbums(searchQuery);
@@ -276,7 +281,7 @@ export function OyoIsland({ visible, onHide, onActivity }: OyoIslandProps) {
 
             setChatHistory(prev => [
               ...prev.slice(0, -1),
-              { role: 'oyo', message: `🔥 Playing "${match.name}" by ${match.artist}!` },
+              { role: 'oyo', message: `On it. "${match.name}" — ${match.artist}.` },
             ]);
 
             // Get cultural context (non-blocking)
@@ -289,20 +294,20 @@ export function OyoIsland({ visible, onHide, onActivity }: OyoIslandProps) {
         } catch {
           setChatHistory(prev => [
             ...prev.slice(0, -1),
-            { role: 'oyo', message: `Found "${match.name}" but couldn't load it. Try the search bar!` },
+            { role: 'oyo', message: `"${match.name}" won't load. Try the search bar.` },
           ]);
         }
       } else {
         // Just show results, ask if user wants to play
         setChatHistory(prev => [
           ...prev.slice(0, -1),
-          { role: 'oyo', message: `Found "${match.name}" by ${match.artist}. Say "play ${match.name}" to hear it!` },
+          { role: 'oyo', message: `"${match.name}" by ${match.artist}. Say "play" to drop it.` },
         ]);
       }
     } else {
       setChatHistory(prev => [
         ...prev.slice(0, -1),
-        { role: 'oyo', message: `Couldn't find "${searchQuery}". Try different words or use 🎤 to hum it!` },
+        { role: 'oyo', message: `"${searchQuery}" — nothing. Different angle or hum it.` },
       ]);
     }
   }, [chatInput]);
@@ -360,7 +365,6 @@ export function OyoIsland({ visible, onHide, onActivity }: OyoIslandProps) {
           input={chatInput}
           onInputChange={(val) => { handleActivity(); setChatInput(val); }}
           onSubmit={() => { handleActivity(); handleChatSubmit(); }}
-          onVoicePress={handleVoiceSearch}
           onCollapse={collapseToIsland}
         />
       )}
@@ -579,14 +583,14 @@ function VoiceIsland({
           marginBottom: '4px',
           transition: 'color 0.3s ease-out',
         }}>
-          {state.isRecording && 'Listening...'}
-          {state.isProcessing && 'Processing...'}
-          {state.error && 'Error'}
+          {state.isRecording && 'Listening.'}
+          {state.isProcessing && 'Reading.'}
+          {state.error && 'No signal.'}
         </p>
 
         <p style={{ color: 'rgba(255,255,255,0.45)', fontSize: '12px', marginBottom: '16px' }}>
-          {state.isRecording && `${djName} is finding your song`}
-          {state.isProcessing && 'Analyzing with Whisper AI...'}
+          {state.isRecording && 'On it.'}
+          {state.isProcessing && 'Breaking it down.'}
           {state.error && state.error}
         </p>
 
@@ -615,7 +619,6 @@ function ChatIsland({
   input,
   onInputChange,
   onSubmit,
-  onVoicePress,
   onCollapse,
 }: {
   djName: string;
@@ -623,7 +626,6 @@ function ChatIsland({
   input: string;
   onInputChange: (value: string) => void;
   onSubmit: () => void;
-  onVoicePress: () => void;
   onCollapse: () => void;
 }) {
   const chatEndRef = useRef<HTMLDivElement>(null);
@@ -696,7 +698,7 @@ function ChatIsland({
         >
           {history.length === 0 && (
             <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: '13px', textAlign: 'center', marginTop: '60px' }}>
-              Ask {djName} for music recommendations or use 🎤 to search by voice!
+              Name a track, hum something, or describe what you're feeling.
             </p>
           )}
           {history.map((msg, i) => (
@@ -741,7 +743,7 @@ function ChatIsland({
             value={input}
             onChange={(e) => onInputChange(e.target.value)}
             onKeyPress={(e) => e.key === 'Enter' && onSubmit()}
-            placeholder={`Ask ${djName}...`}
+            placeholder="Name it."
             style={{
               flex: 1,
               background: 'rgba(255,255,255,0.1)',
@@ -753,23 +755,6 @@ function ChatIsland({
               outline: 'none',
               }}
           />
-          <button
-            onClick={onVoicePress}
-            style={{
-              width: '40px',
-              height: '40px',
-              borderRadius: '12px',
-              background: 'linear-gradient(135deg, #D4A053 0%, #B8862E 100%)',
-              border: 'none',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              cursor: 'pointer',
-              fontSize: '16px',
-              }}
-          >
-            🎤
-          </button>
         </div>
       </div>
     </div>

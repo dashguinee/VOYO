@@ -5190,10 +5190,10 @@ export const VoyoPortraitPlayer = ({
   //     rather than mechanical. The pause is the "system reading
   //     your gesture" beat.
   const DJ_WAKE_MESSAGES: Array<{ text: string; delay: number }> = [
-    { text: "Fiouuuh ✌🏾",       delay:  90 }, // quick exclaim
-    { text: "Let's gooo ✌🏾",    delay: 130 }, // energetic
-    { text: "Now Peace ✌🏾",     delay: 180 }, // settled
-    { text: "DJ Mode Active ✌🏾", delay: 230 }, // deliberate
+    { text: "Fiouuuh ✌🏾",    delay:  90 },
+    { text: "In it ✌🏾",      delay: 130 },
+    { text: "Now Peace ✌🏾",  delay: 180 },
+    { text: "Live ✌🏾",       delay: 230 },
   ];
   const shownDJMessagesRef = useRef<Set<number>>(new Set());
 

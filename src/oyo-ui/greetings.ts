@@ -19,8 +19,8 @@ export const GREETINGS: Record<InvocationSurface, string[]> = {
     "You called. Talk to me.",
     "Mmm. What are we doing tonight?",
     "I'm listening.",
-    "On nu wama? What can I find for you?",
-    "Lobby OYO. Drop it on me.",
+    "Posi?",
+    "Floor's yours. Drop it.",
   ],
   player: [
     "Want me to take this deeper?",

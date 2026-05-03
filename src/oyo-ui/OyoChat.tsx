@@ -248,7 +248,7 @@ export const OyoChat = forwardRef<OyoChatHandle, OyoChatProps>(function OyoChat(
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder={thinking ? 'OYO is thinking…' : 'Talk to OYO…'}
+            placeholder={thinking ? '...' : 'Say something.'}
             disabled={thinking}
             aria-label="Message OYO"
             style={{
