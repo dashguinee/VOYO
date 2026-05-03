@@ -1617,6 +1617,7 @@ export const VoyoMoments: React.FC<VoyoMomentsProps> = ({ onPlayFullTrack, onArt
   const dragLayerRef = useRef<HTMLDivElement>(null);
   const volTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const starHoldTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const oyeTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
 
   // v881 — moved skip-tracking from a per-component ref (v878) to
   // the momentsEngine MODULE level (markTrackMovedAway /
@@ -1875,7 +1876,7 @@ export const VoyoMoments: React.FC<VoyoMomentsProps> = ({ onPlayFullTrack, onArt
     });
     const nf: OyeFloat[] = Array.from({ length: 5 }, (_, i) => ({ id: `${Date.now()}-${i}`, x: x - 14 + (Math.random() - 0.5) * 40, y: y - 14 }));
     setOyeFloats(p => [...p, ...nf]);
-    setTimeout(() => setOyeFloats(p => p.filter(f => !nf.find(n => n.id === f.id))), 2200);
+    oyeTimers.current.push(setTimeout(() => setOyeFloats(p => p.filter(f => !nf.find(n => n.id === f.id))), 2200));
     recordOye(momentId);
   }, [recordOye]);
 
@@ -1990,6 +1991,8 @@ export const VoyoMoments: React.FC<VoyoMomentsProps> = ({ onPlayFullTrack, onArt
     // this clear, unmounting within 5s of a wake fires setState on a
     // dead component (React 18 warning + zombie state on next mount).
     if (headerHideTimer.current) clearTimeout(headerHideTimer.current);
+    oyeTimers.current.forEach(clearTimeout);
+    oyeTimers.current = [];
   }, []);
 
   // slideVariants + sv removed — they were leftover from a stripped

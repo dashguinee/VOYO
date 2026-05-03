@@ -528,7 +528,9 @@ export async function warmLastResortPool(): Promise<void> {
       .limit(500);
     if (error || !data || data.length === 0) return;
     const tracks = (data as VideoIntelligenceRow[]).map(viRowToTrack);
-    localStorage.setItem(LAST_RESORT_KEY, JSON.stringify({ tracks, at: Date.now() }));
+    try {
+      localStorage.setItem(LAST_RESORT_KEY, JSON.stringify({ tracks, at: Date.now() }));
+    } catch { /* QuotaExceededError in iOS Safari private mode — pool stays cold */ }
     devLog(`[Discovery] Last-resort pool warmed: ${tracks.length} tracks`);
   } catch {}
 }

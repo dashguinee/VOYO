@@ -193,10 +193,11 @@ if (typeof window !== 'undefined') {
   const unloadFlush = () => {
     if (buffer.length === 0) return;
     try {
-      const url = `${import.meta.env.VITE_SUPABASE_URL}/rest/v1/${TABLE}`;
-      const body = JSON.stringify(buffer);
       const key = import.meta.env.VITE_SUPABASE_ANON_KEY;
-      // Use fetch with keepalive (beacon doesn't set headers reliably)
+      // sendBeacon cannot set custom headers — apikey must be in the URL as a
+      // query param. Supabase accepts it there for REST auth.
+      const url = `${import.meta.env.VITE_SUPABASE_URL}/rest/v1/${TABLE}?apikey=${encodeURIComponent(key)}`;
+      const body = JSON.stringify(buffer);
       if (navigator.sendBeacon) {
         const blob = new Blob([body], { type: 'application/json' });
         navigator.sendBeacon(url, blob);

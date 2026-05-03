@@ -509,6 +509,7 @@ export async function downloadTrack(trackId: string): Promise<boolean> {
     const response = await fetch(`${API_URL}/download?v=${trackId}`, {
       signal: AbortSignal.timeout(60000), // 1 minute for download
     });
+    if (!response.ok) return false;
     const data = await response.json();
     return data.success === true;
   } catch (error) {
@@ -536,6 +537,7 @@ export async function deleteDownload(trackId: string): Promise<boolean> {
       method: 'DELETE',
       signal: AbortSignal.timeout(5000),
     });
+    if (!response.ok) return false;
     const data = await response.json();
     return data.success === true;
   } catch {
@@ -551,6 +553,7 @@ export async function getDownloadedTracks(): Promise<string[]> {
     const response = await fetch(`${API_URL}/downloaded`, {
       signal: AbortSignal.timeout(5000),
     });
+    if (!response.ok) return [];
     const data = await response.json();
     return data.downloads || [];
   } catch {

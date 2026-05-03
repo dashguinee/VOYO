@@ -65,12 +65,16 @@ export function getBatteryState(): BatteryState {
   return state;
 }
 
+let _batteryInitialized = false;
+
 /**
  * Initialize once on app boot. Reads current state, subscribes to change
  * events, logs each change to trace telemetry so we can correlate with
  * audio events later.
  */
 export async function initBatteryMonitor(): Promise<void> {
+  if (_batteryInitialized) return;
+  _batteryInitialized = true;
   if (typeof navigator === 'undefined' || !('getBattery' in navigator)) {
     // Not supported — stay on the INITIAL default (supported: false).
     trace('battery_init', null, { supported: false });
