@@ -72,14 +72,20 @@ const DIRECTION_CYCLE: string[] = [
 
 let plan: OyoPlan | null = null;
 let shiftTimer: ReturnType<typeof setTimeout> | null = null;
+// Serialise concurrent buildPlan calls — concurrent runs would snapshot
+// prevSkips/prevCompletions at their individual start times and whichever
+// resolves last silently rolls back the counters incremented by onSignal
+// between the two awaits. Queue instead of parallel.
+let _buildQueue: Promise<void> = Promise.resolve();
 
 // ─────────────────────────────────────────────────────────────
 // Public API
 // ─────────────────────────────────────────────────────────────
 
-export async function initPlan(): Promise<void> {
+export function initPlan(): Promise<void> {
   devLog('[OyoPlan] Initialising session plan');
-  await buildPlan('init');
+  buildPlan('init');
+  return _buildQueue;
 }
 
 export function onSignal(type: SignalType, data?: string): void {
@@ -137,7 +143,11 @@ export function getPlan(): OyoPlan | null {
 // Core build logic
 // ─────────────────────────────────────────────────────────────
 
-async function buildPlan(trigger: BuildTrigger, triggerData?: string): Promise<void> {
+function buildPlan(trigger: BuildTrigger, triggerData?: string): void {
+  _buildQueue = _buildQueue.then(() => _doBuildPlan(trigger, triggerData)).catch(() => {});
+}
+
+async function _doBuildPlan(trigger: BuildTrigger, triggerData?: string): Promise<void> {
   devLog(`[OyoPlan] buildPlan trigger=${trigger}`, triggerData ?? '');
 
   // Preserve signal history and counters across rebuilds

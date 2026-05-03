@@ -104,6 +104,7 @@ export function OyoIsland({ visible, onHide, onActivity }: OyoIslandProps) {
 
   // Voice search handler - THE SHAZAM KILLER
   const handleVoiceSearch = useCallback(async () => {
+    if (submittingRef.current) return;
     if (!isWhisperConfigured()) {
       setVoiceState({
         isRecording: false,
@@ -243,50 +244,53 @@ export function OyoIsland({ visible, onHide, onActivity }: OyoIslandProps) {
     // Guard concurrent async submissions — set before first await so the
     // event loop can't re-enter this path while a search is in flight.
     submittingRef.current = true;
-    const searchResults = await searchAlbums(searchQuery);
-    if (searchResults.length > 0) {
-      const match = searchResults[0];
+    try {
+      const searchResults = await searchAlbums(searchQuery);
+      if (searchResults.length > 0) {
+        const match = searchResults[0];
 
-      // If play intent, get tracks and play immediately
-      if (playIntent) {
-        try {
-          const tracks = await getAlbumTracks(match.id);
-          if (tracks.length > 0) {
-            const voyoTrack = pipedTrackToVoyoTrack(tracks[0], match.thumbnail);
-            app.playTrack(voyoTrack, 'search');
+        // If play intent, get tracks and play immediately
+        if (playIntent) {
+          try {
+            const tracks = await getAlbumTracks(match.id);
+            if (tracks.length > 0) {
+              const voyoTrack = pipedTrackToVoyoTrack(tracks[0], match.thumbnail);
+              app.playTrack(voyoTrack, 'search');
 
+              setChatHistory(prev => [
+                ...prev.slice(0, -1),
+                { role: 'oyo', message: `On it. "${match.name}" — ${match.artist}.` },
+              ]);
+
+              // Get cultural context (non-blocking)
+              getCulturalContext(searchQuery, match.name, match.artist).then(context => {
+                if (context) {
+                  setChatHistory(prev => [...prev, { role: 'oyo', message: `💡 ${context}` }]);
+                }
+              });
+            }
+          } catch {
             setChatHistory(prev => [
               ...prev.slice(0, -1),
-              { role: 'oyo', message: `On it. "${match.name}" — ${match.artist}.` },
+              { role: 'oyo', message: `"${match.name}" won't load. Try the search bar.` },
             ]);
-
-            // Get cultural context (non-blocking)
-            getCulturalContext(searchQuery, match.name, match.artist).then(context => {
-              if (context) {
-                setChatHistory(prev => [...prev, { role: 'oyo', message: `💡 ${context}` }]);
-              }
-            });
           }
-        } catch {
+        } else {
+          // Just show results, ask if user wants to play
           setChatHistory(prev => [
             ...prev.slice(0, -1),
-            { role: 'oyo', message: `"${match.name}" won't load. Try the search bar.` },
+            { role: 'oyo', message: `"${match.name}" by ${match.artist}. Say "play" to drop it.` },
           ]);
         }
       } else {
-        // Just show results, ask if user wants to play
         setChatHistory(prev => [
           ...prev.slice(0, -1),
-          { role: 'oyo', message: `"${match.name}" by ${match.artist}. Say "play" to drop it.` },
+          { role: 'oyo', message: `"${searchQuery}" — nothing. Different angle or hum it.` },
         ]);
       }
-    } else {
-      setChatHistory(prev => [
-        ...prev.slice(0, -1),
-        { role: 'oyo', message: `"${searchQuery}" — nothing. Different angle or hum it.` },
-      ]);
+    } finally {
+      submittingRef.current = false;
     }
-    submittingRef.current = false;
   }, [chatInput]);
 
   // Collapse (×, cancel) = dismiss the island entirely. Calling onHide

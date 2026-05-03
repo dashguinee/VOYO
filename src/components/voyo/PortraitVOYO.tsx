@@ -168,6 +168,14 @@ export const PortraitVOYO = ({ onSearch, onDahub, onHome }: PortraitVOYOProps) =
   const [isTextInputOpen, setIsTextInputOpen] = useState(false);
   const [artistPageName, setArtistPageName] = useState<string | null>(null);
   const originalVolumeRef = useRef(volume);
+  const djTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+
+  const clearDjTimers = () => {
+    djTimersRef.current.forEach(clearTimeout);
+    djTimersRef.current = [];
+  };
+
+  useEffect(() => () => clearDjTimers(), []);
 
   // Fade music when DJ is active.
   // Volume intentionally EXCLUDED from deps — this effect should only
@@ -192,19 +200,20 @@ export const PortraitVOYO = ({ onSearch, onDahub, onHome }: PortraitVOYOProps) =
 
   // Handle OYEE - Voice listen mode
   const handleListenMode = () => {
+    clearDjTimers();
     if (djMode === 'listening') {
       setDjMode('responding');
       setDjResponse("Back to the vibes!");
-      setTimeout(() => {
+      djTimersRef.current.push(setTimeout(() => {
         setDjMode('idle');
         setDjResponse(null);
-        if (!isPlaying) togglePlay();
-      }, 1500);
+        if (!usePlayerStore.getState().isPlaying) togglePlay();
+      }, 1500));
     } else {
       setDjMode('listening');
       if (isPlaying) togglePlay();
-      setTimeout(() => setDjResponse("Wazzguan?"), 800);
-      setTimeout(() => setDjResponse(null), 2500);
+      djTimersRef.current.push(setTimeout(() => setDjResponse("Wazzguan?"), 800));
+      djTimersRef.current.push(setTimeout(() => setDjResponse(null), 2500));
     }
   };
 
@@ -217,6 +226,7 @@ export const PortraitVOYO = ({ onSearch, onDahub, onHome }: PortraitVOYOProps) =
 
   // Handle DJ command submission
   const handleDJCommand = (command: string) => {
+    clearDjTimers();
     setIsTextInputOpen(false);
     setDjMode('thinking');
 
@@ -233,21 +243,22 @@ export const PortraitVOYO = ({ onSearch, onDahub, onHome }: PortraitVOYOProps) =
       responseKey = 'chill-vibes';
     }
 
-    setTimeout(() => {
+    djTimersRef.current.push(setTimeout(() => {
       setDjMode('responding');
       const responses = DJ_RESPONSES[responseKey] || DJ_RESPONSES.default;
       setDjResponse(responses[Math.floor(Math.random() * responses.length)]);
       refreshRecommendations();
 
-      setTimeout(() => {
+      djTimersRef.current.push(setTimeout(() => {
         setDjMode('idle');
         setDjResponse(null);
-        if (!isPlaying) togglePlay();
-      }, 2000);
-    }, 600);
+        if (!usePlayerStore.getState().isPlaying) togglePlay();
+      }, 2000));
+    }, 600));
   };
 
   const handleCloseTextInput = () => {
+    clearDjTimers();
     setIsTextInputOpen(false);
     if (djMode === 'listening') setDjMode('idle');
   };

@@ -1153,12 +1153,15 @@ export const AudioPlayer = () => {
           stallLogTimerRef.current = null;
           const curEl = audioRef.current;
           if (!curEl || curEl.readyState >= 3) return; // recovered — not a stall
+          // Read fresh state — if user skipped within the 800ms window the
+          // track and source may have changed; log against current, not snapshot.
+          const freshStore = usePlayerStore.getState();
           logPlaybackEvent({
             event_type: 'stream_stall',
-            track_id: curTrack,
+            track_id: freshStore.currentTrack?.trackId ?? 'unknown',
             meta: {
               sub: 'waiting',
-              source: store.playbackSource,
+              source: freshStore.playbackSource,
               ready_state: curEl.readyState,
               network_state: curEl.networkState,
               waited_ms: STALL_LOG_DELAY_MS,

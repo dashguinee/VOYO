@@ -92,6 +92,13 @@ const R2_POLL_INTERVAL_MS = 2000;
 const SEARCH_WAIT_MS      = 30_000;
 const R2_EDGE             = 'https://voyo-edge.dash-webtv.workers.dev/audio';
 
+// Dedup map — rapid skips would stack a new 30-second poll loop per skip.
+// On Guinea/SL 2G those HEAD requests compete with the audio stream itself.
+// If a poll is already running for a ytId, re-use it instead of starting a
+// new one. The resolved promise is evicted so the next explicit call after
+// success starts fresh (handles re-queued tracks).
+const _ensureInFlight = new Map<string, Promise<void>>();
+
 /**
  * Unified handoff — ensure the track is either in R2 or give up gracefully
  * after SEARCH_WAIT_MS. Callers then proceed to play: R2 hit = instant,
@@ -100,7 +107,7 @@ const R2_EDGE             = 'https://voyo-edge.dash-webtv.workers.dev/audio';
  * Also upserts the queue row so the lanes extract it. That upsert is
  * fire-and-forget; the R2 poll loop below is the actual gate.
  */
-export async function ensureTrackReady(
+export function ensureTrackReady(
   track: Track,
   sessionId: string | null,
   opts: { priority?: number } = {},
@@ -114,6 +121,19 @@ export async function ensureTrackReady(
   // YouTube ID. vyo_<base64> prefixes are rejected by the edge worker.
   const ytId = getYouTubeId(track.trackId);
 
+  // Dedup: rapid skips would stack a new 30s poll loop per skip, burning
+  // bandwidth on the weak Guinea/SL connections we're optimizing for.
+  const existing = _ensureInFlight.get(ytId);
+  if (existing) return existing;
+
+  const promise = _doEnsureTrackReady(ytId).finally(() => {
+    _ensureInFlight.delete(ytId);
+  });
+  _ensureInFlight.set(ytId, promise);
+  return promise;
+}
+
+async function _doEnsureTrackReady(ytId: string): Promise<void> {
   // Fast path: R2 already has it → return immediately (caller plays via
   // audio.src = R2 URL or lets iframe start first with hot-swap later).
   // v938: also populate r2KnownStore on HEAD success. Without this, the
