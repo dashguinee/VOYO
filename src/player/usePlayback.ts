@@ -53,16 +53,17 @@ export interface Playback {
 export function usePlayback(): Playback {
   const currentTrack    = usePlayerStore(s => s.currentTrack);
   const isPlaying       = usePlayerStore(s => s.isPlaying);
-  const currentTime     = usePlayerStore(s => s.currentTime);
   const duration        = usePlayerStore(s => s.duration);
   const queue           = usePlayerStore(useShallow(s => s.queue));
   const playbackSource  = usePlayerStore(s => s.playbackSource);
 
-  // Actions are stable — pull them once.
+  // currentTime is NOT subscribed reactively — it updates 4x/sec and would
+  // force every usePlayback() caller to re-render at that cadence. Consumers
+  // needing live time should call usePlayerStore(s => s.currentTime) directly.
   return useMemo<Playback>(() => ({
     currentTrack,
     isPlaying,
-    currentTime,
+    currentTime: usePlayerStore.getState().currentTime,
     duration,
     queue: queue.map(q => q.track),
     playbackSource,
@@ -106,5 +107,5 @@ export function usePlayback(): Playback {
       if (typeof s.seekTo === 'function') s.seekTo(seconds);
       else s.setCurrentTime(seconds);
     },
-  }), [currentTrack, isPlaying, currentTime, duration, queue, playbackSource]);
+  }), [currentTrack, isPlaying, duration, queue, playbackSource]);
 }

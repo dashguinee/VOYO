@@ -11,7 +11,7 @@
  * confident, never corporate).
  */
 
-import type { InvocationSurface } from '../store/oyoStore';
+export type InvocationSurface = 'home' | 'player' | 'dahub';
 
 export const GREETINGS: Record<InvocationSurface, string[]> = {
   home: [

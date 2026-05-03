@@ -462,7 +462,8 @@ export async function getTrending(region: string = 'US'): Promise<SearchResult[]
  */
 export async function prefetchTrack(trackId: string): Promise<boolean> {
   try {
-    const response = await fetch(`${API_URL}/prefetch?v=${trackId}`, {
+    const youtubeId = decodeVoyoId(trackId);
+    const response = await fetch(`${API_URL}/prefetch?v=${youtubeId}`, {
       signal: AbortSignal.timeout(5000),
     });
     if (!response.ok) {

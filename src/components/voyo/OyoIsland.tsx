@@ -87,6 +87,7 @@ export function OyoIsland({ visible, onHide, onActivity }: OyoIslandProps) {
     if (visible && !prevVisibleRef.current) {
       setMode('chat');
       setChatHistory([]);
+      setVoiceState({ isRecording: false, isProcessing: false });
     }
     prevVisibleRef.current = visible;
   }, [visible]);
@@ -594,7 +595,7 @@ function ChatIsland({
             type="text"
             value={input}
             onChange={(e) => onInputChange(e.target.value)}
-            onKeyPress={(e) => e.key === 'Enter' && onSubmit()}
+            onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && onSubmit()}
             placeholder="Name it."
             style={{
               flex: 1,
@@ -605,8 +606,25 @@ function ChatIsland({
               color: 'white',
               fontSize: '14px',
               outline: 'none',
-              }}
+            }}
           />
+          <button
+            onClick={onSubmit}
+            disabled={!input.trim()}
+            style={{
+              background: input.trim() ? 'rgba(212,160,83,0.35)' : 'rgba(255,255,255,0.06)',
+              border: `1px solid ${input.trim() ? 'rgba(212,160,83,0.5)' : 'rgba(255,255,255,0.1)'}`,
+              borderRadius: '12px',
+              padding: '10px 14px',
+              color: input.trim() ? '#D4A053' : 'rgba(255,255,255,0.3)',
+              fontSize: '14px',
+              cursor: input.trim() ? 'pointer' : 'default',
+              transition: 'all 0.15s ease',
+              flexShrink: 0,
+            }}
+          >
+            Send
+          </button>
         </div>
       </div>
     </div>

@@ -26,7 +26,7 @@ export async function gateToR2(
   _opts: GateOptions = {},
 ): Promise<Track[]> {
   if (!candidates.length || !supabase) return [];
-  const ids = candidates.map(t => t.trackId).filter(Boolean);
+  const ids = candidates.map(t => getYouTubeId(t.trackId)).filter(Boolean);
   if (!ids.length) return [];
 
   const { data, error } = await supabase
@@ -43,7 +43,7 @@ export async function gateToR2(
   // if already oyed) on the next render — without waiting for a local
   // download or a HEAD probe.
   if (cachedSet.size) markR2KnownMany(Array.from(cachedSet));
-  return candidates.filter(t => cachedSet.has(t.trackId));
+  return candidates.filter(t => cachedSet.has(getYouTubeId(t.trackId)));
 }
 
 /**
@@ -58,7 +58,7 @@ export async function queueForExtraction(
 ): Promise<void> {
   if (!VITE_SUPABASE_URL || !VITE_SUPABASE_ANON_KEY || !tracks.length) return;
   const body = tracks.map(t => ({
-    youtube_id: t.trackId,
+    youtube_id: getYouTubeId(t.trackId),
     status: 'pending',
     title: t.title ?? null,
     artist: t.artist ?? null,

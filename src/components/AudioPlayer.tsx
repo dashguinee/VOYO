@@ -229,6 +229,14 @@ export const AudioPlayer = () => {
     return () => {
       voyoStream.onRapidSkip = null;
       voyoStream.endSession();
+      // Release detached preload element — it holds an R2 URL open and
+      // would keep buffering in memory if not explicitly stopped.
+      const preEl = nextTrackPreloadRef.current;
+      if (preEl) {
+        preEl.pause();
+        preEl.src = '';
+        nextTrackPreloadRef.current = null;
+      }
     };
   }, []);
 
