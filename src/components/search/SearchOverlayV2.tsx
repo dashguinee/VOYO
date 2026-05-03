@@ -21,6 +21,7 @@ import { syncSearchResults } from '../../services/databaseSync';
 import { AlbumSection } from './AlbumSection';
 import { VibesSection } from './VibesSection';
 import { devWarn } from '../../utils/logger';
+import { logPlaybackEvent } from '../../services/telemetry';
 import { supabase, isSupabaseConfigured } from '../../lib/supabase';
 import { getYouTubeId } from '../../utils/voyoId';
 import { getVibeEssence } from '../../services/essenceEngine';
@@ -536,6 +537,15 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap, onEnterVideoMode
     const hasResults = merged.length > 0;
 
     setIsSearching(false);
+    logPlaybackEvent({
+      event_type: 'search_query',
+      track_id: '-',
+      meta: {
+        q: searchQuery.slice(0, 100),
+        results: merged.length,
+        source: hasResults ? 'db' : 'empty',
+      },
+    });
     if (hasResults) {
       setResults(merged);
       saveToHistory(searchQuery);
@@ -631,6 +641,7 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap, onEnterVideoMode
 
     if (isCached) {
       // R2 fast path — instant play, no queue/boost step.
+      logPlaybackEvent({ event_type: 'search_tap', track_id: track.trackId, meta: { title: track.title, path: 'r2_fast' } });
       app.playTrack(track, 'search');
       oyaPlanSignal('search_play', track.artist ?? '');
       onEnterVideoMode?.();
@@ -659,6 +670,7 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap, onEnterVideoMode
     // create a render window where currentTrack=old and queue[0]=selected,
     // showing "Next Up" for the track the user just tapped. Playing first
     // makes the track currentTrack before oyeCommit's queue-add fires.
+    logPlaybackEvent({ event_type: 'search_tap', track_id: track.trackId, meta: { title: track.title, path: 'cold' } });
     app.playTrack(track, 'search');
     app.oyeCommit(track);
     oyaPlanSignal('search_play', track.artist ?? '');

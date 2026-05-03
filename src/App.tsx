@@ -44,6 +44,7 @@ const ArtistPage = lazy(() => import('./components/voyo/ArtistPage'));
 const UniversePanel = lazy(() => import('./components/universe/UniversePanel').then(m => ({ default: m.UniversePanel })));
 import { useReactionStore } from './store/reactionStore';
 import { devLog, devWarn, criticalError } from './utils/logger';
+import { logPlaybackEvent } from './services/telemetry';
 import { AuthProvider } from './providers/AuthProvider';
 import { useTabHistory } from './hooks/useTabHistory';
 
@@ -112,6 +113,10 @@ function markBootOk(): void {
  * counter crosses threshold.
  */
 async function nukeAndReload(): Promise<void> {
+  // Log before wiping — once we reload this event won't flush otherwise.
+  try {
+    logPlaybackEvent({ event_type: 'app_nuke', track_id: '-', error_code: 'crash_threshold', meta: {} });
+  } catch { /* noop */ }
   clearCrashCounter();
   try {
     if ('serviceWorker' in navigator) {
@@ -144,6 +149,20 @@ class AppErrorBoundary extends Component<{ children: ReactNode }, ErrorBoundaryS
 
   componentDidCatch(error: Error, info: ErrorInfo) {
     criticalError('[VOYO] Render crash caught by ErrorBoundary:', error, info.componentStack);
+    // Forward render crashes to Supabase — previously invisible in production
+    // (criticalError = console.error only). Now surfaced as app_crash events.
+    try {
+      logPlaybackEvent({
+        event_type: 'app_crash',
+        track_id: '-',
+        error_code: error?.name || 'RenderError',
+        meta: {
+          message: (error?.message || '').slice(0, 200),
+          component: (info?.componentStack || '').split('\n').slice(1, 4).join(' ← ').slice(0, 300),
+          url: typeof location !== 'undefined' ? location.href.slice(0, 200) : '',
+        },
+      });
+    } catch { /* telemetry must never throw */ }
     // ChunkLoadError isn't a real crash — it's a flaky-network symptom.
     // On Guinea / SL LTE, bumping the counter for these would trivially
     // hit the 3-strike threshold and trigger a NUKE that then has to
@@ -651,7 +670,10 @@ function App() {
     window.history.replaceState({}, '', window.location.pathname);
     import('./services/databaseDiscovery').then(({ fetchTrackById }) => {
       fetchTrackById(trackId).then(track => {
-        if (track) app.playTrack(track, 'deeplink');
+        if (track) {
+          logPlaybackEvent({ event_type: 'deeplink_play', track_id: trackId, meta: { title: track.title } });
+          app.playTrack(track, 'deeplink');
+        }
       });
     });
   }, []);
@@ -936,10 +958,12 @@ function App() {
     if (Math.abs(dx) <= Math.abs(dy) * 1.4) return;
     // Right-edge swipe LEFT (dx < 0) → engage Player (voyo)
     if (start.side === 'right' && dx < 0 && appMode === 'classic') {
+      logPlaybackEvent({ event_type: 'nav_switch', track_id: '-', meta: { from: 'classic', to: 'voyo', trigger: 'edge_swipe' } });
       setAppMode('voyo');
     }
     // Left-edge swipe RIGHT (dx > 0) → return to Home (classic)
     if (start.side === 'left' && dx > 0 && appMode === 'voyo') {
+      logPlaybackEvent({ event_type: 'nav_switch', track_id: '-', meta: { from: 'voyo', to: 'classic', trigger: 'edge_swipe' } });
       setAppMode('classic');
     }
   }, [appMode]);
@@ -1013,10 +1037,14 @@ function App() {
     const validTab = (typeof tab === 'string' && (VALID_TABS as readonly string[]).includes(tab))
       ? tab as typeof VALID_TABS[number]
       : 'music';
+    logPlaybackEvent({ event_type: 'nav_switch', track_id: '-', meta: { from: appMode, to: 'voyo', tab: validTab, trigger: 'tap' } });
     setVoyoTab(validTab);
     setAppMode('voyo');
   };
-  const handleSwitchToClassic = () => setAppMode('classic');
+  const handleSwitchToClassic = () => {
+    logPlaybackEvent({ event_type: 'nav_switch', track_id: '-', meta: { from: appMode, to: 'classic', trigger: 'tap' } });
+    setAppMode('classic');
+  };
 
   return (
     <AppErrorBoundary>

@@ -16,7 +16,7 @@
  * Deploy:
  *   cd /opt/voyo/playwright && npm install
  *   npx playwright install chromium --with-deps
- *   cron: 0 */6 * * * root /opt/voyo/playwright/run-guardian.sh
+ *   cron: 0 * /6 * * * root /opt/voyo/playwright/run-guardian.sh  (remove space after *)
  */
 
 'use strict';
