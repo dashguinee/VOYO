@@ -78,6 +78,7 @@ export function OyoIsland({ visible, onHide, onActivity }: OyoIslandProps) {
   // OyoIsland body doesn't re-render at 4Hz during playback.
 
   const djProfile = getProfile();
+  const submittingRef = useRef(false);
 
   // Open directly to chat whenever the island becomes visible.
   // Also clear chat history on each new invocation so users don't land on
@@ -186,7 +187,7 @@ export function OyoIsland({ visible, onHide, onActivity }: OyoIslandProps) {
 
   // Chat submit handler - with play capability AND conversation
   const handleChatSubmit = useCallback(async () => {
-    if (!chatInput.trim()) return;
+    if (!chatInput.trim() || submittingRef.current) return;
 
     const userMessage = chatInput.trim();
     const lowerMessage = userMessage.toLowerCase();
@@ -239,7 +240,9 @@ export function OyoIsland({ visible, onHide, onActivity }: OyoIslandProps) {
     const searchQuery = playIntent ? userMessage.replace(/^(play|queue|hit|drop|spin)\s+/i, '') : userMessage;
     setChatHistory(prev => [...prev, { role: 'oyo', message: `"${searchQuery}"...` }]);
 
-    // Search for the track
+    // Guard concurrent async submissions — set before first await so the
+    // event loop can't re-enter this path while a search is in flight.
+    submittingRef.current = true;
     const searchResults = await searchAlbums(searchQuery);
     if (searchResults.length > 0) {
       const match = searchResults[0];
@@ -283,6 +286,7 @@ export function OyoIsland({ visible, onHide, onActivity }: OyoIslandProps) {
         { role: 'oyo', message: `"${searchQuery}" — nothing. Different angle or hum it.` },
       ]);
     }
+    submittingRef.current = false;
   }, [chatInput]);
 
   // Collapse (×, cancel) = dismiss the island entirely. Calling onHide
