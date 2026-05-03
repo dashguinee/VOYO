@@ -662,3 +662,24 @@ export function rawEntryToTrack(entry: RawPoolEntry): Track {
   };
 }
 
+/**
+ * Fetch a single track by YouTube ID — used for deeplink boot.
+ * Checks the in-memory R2 pool first (free), falls back to a Supabase point query.
+ */
+export async function fetchTrackById(youtubeId: string): Promise<Track | null> {
+  // Fast path: pool already loaded in memory
+  if (_cachedPoolCache) {
+    const hit = (_cachedPoolCache.rows as unknown as RawPoolEntry[]).find(r => r.youtube_id === youtubeId);
+    if (hit) return rawEntryToTrack(hit);
+  }
+  // Slow path: direct DB lookup
+  if (!supabaseConfigured) return null;
+  const { data, error } = await getSupabase()
+    .from('video_intelligence')
+    .select('youtube_id,title,artist,thumbnail_url,artist_tier,primary_genre,cultural_tags,heat_score,vibe_afro_heat,vibe_chill_vibes,vibe_party_mode,vibe_late_night,vibe_workout')
+    .eq('youtube_id', youtubeId)
+    .single();
+  if (error || !data) return null;
+  return toTrack(data as DiscoveryTrack);
+}
+

@@ -642,6 +642,20 @@ function App() {
     detectNetworkQuality();
   }, []);
 
+  // DEEPLINK: ?t=<youtubeId> — shared track link opens directly in portrait player
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const trackId = params.get('t');
+    if (!trackId) return;
+    // Strip param from URL so back/refresh doesn't re-trigger
+    window.history.replaceState({}, '', window.location.pathname);
+    import('./services/databaseDiscovery').then(({ fetchTrackById }) => {
+      fetchTrackById(trackId).then(track => {
+        if (track) app.playTrack(track, 'deeplink');
+      });
+    });
+  }, []);
+
 
 
   // FIRST-TIME EXPERIENCE: Prime the player with a curated track on cold boot.

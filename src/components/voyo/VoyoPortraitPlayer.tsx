@@ -6325,8 +6325,8 @@ export const VoyoPortraitPlayer = ({
                     if (currentTrack && navigator.share) {
                       navigator.share({
                         title: currentTrack.title,
-                        text: `Listen to ${currentTrack.title} by ${currentTrack.artist} on VOYO`,
-                        url: window.location.href,
+                        text: `${currentTrack.title} by ${currentTrack.artist} — listen on VOYO`,
+                        url: `https://voyomusic.com/?t=${currentTrack.trackId}`,
                       }).catch(() => {});
                     }
                     haptics.light();
