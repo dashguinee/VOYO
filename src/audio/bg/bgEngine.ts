@@ -183,13 +183,15 @@ export function useBgEngine(params: UseBgEngineParams): BgEngineApi {
     };
   }, []);
 
-  // Start/stop the bypass keeper with isPlaying. First play() must happen
-  // inside a user-gesture context — since isPlaying only becomes true after
-  // the user taps play, this useEffect fires within that gesture window.
+  // Start/stop the bypass keeper with isPlaying. Volume is 0 in FG (music
+  // itself satisfies Chrome's audibility check) and 0.1 in BG (needed to
+  // keep the tab above Chrome's ~-60 dBFS throttle threshold). This
+  // eliminates the audible buzz while preserving BG continuity.
   useEffect(() => {
     const keeper = bypassKeeperRef.current;
     if (!keeper) return;
     if (isPlaying) {
+      keeper.volume = document.hidden ? 0.1 : 0;
       keeper.play().catch(() => {
         // NotAllowedError if gesture context expired — non-critical, main
         // element's engageSilentWav path still maintains the audio session.
@@ -197,6 +199,11 @@ export function useBgEngine(params: UseBgEngineParams): BgEngineApi {
     } else {
       keeper.pause();
     }
+    const onVisibility = () => {
+      if (keeper && isPlaying) keeper.volume = document.hidden ? 0.1 : 0;
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => document.removeEventListener('visibilitychange', onVisibility);
   }, [isPlaying]);
 
   // ── ENGAGE SILENT WAV (one helper used everywhere) ───────────────────
