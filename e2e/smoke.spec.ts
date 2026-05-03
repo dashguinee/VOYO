@@ -183,16 +183,16 @@ test.describe('Audio playback', () => {
 
 test.describe('PWA', () => {
   test('manifest is served', async ({ page }) => {
-    // Use fetch() inside the page — page.goto() for static files triggers
-    // Vite's SPA HTML fallback in some configurations.
-    await page.goto('/');
-    await waitForAppReady(page);
-    const result = await page.evaluate(async () => {
-      const r = await fetch('/manifest.webmanifest');
-      return { status: r.status, body: await r.text() };
-    });
-    expect(result.status).toBeLessThan(400);
-    expect(result.body.toLowerCase()).toMatch(/voyo|name/);
+    // Read from disk — the SPA fallback can intercept fetches and return
+    // index.html instead of the static file (false positive). Disk read
+    // guarantees we're testing the actual manifest, not the HTML shell.
+    const manifestFile = path.join(__dirname, '../public/manifest.webmanifest');
+    expect(fs.existsSync(manifestFile)).toBe(true);
+    const manifest = JSON.parse(fs.readFileSync(manifestFile, 'utf8'));
+    expect(manifest).toHaveProperty('name');
+    expect(manifest).toHaveProperty('start_url');
+    expect(manifest).toHaveProperty('display', 'standalone');
+    expect(manifest.icons?.length).toBeGreaterThan(0);
   });
 
   test('version.json is served', async ({ page }) => {

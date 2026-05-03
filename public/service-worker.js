@@ -141,7 +141,8 @@ self.addEventListener('fetch', (event) => {
   // (e.g. from a legacy build that had "orientation": "portrait") keeps
   // the PWA locked even after the source manifest is fixed. Network-only
   // here guarantees Chrome's periodic WebAPK refresh sees the live value.
-  if (event.request.url.includes('/manifest.json')) return;
+  if (event.request.url.includes('/manifest.json') ||
+      event.request.url.includes('/manifest.webmanifest')) return;
 
   // Skip Vite dev server resources (HMR, react-refresh, etc.)
   if (event.request.url.includes('@vite') ||
