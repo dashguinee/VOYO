@@ -30,7 +30,8 @@ import type { Track } from '../types';
 import type { BoostPreset } from '../audio/graph/boostPresets';
 // r2Probe is the shared probe — useHotSwap imports the same function,
 // so one fix = both paths. R2_AUDIO stays here for the src-assignment URL.
-import { r2HasTrack, R2_AUDIO_BASE as R2_AUDIO } from '../player/r2Probe';
+import { R2_AUDIO_BASE as R2_AUDIO } from '../player/r2Probe';
+import { isTrackInR2Pool } from '../services/databaseDiscovery';
 import { useHotSwap } from '../player/useHotSwap';
 import { useMiniPiP } from '../hooks/useMiniPiP';
 import { useR2KnownStore } from '../store/r2KnownStore';
@@ -533,35 +534,28 @@ export const AudioPlayer = () => {
             logPlaybackEvent({ event_type: 'trace', track_id: currentTrack.trackId, meta: { subtype: 'bg_swap_safety_released' } });
           }, 5_000);
         } else {
-          // FG: probe R2 first. Found → R2 fast path. Missed → iframe,
-          // useHotSwap upgrades to R2 the moment extraction lands.
-          r2HasTrack(currentTrack.trackId).then(hasR2 => {
-            if (isStale()) return;
-            const el2 = audioRef.current;
-            if (!el2 || isStale()) return;
-            if (hasR2) {
-              el2.pause();
-              el2.loop = false;
-              el2.src = `${R2_AUDIO}/${getYouTubeId(currentTrack.trackId)}?q=high`;
-              setSource('r2');
-              const ctx2 = audioContextRef.current;
-              if (ctx2 && ctx2.state !== 'running') ctx2.resume().catch(() => {});
-              el2.play().catch(() => {});
-              logPlaybackEvent({ event_type: 'play_start', track_id: currentTrack.trackId, source: 'r2', meta: { subtype: 'probe_found' } });
-            } else {
-              setSource('iframe');
-              trackSwapInProgressRef.current = false;
-              logPlaybackEvent({ event_type: 'play_start', track_id: currentTrack.trackId, source: 'iframe', meta: { subtype: 'r2_miss_iframe_immediate' } });
-            }
-          }).catch(() => {
-            if (isStale()) return;
-            const el2 = audioRef.current;
-            if (!el2) return;
-            el2.loop = true;
+          // FG: instant pool lookup instead of async r2HasTrack probe (was up
+          // to 3s gap). isTrackInR2Pool reads the in-memory _cachedPoolCache
+          // (0ms). Cold cache → iframe immediately (still 0ms, no probe wait).
+          // If pool says yes but CDN errors → quality ladder handles it.
+          if (isStale()) return;
+          const el2 = audioRef.current;
+          if (!el2 || isStale()) return;
+          const ytId = getYouTubeId(currentTrack.trackId);
+          if (isTrackInR2Pool(ytId)) {
+            el2.pause();
+            el2.loop = false;
+            el2.src = `${R2_AUDIO}/${ytId}?q=high`;
+            setSource('r2');
+            const ctx2 = audioContextRef.current;
+            if (ctx2 && ctx2.state !== 'running') ctx2.resume().catch(() => {});
+            el2.play().catch(() => {});
+            logPlaybackEvent({ event_type: 'play_start', track_id: currentTrack.trackId, source: 'r2', meta: { subtype: 'pool_hit' } });
+          } else {
             setSource('iframe');
             trackSwapInProgressRef.current = false;
-            logPlaybackEvent({ event_type: 'trace', track_id: currentTrack.trackId, meta: { subtype: 'r2_probe_err_iframe_audio' } });
-          });
+            logPlaybackEvent({ event_type: 'play_start', track_id: currentTrack.trackId, source: 'iframe', meta: { subtype: 'r2_miss_iframe_immediate' } });
+          }
         }
       }
     })();

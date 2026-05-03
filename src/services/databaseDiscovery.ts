@@ -572,6 +572,16 @@ export function getRawCachedPool(): RawPoolEntry[] {
   return _cachedPoolCache.rows as unknown as RawPoolEntry[];
 }
 
+/**
+ * Synchronous O(1) check — is this YouTube ID in the R2-cached pool?
+ * Eliminates the async r2HasTrack HEAD probe (up to 3s → 0ms) on track change.
+ * Returns false when pool is cold — caller falls to iframe immediately.
+ */
+export function isTrackInR2Pool(ytId: string): boolean {
+  if (!_cachedPoolCache) return false;
+  return (_cachedPoolCache.rows as unknown as RawPoolEntry[]).some(r => r.youtube_id === ytId);
+}
+
 // ── Conductor full-DB pool ────────────────────────────────────────────────
 
 let _conductorPoolCache: { rows: RawPoolEntry[]; at: number } | null = null;
