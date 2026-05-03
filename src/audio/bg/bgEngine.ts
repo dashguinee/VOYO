@@ -231,6 +231,14 @@ export function useBgEngine(params: UseBgEngineParams): BgEngineApi {
           audioContextRef.current.suspend().catch(() => {});
           devLog('🔋 [BG] AudioContext suspended (paused + hidden)');
         }
+
+        // Lock-glitch bridge: Android Chrome may suspend the AudioContext
+        // during the lock transition without firing onstatechange synchronously.
+        // Pre-emptive resume() catches that window — no-op on a running ctx,
+        // immediate recovery if Chrome suspended it between lock and this call.
+        if (shouldPlay) {
+          audioContextRef.current?.resume().then(() => applyMasterGain()).catch(() => {});
+        }
         return;
       }
 
