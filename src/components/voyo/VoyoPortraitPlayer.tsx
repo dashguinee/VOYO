@@ -3078,15 +3078,15 @@ const ReactionBar = memo(({
     // Only activate on actual changes (not initial mount)
     if (activateChatTrigger > prevTriggerRef.current) {
       prevTriggerRef.current = activateChatTrigger;
-      // Small delay to ensure parent state updates have propagated
-      requestAnimationFrame(() => {
-        // Activate chat directly - wake up and open
+      let cancelled = false;
+      const rafId = requestAnimationFrame(() => {
+        if (cancelled) return;
         setIsActive(true);
         setIsChatMode(true);
         setChatResponse(null);
-        // Focus input after animation completes
-        setTimeout(() => chatInputRef.current?.focus(), 400);
+        setTimeout(() => { if (!cancelled) chatInputRef.current?.focus(); }, 400);
       });
+      return () => { cancelled = true; cancelAnimationFrame(rafId); };
     }
   }, [activateChatTrigger]);
 
@@ -4907,6 +4907,13 @@ export const VoyoPortraitPlayer = ({
   // re-creating the handler on every change.
   const portalProgressRef = useRef(portalProgress);
   portalProgressRef.current = portalProgress;
+  // Mirror scrollTaught in a ref so the rAF callback always reads the live
+  // value without adding scrollTaught to the useCallback dep array.
+  // Without this, the callback captures scrollTaught=false forever and calls
+  // setScrollTaught(true) + localStorage.setItem on every rAF frame once
+  // the user scrolls past 50%, burning I/O at up to 60Hz.
+  const scrollTaughtRef = useRef(scrollTaught);
+  scrollTaughtRef.current = scrollTaught;
 
   const handleHeaderScroll = useCallback(() => {
     if (scrollRafRef.current !== null) return; // coalesce to one update per frame
@@ -4939,7 +4946,7 @@ export const VoyoPortraitPlayer = ({
         // First-session scroll teach: once the user reaches half-fade,
         // they've discovered the scroll. Mark taught and persist; from
         // here on the bar stays hidden in subsequent sessions.
-        if (!scrollTaught && next > 0.5) {
+        if (!scrollTaughtRef.current && next > 0.5) {
           setScrollTaught(true);
           try { window.localStorage.setItem('voyo-scroll-taught', '1'); } catch { /* private mode */ }
         }

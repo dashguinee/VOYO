@@ -321,10 +321,10 @@ export const DynamicIsland = ({
       if (next < 0 || next >= notifications.length) return;
       if (withTransition) {
         setIsTransitioning(true);
-        setTimeout(() => {
+        phaseTimersRef.current.push(setTimeout(() => {
           setCurrentIndex(next);
-          setTimeout(() => setIsTransitioning(false), TIMING.TRANSITION_MS);
-        }, TIMING.TRANSITION_MS);
+          phaseTimersRef.current.push(setTimeout(() => setIsTransitioning(false), TIMING.TRANSITION_MS));
+        }, TIMING.TRANSITION_MS));
       } else {
         setCurrentIndex(next);
       }
@@ -387,7 +387,7 @@ export const DynamicIsland = ({
       removeAt(currentIndex);
       if (notifications.length > 1) {
         setPhase('hidden');
-        setTimeout(() => playResurface(), TIMING.FADE_MS);
+        phaseTimersRef.current.push(setTimeout(() => playResurface(), TIMING.FADE_MS));
       } else {
         setPhase('hidden');
       }
@@ -397,7 +397,7 @@ export const DynamicIsland = ({
 
   const handleReplyMode = useCallback(() => {
     setPhase('replying');
-    setTimeout(() => replyInputRef.current?.focus(), TIMING.REPLY_FOCUS_MS);
+    phaseTimersRef.current.push(setTimeout(() => replyInputRef.current?.focus(), TIMING.REPLY_FOCUS_MS));
   }, []);
 
   // ── Voice recording ────────────────────────────────────────────────
@@ -510,7 +510,7 @@ export const DynamicIsland = ({
         removeAt(currentIndex);
         if (notifications.length > 1) {
           setPhase('hidden');
-          setTimeout(() => playResurface(), TIMING.FADE_MS);
+          phaseTimersRef.current.push(setTimeout(() => playResurface(), TIMING.FADE_MS));
         } else {
           setPhase('hidden');
         }
