@@ -572,6 +572,11 @@ export function getRawCachedPool(): RawPoolEntry[] {
   return _cachedPoolCache.rows as unknown as RawPoolEntry[];
 }
 
+/** Prime the in-memory conductor pool without returning tracks. */
+export async function warmConductorPool(): Promise<void> {
+  await getCachedTracks(1, 'heat_score');
+}
+
 /** Convert a RawPoolEntry to Track for playback. */
 export function rawEntryToTrack(entry: RawPoolEntry): Track {
   const thumbnail = entry.thumbnail_url || `https://i.ytimg.com/vi/${entry.youtube_id}/hqdefault.jpg`;

@@ -31,7 +31,7 @@ import {
   selectArc, getArc, PHASE_ORDER, ENERGY_TO_VIBE,
 } from './arc';
 import {
-  getRawCachedPool, rawEntryToTrack, type RawPoolEntry,
+  getRawCachedPool, rawEntryToTrack, warmConductorPool, type RawPoolEntry,
 } from '../databaseDiscovery';
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -360,7 +360,13 @@ export async function conductorFetch(
   limit: number = 10,
 ): Promise<Track[]> {
   let pool = getRawCachedPool();
-  if (!pool.length) return [];
+  if (!pool.length) {
+    // Pool not yet warm (cold start race). Load it inline — getCachedTracks
+    // is cheap (~100ms) and subsequent calls hit the 60s in-memory cache.
+    await warmConductorPool();
+    pool = getRawCachedPool();
+    if (!pool.length) return [];
+  }
 
   // Step 1: exclude played IDs
   pool = pool.filter(e => !excludeIds.has(e.youtube_id));

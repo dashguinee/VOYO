@@ -108,9 +108,8 @@ function recordRemoteSignal(trackId: string, action: SignalAction): void {
 //            changed (e.g. afternoon→evening). Reset the DJ session so the
 //            next track uses the correct arc, and purge the stale conductor
 //            queue (tracks were pre-selected for the OLD arc).
-// Refill   : skip conductor refill while the page is hidden — no point
-//            fetching when nobody is listening, and mobile browsers throttle
-//            network requests in background tabs anyway.
+// Refill   : fires freely in both FG and BG. conductorFetch is in-memory
+//            (getRawCachedPool) — no network cost, no throttle risk.
 
 const ARC_STALE_MS = 20 * 60 * 1000; // 20 min
 
@@ -296,8 +295,7 @@ export async function prefetch(_tracks: Track[], _priority: number = 5): Promise
 // provides cultural intelligence; MixBoard provides explicit mood intent.
 // 50/50 blend keeps both respected.
 //
-// Visibility guard: skip refill entirely when the page is hidden — browser
-// throttles network in background tabs and nobody is listening anyway.
+// Refill is not gated on visibility — conductorFetch reads in-memory pool.
 
 let _conductorQueue: Track[] = [];
 let _conductorRefilling = false;
