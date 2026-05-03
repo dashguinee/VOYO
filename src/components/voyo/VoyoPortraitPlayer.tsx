@@ -2066,17 +2066,67 @@ const StreamCard = memo(({ track, onTap, isPlayed, modeColor }: {
   track: Track;
   onTap: () => void;
   isPlayed?: boolean;
-  modeColor?: { neon: string; glow: string; intensity: number } | null; // From MixBoard mode matching
+  modeColor?: { neon: string; glow: string; intensity: number } | null;
 }) => {
-  // v923 — purged ~30 lines of dead state (showQueueFeedback / wasDragged
-  // / isFlying / queueTimeoutRef / dragTimeoutRef / flyTimeoutRef +
-  // their cleanup effect + the unrendered queue-feedback / flying-
-  // trail JSX). Setters were never called; the JSX rendered nothing
-  // because gating state was permanently false. Tap-only now.
-  // onQueueAdd prop also dropped — never invoked anywhere.
+  const addToQueue = usePlayerStore(s => s.addToQueue);
+  const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const ptrStartRef = useRef<{ x: number; y: number } | null>(null);
+  const holdFiredRef = useRef(false);
+  const [showHoldHint, setShowHoldHint] = useState(false);
+  const [showFeedback, setShowFeedback] = useState(false);
+  const feedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clearHold = () => {
+    if (holdTimerRef.current) { clearTimeout(holdTimerRef.current); holdTimerRef.current = null; }
+    setShowHoldHint(false);
+    holdFiredRef.current = false;
+    ptrStartRef.current = null;
+  };
+
+  const triggerAdd = () => {
+    addToQueue(track);
+    try { navigator.vibrate?.([15, 8, 15]); } catch {}
+    setShowHoldHint(false);
+    setShowFeedback(true);
+    if (feedbackTimerRef.current) clearTimeout(feedbackTimerRef.current);
+    feedbackTimerRef.current = window.setTimeout(() => setShowFeedback(false), 800);
+  };
+
+  useEffect(() => () => {
+    clearHold();
+    if (feedbackTimerRef.current) clearTimeout(feedbackTimerRef.current);
+  }, []);
+
+  const onPointerDown = (e: React.PointerEvent) => {
+    ptrStartRef.current = { x: e.clientX, y: e.clientY };
+    holdFiredRef.current = false;
+    holdTimerRef.current = window.setTimeout(() => {
+      holdFiredRef.current = true;
+      setShowHoldHint(true);
+      try { navigator.vibrate?.(18); } catch {}
+    }, 480);
+  };
+
+  const onPointerMove = (e: React.PointerEvent) => {
+    if (!ptrStartRef.current) return;
+    const dx = e.clientX - ptrStartRef.current.x;
+    const dy = e.clientY - ptrStartRef.current.y;
+    if (Math.abs(dx) > 8) { clearHold(); return; } // horizontal → belt drag
+    if (dy < -35) { clearHold(); triggerAdd(); } // swipe up
+  };
+
+  const onPointerUp = () => {
+    if (holdFiredRef.current) { triggerAdd(); }
+    clearHold();
+  };
+
   return (
     <div
       className="flex-shrink-0 flex flex-col items-center w-16 relative"
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      onPointerCancel={clearHold}
     >
       <button
         className="flex flex-col items-center group w-full"
@@ -2123,6 +2173,23 @@ const StreamCard = memo(({ track, onTap, isPlayed, modeColor }: {
                 <svg className="w-2.5 h-2.5 text-white" fill="currentColor" viewBox="0 0 20 20">
                   <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                 </svg>
+              </div>
+            </div>
+          )}
+          {/* Hold hint — 480ms hold reveals "Add ↑" cue */}
+          {showHoldHint && (
+            <div className="absolute inset-0 rounded-xl flex items-center justify-center pointer-events-none"
+              style={{ background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(4px)' }}>
+              <span className="text-[9px] font-black tracking-widest uppercase text-white/90">Add ↑</span>
+            </div>
+          )}
+          {/* Queued feedback toast */}
+          {showFeedback && (
+            <div className="absolute -top-6 left-1/2 -translate-x-1/2 pointer-events-none z-50"
+              style={{ animation: 'voyo-gesture-fade-in 150ms ease-out both' }}>
+              <div className="text-[8px] font-bold px-2 py-1 rounded-full whitespace-nowrap"
+                style={{ background: 'linear-gradient(135deg,#a78bfa,#7c3aed)', color: '#fff', boxShadow: '0 0 10px rgba(167,139,250,0.5)' }}>
+                ✓ Queued
               </div>
             </div>
           )}
