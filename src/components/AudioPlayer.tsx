@@ -229,6 +229,12 @@ export const AudioPlayer = () => {
     return () => {
       voyoStream.onRapidSkip = null;
       voyoStream.endSession();
+      // Cancel any in-flight BG swap safety timer — it writes to refs and
+      // dispatches to Zustand store on fire; must not outlive the component.
+      if (bgSwapSafetyTimerRef.current) {
+        clearTimeout(bgSwapSafetyTimerRef.current);
+        bgSwapSafetyTimerRef.current = null;
+      }
       // Release detached preload element — it holds an R2 URL open and
       // would keep buffering in memory if not explicitly stopped.
       const preEl = nextTrackPreloadRef.current;

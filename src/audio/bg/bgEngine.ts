@@ -328,13 +328,13 @@ export function useBgEngine(params: UseBgEngineParams): BgEngineApi {
         // Re-anchor gain after iOS audio-thread interruption resume.
         applyMasterGain();
         const el = audioRef.current;
-        if (el && el.paused && !el.ended && usePlayerStore.getState().isPlaying) {
+        if (el && el.paused && !el.ended && !isLoadingTrackRef.current && usePlayerStore.getState().isPlaying) {
           el.play().catch(() => {});
         }
       }).catch(() => {});
     });
     return unsub;
-  }, [audioRef, audioContextRef, applyMasterGain]);
+  }, [audioRef, audioContextRef, applyMasterGain, isLoadingTrackRef]);
 
   // ── BATTERY-SUSPEND TIMER ────────────────────────────────────────────
   // 5s after paused + hidden, suspend the context for battery. Cancels
