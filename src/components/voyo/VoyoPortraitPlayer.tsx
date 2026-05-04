@@ -1226,11 +1226,11 @@ const ExpandVideoButton = memo(({ onClick, isIframeAudio, isMiniPlayerActive, co
   useEffect(() => {
     if (phase !== 'takeout') return;
     const lines = [
-      "I'm ready",
-      "Let's go",
-      "Ready",
+      "Oyé!!",
+      "OYEEEE",
+      "Oyé, let's go",
       "Zouu where we going snap?",
-      "Pocket time",
+      "Oyé oyé",
       "Let's roll",
     ];
     const text = lines[Math.floor(Math.random() * lines.length)];

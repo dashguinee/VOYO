@@ -8,10 +8,10 @@
  *   • SOCIAL: "3 friends vibing right now" (presence)
  *   • MILESTONE: "You've listened for 2 hours — sleep timer?" (care)
  *
- * Notifications are conversational — users can reply, and OYO takes action.
- * They fire via the browser's Notification API (in-app) or Push API (background).
- *
- * For Hub + VOYO: same Supabase table (dash_notifications), different app tags.
+ * Rate rules:
+ *   • Max 1 every 45 minutes
+ *   • Max 4 stacked in the OS drawer before user returns to the app
+ *   • Stack counter resets when user brings the app to foreground
  */
 
 import { devLog } from '../utils/logger';
@@ -31,37 +31,58 @@ export interface OyoNotification {
 }
 
 // ============================================================================
-// In-app notification (foreground — uses Notification API directly)
+// Rate limiting
+// ============================================================================
+
+const MIN_INTERVAL_MS = 45 * 60 * 1000; // 45 minutes between notifications
+const MAX_STACK = 4;                      // Max pending in OS drawer at once
+
+let _lastNotifTime = 0;
+let _stackCount = 0;
+
+// Reset stack count when user returns to the app — they likely cleared
+// the OS notifications while away, so the budget refills.
+if (typeof document !== 'undefined') {
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) _stackCount = 0;
+  });
+}
+
+function shouldNotify(): boolean {
+  const now = Date.now();
+  if (now - _lastNotifTime < MIN_INTERVAL_MS) return false;
+  if (_stackCount >= MAX_STACK) return false;
+  _lastNotifTime = now;
+  _stackCount++;
+  return true;
+}
+
+// ============================================================================
+// In-app notification (foreground — uses SW showNotification for OS-level)
 // ============================================================================
 
 export function showInAppNotification(notif: OyoNotification): void {
   if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
 
   try {
-    const reg = navigator.serviceWorker?.controller;
-    if (reg) {
-      // Use service worker for rich notifications (actions, badge)
-      navigator.serviceWorker.ready.then(registration => {
-        const opts: Record<string, unknown> = {
-          body: notif.body,
-          icon: notif.icon || '/icon-192.png',
-          badge: '/icon-192.png',
-          tag: notif.tag,
-          data: { url: notif.url || '/' },
-          silent: notif.silent ?? true,
-        };
-        if (notif.actions) opts.actions = notif.actions;
-        registration.showNotification(notif.title, opts as NotificationOptions);
-      });
-    } else {
-      // Fallback: basic Notification API
-      new Notification(notif.title, {
-        body: notif.body,
-        icon: notif.icon || '/icon-192.png',
-        tag: notif.tag,
-        silent: notif.silent ?? true,
-      });
-    }
+    const opts: Record<string, unknown> = {
+      body: notif.body,
+      icon: notif.icon || '/icon-192.png',
+      badge: '/icon-192.png',
+      tag: notif.tag,
+      data: { url: notif.url || '/' },
+      silent: notif.silent ?? true,
+      renotify: false,
+    };
+    if (notif.actions) opts.actions = notif.actions;
+
+    // Prefer SW path — fires OS-level notification whether foregrounded or not.
+    // Direct new Notification() is silent when the SW is active and the page
+    // is hidden (Chrome silently drops it). SW showNotification works in both.
+    navigator.serviceWorker.ready.then(registration => {
+      registration.showNotification(notif.title, opts as NotificationOptions);
+    });
+
     devLog(`[OYO Notif] ${notif.tag}: ${notif.title}`);
   } catch (e) {
     // Notifications not available — silent fail
@@ -72,22 +93,11 @@ export function showInAppNotification(notif: OyoNotification): void {
 // OYO ambient notification triggers — called from playback events
 // ============================================================================
 
-let lastNotifTime = 0;
-const MIN_INTERVAL = 30000; // 30s between notifications (non-cringe)
-
-function shouldNotify(): boolean {
-  const now = Date.now();
-  if (now - lastNotifTime < MIN_INTERVAL) return false;
-  if (document.hidden) return false; // Don't spam when backgrounded
-  lastNotifTime = now;
-  return true;
-}
-
 /** Pre-announce the next track (fires from nextTrack or crossfade) */
 export function notifyNextUp(title: string, artist: string): void {
   if (!shouldNotify()) return;
   showInAppNotification({
-    title: `Next up`,
+    title: 'Next up',
     body: `${title} — ${artist}`,
     tag: 'oyo-next-up',
     silent: true,
@@ -107,6 +117,7 @@ export function notifyTrackContext(message: string): void {
 
 /** Taste insight (fires after significant listening patterns) */
 export function notifyInsight(message: string): void {
+  if (!shouldNotify()) return;
   showInAppNotification({
     title: 'OYO noticed',
     body: message,
@@ -128,13 +139,14 @@ export function notifySocial(count: number): void {
 
 /** Listening milestone (fires at 1h, 2h intervals) */
 export function notifyMilestone(hours: number): void {
+  if (!shouldNotify()) return;
   showInAppNotification({
     title: 'OYO',
     body: hours === 1
       ? `1 hour of vibes. Want a sleep timer?`
       : `${hours} hours deep. Take a break?`,
     tag: 'oyo-milestone',
-    silent: false, // This one should be audible
+    silent: false,
     actions: [
       { action: 'sleep-30', title: 'Sleep 30m' },
       { action: 'continue', title: 'Keep going' },

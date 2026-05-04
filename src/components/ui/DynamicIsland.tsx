@@ -258,7 +258,7 @@ export const DynamicIsland = ({
     if (!import.meta.env.DEV) return;
     const t1 = setTimeout(() => window.pushNotification?.({ id: 'demo-1', type: 'music',   title: 'Burna Boy', subtitle: 'Higher just dropped'        }),  1000);
     const t2 = setTimeout(() => window.pushNotification?.({ id: 'demo-2', type: 'message', title: 'Aziz',      subtitle: 'yo come check this out'     }),  8000);
-    const t3 = setTimeout(() => window.pushNotification?.({ id: 'demo-3', type: 'system',  title: 'VOYO',      subtitle: 'notification system ready'  }), 15000);
+    const t3 = setTimeout(() => window.pushNotification?.({ id: 'demo-3', type: 'system',  title: 'VOYO',      subtitle: 'Oyé!!'  }), 15000);
     return () => { [t1, t2, t3].forEach(clearTimeout); };
   }, []);
 
