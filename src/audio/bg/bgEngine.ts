@@ -106,8 +106,6 @@ export function useBgEngine(params: UseBgEngineParams): BgEngineApi {
     syntheticEndedBypassRef,
     lastEndedTrackIdRef,
   } = params;
-  // Prevent lint "declared but unused" when downstream callers evolve.
-  void muteMasterGainInstantly;
 
   // ── SILENT WAV KEEPER ────────────────────────────────────────────────
   // 2-second silent WAV blob URL. Set on mount, revoked on unmount.
@@ -193,6 +191,11 @@ export function useBgEngine(params: UseBgEngineParams): BgEngineApi {
     const url = silentKeeperUrlRef.current;
     if (!el || !url) return;
     try {
+      // Mute the DSP chain before the src swap so compressor release and
+      // ConvolverNode reverb tails don't bleed through the gain at full
+      // volume during the transition. The bypass keeper holds OS audio
+      // focus at volume=0 so muting the chain here loses nothing.
+      muteMasterGainInstantly();
       el.loop = true;
       el.src = url;
       el.play().catch(() => {});

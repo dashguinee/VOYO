@@ -267,12 +267,20 @@ export function useAudioChain(params: UseAudioChainParams): AudioChainApi {
   const muteMasterGainInstantly = useCallback(() => {
     if (!gainNodeRef.current || !audioContextRef.current) return;
     const ctx = audioContextRef.current;
-    const now = ctx.currentTime;
     const param = gainNodeRef.current.gain;
     gainIntentRef.current = 'mute';
-    param.cancelScheduledValues(now);
-    param.setValueAtTime(param.value, now);
-    param.linearRampToValueAtTime(0.0001, now + 0.008);
+    if (ctx.state !== 'running') {
+      // Suspended/interrupted — clock is frozen, scheduled ramps land in the
+      // past and complete instantly at the wrong value. Set directly instead,
+      // then nudge ctx.resume() so the next ramp writer gets a live clock.
+      param.value = 0.0001;
+      ctx.resume().catch(() => {});
+    } else {
+      const now = ctx.currentTime;
+      param.cancelScheduledValues(now);
+      param.setValueAtTime(param.value, now);
+      param.linearRampToValueAtTime(0.0001, now + 0.008);
+    }
     armGainWatchdog('mute-before-load');
     // Hold 'mute' intent for the full ramp window so no in-flight ramp writer
     // can unmute us mid-swap. fadeInMasterGain is what clears 'mute' back to
@@ -443,9 +451,9 @@ export function useAudioChain(params: UseAudioChainParams): AudioChainApi {
       if (compressorRef.current) {
         ramp(compressorRef.current.threshold, s.compressor.threshold);
         ramp(compressorRef.current.ratio, s.compressor.ratio);
-        compressorRef.current.knee.value = s.compressor.knee;
-        compressorRef.current.attack.value = s.compressor.attack;
-        compressorRef.current.release.value = s.compressor.release;
+        ramp(compressorRef.current.knee, s.compressor.knee);
+        ramp(compressorRef.current.attack, s.compressor.attack);
+        ramp(compressorRef.current.release, s.compressor.release);
       }
       ramp(stereoDelayRef.current?.delayTime, s.stereoWidth || 0);
     }
@@ -458,6 +466,11 @@ export function useAudioChain(params: UseAudioChainParams): AudioChainApi {
   // Slider -100..+100: DIVE (negative) ↔ IMMERSE (positive). 3 layers:
   // multiband mastering character, stereo field width, spatial effects.
   //
+  // buildSpatialRef: replaces the _buildSpatial property hack on spatialBypassDirectRef.
+  // A React ref is a plain object — attaching arbitrary props to it works but
+  // is undefined behaviour if React ever clears it between renders. A dedicated
+  // ref is explicit and survives any React internal changes.
+  const buildSpatialRef = useRef<(() => void) | null>(null);
   // Self-ref: used by the mute-window path to re-apply spatial params
   // after the ConvolverNode build completes without circular useCallback deps.
   const updateVoyexSpatialRef = useRef<((v: number) => void)>(() => {});
@@ -472,7 +485,7 @@ export function useAudioChain(params: UseAudioChainParams): AudioChainApi {
     // fadeInMasterGain fires after 30ms (10+ render quantums at 44.1kHz)
     // so the topology change is fully settled before gain is restored.
     if (v !== 0 && !diveReverbWetRef.current) {
-      const builder = (spatialBypassDirectRef as unknown as { _buildSpatial?: () => void })._buildSpatial;
+      const builder = buildSpatialRef.current;
       if (builder) {
         muteMasterGainInstantly();
         requestAnimationFrame(() => {
@@ -680,8 +693,7 @@ export function useAudioChain(params: UseAudioChainParams): AudioChainApi {
         const sMx = ctx.createGain(); sMx.gain.value = 0; subHarmonicGainRef.current = sMx;
         spInput.connect(sBP); sBP.connect(sSh); sSh.connect(sLP); sLP.connect(sMx); sMx.connect(ctx.destination);
       };
-      // Store builder on a ref so updateVoyexSpatial can trigger it on first spatial use
-      (spatialBypassDirectRef as unknown as { _buildSpatial?: () => void })._buildSpatial = buildVoyexSpatialNodes;
+      buildSpatialRef.current = buildVoyexSpatialNodes;
 
       spatialEnhancedRef.current = true;
 

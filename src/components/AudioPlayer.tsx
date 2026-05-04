@@ -558,6 +558,7 @@ export const AudioPlayer = () => {
           const ytId = getYouTubeId(currentTrack.trackId);
           if (isTrackInR2Pool(ytId)) {
             el2.pause();
+            muteMasterGainInstantly();
             el2.loop = false;
             el2.src = `${R2_AUDIO}/${ytId}?q=high`;
             setSource('r2');
@@ -1263,6 +1264,7 @@ export const AudioPlayer = () => {
             // be charged for.
             errorBurst.pop();
             try {
+              muteMasterGainInstantly();
               el.src = newSrc;
               el.play().catch(() => { /* canplay or next error will retry */ });
             } catch { /* fall through to circuit breaker */ }

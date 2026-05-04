@@ -137,6 +137,12 @@ async function performHotSwap(
     });
     if (elementModified) {
       try { el.pause(); } catch {}
+      // Restore el.volume to 1.0 — the crossfade loop sets it to 0 at the
+      // start of the hot-swap (line ~173). If bail() runs after that point,
+      // the volume is left at 0. AudioPlayer's Web Audio gain chain then
+      // takes over but el.volume=0 silences the element before the chain
+      // even runs — next track plays silently until the volume-sync effect fires.
+      try { el.volume = 1.0; } catch {}
       try {
         const ytId = getYouTubeId(trackId);
         // Only strip src if this element still points at OUR track. If the
