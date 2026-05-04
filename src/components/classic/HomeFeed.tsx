@@ -21,7 +21,7 @@ import { GreetingArea } from './GreetingArea';
 import { VIBES, Vibe, TRACKS } from '../../data/tracks';
 import { VibesReel } from './VibesReel';
 import { getUserTopTracks, getPoolAwareHotTracks, calculateBehaviorScore, recordPoolEngagement } from '../../services/personalization';
-import { curateAllSections, ensurePoolBootstrapped, ensurePoolIntegrity } from '../../services/poolCurator';
+import { curateAllSections, ensurePoolBootstrapped } from '../../services/poolCurator';
 import type { PooledTrack } from '../../store/trackPoolStore';
 import type { HistoryItem } from '../../types';
 import { getInsights as getOyoInsights, initOYO } from '../../services/oyoDJ';
@@ -2944,7 +2944,6 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onNavVisibilityChange, onSwitc
   // module-level setTimeout in poolCurator.ts (3-5 queries that fired on
   // every page load, before any UI mounted). Now intentional + traceable.
   useEffect(() => {
-    ensurePoolIntegrity(); // one-time geo-contamination eviction (sync, safe)
     initOYO();
     void ensurePoolBootstrapped();
     curateAllSections().catch(() => {});

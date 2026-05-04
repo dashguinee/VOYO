@@ -119,22 +119,6 @@ export function clearStalePool(): void {
   devLog('[Pool Curator] Cleared stale pool data');
 }
 
-// Version key for geo-contamination purge. Bump this string whenever a
-// pool-wide eviction is needed (e.g. after discovering geo-biased tracks
-// accumulated from a non-African Cloudflare PoP). On first boot with a new
-// version, the entire persisted pool is wiped so the African-tag filter in
-// oyo/pools.ts starts from a clean slate.
-const POOL_INTEGRITY_VERSION = 'voyo-pool-integrity-v2'; // bump = purge
-
-export function ensurePoolIntegrity(): void {
-  if (typeof window === 'undefined') return;
-  if (localStorage.getItem(POOL_INTEGRITY_VERSION)) return;
-  // First run on this version: evict the persisted pool. It may contain
-  // geo-contaminated tracks (Malaysian/SEA content) from CF PoP searches.
-  localStorage.removeItem('voyo-track-pool');
-  localStorage.setItem(POOL_INTEGRITY_VERSION, '1');
-  devLog('[Pool Curator] Pool integrity purge complete (geo-contamination eviction)');
-}
 
 /**
  * SEED POOL - Instant, no API calls

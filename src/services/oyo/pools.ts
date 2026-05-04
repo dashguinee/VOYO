@@ -71,60 +71,41 @@ function freshnessScoreShuffle<T extends Track>(tracks: T[], seed: number): T[] 
   return candidates.sort((a, b) => score(b) - score(a))[0];
 }
 
-// ── African cultural integrity guard ─────────────────────────────────────
-//
-// The client-side trackPoolStore accumulates tracks from YouTube search
-// results run via the Cloudflare Edge Worker. CF Workers execute from the
-// nearest datacenter to the user — for users in Malaysia the PoP is
-// Singapore/KL, and YouTube returns geo-biased results (Malaysian/SEA
-// content) mixed in with African music queries.
-//
-// Guard: only use localPool tracks that carry at least one African
-// cultural tag. Tracks from the curated Supabase path always have
-// cultural_tags set (afrobeats, amapiano, west-african, etc.). Tracks
-// that snuck in via geo-biased search typically have no tags or
-// ['fallback']/['youtube'] — they fail this check and the pool falls
-// through to Supabase which is genuinely curated.
-
-const AFRICAN_TAGS = new Set([
-  'afrobeats', 'afropop', 'afro-heat', 'afro-pop', 'afro-fusion', 'afro',
-  'west-african', 'african', 'amapiano', 'highlife', 'mbalax', 'kizomba',
-  'soukous', 'naija', 'naijapop', 'afroswing', 'afrotrap', 'afrohouse',
-  'celebration', 'festival', 'liberation', 'pan-african', 'diaspora',
-  'roots', 'motherland', 'tradition', 'classic', 'west-africa',
-  'guinean', 'senegalese', 'ghanaian', 'nigerian', 'congolese',
-]);
-
-function isAfricanTrack(t: Track): boolean {
-  return (t.tags || []).some(tag => AFRICAN_TAGS.has(tag.toLowerCase()));
-}
-
 // ── The two canonical streams ─────────────────────────────────────────────
 
 /**
  * HOT pool — R2-cached, vibe-matched, behavior-reranked, session-shuffled.
- * All rows that surface "what the user wants right now" share this pool.
  *
- * Source preference:
- *   1. Local trackPoolStore.hotPool — filtered to African tracks only
- *      (geo-contamination guard; see AFRICAN_TAGS above).
- *   2. Fallback to server getHotTracks if local pool is thin or contaminated.
+ * Architecture: Supabase is ALWAYS the primary source (video_intelligence,
+ * r2_cached=true, African catalog). getCachedTracks() keeps a 60s in-memory
+ * cache so repeated calls cost nothing after the first.
+ *
+ * The trackPoolStore.hotPool supplies a small personalisation supplement —
+ * tracks the user has actively engaged (played or queued this session) get
+ * prepended so they score high during re-rank. They never replace the
+ * curated catalog; they only boost what the user already showed intent for.
+ * Cap at 10 so one search spree can't crowd out the full catalog.
  */
 export async function hot(): Promise<Track[]> {
   const now = Date.now();
   if (_hotCache && now - _hotCache.at < TTL_MS) return _hotCache.tracks;
 
-  // African-only slice of the local pool. Tracks from geo-biased YouTube
-  // search (no African tags) are silently excluded; if the clean slice
-  // drops below 50 we fall through to Supabase which is curated.
+  // Primary: curated catalog from Supabase (cached in memory, geo-neutral).
+  const serverTracks = await getHotTracks(60);
+
+  // Supplement: up to 10 tracks the user has actively played or queued.
+  // These carry real engagement signal (playCount/queuedCount > 0) so they
+  // belong at the front of the scoring pass. Deduped against server tracks.
+  const serverIds = new Set(serverTracks.map(t => t.id || t.trackId));
   const localPool = useTrackPoolStore.getState().hotPool;
-  const africanLocal = localPool ? (localPool as Track[]).filter(isAfricanTrack) : [];
-  let raw: Track[] = [];
-  if (africanLocal.length >= 50) {
-    raw = africanLocal;
-  } else {
-    raw = await getHotTracks(60); // server fallback — curated, no geo-bias
-  }
+  const engaged = localPool
+    ? (localPool as (Track & { playCount?: number; queuedCount?: number })[])
+        .filter(t => (t.playCount ?? 0) > 0 || (t.queuedCount ?? 0) > 0)
+        .filter(t => !serverIds.has(t.id || t.trackId))
+        .slice(0, 10) as Track[]
+    : [];
+
+  const raw = [...engaged, ...serverTracks];
 
   const prefs = usePreferenceStore.getState().trackPreferences;
   // Re-rank locally: server vibe-match was first pass; behavior score adds
