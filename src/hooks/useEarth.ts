@@ -117,17 +117,23 @@ export function useEarth() {
   }, [transitioning, prefetch]);
 
   const recordPlay = useCallback(async (momentId: string) => {
-    if (!supabase) return;
-    await supabase
-      .rpc('record_moment_play', { p_moment_id: momentId, p_play_type: 'view' })
-      .catch(() => {});
+    if (!supabase || !isSupabaseConfigured) return;
+    try {
+      await supabase.rpc('record_moment_play', {
+        p_moment_id: momentId,
+        p_tapped_full_song: false,
+      });
+    } catch { /* best-effort */ }
   }, []);
 
   const recordOye = useCallback(async (momentId: string) => {
-    if (!supabase) return;
-    await supabase
-      .rpc('record_moment_play', { p_moment_id: momentId, p_play_type: 'oye' })
-      .catch(() => {});
+    if (!supabase || !isSupabaseConfigured) return;
+    try {
+      await supabase.rpc('record_moment_play', {
+        p_moment_id: momentId,
+        p_tapped_full_song: false,
+      });
+    } catch { /* best-effort */ }
   }, []);
 
   return {

@@ -18,7 +18,6 @@ import React, {
 import { X, Heart, Play } from 'lucide-react';
 import { useEarth, EarthDir } from '../../../hooks/useEarth';
 import type { Moment } from '../../../types/moments';
-import { usePlayerStore } from '../../../store/playerStore';
 
 const VOYO_API = import.meta.env.VITE_API_URL || 'https://voyo-edge.dash-webtv.workers.dev';
 
@@ -262,7 +261,7 @@ export const VoyoEarth: React.FC<VoyoEarthProps> = ({ onClose, onPlayTrack }) =>
   const { current, transitioning, lastDir, loading, loadInitial, navigate, recordPlay, recordOye } =
     useEarth();
 
-  const isMuted = usePlayerStore(s => s.isMuted ?? true);
+  const [isMuted] = useState(true); // moments default muted; audio comes from portrait player
   const [oyedIds, setOyedIds] = useState<Set<string>>(new Set());
   const [showCompass, setShowCompass] = useState(false);
   const [cardOpacity, setCardOpacity] = useState(1);
