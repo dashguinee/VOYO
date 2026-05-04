@@ -14,10 +14,8 @@
 import React, { useState, useRef, useCallback, useEffect, memo } from 'react';
 import { Heart, Flame, MessageCircle, ExternalLink, Play, Volume2, VolumeX, X, Sparkles } from 'lucide-react';
 import { useMoments, CategoryAxis, NavAction, CATEGORY_PRESETS, TOP_MODE_LABELS } from '../../../hooks/useMoments';
-import { markTrackMovedAway, hasUserMovedAwayFromTrack } from '../../../services/momentsEngine';
+import { markTrackMovedAway } from '../../../services/momentsEngine';
 import type { Moment } from '../../../types/moments';
-import { AnimatedArtCard } from './AnimatedArtCard';
-import { DynamicVignette } from './DynamicVignette';
 import { devWarn } from '../../../utils/logger';
 import { usePlayerStore } from '../../../store/playerStore';
 import { useMessagingViewport } from '../../../hooks/useMessagingViewport';
@@ -638,7 +636,7 @@ OyeAnimations.displayName = 'OyeAnimations';
 // MOMENT CARD
 // ============================================
 
-type MomentFormat = 'r2_video' | 'audio_cover' | 'thumbnail';
+type MomentFormat = 'r2_video' | 'iframe_embed' | 'thumbnail';
 
 interface MomentCardProps {
   moment: Moment;
@@ -693,13 +691,18 @@ const MomentCard = memo(({ moment, isOyed, onOye, isActive, isMuted, onToggleMut
     setThumbLoaded(false);
   }, [moment.source_id]);
 
-  // Resolve presentation format. v829 grammar:
-  //   - default optimistically to r2_video (we'll let the element try)
-  //   - fall back to audio_cover when video errored AND we have a track
-  //   - else fall back to thumbnail
+  // Resolve presentation format:
+  //   1. r2_video — primary (Edge Worker CDN). Optimistic: mount <video>,
+  //      fall back on onError.
+  //   2. iframe_embed — YouTube embed when R2 fails. YouTube always requires
+  //      muted autoplay; audio comes from the VOYO player via the Play Now
+  //      button when parent_track_id is set.
+  //   3. thumbnail — last resort for platforms that don't support embeds
+  //      (Instagram, TikTok — their oEmbed flows are too unreliable for PWA).
+  const canIframe = moment.source_platform === 'youtube' || moment.source_platform === 'youtube_shorts';
   const format: MomentFormat = (() => {
     if (!videoError) return 'r2_video';
-    if (moment.parent_track_id) return 'audio_cover';
+    if (canIframe) return 'iframe_embed';
     return 'thumbnail';
   })();
 
@@ -802,23 +805,23 @@ const MomentCard = memo(({ moment, isOyed, onOye, isActive, isMuted, onToggleMut
         </>
       )}
 
-      {/* === FORMAT: AUDIO + COVER COMPOSITION === */}
-      {format === 'audio_cover' && (
-        <>
-          <AnimatedArtCard
-            trackId={moment.parent_track_id!}
-            thumbnail={moment.thumbnail_url || ''}
-            isActive={isActive}
-            isPlaying={isActive}
-            displayMode="fullscreen"
-          />
-          <DynamicVignette
-            isActive={isActive}
-            isPlaying={isActive}
-            intensity="medium"
-            pulseEnabled={true}
-          />
-        </>
+      {/* === FORMAT: YOUTUBE IFRAME EMBED ===
+          Fires when the R2 video 404s/errors but the moment is from
+          YouTube. Always muted — YouTube's autoplay policy requires it,
+          and in vibes mode the VOYO player is the audio source anyway.
+          The Play Now button in the bio card is the user's CTA to link
+          this moment to the full song. */}
+      {format === 'iframe_embed' && (
+        <iframe
+          key={`yt-${moment.source_id}`}
+          src={`https://www.youtube.com/embed/${moment.source_id}?autoplay=1&mute=1&loop=1&playlist=${moment.source_id}&controls=0&playsinline=1&modestbranding=1&rel=0`}
+          style={{
+            position: 'absolute', inset: 0, width: '100%', height: '100%',
+            border: 'none', backgroundColor: '#0B0703',
+          }}
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+          title={moment.title || 'Moment'}
+        />
       )}
 
       {/* === FORMAT: THUMBNAIL STATIC === */}
@@ -1626,7 +1629,6 @@ export const VoyoMoments: React.FC<VoyoMomentsProps> = ({ onPlayFullTrack, onArt
   // tab switch. Fixes "Godfather from davido leaking in" — that
   // song was a victim of the per-component ref resetting on
   // remount.
-  const lastTrackChangeAtRef = useRef<number>(0);
   const previousTrackIdRef = useRef<string | undefined>(undefined);
   useEffect(() => {
     const unsub = usePlayerStore.subscribe((state) => {
@@ -1639,55 +1641,23 @@ export const VoyoMoments: React.FC<VoyoMomentsProps> = ({ onPlayFullTrack, onArt
           markTrackMovedAway(previousTrackIdRef.current);
         }
         previousTrackIdRef.current = newId;
-        lastTrackChangeAtRef.current = Date.now();
       }
     });
     return unsub;
   }, []);
 
-  // Record play after 1.5s dwell.
-  // v915 — was over-keyed on [currentMoment?.id, recordPlay, recordSkip,
-  // categoryAxis, onPlayFullTrack, currentMoment]. Any callback identity
-  // churn during the 1.5s dwell tore the effect down and fired
-  // recordSkip even though the user was still watching. Pinned the
-  // volatile callbacks to refs and narrowed the dep list to the moment
-  // id, so the dwell timer only restarts on actual moment change.
+  // Record play after 1.5s dwell. If the user leaves before 1.5s, record skip.
   const recordPlayRef = useRef(recordPlay);
   const recordSkipRef = useRef(recordSkip);
-  const onPlayFullTrackRef = useRef(onPlayFullTrack);
-  const categoryAxisRef = useRef(categoryAxis);
   useEffect(() => { recordPlayRef.current = recordPlay; }, [recordPlay]);
   useEffect(() => { recordSkipRef.current = recordSkip; }, [recordSkip]);
-  useEffect(() => { onPlayFullTrackRef.current = onPlayFullTrack; }, [onPlayFullTrack]);
-  useEffect(() => { categoryAxisRef.current = categoryAxis; }, [categoryAxis]);
   useEffect(() => {
     if (!currentMoment) return;
     const id = currentMoment.id;
-    const moment = currentMoment;
     let recorded = false;
     const t = window.setTimeout(() => {
       recordPlayRef.current(id);
       recorded = true;
-      const playFullTrack = onPlayFullTrackRef.current;
-      if (categoryAxisRef.current === 'vibes' && moment.parent_track_id && playFullTrack) {
-        const livePlayingId = usePlayerStore.getState().currentTrack?.trackId
-          || (usePlayerStore.getState().currentTrack as unknown as { id?: string })?.id;
-        // (1) Same-track guard (v871) — no redundant reload.
-        if (livePlayingId === moment.parent_track_id) return;
-        // (2) Skipped-this-session guard (v881) — don't re-impose
-        // a song the user has already moved on from. Module-level
-        // set, sessionStorage-backed.
-        if (hasUserMovedAwayFromTrack(moment.parent_track_id)) return;
-        // (3) Recent-skip cooldown (v878) — 4s after any track
-        // change, no auto-plays. Lets the new track settle without
-        // the feed yanking it back.
-        if (Date.now() - lastTrackChangeAtRef.current < 4000) return;
-        playFullTrack({
-          id: moment.parent_track_id,
-          title: moment.parent_track_title || 'Unknown',
-          artist: moment.parent_track_artist || 'Unknown Artist',
-        });
-      }
     }, 1500);
     return () => {
       window.clearTimeout(t);
