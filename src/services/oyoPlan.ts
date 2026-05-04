@@ -96,6 +96,8 @@ export function onSignal(type: SignalType, data?: string): void {
 
   const signal: Signal = { type, data, at: Date.now() };
   plan.sessionSignals.push(signal);
+  // Rolling cap: prevents unbounded array growth across long sessions
+  if (plan.sessionSignals.length > 500) plan.sessionSignals = plan.sessionSignals.slice(-500);
   devLog(`[OyoPlan] signal: ${type}`, data ?? '');
 
   switch (type) {
@@ -165,21 +167,42 @@ async function _doBuildPlan(trigger: BuildTrigger, triggerData?: string): Promis
   const favoriteArtists = oyoInsights.favoriteArtists ?? [];
   const playedIds = new Set(stateBundle?.deck?.trackIds ?? []);
 
-  // Boost: sort favorite artists first (stable, preserves relative order within groups)
+  // HOT pool: boost favorite artists to the front (familiar comfort layer)
   const boost = (tracks: Track[]): Track[] => {
     const favs = tracks.filter(t => favoriteArtists.includes(t.artist));
     const rest = tracks.filter(t => !favoriteArtists.includes(t.artist));
     return [...favs, ...rest];
   };
 
-  const hotPool     = boost(hotRaw);
-  const discoverPool = boost(discoverRaw);
+  // DISCOVER pool: cap favorite-artist boost at 30% so it stays genuinely fresh.
+  // Without this cap, favorite artists dominate both pools → echo chamber where
+  // the user only hears the same 3-4 artists on repeat regardless of pool source.
+  const diversifyDiscover = (tracks: Track[]): Track[] => {
+    if (!favoriteArtists.length) return tracks;
+    const maxFavs = Math.max(1, Math.ceil(tracks.length * 0.3));
+    const favs = tracks.filter(t => favoriteArtists.includes(t.artist)).slice(0, maxFavs);
+    const rest = tracks.filter(t => !favoriteArtists.includes(t.artist));
+    return [...favs, ...rest];
+  };
+
+  const hotPool      = boost(hotRaw);
+  const discoverPool = diversifyDiscover(discoverRaw);
+
+  // Time-of-day context: morning brains want comfort, afternoon welcomes discovery.
+  // Controls how much of the discover pool enters the candidate mixer.
+  const hour = new Date().getHours();
+  const maxDiscover = hour >= 5 && hour < 10 ? 15   // morning: familiar anchor
+    : hour >= 10 && hour < 18 ? 45                  // day: open to new
+    : hour >= 18 && hour < 22 ? 25                  // evening: winding down
+    : 30;                                           // late night: curious but settled
+  const hotSized      = hotPool.slice(0, 50);
+  const discoverSized = discoverPool.slice(0, maxDiscover);
 
   // Determine direction label
   const direction = resolveDirection(trigger, triggerData, plan?.direction, favoriteArtists);
 
   // Compute suggested directions from pool vibes
-  const suggestedDirections = computeSuggestedDirections(hotPool, discoverPool, favoriteArtists);
+  const suggestedDirections = computeSuggestedDirections(hotSized, discoverSized, favoriteArtists);
 
   // Decide next shift timing
   const inFlow = prevCompletions >= FLOW_THRESHOLD;
@@ -187,8 +210,8 @@ async function _doBuildPlan(trigger: BuildTrigger, triggerData?: string): Promis
 
   plan = {
     direction,
-    hotPool,
-    discoverPool,
+    hotPool:      hotSized,
+    discoverPool: discoverSized,
     builtAt: Date.now(),
     nextShiftAt: Date.now() + shiftMs,
     consecutiveCompletions: prevCompletions,
@@ -198,9 +221,9 @@ async function _doBuildPlan(trigger: BuildTrigger, triggerData?: string): Promis
   };
 
   // Push pools to player store
-  usePlayerStore.setState({ hotTracks: hotPool, discoverTracks: discoverPool });
+  usePlayerStore.setState({ hotTracks: hotSized, discoverTracks: discoverSized });
 
-  devLog(`[OyoPlan] Built — direction="${direction}", hot=${hotPool.length}, discover=${discoverPool.length}, nextShift=${shiftMs / 1000}s, inFlow=${inFlow}`);
+  devLog(`[OyoPlan] Built — direction="${direction}", hot=${hotSized.length}, discover=${discoverSized.length} (tod=${hour}h), nextShift=${shiftMs / 1000}s, inFlow=${inFlow}`);
 
   scheduleShift(shiftMs);
 }

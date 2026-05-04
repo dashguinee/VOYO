@@ -6,7 +6,7 @@
  *   HOT = server RPC get_hot_tracks → scored by (like+view/1000) × vibe
  *         match against user's VibeEssence. Cached tracks only (r2Gate).
  *         Re-ranked locally by client behavior score with time-decayed
- *         skip penalties. Then seededShuffle(sessionSeed) for fresh-feel.
+ *         skip penalties. Then freshnessScoreShuffle(sessionSeed) for fresh-feel.
  *
  *   DISCOVERY = server RPC get_discovery_tracks → vibe match + novelty
  *         bonus + tier bonus, returns discovery_reason. Cached only.
@@ -40,18 +40,35 @@ let _discoveryCache: PoolCache | null = null;
 // the feed, fresh on reload. Matches the old HomeFeed behavior.
 let _sessionSeed: number = Date.now();
 
-function seededShuffle<T extends Track>(tracks: T[], seed: number): T[] {
-  if (!tracks.length) return tracks;
-  return [...tracks].sort((a, b) => {
-    const keyA = a.trackId || a.id || '';
-    const keyB = b.trackId || b.id || '';
-    // JS % preserves sign — use double-modulo to guarantee positive hashes
-    // and consistent sort order. Negative hashes produced undefined ordering.
-    const raw = 1_000_003;
-    const hashA = (((keyA.charCodeAt(0) || 0) * 31 + (keyA.charCodeAt(1) || 0)) * seed % raw + raw) % raw;
-    const hashB = (((keyB.charCodeAt(0) || 0) * 31 + (keyB.charCodeAt(1) || 0)) * seed % raw + raw) % raw;
-    return hashA - hashB;
-  });
+// Freshness-score shuffle: generate 5 candidate orderings (each with a varied
+// seed), score each by how well it separates same-artist tracks, return the
+// best. This is the core of Spotify's anti-clustering technique — same-artist
+// back-to-backs feel repetitive even when the tracks are different.
+function freshnessScoreShuffle<T extends Track>(tracks: T[], seed: number): T[] {
+  if (tracks.length <= 1) return tracks;
+  const raw = 1_000_003;
+
+  const makeOrdering = (s: number): T[] =>
+    [...tracks].sort((a, b) => {
+      const keyA = a.trackId || a.id || '';
+      const keyB = b.trackId || b.id || '';
+      const hashA = (((keyA.charCodeAt(0) || 0) * 31 + (keyA.charCodeAt(1) || 0)) * s % raw + raw) % raw;
+      const hashB = (((keyB.charCodeAt(0) || 0) * 31 + (keyB.charCodeAt(1) || 0)) * s % raw + raw) % raw;
+      return hashA - hashB;
+    });
+
+  const score = (arr: T[]): number => {
+    let penalty = 0;
+    for (let i = 1; i < arr.length; i++) {
+      if (arr[i].artist && arr[i].artist === arr[i - 1].artist) penalty += 3;
+      if (i >= 2 && arr[i].artist && arr[i].artist === arr[i - 2].artist) penalty += 1;
+    }
+    return -penalty; // higher is better
+  };
+
+  // 5 candidates, prime-stepped seeds to maximise ordering diversity
+  const candidates = [0, 7919, 15791, 23669, 31573].map(offset => makeOrdering((seed + offset) | 0));
+  return candidates.sort((a, b) => score(b) - score(a))[0];
 }
 
 // ── The two canonical streams ─────────────────────────────────────────────
@@ -94,7 +111,7 @@ export async function hot(): Promise<Track[]> {
   }));
   scored.sort((a, b) => b.score - a.score);
   const topBand = scored.map(s => s.track).slice(0, 60);
-  const shuffled = seededShuffle(topBand, _sessionSeed);
+  const shuffled = freshnessScoreShuffle(topBand, _sessionSeed);
 
   _hotCache = { tracks: shuffled, at: now, sessionSeed: _sessionSeed };
   return shuffled;
@@ -116,7 +133,7 @@ export async function discovery(): Promise<Track[]> {
   }));
   scored.sort((a, b) => b.score - a.score);
   const topBand = scored.map(s => s.track).slice(0, 50);
-  const shuffled = seededShuffle(topBand, _sessionSeed);
+  const shuffled = freshnessScoreShuffle(topBand, _sessionSeed);
 
   _discoveryCache = { tracks: shuffled, at: now, sessionSeed: _sessionSeed };
   return shuffled;
