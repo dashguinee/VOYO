@@ -71,6 +71,34 @@ function freshnessScoreShuffle<T extends Track>(tracks: T[], seed: number): T[] 
   return candidates.sort((a, b) => score(b) - score(a))[0];
 }
 
+// ── African cultural integrity guard ─────────────────────────────────────
+//
+// The client-side trackPoolStore accumulates tracks from YouTube search
+// results run via the Cloudflare Edge Worker. CF Workers execute from the
+// nearest datacenter to the user — for users in Malaysia the PoP is
+// Singapore/KL, and YouTube returns geo-biased results (Malaysian/SEA
+// content) mixed in with African music queries.
+//
+// Guard: only use localPool tracks that carry at least one African
+// cultural tag. Tracks from the curated Supabase path always have
+// cultural_tags set (afrobeats, amapiano, west-african, etc.). Tracks
+// that snuck in via geo-biased search typically have no tags or
+// ['fallback']/['youtube'] — they fail this check and the pool falls
+// through to Supabase which is genuinely curated.
+
+const AFRICAN_TAGS = new Set([
+  'afrobeats', 'afropop', 'afro-heat', 'afro-pop', 'afro-fusion', 'afro',
+  'west-african', 'african', 'amapiano', 'highlife', 'mbalax', 'kizomba',
+  'soukous', 'naija', 'naijapop', 'afroswing', 'afrotrap', 'afrohouse',
+  'celebration', 'festival', 'liberation', 'pan-african', 'diaspora',
+  'roots', 'motherland', 'tradition', 'classic', 'west-africa',
+  'guinean', 'senegalese', 'ghanaian', 'nigerian', 'congolese',
+]);
+
+function isAfricanTrack(t: Track): boolean {
+  return (t.tags || []).some(tag => AFRICAN_TAGS.has(tag.toLowerCase()));
+}
+
 // ── The two canonical streams ─────────────────────────────────────────────
 
 /**
@@ -78,28 +106,24 @@ function freshnessScoreShuffle<T extends Track>(tracks: T[], seed: number): T[] 
  * All rows that surface "what the user wants right now" share this pool.
  *
  * Source preference:
- *   1. Local trackPoolStore.hotPool — already enriched with poolCurator
- *      tags ('west-african', 'classic', 'trending', 'amapiano', ...) so
- *      tag-filter rows work. Also has poolScore for local ranking.
- *   2. Fallback to server getHotTracks if local pool is thin (<20 tracks
- *      — first visit or after clearStalePool).
+ *   1. Local trackPoolStore.hotPool — filtered to African tracks only
+ *      (geo-contamination guard; see AFRICAN_TAGS above).
+ *   2. Fallback to server getHotTracks if local pool is thin or contaminated.
  */
 export async function hot(): Promise<Track[]> {
   const now = Date.now();
   if (_hotCache && now - _hotCache.at < TTL_MS) return _hotCache.tracks;
 
-  // Prefer local pool only when it's rich enough that server content
-  // adds marginal value. Raised from 20 → 50: at 20 items the local pool
-  // was thin enough that server had meaningfully richer content, but we
-  // never fetched it. At 50 the local pool is broad enough to serve well;
-  // below that, fall through to getHotTracks so server surfaces more.
-  // [SEARCH-2 P0-5]
+  // African-only slice of the local pool. Tracks from geo-biased YouTube
+  // search (no African tags) are silently excluded; if the clean slice
+  // drops below 50 we fall through to Supabase which is curated.
   const localPool = useTrackPoolStore.getState().hotPool;
+  const africanLocal = localPool ? (localPool as Track[]).filter(isAfricanTrack) : [];
   let raw: Track[] = [];
-  if (localPool && localPool.length >= 50) {
-    raw = localPool as Track[];
+  if (africanLocal.length >= 50) {
+    raw = africanLocal;
   } else {
-    raw = await getHotTracks(60); // server fallback, first visit or thin local
+    raw = await getHotTracks(60); // server fallback — curated, no geo-bias
   }
 
   const prefs = usePreferenceStore.getState().trackPreferences;

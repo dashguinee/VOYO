@@ -113,14 +113,19 @@ function getDominantMode(context: ListeningContext): MixBoardMode {
 // ── Fallback: YouTube search ──────────────────────────────────────────────
 
 async function fallbackToSearch(context: ListeningContext): Promise<number> {
-  const query = context.favoriteArtists.length > 0
-    ? `${context.favoriteArtists[0]} ${context.currentMood === 'vibing' ? 'hits' : 'songs'}`
-    : 'afrobeats trending 2024';
+  // Always anchor the query to African music — the edge worker runs from
+  // the nearest CF PoP which for non-African users (e.g. Malaysia) returns
+  // geo-biased YouTube results. Explicit "African music" suffix keeps results
+  // on-target regardless of the requesting datacenter's location.
+  const baseArtist = context.favoriteArtists.length > 0 ? context.favoriteArtists[0] : '';
+  const query = baseArtist
+    ? `${baseArtist} afrobeats ${context.currentMood === 'vibing' ? 'hits' : 'songs'}`
+    : 'afrobeats amapiano west african music 2024';
   try {
     const results = await searchMusic(query, 10);
     const tracks: Track[] = results.map(r => ({
       id: r.voyoId, title: r.title, artist: r.artist, album: 'VOYO', trackId: r.voyoId,
-      coverUrl: r.thumbnail, duration: r.duration, tags: ['fallback'],
+      coverUrl: r.thumbnail, duration: r.duration, tags: ['afrobeats'],
       mood: 'afro' as const, region: 'NG', oyeScore: r.views || 0,
       createdAt: new Date().toISOString(),
     }));

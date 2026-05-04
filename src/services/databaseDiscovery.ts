@@ -521,9 +521,12 @@ export async function warmLastResortPool(): Promise<void> {
   try {
     // Last-resort pool: no r2_cached filter — this is a fallback, not a gate.
     // r2Gate enforces cache status at play time; here we just want popular tracks.
+    // cultural_tags NOT NULL ensures only classified African content enters —
+    // unclassified or geo-contaminated rows have cultural_tags = null/[].
     const { data, error } = await supabase
       .from('video_intelligence')
-      .select('youtube_id,title,artist,thumbnail_url,play_count,first_seen')
+      .select('youtube_id,title,artist,thumbnail_url,play_count,first_seen,cultural_tags')
+      .not('cultural_tags', 'is', null)
       .order('play_count', { ascending: false })
       .limit(500);
     if (error || !data || data.length === 0) return;
