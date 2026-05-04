@@ -204,6 +204,12 @@ export function useAudioChain(params: UseAudioChainParams): AudioChainApi {
   const rescueGain = useCallback((label: string) => {
     if (!audioRef.current || !gainNodeRef.current || !audioContextRef.current) return;
     if (audioRef.current.paused) return;
+    // Don't rescue an intentional mute — gain near 0 is expected during src
+    // transitions. Without this check, the 6s watchdog fires while the silent
+    // WAV is playing, unmutes the chain at full gain, and the compressor noise
+    // floor becomes audible through headphones. fadeInMasterGain (on canplay)
+    // is what clears 'mute' and properly unmutes.
+    if (gainIntentRef.current === 'mute') return;
     const param = gainNodeRef.current.gain;
     if (param.value > 0.01) return;
     devWarn(`🩹 [AudioChain] watchdog rescue (${label})`);
