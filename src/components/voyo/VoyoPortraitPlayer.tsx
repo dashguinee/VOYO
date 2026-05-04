@@ -1229,7 +1229,7 @@ const ExpandVideoButton = memo(({ onClick, isIframeAudio, isMiniPlayerActive, co
       "Oyé!!",
       "OYEEEE",
       "Oyé, let's go",
-      "Zouu where we going snap?",
+      "Asambe, let's go!",
       "Oyé oyé",
       "Let's roll",
     ];
