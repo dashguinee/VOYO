@@ -661,6 +661,7 @@ const MomentCard = memo(({ moment, isOyed, onOye, isActive, isMuted, onToggleMut
   const initial = (moment.creator_name || moment.creator_username || '?')[0].toUpperCase();
   const creator = moment.creator_name || moment.creator_username || 'Unknown';
   const videoRef = useRef<HTMLVideoElement>(null);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
   const [videoError, setVideoError] = useState(false);
   // Tracks whether the static thumbnail <img> has finished decoding.
   // While loading (or if it never loads), we keep it at opacity:0 so the
@@ -675,6 +676,10 @@ const MomentCard = memo(({ moment, isOyed, onOye, isActive, isMuted, onToggleMut
   // identical to moment.thumbnail_url, you'd see a flash as the swap
   // happened. Fired per format/active flip.
   const [videoFramePainted, setVideoFramePainted] = useState(false);
+  // Gates thumbnail → iframe crossfade. Fires on iframe `load` event
+  // (YouTube page loaded = safe to reveal). Reset when going inactive
+  // so the thumbnail shows again if the user returns to this moment.
+  const [iframeLoaded, setIframeLoaded] = useState(false);
 
   const videoUrl = `${VOYO_API}/r2/feed/${moment.source_id}`;
 
@@ -689,6 +694,8 @@ const MomentCard = memo(({ moment, isOyed, onOye, isActive, isMuted, onToggleMut
   useEffect(() => {
     setVideoError(false);
     setThumbLoaded(false);
+    setVideoFramePainted(false);
+    setIframeLoaded(false);
   }, [moment.source_id]);
 
   // Resolve presentation format:
@@ -743,6 +750,14 @@ const MomentCard = memo(({ moment, isOyed, onOye, isActive, isMuted, onToggleMut
     return () => vid.removeEventListener('playing', onPlaying);
   }, [format]);
 
+  // iframe is unmounted when isActive=false (audio stop + no wasted load).
+  // Reset iframeLoaded so the thumbnail shows again on remount.
+  useEffect(() => {
+    if (format === 'iframe_embed' && !isActive) {
+      setIframeLoaded(false);
+    }
+  }, [isActive, format]);
+
   // Sync muted state
   useEffect(() => {
     const vid = videoRef.current;
@@ -756,97 +771,77 @@ const MomentCard = memo(({ moment, isOyed, onOye, isActive, isMuted, onToggleMut
 
   return (
     <div style={S.card}>
+      {/* === SHARED THUMBNAIL BACKDROP ===
+          Persists across all three formats. During r2_video it cross-fades
+          out when frames start painting; during iframe_embed it stays visible
+          while the iframe loads then fades when it's ready; for thumbnail
+          format it stays visible permanently. This prevents the blank-flash
+          that happened when format switched from r2_video → iframe_embed
+          (old code removed the thumbnail from the DOM at that moment). */}
+      {moment.thumbnail_url && (
+        <img
+          src={moment.thumbnail_url}
+          alt=""
+          onLoad={() => setThumbLoaded(true)}
+          onError={() => setThumbLoaded(false)}
+          style={{
+            ...S.thumb,
+            opacity: (() => {
+              if (!thumbLoaded) return 0;
+              if (format === 'r2_video') return videoFramePainted ? 0 : 1;
+              if (format === 'iframe_embed') return iframeLoaded ? 0 : 1;
+              return 1; // thumbnail format — stays
+            })(),
+            transition: 'opacity 400ms cubic-bezier(0.16, 1, 0.3, 1)',
+          }}
+          loading="lazy"
+          decoding="async"
+          draggable={false}
+        />
+      )}
+
       {/* === FORMAT: R2 VIDEO === */}
       {format === 'r2_video' && (
-        <>
-          {/* Thumbnail backdrop — cross-fades out once the <video> element
-              fires `playing` (real frames being decoded). Without the
-              gate, video rendered at full opacity above the thumbnail
-              before any frame was decoded — if the first frame differed
-              from the thumbnail, the swap was visible as a flash. */}
-          {moment.thumbnail_url && (
-            <img
-              src={moment.thumbnail_url}
-              alt=""
-              onLoad={() => setThumbLoaded(true)}
-              onError={() => setThumbLoaded(false)}
-              style={{
-                ...S.thumb,
-                // v829: gate visibility on thumbLoaded so the broken-image
-                // icon never paints during fetch / on 404.
-                opacity: videoFramePainted ? 0 : (thumbLoaded ? 1 : 0),
-                transition: 'opacity 400ms cubic-bezier(0.16, 1, 0.3, 1)',
-              }}
-              loading="lazy"
-              decoding="async"
-              draggable={false}
-            />
-          )}
-          <video
-            ref={videoRef}
-            src={videoUrl}
-            className="absolute inset-0 w-full h-full object-cover"
-            muted={isMuted}
-            loop
-            playsInline
-            // 'metadata' on all cards warms the header without streaming
-            // the full clip — active flip is instant, no poster blink on first play().
-            preload={isActive ? 'auto' : 'metadata'}
-            onError={handleVideoError}
-            style={{
-              opacity: videoFramePainted ? 1 : 0,
-              transition: 'opacity 400ms cubic-bezier(0.16, 1, 0.3, 1)',
-              // v829: black-amber bg on the video itself so even if the
-              // thumb fails AND frames haven't decoded, you see the cozy
-              // container color, not a white user-agent default.
-              backgroundColor: '#0B0703',
-            }}
-          />
-        </>
+        <video
+          ref={videoRef}
+          src={videoUrl}
+          className="absolute inset-0 w-full h-full object-cover"
+          muted={isMuted}
+          loop
+          playsInline
+          // 'metadata' on all cards warms the header without streaming
+          // the full clip — active flip is instant, no poster blink on first play().
+          preload={isActive ? 'auto' : 'metadata'}
+          onError={handleVideoError}
+          style={{
+            opacity: videoFramePainted ? 1 : 0,
+            transition: 'opacity 400ms cubic-bezier(0.16, 1, 0.3, 1)',
+            backgroundColor: '#0B0703',
+          }}
+        />
       )}
 
       {/* === FORMAT: YOUTUBE IFRAME EMBED ===
-          Fires when the R2 video 404s/errors but the moment is from
-          YouTube. Always muted — YouTube's autoplay policy requires it,
-          and in vibes mode the VOYO player is the audio source anyway.
-          The Play Now button in the bio card is the user's CTA to link
-          this moment to the full song. */}
-      {format === 'iframe_embed' && (
+          Only mounted when isActive — unmounting is the pause mechanism
+          (no postMessage, no src swap). This stops audio bleed when the
+          user swipes away. The shared thumbnail backdrop above stays visible
+          while the iframe loads; `onLoad` fires when YouTube page is ready
+          and triggers the crossfade. enablejsapi=1 added for future control. */}
+      {format === 'iframe_embed' && isActive && (
         <iframe
+          ref={iframeRef}
           key={`yt-${moment.source_id}`}
-          src={`https://www.youtube.com/embed/${moment.source_id}?autoplay=1&mute=1&loop=1&playlist=${moment.source_id}&controls=0&playsinline=1&modestbranding=1&rel=0`}
+          src={`https://www.youtube.com/embed/${moment.source_id}?autoplay=1&mute=1&loop=1&playlist=${moment.source_id}&controls=0&playsinline=1&modestbranding=1&rel=0&enablejsapi=1`}
+          onLoad={() => setIframeLoaded(true)}
           style={{
             position: 'absolute', inset: 0, width: '100%', height: '100%',
             border: 'none', backgroundColor: '#0B0703',
+            opacity: iframeLoaded ? 1 : 0,
+            transition: 'opacity 500ms cubic-bezier(0.16, 1, 0.3, 1)',
           }}
           allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
           title={moment.title || 'Moment'}
         />
-      )}
-
-      {/* === FORMAT: THUMBNAIL STATIC === */}
-      {format === 'thumbnail' && (
-        <>
-          {/* v829: same broken-icon guard as the r2_video path — fade in
-              on load, stay invisible on error so the container bg shows
-              through. */}
-          {moment.thumbnail_url && (
-            <img
-              src={moment.thumbnail_url}
-              alt=""
-              onLoad={() => setThumbLoaded(true)}
-              onError={() => setThumbLoaded(false)}
-              style={{
-                ...S.thumb,
-                opacity: thumbLoaded ? 1 : 0,
-                transition: 'opacity 300ms ease-out',
-              }}
-              loading="lazy"
-              decoding="async"
-              draggable={false}
-            />
-          )}
-        </>
       )}
 
       <div style={S.grad} />
