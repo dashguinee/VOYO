@@ -1064,12 +1064,15 @@ const AfricanVibesVideoCard = memo(({
 
   // ── PLAYING-state listener: flips isReady (drives cover→video) ─────
   // YT broadcasts `infoDelivery` with playerState=1 (PLAYING) once a
-  // frame is being decoded. Sticky once flipped — re-entering the
-  // viewport doesn't replay the swap. 800ms fallback timer if YT goes
-  // silent.
+  // frame is being decoded. We enforce a 10s minimum dwell so the
+  // thumbnail shows long enough for the user to read the card before
+  // the video takes over — even if YT fires PLAYING immediately.
+  // 10.5s fallback if YT goes silent.
   useEffect(() => {
     if (!isLoaded || isReady) return;
     const targetWindow = iframeRef.current?.contentWindow;
+    const MIN_DWELL_MS = 10_000;
+    const loadedAt = Date.now();
     let armed = true;
     const onMsg = (ev: MessageEvent) => {
       if (!armed) return;
@@ -1078,14 +1081,15 @@ const AfricanVibesVideoCard = memo(({
         const data = typeof ev.data === 'string' ? JSON.parse(ev.data) : ev.data;
         if (data?.event === 'infoDelivery' && data.info?.playerState === 1) {
           armed = false;
-          setIsReady(true);
+          const remaining = Math.max(0, MIN_DWELL_MS - (Date.now() - loadedAt));
+          window.setTimeout(() => setIsReady(true), remaining);
         }
       } catch { /* not a YT message */ }
     };
     window.addEventListener('message', onMsg);
     const fallback = window.setTimeout(() => {
       if (armed) { armed = false; setIsReady(true); }
-    }, 500);
+    }, MIN_DWELL_MS + 500);
     return () => {
       armed = false;
       window.removeEventListener('message', onMsg);
