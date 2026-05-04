@@ -422,17 +422,19 @@ const NeonBillboardCard = memo(({
   //   starving → neutral grey
   //   1-5      → palette base (purple or gronze)
   //   6        → bronze-gold accent (the "boom golden" peak)
-  const purpleHex = '#a78bfa';
+  // Soft muted lavender — secondary/tertiary cards shouldn't compete with
+  // the player hero. Desaturated vs the old #a78bfa so the rail reads calm.
+  // Golden at boost 6 is the only card that earns full brightness.
+  const purpleHex = '#7c6faa';
   const gronzeHex = '#F4A23E';
   const goldHex   = '#D4A053';
   const neutralHex = '#9a9aa8';
   const baseHex = palette === 'gronze' ? gronzeHex : purpleHex;
   const neon = isStarving ? neutralHex : (isFull ? goldHex : baseHex);
-  const seedRgb = isFull ? '212,160,83' : (palette === 'gronze' ? '244,162,62' : '167,139,250');
-  // glowAlpha still drives the inner-content drop-shadows
-  // (corner brackets, text glow). Ring/fill alphas retired with the
-  // parent box-shadow path in v841.
-  const glowAlpha = isStarving ? 0 : 0.18 + barRatio * 0.30;
+  const seedRgb = isFull ? '212,160,83' : (palette === 'gronze' ? '244,162,62' : '124,111,170');
+  // glowAlpha: lower floor (0.12) keeps tinted cards quiet; still ramps to
+  // 0.42 at max before the golden transition takes over at boost 6.
+  const glowAlpha = isStarving ? 0 : 0.12 + barRatio * 0.30;
   const glow = `rgba(${seedRgb},${glowAlpha})`;
 
   // Adjust timing based on energy level - starving = slow, boosted = fast
@@ -7011,11 +7013,10 @@ export const VoyoPortraitPlayer = ({
           />
           <div className="overflow-x-auto no-scrollbar flex gap-3 pb-1 -mb-2">
             {/* ====== MIX BOARD PRESETS - Tap to boost, Double-tap to react, Click punch to discover ====== */}
-            {/* Heating Up RN - ENERGETIC mood (only non-purple, luxury bronze-orange) */}
+            {/* Heating Up RN */}
             <NeonBillboardCard
               title="Heating Up RN"
               taglines={["Asambe! 🔥", "Lagos to Accra!", "E Choke! 💥", "Fire on Fire!", "No Wahala!"]}
-              palette="gronze"
               delay={0}
               mood="energetic"
               textAnimation="bounce"
