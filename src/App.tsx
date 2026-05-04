@@ -155,7 +155,7 @@ class AppErrorBoundary extends Component<{ children: ReactNode }, ErrorBoundaryS
       logPlaybackEvent({
         event_type: 'app_crash',
         track_id: '-',
-        error_code: error?.name || 'RenderError',
+        error_code: 'unknown',
         meta: {
           message: (error?.message || '').slice(0, 200),
           component: (info?.componentStack || '').split('\n').slice(1, 4).join(' ← ').slice(0, 300),

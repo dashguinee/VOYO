@@ -530,7 +530,7 @@ export async function warmLastResortPool(): Promise<void> {
       .order('play_count', { ascending: false })
       .limit(500);
     if (error || !data || data.length === 0) return;
-    const tracks = (data as VideoIntelligenceRow[]).map(viRowToTrack);
+    const tracks = (data as unknown as VideoIntelligenceRow[]).map(viRowToTrack);
     try {
       localStorage.setItem(LAST_RESORT_KEY, JSON.stringify({ tracks, at: Date.now() }));
     } catch { /* QuotaExceededError in iOS Safari private mode — pool stays cold */ }
@@ -685,6 +685,6 @@ export async function fetchTrackById(youtubeId: string): Promise<Track | null> {
     .eq('youtube_id', youtubeId)
     .single();
   if (error || !data) return null;
-  return toTrack(data as DiscoveryTrack);
+  return toTrack(data as unknown as DiscoveryTrack);
 }
 

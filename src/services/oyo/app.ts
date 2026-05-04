@@ -39,7 +39,8 @@ import { r2HasTrack } from '../../player/r2Probe';
 export type PlaySource =
   | 'feed' | 'queue' | 'search' | 'artist' | 'vibe' | 'moment'
   | 'oyo-pick' | 'previous' | 'history' | 'library' | 'auto' | 'unknown'
-  | 'drift';  // 2026-04-28: portrait-player left-swipe / discover-more
+  | 'drift'     // 2026-04-28: portrait-player left-swipe / discover-more
+  | 'deeplink'; // deep-link initiated play
 
 /**
  * The canonical "play this track" action. Every click that results in

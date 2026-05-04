@@ -36,7 +36,13 @@ export type PlaybackEventType =
   | 'stall'              // playback stalled during streaming
   | 'skip_auto'          // track auto-skipped (watchdog / max-retry / recovery)
   | 'vital'              // web-vital sample: LCP, INP, CLS (one per metric per session)
-  | 'trace';             // full-session debug trace (localStorage.voyoDebug = '1')
+  | 'trace'              // full-session debug trace (localStorage.voyoDebug = '1')
+  | 'app_nuke'           // catastrophic error — app forced to reload
+  | 'app_crash'          // unhandled error boundary catch
+  | 'deeplink_play'      // track started via deep link
+  | 'nav_switch'         // user switched navigation section
+  | 'search_query'       // user ran a search
+  | 'search_tap';        // user tapped a search result
 
 export type PlaybackSource =
   | 'preload'
@@ -57,6 +63,7 @@ export type ErrorCode =
   | 'max_retries'
   | 'load_watchdog'
   | 'aborted'
+  | 'crash_threshold'
   | 'unknown';
 
 interface PlaybackEvent {
