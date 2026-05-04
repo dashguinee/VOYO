@@ -31,6 +31,7 @@ const VoyoPortraitPlayer = lazy(() => import('./VoyoPortraitPlayer').then(m => (
 // DaHub — ported from Command Center, framer-motion stripped, voyo CSS animations
 const Dahub = lazy(() => import('../dahub/Dahub').then(m => ({ default: m.Dahub })));
 const ArtistPage = lazy(() => import('./ArtistPage').then(m => ({ default: m.ArtistPage })));
+const VoyoEarth = lazy(() => import('./earth/VoyoEarth').then(m => ({ default: m.VoyoEarth })));
 
 // Quick DJ Prompts
 const DJ_PROMPTS = [
@@ -355,11 +356,41 @@ export const PortraitVOYO = ({ onSearch, onDahub, onHome }: PortraitVOYOProps) =
               setVoyoTab('music');
             }}
             onArtistTap={(name) => setArtistPageName(name)}
+            onEarth={() => setVoyoTab('earth')}
           />
           </Suspense>
         </div>
 
         {/* LAYER 3: CREATOR MODE — hidden until backend ready */}
+
+        {/* LAYER 3b: EARTH MODE — cultural compass explorer
+            Fixed inset like Feed so video fills edge-to-edge.
+            z-20 so it sits above Feed but below Dahub (z-20 shared,
+            but Earth only mounts when active so no paint conflict). */}
+        {voyoActiveTab === 'earth' && (
+          <div className="fixed inset-0 z-20">
+            <Suspense fallback={<div className="h-full bg-[#0B0703]" />}>
+              <VoyoEarth
+                onClose={() => setVoyoTab('feed')}
+                onPlayTrack={(trackId, title, artist) => {
+                  const track: Track = {
+                    id: trackId,
+                    trackId,
+                    title,
+                    artist,
+                    coverUrl: `https://i.ytimg.com/vi/${trackId}/hqdefault.jpg`,
+                    duration: 0,
+                    tags: [],
+                    oyeScore: 0,
+                    createdAt: new Date().toISOString(),
+                  };
+                  app.playTrack(track, 'moment');
+                  setVoyoTab('music');
+                }}
+              />
+            </Suspense>
+          </div>
+        )}
 
         {/* LAYER 4: DAHUB MODE (Slide-in from Left)
             NOTE: Dahub handles its own scroll via flex-1 overflow-y-auto

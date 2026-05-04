@@ -233,13 +233,12 @@ export function hasUserMovedAwayFromTrack(trackId: string): boolean {
 // surfaces strong signals without the user explicitly starring).
 export function getEngagedCreators(): Set<string> {
   const out = new Set<string>(sessionStarred);
-  // Heavy positive session-weight (>= 25) = "friend-equivalent" intent
-  // even without an explicit star (e.g. multiple OYEs / plays in a
-  // single session). Threshold tuned conservatively: a single play
-  // gives +8, OYE on its parent track flows in via the same channel,
-  // 25 ≈ 3 plays or 1 play + cross-surface taste match.
+  // Threshold raised from 25 → 40 to require genuine repeated engagement
+  // before a creator is locked into the Friends lane. At +8 per play
+  // that's 5 plays, or a star (+30) + 1 play. Prevents a single-session
+  // binge on one creator from permanently narrowing the Friends feed.
   for (const [creator, weight] of creatorWeights.entries()) {
-    if (weight >= 25) out.add(creator);
+    if (weight >= 40) out.add(creator);
   }
   return out;
 }
@@ -331,7 +330,19 @@ function scoreMoment(m: Moment, ctx: RankContext): number {
 
   const creator = m.creator_username || m.creator_name || '';
   if (creator && sessionStarred.has(creator)) s += 25;
-  if (creator) s += creatorWeights.get(creator) ?? 0;
+  if (creator) {
+    const rawWeight = creatorWeights.get(creator) ?? 0;
+    if (rawWeight > 0 && creatorWeights.size > 1) {
+      // Cap the contribution to 3× the average positive weight so no single
+      // creator drowns out the rest of the ranked pool. Negative weights
+      // (skips) are applied as-is — punishments aren't normalized up.
+      const weights = Array.from(creatorWeights.values()).filter(w => w > 0);
+      const avg = weights.reduce((a, b) => a + b, 0) / weights.length;
+      s += Math.min(rawWeight, avg * 3);
+    } else {
+      s += rawWeight;
+    }
+  }
 
   // v858 — last-N creator rhythm penalty. If the same creator has
   // appeared in the last 5 moments, drop their score so the immediate
@@ -482,6 +493,32 @@ export function rankMoments(rows: Moment[], ctx: RankContext): Moment[] {
       perCreator.set(s.creatorKey, used + 1);
       taken.add(s.moment.id);
     }
+  }
+
+  // Pass 4: CREATOR INTERLEAVE — reorder the assembled output so no
+  // creator's two slots land back-to-back. Groups by creator, then
+  // round-robins across groups: slot 0 from each creator, then slot 1
+  // from each, etc. This is a pure reorder (no drops) so page size is
+  // unchanged. The effect is that even when two creators dominate the
+  // taste score, the user sees A → B → C → D → A → B rather than
+  // A → A → B → B → C.
+  if (out.length > 1) {
+    const byCreator = new Map<string, Moment[]>();
+    for (const m of out) {
+      const key = m.creator_username || m.creator_name || m.source_id || 'unknown';
+      const bucket = byCreator.get(key) ?? [];
+      bucket.push(m);
+      byCreator.set(key, bucket);
+    }
+    const groups = Array.from(byCreator.values());
+    const interleaved: Moment[] = [];
+    const maxSlots = Math.max(...groups.map(g => g.length));
+    for (let i = 0; i < maxSlots; i++) {
+      for (const group of groups) {
+        if (i < group.length) interleaved.push(group[i]);
+      }
+    }
+    return interleaved;
   }
 
   return out;

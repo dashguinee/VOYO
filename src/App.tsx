@@ -1030,10 +1030,10 @@ function App() {
   }, [isSearchOpen]);
 
   // Handle mode switching
-  const handleSwitchToVOYO = (tab?: 'music' | 'feed' | 'upload' | 'dahub') => {
+  const handleSwitchToVOYO = (tab?: 'music' | 'feed' | 'upload' | 'dahub' | 'earth') => {
     // DEFENSIVE: onClick handlers pass the MouseEvent as the first arg which
     // would otherwise set voyoActiveTab to an event object. Only accept strings.
-    const VALID_TABS = ['music', 'feed', 'upload', 'dahub'] as const;
+    const VALID_TABS = ['music', 'feed', 'upload', 'dahub', 'earth'] as const;
     const validTab = (typeof tab === 'string' && (VALID_TABS as readonly string[]).includes(tab))
       ? tab as typeof VALID_TABS[number]
       : 'music';
