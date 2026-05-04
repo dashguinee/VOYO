@@ -26,10 +26,16 @@ import { recordPoolEngagement } from '../personalization';
 import { gateToR2 } from '../r2Gate';
 import * as pools from './pools';
 import { updateEngagement, getNextMove, conductorFetch, resetDJ, getSession } from './dj';
-import type { UserState } from './dj';
+import type { UserState, DJMove } from './dj';
 import { getVibeEssence, type VibeEssence } from '../essenceEngine';
+import {
+  generateAnnouncement, _emitAnnouncement, resetAnnounceRotation,
+  type VibeIntent, type DJAnnouncement,
+} from './djAnnounce';
 export { usePools } from './usePools';
 export { app, type PlaySource } from './app';
+export type { VibeIntent, DJAnnouncement } from './djAnnounce';
+export { onAnnouncement } from './djAnnounce';
 export {
   getNextMove, conductorFetch, initDJ, updateEngagement, getSession, resetDJ,
   maybeFetchTrends,
@@ -134,7 +140,9 @@ if (typeof window !== 'undefined' && !(window as unknown as BgWindow).__voyoSign
         // Arc is stale — new time of day, reset conductor so the next track
         // picks up a fresh arc (getNextMove() calls initDJ on null session).
         resetDJ();
+        resetAnnounceRotation();
         _conductorQueue = [];
+        _vibeOverride = null;
         _recentActions.length = 0;
         // Eager refill — don't wait for the first drain call. Queue is ready
         // before the user's first skip after a long BG session.
@@ -297,8 +305,33 @@ export async function prefetch(_tracks: Track[], _priority: number = 5): Promise
 //
 // Refill is not gated on visibility — conductorFetch reads in-memory pool.
 
-let _conductorQueue: Track[] = [];
+// Parallel announcement queue — each slot matches the _conductorQueue slot.
+// Only the first track of each refill batch carries the announcement.
+interface ConductorEntry { track: Track; announcement: DJAnnouncement | null }
+let _conductorQueue: ConductorEntry[] = [];
 let _conductorRefilling = false;
+
+// Vibe steering — user taps a choice → override applied to the next refill
+let _vibeOverride: VibeIntent | null = null;
+
+function _applyVibeOverride(move: DJMove, intent: VibeIntent): void {
+  if (intent === 'boost_energy')   move.energyTarget = Math.min(move.energyRange[1], move.energyTarget + 1);
+  if (intent === 'drop_energy')    move.energyTarget = Math.max(move.energyRange[0], move.energyTarget - 1);
+  if (intent === 'pivot_culture')  move.type = 'bridge';
+  if (intent === 'surface_hits') { move.hotRatio = 1.0; move.canonDepth = 'surface'; }
+  if (intent === 'go_deep')      { move.hotRatio = 0.0; move.canonDepth = 'deep'; }
+  // keep_energy + stay_culture → no structural change, just consume the override
+}
+
+/**
+ * User tapped a vibe choice. Applies to the NEXT conductor refill.
+ * Purges the current queue so the override takes effect immediately.
+ */
+export function steerVibe(intent: VibeIntent): void {
+  _vibeOverride = intent;
+  _conductorQueue = []; // stale queue was built for the old direction
+  void _refillConductorQueue(new Set());
+}
 
 function _blendMixBoardEnergy(move: ReturnType<typeof getNextMove>, essence: VibeEssence): void {
   // Compute a weighted "intent energy" (1–5) from MixBoard vibe weights.
@@ -321,6 +354,12 @@ async function _refillConductorQueue(excludeIds: Set<string>): Promise<void> {
     const userState = _buildUserState();
     const move = getNextMove(userState);
 
+    // Apply user's vibe steering if present — consume after one refill
+    if (_vibeOverride) {
+      _applyVibeOverride(move, _vibeOverride);
+      _vibeOverride = null;
+    }
+
     // Blend MixBoard intent into the energy axis (Gap 2 fix)
     try {
       const essence = getVibeEssence();
@@ -328,9 +367,18 @@ async function _refillConductorQueue(excludeIds: Set<string>): Promise<void> {
     } catch { /* non-fatal — arc defaults hold */ }
 
     const candidates = await conductorFetch(move, excludeIds, 8);
-    const existing = new Set(_conductorQueue.map(t => t.trackId || t.id));
+    const existing = new Set(_conductorQueue.map(e => e.track.trackId || e.track.id));
+
+    // Generate one announcement for the first new track in this batch.
+    // Only bridge/echo/phase-advance always get one; flow tracks use probability.
+    const ann = generateAnnouncement(move, userState.recentCulturalTags);
+    let firstSlot = true;
+
     for (const t of candidates) {
-      if (!existing.has(t.trackId || t.id)) _conductorQueue.push(t);
+      if (!existing.has(t.trackId || t.id)) {
+        _conductorQueue.push({ track: t, announcement: firstSlot ? ann : null });
+        firstSlot = false;
+      }
     }
   } finally {
     _conductorRefilling = false;
@@ -339,19 +387,26 @@ async function _refillConductorQueue(excludeIds: Set<string>): Promise<void> {
 
 function _filterQueue(excludeIds: Set<string>): void {
   _conductorQueue = _conductorQueue.filter(
-    t => !excludeIds.has(t.trackId) && !excludeIds.has(t.id),
+    e => !excludeIds.has(e.track.trackId) && !excludeIds.has(e.track.id),
   );
 }
 
 /**
  * Pull the next conductor-selected track. Returns null if empty.
+ * Emits the DJ announcement for this slot if one was generated.
  * Triggers a background refill when the queue drops below 3.
  */
 export function drainConductorQueue(excludeIds: Set<string>): Track | null {
   _filterQueue(excludeIds);
-  const next = _conductorQueue.shift() ?? null;
+  const entry = _conductorQueue.shift() ?? null;
+  if (!entry) {
+    if (_conductorQueue.length < 3) void _refillConductorQueue(excludeIds);
+    return null;
+  }
+  // Emit the announcement so the OYO DJ bar can pick it up
+  if (entry.announcement) _emitAnnouncement(entry.announcement);
   if (_conductorQueue.length < 3) void _refillConductorQueue(excludeIds);
-  return next;
+  return entry.track;
 }
 
 /**
@@ -360,7 +415,7 @@ export function drainConductorQueue(excludeIds: Set<string>): Track | null {
  */
 export function peekConductorQueue(excludeIds: Set<string>): Track | null {
   _filterQueue(excludeIds);
-  return _conductorQueue[0] ?? null;
+  return _conductorQueue[0]?.track ?? null;
 }
 
 /**
@@ -406,6 +461,7 @@ export const oyo = {
     notifyManualPick,
     getSession,
     resetDJ,
+    steerVibe,
   },
   prefetch,
 };

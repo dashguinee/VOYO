@@ -51,10 +51,11 @@ import {
 } from '../../services/centralDJ';
 
 import { onSignal as oyaPlanSignal } from '../../services/oyoPlan';
-import { app } from '../../services/oyo';
+import { app, steerVibe } from '../../services/oyo';
 
 // OYO Island - DJ Voice Search & Chat
 import { OyoIsland } from './OyoIsland';
+import { OyoDJBar } from './OyoDJBar';
 import { VoyoLoadOrb } from './VoyoLoadOrb';
 
 // YouTube Iframe - Unified streaming + video display
@@ -5979,6 +5980,9 @@ export const VoyoPortraitPlayer = ({
         )}
       
 
+
+      {/* OYO DJ BAR — ambient steering surface (auto-triggered by OYO moves) */}
+      <OyoDJBar onSteer={steerVibe} bottomOffset={116} />
 
       {/* OYO ISLAND - DJ Voice Search & Chat (tap screen to show) */}
       <div data-no-canvas-swipe="true">
