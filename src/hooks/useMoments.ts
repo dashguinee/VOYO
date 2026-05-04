@@ -79,6 +79,18 @@ const COUNTRY_TAG_MAP: Record<string, string[]> = {
   'west-africa': ['west-africa'],
 };
 
+// Genre → cultural_tag proxy mapping. Powered by video_intelligence.primary_genre
+// enrichment (2026-05). Tags keyed from live catalog distribution:
+//   nigeria 122, west-africa 106, angola 41, east-africa 17, spiritual 28, south-africa 5
+const GENRE_TAG_MAP: Record<string, string[]> = {
+  'afrobeats':   ['nigeria', 'west-africa', 'naija', 'ghana', 'ng', 'gh'],
+  'kizomba':     ['angola', 'lusophone-africa', 'mozambique'],
+  'bongo-flava': ['east-africa', 'kenya', 'tanzania'],
+  'gospel':      ['spiritual'],
+  'amapiano':    ['south-africa', 'south africa', 'mzansi'],
+  'for-you':     [],  // no filter = broadest pool
+};
+
 // CategoryAxis — v902 (Dash 2026-04-29): top-bar reorg.
 //   trends   the TikTok-style "For You" explore feed (broadest pool)
 //   travel   geo-organized social-media explore (country sub-cats)
@@ -86,7 +98,7 @@ const COUNTRY_TAG_MAP: Record<string, string[]> = {
 //   vibes    music-bridged moments (was 'music')
 //   friends  engaged-creators only (private space)
 // 'vibes-now' retired — its content_type filtering folded into Trends.
-export type CategoryAxis = 'trends' | 'travel' | 'live' | 'vibes' | 'friends';
+export type CategoryAxis = 'trends' | 'travel' | 'live' | 'vibes' | 'friends' | 'genre';
 
 export interface MomentPosition {
   categoryIndex: number;
@@ -179,6 +191,13 @@ export const CATEGORY_PRESETS: Record<CategoryAxis, string[]> = {
   'friends': [
     'all',
   ],
+  // Genre compass — African music compass directions. Proxy via cultural_tags
+  // until parent_track_id coverage reaches critical mass (target: >500 linked).
+  // Ranked by catalog volume: afrobeats (255 moments) → kizomba (77) → bongo-flava (29)
+  //   → gospel (28) → amapiano (11) → for-you (all 6788).
+  'genre': [
+    'afrobeats', 'kizomba', 'bongo-flava', 'gospel', 'amapiano', 'for-you',
+  ],
 };
 
 // Display names for UI (map internal keys to pretty labels)
@@ -196,6 +215,13 @@ const DISPLAY_NAMES: Record<string, string> = {
   'ghana':       'Ghana',
   'angola':      'Angola',
   'west-africa': 'West Africa',
+  // Genre compass sub-cats (v1063 — cultural_tag proxy + parent_track genre)
+  'afrobeats':   'Afrobeats',
+  'kizomba':     'Kizomba',
+  'bongo-flava': 'Bongo Flava',
+  'gospel':      'Gospel',
+  'amapiano':    'Amapiano',
+  'for-you':     'For You',
 };
 
 // v902 — labels for the 5 top modes. Trends leads as the explore
@@ -208,6 +234,7 @@ export const TOP_MODE_LABELS: Record<CategoryAxis, string> = {
   'live':    'Live',
   'vibes':   'Vibes',
   'friends': 'Friends',
+  'genre':   'Genre',
 };
 
 // When in Vibes mode (was Music), override DISPLAY_NAMES so 'live'
@@ -289,6 +316,16 @@ const ADJACENCY: Record<CategoryAxis, Record<string, Record<string, number>>> = 
   },
   'friends': {
     'all': {},
+  },
+  // Genre compass adjacency — drift across sonic siblings.
+  // Afrobeats ↔ Amapiano (both Pan-African dancefloor), Kizomba ↔ Bongo Flava (sensual/groovy).
+  'genre': {
+    'afrobeats':   { 'amapiano': 0.45, 'kizomba': 0.3,  'gospel': 0.15, 'bongo-flava': 0.1 },
+    'kizomba':     { 'afrobeats': 0.5, 'amapiano': 0.3,  'bongo-flava': 0.2 },
+    'bongo-flava': { 'afrobeats': 0.5, 'kizomba': 0.3,   'gospel': 0.2 },
+    'gospel':      { 'afrobeats': 0.6, 'bongo-flava': 0.3, 'kizomba': 0.1 },
+    'amapiano':    { 'afrobeats': 0.55,'kizomba': 0.3,   'gospel': 0.15 },
+    'for-you':     { 'afrobeats': 0.4, 'kizomba': 0.25,  'amapiano': 0.2, 'bongo-flava': 0.15 },
   },
 };
 
@@ -447,6 +484,17 @@ export function useMoments(): UseMomentsReturn {
             q = q.gte('virality_score', minV);
             const maxV = maxViralityFor[category];
             if (maxV !== null && maxV !== undefined) q = q.lt('virality_score', maxV);
+          } else if (axis === 'genre') {
+            // Genre compass — cultural_tag proxy for African music directions.
+            // 'for-you' = no filter (broadest pool). Other genres filter by
+            // cultural_tags overlap (Nigeria → Afrobeats, Angola → Kizomba, etc).
+            // Phase 2: when parent_track_id coverage > 500, switch to
+            //   q.not('parent_track_id', 'is', null) + server-side genre join.
+            const tags = GENRE_TAG_MAP[category];
+            if (tags && tags.length > 0) {
+              q = q.overlaps('cultural_tags', tags);
+            }
+            // 'for-you' gets no tag filter — falls through to broadest pool
           } else if (axis === 'friends') {
             // Social graph — moments by creators the user has
             // engaged with. v860 v1: pull from sessionStarred +
@@ -586,6 +634,12 @@ export function useMoments(): UseMomentsReturn {
                 const tags = COUNTRY_TAG_MAP[nc];
                 if (!tags || tags.length === 0) continue;
                 nq = nq.overlaps('cultural_tags', tags);
+              } else if (axis === 'genre') {
+                const tags = GENRE_TAG_MAP[nc];
+                if (tags && tags.length > 0) {
+                  nq = nq.overlaps('cultural_tags', tags);
+                }
+                // 'for-you' neighbor gets no tag filter — broadest pool
               } else if (axis === 'live') {
                 const liveMin: Record<string, number> = { 'pulse': 120000, 'rising': 20000, 'gems': 2500 };
                 const liveMax: Record<string, number | null> = { 'pulse': null, 'rising': 120000, 'gems': 20000 };

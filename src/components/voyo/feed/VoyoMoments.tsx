@@ -2128,7 +2128,7 @@ export const VoyoMoments: React.FC<VoyoMomentsProps> = ({ onPlayFullTrack, onArt
             only space. */}
         <div style={{ ...S.axisTabs, justifyContent: 'space-between', alignItems: 'center' }}>
           <div style={{ display: 'flex', gap: 4 }}>
-            {(['trends', 'travel', 'live', 'vibes', 'friends'] as CategoryAxis[]).map(a => {
+            {(['trends', 'travel', 'live', 'vibes', 'genre', 'friends'] as CategoryAxis[]).map(a => {
               const disabled = a === 'live';
               const isVibes = a === 'vibes';
               return (
