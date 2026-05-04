@@ -1048,13 +1048,16 @@ export const AudioPlayer = () => {
     // Reset the bypass flag — it was set to true by bgEngine only for
     // this one escalated advance; keep normal ended-gating for future.
     syntheticEndedBypassRef.current = false;
-    // Engage the silent-WAV keeper right now to bridge the gap between
-    // this track ending and the next track's src landing. Keeps the
-    // audio element "playing" so the OS doesn't revoke audio focus
-    // (which is what causes BG sessions to die mid-transition).
+    // Mute the DSP chain before swapping src. Without this, the compressor's
+    // gain-release ramp + Voyex ConvolverNode reverb tails bleed through the
+    // chain at full volume for ~50-100ms while the src transitions to the
+    // silent WAV. The bypass keeper already holds OS audio focus at volume=0
+    // so muting the master gain here loses nothing. fadeInMasterGain restores
+    // it once the next track's canplay fires.
+    muteMasterGainInstantly();
     engageSilentWav('ended_advance', trackId);
     usePlayerStore.getState().nextTrack();
-  }, [engageSilentWav]);
+  }, [engageSilentWav, muteMasterGainInstantly]);
 
   // Keep runEndedAdvanceRef pointed at the latest handleEnded so bgEngine's
   // heartbeat detectors (synthetic-ended, stuck-playback) can trigger advance

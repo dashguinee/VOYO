@@ -457,13 +457,33 @@ export function useAudioChain(params: UseAudioChainParams): AudioChainApi {
   // ── UPDATE VOYEX SPATIAL ────────────────────────────────────────────
   // Slider -100..+100: DIVE (negative) ↔ IMMERSE (positive). 3 layers:
   // multiband mastering character, stereo field width, spatial effects.
+  //
+  // Self-ref: used by the mute-window path to re-apply spatial params
+  // after the ConvolverNode build completes without circular useCallback deps.
+  const updateVoyexSpatialRef = useRef<((v: number) => void)>(() => {});
+
   const updateVoyexSpatial = useCallback((value: number) => {
     if (!spatialEnhancedRef.current) return;
     const v = Math.max(-100, Math.min(100, value));
-    // Lazy-build spatial nodes on first non-zero activation
+    // Lazy-build spatial nodes on first non-zero activation.
+    // Wraps the build in a mute window: connecting ConvolverNodes to the
+    // live graph mid-stream forces the audio thread to rebuild its render
+    // graph, causing an audible dropout. Muting first makes it inaudible.
+    // fadeInMasterGain fires after 30ms (10+ render quantums at 44.1kHz)
+    // so the topology change is fully settled before gain is restored.
     if (v !== 0 && !diveReverbWetRef.current) {
       const builder = (spatialBypassDirectRef as unknown as { _buildSpatial?: () => void })._buildSpatial;
-      builder?.();
+      if (builder) {
+        muteMasterGainInstantly();
+        requestAnimationFrame(() => {
+          builder();
+          setTimeout(() => {
+            fadeInMasterGain(80);
+            updateVoyexSpatialRef.current(v); // re-apply with nodes now live
+          }, 30);
+        });
+        return;
+      }
     }
     const i = Math.abs(v) / 100;
 
@@ -539,7 +559,8 @@ export function useAudioChain(params: UseAudioChainParams): AudioChainApi {
       ramp(crossfeedRightGainRef.current?.gain, 0);
       applyMasterGain();
     }
-  }, [applyMasterGain]);
+  }, [applyMasterGain, muteMasterGainInstantly, fadeInMasterGain]); // eslint-disable-line react-hooks/exhaustive-deps
+  updateVoyexSpatialRef.current = updateVoyexSpatial;
 
   // ── SETUP AUDIO ENHANCEMENT ──────────────────────────────────────────
   // Builds the full chain on first call. Singleton via connectAudioChain.
