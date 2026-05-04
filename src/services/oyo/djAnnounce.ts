@@ -132,6 +132,16 @@ function artistCallout(artist: string): string {
     `${artist} in the set.`,
     `${artist} about to say something.`,
     `${artist} don't play.`,
+    `Make some noise for ${artist}!`,
+  ]);
+}
+
+function unknownArtistCallout(artist: string): string {
+  return rotate('artist_unknown', [
+    `${artist}, for you people.`,
+    `Big up ${artist}.`,
+    `${artist} — the people need to know.`,
+    `Make some noise for ${artist}!`,
   ]);
 }
 
@@ -199,9 +209,10 @@ function echoAnnouncement(ctx?: TrackContext): DJAnnouncement {
   let text: string;
   if (ctx?.artist && (ctx.heatScore ?? 100) < 30) {
     text = rotate('echo_artist', [
-      `They slept on this one.`,
+      `${ctx.artist}, for you people.`,
       `${ctx.artist} goes deeper than people know.`,
-      `This one's been sitting.`,
+      `They slept on this one.`,
+      `Big up ${ctx.artist}.`,
     ]);
   } else {
     text = rotate('echo', [
@@ -303,7 +314,10 @@ function hotSearchingAnnouncement(): DJAnnouncement {
 
 function discoveryAnnouncement(tags: string[], ctx?: TrackContext): DJAnnouncement {
   let text: string;
-  if (ctx && isHypeSong(ctx)) {
+  // Low-heat artist on a discovery move — DJ introduces the unknown
+  if (ctx?.artist && (ctx.heatScore ?? 50) < 30) {
+    text = unknownArtistCallout(ctx.artist);
+  } else if (ctx && isHypeSong(ctx)) {
     text = getGenreVocab(ctx.genre) ?? (() => {
       const intro = getCulturalIntro(tags, ctx);
       const base = rotate('discovery', ['Taking you somewhere.', 'Going left for a sec.', 'Expanding the map.', 'Trust the move.']);
