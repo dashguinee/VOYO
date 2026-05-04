@@ -1818,7 +1818,7 @@ const PortalBelt = memo(({ tracks, onTap, playedTrackIds, type, mixModes, modeBo
   }, [scrollOutwardTrigger]);
 
   // Card dimensions
-  const cardWidth = 72; // 64px + gap
+  const cardWidth = 86; // 77px + gap (20% bigger than original 72)
   const totalWidth = tracks.length * cardWidth;
 
   // Auto-scroll animation - Only when isActive AND not paused
@@ -2136,7 +2136,7 @@ const StreamCard = memo(({ track, onTap, isPlayed, modeColor }: {
 
   return (
     <div
-      className="flex-shrink-0 flex flex-col items-center w-16 relative"
+      className="flex-shrink-0 flex flex-col items-center w-[77px] relative"
       style={{ touchAction: 'manipulation', userSelect: 'none', WebkitUserSelect: 'none' } as React.CSSProperties}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
@@ -2159,7 +2159,7 @@ const StreamCard = memo(({ track, onTap, isPlayed, modeColor }: {
         onClick={handleTap}
       >
         <div
-          className="w-14 h-14 rounded-xl overflow-hidden mb-1.5 relative shadow-md bg-gradient-to-br from-purple-900/30 to-violet-900/20"
+          className="w-[67px] h-[67px] rounded-xl overflow-hidden mb-1.5 relative shadow-md bg-gradient-to-br from-purple-900/30 to-violet-900/20"
           style={{
             border: modeColor ? `${1 + modeColor.intensity}px solid ${modeColor.neon}` : '1px solid rgba(255,255,255,0.05)',
             boxShadow: modeColor
@@ -2200,8 +2200,8 @@ const StreamCard = memo(({ track, onTap, isPlayed, modeColor }: {
             </div>
           )}
         </div>
-        <h4 className={`text-[9px] font-bold truncate w-full text-center ${isPlayed ? 'text-gray-400' : 'text-white'}`}>{track.title}</h4>
-        <p className="text-[7px] text-gray-500 truncate w-full text-center uppercase">{track.artist}</p>
+        <h4 className={`text-[11px] font-bold truncate w-full text-center ${isPlayed ? 'text-gray-400' : 'text-white'}`}>{track.title}</h4>
+        <p className="text-[9px] text-gray-500 truncate w-full text-center uppercase">{track.artist}</p>
       </button>
 
       {/* Hold overlay — glass pill + shimmer, matches TrackCardGestures */}
