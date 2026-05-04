@@ -30,7 +30,7 @@ import type { UserState, DJMove } from './dj';
 import { getVibeEssence, type VibeEssence } from '../essenceEngine';
 import {
   generateAnnouncement, _emitAnnouncement, resetAnnounceRotation,
-  type VibeIntent, type DJAnnouncement,
+  type VibeIntent, type DJAnnouncement, type TrackContext,
 } from './djAnnounce';
 export { usePools } from './usePools';
 export { app, type PlaySource } from './app';
@@ -366,12 +366,26 @@ async function _refillConductorQueue(excludeIds: Set<string>): Promise<void> {
       _blendMixBoardEnergy(move, essence);
     } catch { /* non-fatal — arc defaults hold */ }
 
-    const candidates = await conductorFetch(move, excludeIds, 8);
+    // Capture raw metadata from the first candidate for context-aware announcements.
+    // Called synchronously inside conductorFetch before rawEntryToTrack conversion.
+    let firstRawCtx: TrackContext | undefined;
+    const candidates = await conductorFetch(move, excludeIds, 8, (raw) => {
+      firstRawCtx = {
+        artist:       raw.artist,
+        genre:        raw.primary_genre,
+        artistTier:   raw.artist_tier,
+        heatScore:    raw.heat_score,
+        vibeAfroHeat: raw.vibe_afro_heat,
+        vibeParty:    raw.vibe_party_mode,
+        vibeLatenight:raw.vibe_late_night,
+        vibeChill:    raw.vibe_chill_vibes,
+      };
+    });
     const existing = new Set(_conductorQueue.map(e => e.track.trackId || e.track.id));
 
     // Generate one announcement for the first new track in this batch.
     // Only bridge/echo/phase-advance always get one; flow tracks use probability.
-    const ann = generateAnnouncement(move, userState.recentCulturalTags);
+    const ann = generateAnnouncement(move, userState.recentCulturalTags, firstRawCtx);
     let firstSlot = true;
 
     for (const t of candidates) {

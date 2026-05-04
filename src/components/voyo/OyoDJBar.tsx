@@ -46,9 +46,10 @@ export function OyoDJBar({ bottomOffset = 110, onSteer }: OyoDJBarProps) {
     dismissTimerRef.current = setTimeout(dismiss, AUTO_DISMISS_MS);
   }, [dismiss]);
 
-  // Subscribe to DJ announcements
+  // Subscribe to DJ announcements — skip when app is backgrounded
   useEffect(() => {
     const unsub = onAnnouncement((ann) => {
+      if (document.hidden) return;
       setCurrent(ann);
       setLeaving(false);
       setVisible(true);

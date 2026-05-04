@@ -7,13 +7,13 @@
  * a culture pivot, a hidden gem, a peak moment — and they do it with
  * economy. Three words that land harder than a paragraph.
  *
- * Each announcement carries two vibe choices: standardized intents the
- * system understands. Not free-form text input — curated options that
- * feel like a DJ asking "you want me to go harder or take it smooth?"
+ * Hype vocab (Firebondeem, Kulossaaa) is energy-gated: only fires when
+ * vibe_afro_heat > 55 OR vibe_party_mode > 55. Saying "Firebondeem" on
+ * an Ed Sheeran ballad is not the vibe.
  *
- * The event emitter pattern lets any UI surface subscribe without
- * coupling to the playerStore. One subscriber at a time (the active
- * OYO DJ bar) — last subscribe wins.
+ * Genre vocabulary, artist callouts, and energy classification all use
+ * the incoming track's raw metadata — so OYO sounds like it actually
+ * knows what it's playing.
  */
 
 import type { DJMove, DJMoveType, Engagement } from './dj';
@@ -40,6 +40,18 @@ export interface DJAnnouncement {
   moveType: DJMoveType;
 }
 
+/** Snapshot of the incoming track's raw metadata for announcement personalization. */
+export interface TrackContext {
+  artist?: string | null;
+  genre?: string | null;
+  artistTier?: string | null;
+  heatScore?: number | null;
+  vibeAfroHeat?: number | null;
+  vibeParty?: number | null;
+  vibeLatenight?: number | null;
+  vibeChill?: number | null;
+}
+
 // ── Event emitter ────────────────────────────────────────────────────────────
 
 type AnnouncementHandler = (ann: DJAnnouncement) => void;
@@ -55,8 +67,6 @@ export function _emitAnnouncement(ann: DJAnnouncement): void {
 }
 
 // ── Rotation counters ────────────────────────────────────────────────────────
-// One counter per template bucket. Cycles through phrases without repeating,
-// without randomness — deterministic within session, varied across tracks.
 
 const _rotation: Record<string, number> = {};
 function rotate(key: string, arr: string[]): string {
@@ -68,14 +78,74 @@ export function resetAnnounceRotation(): void {
   Object.keys(_rotation).forEach(k => { delete _rotation[k]; });
 }
 
-// ── Cultural prefix overrides ────────────────────────────────────────────────
-// Layered on top of base text when cultural tags are present.
-// These are the DJ's vocabulary — they know the culture.
+// ── Energy classification ────────────────────────────────────────────────────
 
-const CULTURAL_PREFIXES: Record<string, string[]> = {
-  celebration:   ['Firebondeem —', 'Kulossaaa —'],
-  festival:      ['Firebondeem —', 'Festival energy —'],
-  liberation:    ['Free vibes —', 'Liberation —'],
+function isHypeSong(ctx: TrackContext): boolean {
+  return (ctx.vibeAfroHeat ?? 0) > 55 || (ctx.vibeParty ?? 0) > 55;
+}
+function isChillSong(ctx: TrackContext): boolean {
+  return (ctx.vibeChill ?? 0) > 55 && (ctx.vibeAfroHeat ?? 0) < 40;
+}
+function isLateNight(ctx: TrackContext): boolean {
+  return (ctx.vibeLatenight ?? 0) > 55;
+}
+
+// ── Genre vocabulary ─────────────────────────────────────────────────────────
+// Keyed on normalized genre strings (lowercase, no spaces/hyphens).
+
+const GENRE_VOCAB: Record<string, string[]> = {
+  amapiano:  ['Piano on deck.', 'Yanos drop.', 'SA in the building.', 'Log drum szn.'],
+  afrobeats: ['Lagos calling.', 'The groove don\'t lie.', 'Afro in the air.', 'Nigerian on top.'],
+  afropop:   ['Afro wave.', 'The continent calling.', 'Pure afro.'],
+  reggae:    ['Riddim.', 'One drop.', 'Roots rock.'],
+  dancehall: ['Bashment.', 'Dance hall lock off.'],
+  reggaeton: ['La vibra.', 'Perreo szn.'],
+  afrohouse: ['Dance floor calling.', 'Warehouse energy.', 'Deep in it.'],
+  congolese: ['Ndombolo.', 'Kinshasa on the set.', 'Rumba vibes.'],
+  soukous:   ['Congo in the air.', 'Soukous time.'],
+  highlife:  ['Highlife hour.', 'Ghana on it.'],
+  kwaito:    ['SA deep.', 'Kwaito bounce.'],
+  bongo:     ['Bongo flava.', 'Dar es Salaam in the set.'],
+  hiplife:   ['Ghana hip.', 'Hiplife energy.'],
+  fuji:      ['Fuji vibes.', 'Traditional road.'],
+  afrojuju:  ['Juju wave.', 'Nigerian roots.'],
+};
+
+function getGenreVocab(genre: string | null | undefined): string | null {
+  if (!genre) return null;
+  const norm = genre.toLowerCase().replace(/[\s\-]+/g, '');
+  if (GENRE_VOCAB[norm]) return rotate(`genre_${norm}`, GENRE_VOCAB[norm]);
+  // Substring match for compound genres (e.g. "Congolese Rumba" → "congolese")
+  for (const [key, phrases] of Object.entries(GENRE_VOCAB)) {
+    if (norm.includes(key) || key.includes(norm)) {
+      return rotate(`genre_${key}`, phrases);
+    }
+  }
+  return null;
+}
+
+// ── Artist callout ───────────────────────────────────────────────────────────
+
+function artistCallout(artist: string): string {
+  return rotate('artist_callout', [
+    `Oye ${artist}!`,
+    `${artist} in the set.`,
+    `${artist} about to say something.`,
+    `${artist} don't play.`,
+  ]);
+}
+
+// ── Cultural prefix overrides ────────────────────────────────────────────────
+// Split into hype-only (energy-gated) and neutral buckets.
+// Hype vocab only fires when isHypeSong(ctx) — ctx required for hype bucket.
+
+const HYPE_PREFIXES: Record<string, string[]> = {
+  celebration: ['Firebondeem —', 'Kulossaaa —'],
+  festival:    ['Firebondeem —', 'Festival energy —'],
+  liberation:  ['E dey fire —', 'Free vibes —'],
+};
+
+const NEUTRAL_PREFIXES: Record<string, string[]> = {
   roots:         ['Back to the ground.', 'African roots.'],
   motherland:    ['Motherland energy.', 'Back home.'],
   healing:       ['Soul shift.', 'Medicine music.'],
@@ -87,9 +157,19 @@ const CULTURAL_PREFIXES: Record<string, string[]> = {
   tradition:     ['Tradition first.', 'Roots deep.'],
 };
 
-function getCulturalIntro(tags: string[]): string {
+function getCulturalIntro(tags: string[], ctx?: TrackContext): string {
+  if (ctx && isHypeSong(ctx)) {
+    for (const tag of tags) {
+      const opts = HYPE_PREFIXES[tag];
+      if (opts?.length) {
+        const key = `prefix_hype_${tag}`;
+        _rotation[key] = ((_rotation[key] ?? -1) + 1) % opts.length;
+        return opts[_rotation[key]];
+      }
+    }
+  }
   for (const tag of tags) {
-    const opts = CULTURAL_PREFIXES[tag];
+    const opts = NEUTRAL_PREFIXES[tag];
     if (opts?.length) {
       const key = `prefix_${tag}`;
       _rotation[key] = ((_rotation[key] ?? -1) + 1) % opts.length;
@@ -101,8 +181,8 @@ function getCulturalIntro(tags: string[]): string {
 
 // ── Template bank ─────────────────────────────────────────────────────────────
 
-function bridgeAnnouncement(tags: string[]): DJAnnouncement {
-  const intro = getCulturalIntro(tags);
+function bridgeAnnouncement(tags: string[], ctx?: TrackContext): DJAnnouncement {
+  const intro = getCulturalIntro(tags, ctx);
   const bases = ['Culture shift.', 'We switching it up.', 'New territory.', 'Trust the move.'];
   const base = rotate('bridge', bases);
   return {
@@ -115,15 +195,24 @@ function bridgeAnnouncement(tags: string[]): DJAnnouncement {
   };
 }
 
-function echoAnnouncement(): DJAnnouncement {
-  const texts = [
-    'Bro listen.',
-    'They slept on this.',
-    'This one\'s been waiting.',
-    'OYO found something.',
-  ];
+function echoAnnouncement(ctx?: TrackContext): DJAnnouncement {
+  let text: string;
+  if (ctx?.artist && (ctx.heatScore ?? 100) < 30) {
+    text = rotate('echo_artist', [
+      `They slept on this one.`,
+      `${ctx.artist} goes deeper than people know.`,
+      `This one's been sitting.`,
+    ]);
+  } else {
+    text = rotate('echo', [
+      'Bro listen.',
+      'They slept on this.',
+      'This one\'s been waiting.',
+      'OYO found something.',
+    ]);
+  }
   return {
-    text: rotate('echo', texts),
+    text,
     choices: [
       { label: 'More like this', intent: 'go_deep' },
       { label: 'Back to heat', intent: 'surface_hits' },
@@ -132,11 +221,27 @@ function echoAnnouncement(): DJAnnouncement {
   };
 }
 
-function hotLockedAnnouncement(tags: string[]): DJAnnouncement {
-  const intro = getCulturalIntro(tags);
-  const base = rotate('hot_locked', ['We in the zone.', 'Full send.', 'No stops from here.', 'We locked.']);
+function hotLockedAnnouncement(tags: string[], ctx?: TrackContext): DJAnnouncement {
+  let text: string;
+  if (ctx?.artist && ctx.artistTier === 'A') {
+    text = artistCallout(ctx.artist);
+  } else if (ctx && isHypeSong(ctx)) {
+    text = getGenreVocab(ctx.genre) ?? (() => {
+      const intro = getCulturalIntro(tags, ctx);
+      const base = rotate('hot_locked', ['We in the zone.', 'Full send.', 'No stops from here.', 'We locked.']);
+      return intro ? `${intro} ${base}` : base;
+    })();
+  } else if (ctx && isLateNight(ctx)) {
+    text = rotate('late_night', ['Night shift.', '3am feeling.', 'Low light energy.', 'After dark.']);
+  } else if (ctx && isChillSong(ctx)) {
+    text = rotate('chill_locked', ['Soft life vibes.', 'Soul food.', 'Take it down.', 'We breathing.']);
+  } else {
+    const intro = getCulturalIntro(tags, ctx);
+    const base = rotate('hot_locked', ['We in the zone.', 'Full send.', 'No stops from here.', 'We locked.']);
+    text = intro ? `${intro} ${base}` : base;
+  }
   return {
-    text: intro ? `${intro} ${base}` : base,
+    text,
     choices: [
       { label: 'Go harder', intent: 'boost_energy' },
       { label: 'Let it breathe', intent: 'drop_energy' },
@@ -145,17 +250,27 @@ function hotLockedAnnouncement(tags: string[]): DJAnnouncement {
   };
 }
 
-function hotVibingAnnouncement(tags: string[]): DJAnnouncement {
-  const intro = getCulturalIntro(tags);
-  const texts = [
-    'Riding this.',
-    'We cooking.',
-    'Hold the wave.',
-    'This is working.',
-  ];
-  const base = rotate('hot_vibing', texts);
+function hotVibingAnnouncement(tags: string[], ctx?: TrackContext): DJAnnouncement {
+  let text: string;
+  if (ctx?.artist && ctx.artistTier === 'A') {
+    text = artistCallout(ctx.artist);
+  } else if (ctx && isHypeSong(ctx)) {
+    text = getGenreVocab(ctx.genre) ?? (() => {
+      const intro = getCulturalIntro(tags, ctx);
+      const base = rotate('hot_vibing', ['Riding this.', 'We cooking.', 'Hold the wave.', 'This is working.']);
+      return intro ? `${intro} ${base}` : base;
+    })();
+  } else if (ctx && isLateNight(ctx)) {
+    text = rotate('late_vibing', ['Night shift.', 'Low light energy.', 'After dark.']);
+  } else if (ctx && isChillSong(ctx)) {
+    text = rotate('chill_vibing', ['Soft life.', 'Soul food.', 'We breathing.']);
+  } else {
+    const intro = getCulturalIntro(tags, ctx);
+    const base = rotate('hot_vibing', ['Riding this.', 'We cooking.', 'Hold the wave.', 'This is working.']);
+    text = intro ? `${intro} ${base}` : base;
+  }
   return {
-    text: intro ? `${intro} ${base}` : base,
+    text,
     choices: [
       { label: 'Hold this', intent: 'keep_energy' },
       { label: 'Go harder', intent: 'boost_energy' },
@@ -165,13 +280,8 @@ function hotVibingAnnouncement(tags: string[]): DJAnnouncement {
 }
 
 function hotWarmingAnnouncement(): DJAnnouncement {
-  const texts = [
-    'Reading you.',
-    'Still reading.',
-    'Getting warmer.',
-  ];
   return {
-    text: rotate('hot_warming', texts),
+    text: rotate('hot_warming', ['Reading you.', 'Still reading.', 'Getting warmer.']),
     choices: [
       { label: 'Easy does it', intent: 'drop_energy' },
       { label: 'Drop straight in', intent: 'boost_energy' },
@@ -181,13 +291,8 @@ function hotWarmingAnnouncement(): DJAnnouncement {
 }
 
 function hotSearchingAnnouncement(): DJAnnouncement {
-  const texts = [
-    'Finding your frequency.',
-    'Let\'s see what lands.',
-    'On the search.',
-  ];
   return {
-    text: rotate('hot_searching', texts),
+    text: rotate('hot_searching', ['Finding your frequency.', 'Let\'s see what lands.', 'On the search.']),
     choices: [
       { label: 'Keep it familiar', intent: 'surface_hits' },
       { label: 'Surprise me', intent: 'go_deep' },
@@ -196,12 +301,21 @@ function hotSearchingAnnouncement(): DJAnnouncement {
   };
 }
 
-function discoveryAnnouncement(tags: string[]): DJAnnouncement {
-  const intro = getCulturalIntro(tags);
-  const texts = ['Taking you somewhere.', 'Going left for a sec.', 'Expanding the map.', 'Trust the move.'];
-  const base = rotate('discovery', texts);
+function discoveryAnnouncement(tags: string[], ctx?: TrackContext): DJAnnouncement {
+  let text: string;
+  if (ctx && isHypeSong(ctx)) {
+    text = getGenreVocab(ctx.genre) ?? (() => {
+      const intro = getCulturalIntro(tags, ctx);
+      const base = rotate('discovery', ['Taking you somewhere.', 'Going left for a sec.', 'Expanding the map.', 'Trust the move.']);
+      return intro ? `${intro} ${base}` : base;
+    })();
+  } else {
+    const intro = getCulturalIntro(tags, ctx);
+    const base = rotate('discovery', ['Taking you somewhere.', 'Going left for a sec.', 'Expanding the map.', 'Trust the move.']);
+    text = intro ? `${intro} ${base}` : base;
+  }
   return {
-    text: intro ? `${intro} ${base}` : base,
+    text,
     choices: [
       { label: 'Stay in discovery', intent: 'go_deep' },
       { label: 'Back to hits', intent: 'surface_hits' },
@@ -210,17 +324,19 @@ function discoveryAnnouncement(tags: string[]): DJAnnouncement {
   };
 }
 
-function peakPhaseAnnouncement(tags: string[]): DJAnnouncement {
-  const intro = getCulturalIntro(tags);
-  const texts = [
-    'Peak hour.',
-    'Firebondeem, we\'re there.',
-    'This is the top.',
-    'Kulossaaa fr.',
-  ];
-  const base = rotate('peak', texts);
+function peakPhaseAnnouncement(tags: string[], ctx?: TrackContext): DJAnnouncement {
+  let text: string;
+  if (ctx && isHypeSong(ctx)) {
+    const intro = getCulturalIntro(tags, ctx);
+    const base = rotate('peak_hype', ['Peak hour.', 'This is the top.', 'We\'re there.', 'No ceiling.']);
+    text = intro ? `${intro} ${base}` : base;
+  } else if (ctx?.artist && ctx.artistTier === 'A') {
+    text = artistCallout(ctx.artist);
+  } else {
+    text = rotate('peak', ['Peak hour.', 'This is the top.', 'We\'re there.', 'Full arc.']);
+  }
   return {
-    text: intro ? `${intro} ${base}` : base,
+    text,
     choices: [
       { label: 'Double down', intent: 'boost_energy' },
       { label: 'Hold this', intent: 'keep_energy' },
@@ -231,9 +347,7 @@ function peakPhaseAnnouncement(tags: string[]): DJAnnouncement {
 
 // ── Generator ────────────────────────────────────────────────────────────────
 
-// Probability of a regular hot/discovery move getting an announcement.
-// Kept low — OYO speaks when it matters, not on every track.
-const RATE_LOCKED  = 0.30; // 1 in 3 at peak engagement
+const RATE_LOCKED  = 0.30;
 const RATE_VIBING  = 0.22;
 const RATE_WARMING = 0.14;
 const RATE_DEFAULT = 0.10;
@@ -246,31 +360,26 @@ const RATE_DEFAULT = 0.10;
 export function generateAnnouncement(
   move: DJMove & { phaseAdvanced?: boolean },
   culturalTags: string[],
+  ctx?: TrackContext,
 ): DJAnnouncement | null {
-  // Extract engagement from the thought string
   const engagementMatch = move.thought.match(/:(searching|warming|vibing|locked)\]/);
   const engagement = (engagementMatch?.[1] ?? 'warming') as Engagement;
 
-  // Bridge and echo are intentional DJ moves — always announce
-  if (move.type === 'bridge') return bridgeAnnouncement(culturalTags);
-  if (move.type === 'echo')   return echoAnnouncement();
+  if (move.type === 'bridge') return bridgeAnnouncement(culturalTags, ctx);
+  if (move.type === 'echo')   return echoAnnouncement(ctx);
+  if (move.phaseAdvanced)     return peakPhaseAnnouncement(culturalTags, ctx);
 
-  // Phase advance to peak is worth calling out
-  if (move.phaseAdvanced) return peakPhaseAnnouncement(culturalTags);
-
-  // Hot/discovery: announce based on engagement level
   const rate =
-    engagement === 'locked'    ? RATE_LOCKED  :
-    engagement === 'vibing'    ? RATE_VIBING  :
-    engagement === 'warming'   ? RATE_WARMING : RATE_DEFAULT;
+    engagement === 'locked'  ? RATE_LOCKED  :
+    engagement === 'vibing'  ? RATE_VIBING  :
+    engagement === 'warming' ? RATE_WARMING : RATE_DEFAULT;
 
-  if (Math.random() > rate) return null; // silence for most tracks
+  if (Math.random() > rate) return null;
 
-  if (move.type === 'discovery') return discoveryAnnouncement(culturalTags);
+  if (move.type === 'discovery') return discoveryAnnouncement(culturalTags, ctx);
 
-  // Hot by engagement
-  if (engagement === 'locked')  return hotLockedAnnouncement(culturalTags);
-  if (engagement === 'vibing')  return hotVibingAnnouncement(culturalTags);
+  if (engagement === 'locked')  return hotLockedAnnouncement(culturalTags, ctx);
+  if (engagement === 'vibing')  return hotVibingAnnouncement(culturalTags, ctx);
   if (engagement === 'warming') return hotWarmingAnnouncement();
   return hotSearchingAnnouncement();
 }

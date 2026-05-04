@@ -358,6 +358,7 @@ export async function conductorFetch(
   move: DJMove,
   excludeIds: Set<string>,
   limit: number = 10,
+  onFirstRaw?: (raw: RawPoolEntry) => void,
 ): Promise<Track[]> {
   // Full 324K DB via RPC — no r2_cached gate. Player handles non-R2 tracks
   // via iframe + hotswap. excludeIds applied inside getConductorCandidates.
@@ -408,7 +409,9 @@ export async function conductorFetch(
 
   // Shuffle and slice
   const shuffled = pool.slice().sort(() => Math.random() - 0.5);
-  return shuffled.slice(0, limit).map(rawEntryToTrack);
+  const sliced = shuffled.slice(0, limit);
+  if (onFirstRaw && sliced[0]) onFirstRaw(sliced[0]);
+  return sliced.map(rawEntryToTrack);
 }
 
 // ── Trend phase stub (VPS/Qwen — endpoint TBD) ───────────────────────────
