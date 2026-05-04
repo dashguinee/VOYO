@@ -1,13 +1,13 @@
 /**
  * VOYO Central DJ — Collective Intelligence Layer
  *
- * Owns the shared Supabase track graph (voyo_tracks).
- * Surfaces tracks by vibe mode, records playback signals to voyo_signals,
- * and trains vibe scores when users queue/boost/react.
+ * Canonical track store: video_intelligence (275K+ rows, youtube_id PK).
+ * voyo_tracks is legacy — kept alive only for RPC compat (get_tracks_by_mode,
+ * get_hot_tracks). New writes go to video_intelligence only.
  *
- * The flywheel: every user interaction votes on a track's mode affinity
- * so getTracksByMode() returns better results with each session.
- * No AI — pure collective behavior.
+ * Signal pipeline: every user interaction writes to voyo_signals →
+ * hydrateFromSignals → OYO affinities. Vibe columns on video_intelligence
+ * are the recommendation source of truth.
  */
 
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
@@ -249,28 +249,30 @@ export async function saveVerifiedTrack(
     const detectedModes = detectModes(track.title, track.artist);
     const vibeProfile = vibe || modesToVibeProfile(detectedModes);
 
-    const { error } = await supabase.from('voyo_tracks').upsert({
-      voyo_id: track.trackId,
+    // Cultural tags: start from track.tags, add region if provided
+    const culturalTags = [...(track.tags || [])];
+    if (track.region && !culturalTags.includes(track.region)) {
+      culturalTags.push(track.region.toLowerCase());
+    }
+
+    const { error } = await supabase.from('video_intelligence').upsert({
       youtube_id: youtubeId,
       title: track.title,
       artist: track.artist,
-      thumbnail: track.coverUrl || getThumb(youtubeId),
-      duration: track.duration || 0,
-      tags: track.tags || [],
-      language: 'en',
-      region: track.region || 'NG',
-      discovered_by: discoveredBy,
+      thumbnail_url: track.coverUrl || getThumb(youtubeId),
+      discovery_method: discoveredBy,
       verified: true,
-      // MixBoard vibe scores
+      // Vibe scores — canonical recommendation signals
       vibe_afro_heat: vibeProfile['afro-heat'],
       vibe_chill_vibes: vibeProfile['chill-vibes'],
       vibe_party_mode: vibeProfile['party-mode'],
       vibe_late_night: vibeProfile['late-night'],
       vibe_workout: vibeProfile['workout'],
-      // Vibe tags (detected modes)
-      vibe_tags: detectedModes,
+      // Tag signals
+      aesthetic_tags: detectedModes,
+      cultural_tags: culturalTags.length ? culturalTags : undefined,
     }, {
-      onConflict: 'voyo_id',
+      onConflict: 'youtube_id',
       ignoreDuplicates: false,
     });
 
@@ -382,20 +384,20 @@ export async function trainVibe(signal: VibeTrainSignal): Promise<boolean> {
   const column = columnMap[signal.modeId];
 
   try {
-    // First check if track exists
+    // Check existence in video_intelligence (canonical store)
     const { data: existing } = await supabase
-      .from('voyo_tracks')
-      .select('voyo_id, vibe_tags')
-      .eq('voyo_id', signal.trackId)
+      .from('video_intelligence')
+      .select('youtube_id, aesthetic_tags')
+      .eq('youtube_id', signal.trackId)
       .maybeSingle();
 
     if (!existing) {
-      // Track doesn't exist in central DB yet - that's OK, will be added later
-      devLog(`[Central DJ] Track ${signal.trackId.substring(0, 10)}... not in central DB yet`);
+      devLog(`[Central DJ] Track ${signal.trackId.substring(0, 10)}... not in video_intelligence yet`);
       return false;
     }
 
-    // Update the vibe score (cap at 100)
+    // Atomic vibe increment via RPC — note: RPC currently targets voyo_tracks;
+    // once updated to target video_intelligence it will close the training loop.
     const { error } = await supabase.rpc('train_track_vibe', {
       p_track_id: signal.trackId,
       p_mode: signal.modeId,
@@ -403,9 +405,7 @@ export async function trainVibe(signal: VibeTrainSignal): Promise<boolean> {
     });
 
     if (error) {
-      // RPC doesn't exist yet - log and continue
-      // The RPC will be available after running the migration
-      devLog('[Central DJ] Vibe training RPC not available yet - run the migration');
+      devLog('[Central DJ] Vibe training RPC not available — skipping increment');
       return false;
     }
 

@@ -40,4 +40,5 @@ export interface Moment {
   is_active: boolean;
   created_at: string;
   updated_at: string;
+  r2_video_key?: string;
 }

@@ -1324,9 +1324,12 @@ StarConfirmation.displayName = 'StarConfirmation';
 // ============================================
 
 export interface MomentTrackInfo {
-  id: string;
+  id: string;            // youtube_id — FK into video_intelligence
+  momentId: string;      // voyo_moments.id — for tapped_full_song signal
   title: string;
   artist: string;
+  vibeTagsFromMoment: string[];     // moment.vibe_tags — back-propagated to vi
+  culturalTagsFromMoment: string[]; // moment.cultural_tags — back-propagated to vi
 }
 
 export interface VoyoMomentsProps {
@@ -2337,8 +2340,11 @@ export const VoyoMoments: React.FC<VoyoMomentsProps> = ({ onPlayFullTrack, onArt
                 onToggleMute={showVolBadge}
                 onPlayTrack={currentMoment.parent_track_id && onPlayFullTrack ? () => onPlayFullTrack({
                   id: currentMoment.parent_track_id!,
+                  momentId: currentMoment.id,
                   title: currentMoment.parent_track_title || 'Unknown',
                   artist: currentMoment.parent_track_artist || 'Unknown Artist',
+                  vibeTagsFromMoment: currentMoment.vibe_tags || [],
+                  culturalTagsFromMoment: currentMoment.cultural_tags || [],
                 }) : undefined}
                 onArtistTap={onArtistTap}
                 onOpenComments={handleOpenComments}

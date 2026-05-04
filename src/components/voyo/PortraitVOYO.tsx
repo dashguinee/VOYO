@@ -17,6 +17,7 @@ import { DJMode, Track } from '../../types';
 import { useAuth } from '../../hooks/useAuth';
 import { useTabHistory } from '../../hooks/useTabHistory';
 import { APP_CODES } from '../../lib/dahub/dahub-api';
+import { supabase, isSupabaseConfigured } from '../../lib/supabase';
 import { VoyoLoadOrb } from './VoyoLoadOrb';
 import { VoyoCloseX } from '../ui/VoyoCloseX';
 import { Safe } from '../ui/Safe';
@@ -340,7 +341,53 @@ export const PortraitVOYO = ({ onSearch, onDahub, onHome }: PortraitVOYOProps) =
         >
           <Suspense fallback={<div className="h-full bg-[#0a0a0c]" />}>
           <VoyoMoments
-            onPlayFullTrack={(trackInfo: MomentTrackInfo) => {
+            onPlayFullTrack={async (trackInfo: MomentTrackInfo) => {
+              // Strongest engagement signal a moment can fire — feeds OYO graph
+              if (supabase && isSupabaseConfigured) {
+                supabase.rpc('record_moment_play', {
+                  p_moment_id: trackInfo.momentId,
+                  p_tapped_full_song: true,
+                }).catch(() => {});
+              }
+
+              // Fetch full signals from video_intelligence while launching playback.
+              // youtube_id is the FK — one indexed primary-key lookup, < 30ms.
+              let viTrack: { primary_genre: string | null; cultural_tags: string[]; aesthetic_tags: string[]; vibe_afro_heat: number; heat_score: number } | null = null;
+              if (supabase && isSupabaseConfigured) {
+                const { data } = await supabase
+                  .from('video_intelligence')
+                  .select('primary_genre, cultural_tags, aesthetic_tags, vibe_afro_heat, heat_score')
+                  .eq('youtube_id', trackInfo.id)
+                  .maybeSingle();
+                viTrack = data;
+
+                // Back-propagate moment tags into video_intelligence when the track
+                // is missing cultural context (moment is often richer than the catalog entry)
+                const momentCulturalTags = trackInfo.culturalTagsFromMoment;
+                const momentVibeTags = trackInfo.vibeTagsFromMoment;
+                const existingCultural = viTrack?.cultural_tags || [];
+                const existingAesthetic = viTrack?.aesthetic_tags || [];
+                const mergedCultural = [...new Set([...existingCultural, ...momentCulturalTags])];
+                const mergedAesthetic = [...new Set([...existingAesthetic, ...momentVibeTags])];
+                const tagsChanged =
+                  mergedCultural.length !== existingCultural.length ||
+                  mergedAesthetic.length !== existingAesthetic.length;
+                if (tagsChanged) {
+                  supabase.from('video_intelligence').update({
+                    cultural_tags: mergedCultural,
+                    aesthetic_tags: mergedAesthetic,
+                  }).eq('youtube_id', trackInfo.id).then(() => {});
+                }
+              }
+
+              // Build the Track — tags carry the full merged signal set so OYO DJ
+              // has context even before the next video_intelligence read cycle
+              const allTags = [
+                ...(viTrack?.cultural_tags || trackInfo.culturalTagsFromMoment),
+                ...(viTrack?.aesthetic_tags || trackInfo.vibeTagsFromMoment),
+                ...(viTrack?.primary_genre ? [viTrack.primary_genre] : []),
+              ].filter((t, i, a) => t && a.indexOf(t) === i);
+
               const track: Track = {
                 id: trackInfo.id,
                 trackId: trackInfo.id,
@@ -348,8 +395,8 @@ export const PortraitVOYO = ({ onSearch, onDahub, onHome }: PortraitVOYOProps) =
                 artist: trackInfo.artist,
                 coverUrl: `https://i.ytimg.com/vi/${trackInfo.id}/hqdefault.jpg`,
                 duration: 0,
-                tags: [],
-                oyeScore: 0,
+                tags: allTags,
+                oyeScore: viTrack?.heat_score || 0,
                 createdAt: new Date().toISOString(),
               };
               app.playTrack(track, 'moment');
