@@ -24,6 +24,12 @@ import type { Moment } from '../../../types/moments';
 
 const VOYO_API = import.meta.env.VITE_API_URL || 'https://voyo-edge.dash-webtv.workers.dev';
 
+// Session-level R2 availability flag.
+// Flips to false on the first 404 — all subsequent cards skip the R2 attempt
+// and go straight to their embed/thumbnail fallback without a stall.
+// Resets to true when the download pipeline populates R2 and deploys.
+let r2SessionAvailable = true;
+
 // ── Cultural origin map ───────────────────────────────────────────────────
 
 const ORIGIN_MAP: Record<string, { flag: string; label: string }> = {
@@ -133,12 +139,8 @@ DirectionPulse.displayName = 'DirectionPulse';
 type VideoFormat = 'r2_video' | 'tiktok_embed' | 'instagram_embed' | 'youtube_embed' | 'thumbnail';
 
 function resolveFormat(moment: Moment, r2Failed: boolean): VideoFormat {
-  // R2 is preferred when it exists and hasn't failed yet
-  if (!r2Failed && moment.r2_video_key) return 'r2_video';
-  // Platform-specific embeds — actual video content
+  if (!r2Failed && r2SessionAvailable && moment.r2_video_key) return 'r2_video';
   if (moment.source_platform === 'tiktok') return 'tiktok_embed';
-  // Instagram embed shows "Watch on Instagram" UI chrome — not usable for fullscreen.
-  // Falls to thumbnail until R2 pipeline populates actual video files.
   if (moment.source_platform === 'youtube' || moment.source_platform === 'youtube_shorts') return 'youtube_embed';
   return 'thumbnail';
 }
@@ -212,7 +214,7 @@ const EarthVideoCard = memo(({ moment, visible, muted }: EarthVideoCardProps) =>
           playsInline
           preload={visible ? 'auto' : 'metadata'}
           onCanPlay={() => setVideoReady(true)}
-          onError={() => setR2Failed(true)}
+          onError={() => { r2SessionAvailable = false; setR2Failed(true); }}
           className="absolute inset-0 w-full h-full object-cover"
           style={{
             opacity: videoReady ? 1 : 0,

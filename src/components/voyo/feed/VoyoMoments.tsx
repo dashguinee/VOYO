@@ -42,6 +42,9 @@ function getSpring(action: NavAction) {
 // API base for R2 feed video streaming — Edge Worker (300+ locations)
 const VOYO_API = import.meta.env.VITE_API_URL || 'https://voyo-edge.dash-webtv.workers.dev';
 
+// Session-level R2 flag — flips false on first 404, skipping R2 for all subsequent cards.
+let r2SessionAvailable = true;
+
 const css = (obj: React.CSSProperties) => obj;
 
 function formatCount(n: number): string {
@@ -705,7 +708,7 @@ const MomentCard = memo(({ moment, isOyed, onOye, isActive, isMuted, onToggleMut
   //   4. iframe_embed   — YouTube embed (youtube/youtube_shorts platform).
   //   5. thumbnail      — Static last resort.
   const format: MomentFormat = (() => {
-    if (!videoError) return 'r2_video';
+    if (!videoError && r2SessionAvailable) return 'r2_video';
     if (moment.source_platform === 'tiktok') return 'tiktok_embed';
     // Instagram embed shows "Watch on Instagram" chrome — thumbnail until R2 is populated.
     if (moment.source_platform === 'youtube' || moment.source_platform === 'youtube_shorts') return 'iframe_embed';
@@ -764,6 +767,7 @@ const MomentCard = memo(({ moment, isOyed, onOye, isActive, isMuted, onToggleMut
   }, [isMuted]);
 
   const handleVideoError = useCallback(() => {
+    r2SessionAvailable = false;
     setVideoError(true);
     devWarn(`[MomentCard] Video load failed for ${moment.source_id}, falling back`);
   }, [moment.source_id]);
