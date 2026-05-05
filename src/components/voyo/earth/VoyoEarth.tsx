@@ -52,6 +52,9 @@ const ORIGIN_MAP: Record<string, { flag: string; label: string }> = {
   caribbean: { flag: '🌴', label: 'Caribbean' },
   'dr-congo': { flag: '🇨🇩', label: 'Kinshasa' },
   'central-africa': { flag: '🌍', label: 'Central Africa' },
+  'ivory-coast':    { flag: '🇨🇮', label: 'Abidjan' },
+  'cape-verde':     { flag: '🇨🇻', label: 'Cabo Verde' },
+  morocco:          { flag: '🇲🇦', label: 'Marrakech' },
   jamaica: { flag: '🇯🇲', label: 'Kingston' },
   latin: { flag: '🌎', label: 'Latin America' },
 };
@@ -267,6 +270,7 @@ export const VoyoEarth: React.FC<VoyoEarthProps> = ({ onClose, onPlayTrack }) =>
 
   const [isMuted] = useState(true); // moments default muted; audio comes from portrait player
   const [oyedIds, setOyedIds] = useState<Set<string>>(new Set());
+  const [reactionDeltas, setReactionDeltas] = useState<Record<string, number>>({});
   const [showCompass, setShowCompass] = useState(false);
   const [cardOpacity, setCardOpacity] = useState(1);
   const [dirPulse, setDirPulse] = useState<EarthDir | null>(null);
@@ -314,14 +318,15 @@ export const VoyoEarth: React.FC<VoyoEarthProps> = ({ onClose, onPlayTrack }) =>
   }, [navigate, flashDirection]);
 
   const handleOye = useCallback(() => {
-    if (!current) return;
+    if (!current || oyedIds.has(current.id)) return;
     setOyedIds(prev => {
       const next = new Set(prev);
       next.add(current.id);
       return next;
     });
+    setReactionDeltas(prev => ({ ...prev, [current.id]: (prev[current.id] ?? 0) + 1 }));
     void recordOye(current.id);
-  }, [current, recordOye]);
+  }, [current, oyedIds, recordOye]);
 
   // Touch gesture handler
   const onTouchStart = useCallback((e: React.TouchEvent) => {
@@ -357,6 +362,15 @@ export const VoyoEarth: React.FC<VoyoEarthProps> = ({ onClose, onPlayTrack }) =>
 
   const origin = current ? getOrigin(current.cultural_tags || []) : null;
   const isOyed = current ? oyedIds.has(current.id) : false;
+  const reactionCount = current
+    ? (current.voyo_reactions || 0) + (reactionDeltas[current.id] ?? 0)
+    : 0;
+
+  function fmtCount(n: number): string {
+    if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+    if (n >= 1_000) return `${(n / 1_000).toFixed(0)}K`;
+    return n > 0 ? String(n) : '';
+  }
 
   return (
     <div
@@ -462,7 +476,7 @@ export const VoyoEarth: React.FC<VoyoEarthProps> = ({ onClose, onPlayTrack }) =>
             className="text-[9px] font-bold tracking-wider uppercase"
             style={{ color: isOyed ? 'rgba(251,191,36,0.9)' : 'rgba(255,255,255,0.4)' }}
           >
-            oyé
+            {reactionCount > 0 ? fmtCount(reactionCount) : 'oyé'}
           </span>
         </button>
       </div>
@@ -498,6 +512,14 @@ export const VoyoEarth: React.FC<VoyoEarthProps> = ({ onClose, onPlayTrack }) =>
                   {current.title}
                 </p>
               )}
+              {current.view_count > 0 && (
+                <p
+                  className="text-[10px] mt-1"
+                  style={{ color: 'rgba(255,255,255,0.3)' }}
+                >
+                  {fmtCount(current.view_count)} views
+                </p>
+              )}
             </div>
 
             {/* Cultural origin tag */}
@@ -505,15 +527,22 @@ export const VoyoEarth: React.FC<VoyoEarthProps> = ({ onClose, onPlayTrack }) =>
               <div
                 className="flex items-center gap-1.5 px-2.5 py-1 rounded-full flex-shrink-0"
                 style={{
-                  background: 'rgba(0,0,0,0.5)',
-                  border: '1px solid rgba(255,255,255,0.1)',
+                  background: current.featured
+                    ? 'rgba(212,160,83,0.15)'
+                    : 'rgba(0,0,0,0.5)',
+                  border: current.featured
+                    ? '1px solid rgba(212,160,83,0.35)'
+                    : '1px solid rgba(255,255,255,0.1)',
                   backdropFilter: 'blur(8px)',
                 }}
               >
+                {current.featured && (
+                  <span className="text-[10px] leading-none" style={{ color: 'rgba(212,160,83,0.9)' }}>★</span>
+                )}
                 <span className="text-base leading-none">{origin.flag}</span>
                 <span
                   className="text-[10px] font-semibold tracking-wide"
-                  style={{ color: 'rgba(255,255,255,0.75)' }}
+                  style={{ color: current.featured ? 'rgba(212,160,83,0.9)' : 'rgba(255,255,255,0.75)' }}
                 >
                   {origin.label}
                 </span>
