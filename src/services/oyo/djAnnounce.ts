@@ -353,13 +353,19 @@ const GENRE_BRIDGE: Partial<Record<string, string>> = {
   'rnb→gospel':           'Spirit in it.',
 };
 
+function normalizeGenreKey(g: string): string {
+  return g.toLowerCase().replace(/[\s\-&]+/g, '');
+}
+
 function bridgeAnnouncement(tags: string[], ctx?: TrackContext, prevGenre?: string | null): DJAnnouncement {
   let text: string | null = null;
 
   // Genre-pair bridge: if we know source and destination genres
   if (prevGenre && ctx?.genre && prevGenre !== ctx.genre) {
-    const key = `${prevGenre}→${ctx.genre}`;
-    text = GENRE_BRIDGE[key] ?? null;
+    // Try exact key first, then normalized (strips &, -, spaces)
+    const exactKey = `${prevGenre}→${ctx.genre}`;
+    const normKey = `${normalizeGenreKey(prevGenre)}→${normalizeGenreKey(ctx.genre)}`;
+    text = GENRE_BRIDGE[exactKey] ?? GENRE_BRIDGE[normKey] ?? null;
   }
 
   if (!text) {
