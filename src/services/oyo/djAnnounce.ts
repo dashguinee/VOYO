@@ -260,21 +260,31 @@ function getRegionCallout(culturalTags: string[] | null | undefined, genre?: str
 // Hype vocab only fires when isHypeSong(ctx) — ctx required for hype bucket.
 
 const HYPE_PREFIXES: Record<string, string[]> = {
-  celebration: ['Firebondeem —', 'Kulossaaa —'],
-  festival:    ['Firebondeem —', 'Festival energy —'],
-  liberation:  ['E dey fire —', 'Free vibes —'],
+  celebration: ['Firebondeem —', 'Kulossaaa —', 'We celebrating —'],
+  festival:    ['Firebondeem —', 'Festival energy —', 'The whole block is out —'],
+  liberation:  ['E dey fire —', 'Free vibes —', 'Liberation mode —'],
+  revolution:  ['E dey fire —', 'The people speak —'],
+  anthem:      ['Kulossaaa —', 'This one hits different —'],
 };
 
 const NEUTRAL_PREFIXES: Record<string, string[]> = {
-  roots:         ['Back to the ground.', 'African roots.'],
-  motherland:    ['Motherland energy.', 'Back home.'],
-  healing:       ['Soul shift.', 'Medicine music.'],
-  diaspora:      ['Bridging the distance.', 'Diaspora energy.'],
-  'pan-african': ['Pan-African move.', 'All of us.'],
-  prayer:        ['Sacred ground.', 'Soul work.'],
-  anthem:        ['Anthem time.', 'We stand up.'],
-  street:        ['Street certified.', 'Real talk.'],
-  tradition:     ['Tradition first.', 'Roots deep.'],
+  roots:         ['Back to the ground.', 'African roots.', 'Grounded.'],
+  motherland:    ['Motherland energy.', 'Back home.', 'From the source.'],
+  healing:       ['Soul shift.', 'Medicine music.', 'Let this land.'],
+  diaspora:      ['Bridging the distance.', 'Diaspora energy.', 'Two worlds, one sound.'],
+  'pan-african': ['Pan-African move.', 'All of us.', 'The continent in one track.'],
+  prayer:        ['Sacred ground.', 'Soul work.', 'Spirit first.'],
+  anthem:        ['Anthem time.', 'We stand up.', 'Everyone knows this one.'],
+  street:        ['Street certified.', 'Real talk.', 'From the ground up.'],
+  tradition:     ['Tradition first.', 'Roots deep.', 'The ancestors knew.'],
+  protest:       ['The people speak.', 'Real voices.', 'Truth in the music.'],
+  survival:      ['Built from the struggle.', 'Resilience.', 'They made it through.'],
+  migration:     ['Moving stories.', 'The journey in sound.', 'Wherever home is.'],
+  homecoming:    ['Coming back.', 'Full circle.', 'Home sounds like this.'],
+  wedding:       ['Celebration mode.', 'For the love.', 'Joy in this one.'],
+  spiritual:     ['Spirit moving.', 'Sacred ground.', 'Soul work.'],
+  bridge:        ['Two worlds meeting.', 'The link.', 'Culture crossing.'],
+  ghetto:        ['From the ground up.', 'Real streets.', 'They know.'],
 };
 
 function getCulturalIntro(tags: string[], ctx?: TrackContext): string {
