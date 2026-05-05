@@ -111,6 +111,10 @@ const CULTURAL_PIVOTS: Record<string, string[]> = {
   homecoming:   ['roots', 'celebration', 'healing'],
   revolution:   ['liberation', 'anthem', 'survival'],
   bridge:       ['diaspora', 'pan-african', 'homecoming'],
+  protest:      ['liberation', 'survival', 'anthem'],
+  migration:    ['homecoming', 'diaspora', 'roots'],
+  wedding:      ['celebration', 'tradition', 'healing'],
+  ghetto:       ['street', 'survival', 'liberation'],
 };
 
 const DEFAULT_BRIDGE_TAGS = ['roots', 'tradition', 'pan-african', 'diaspora'];
