@@ -282,6 +282,8 @@ export function onComplete(track: Track, completionRate: number = 100): void {
 export function onOye(track: Track): void {
   _pushAction('react');
   _favoriteArtists.set(track.artist, (_favoriteArtists.get(track.artist) || 0) + 1);
+  // Double-push genre so OYÉd genres get extra weight in the conductor's genre window
+  _pushTrackContext(track);
   updateEngagement(_buildUserState());
   djRecordPlay(track, true, false);
   oyoPlanSignal('reaction', track.trackId);

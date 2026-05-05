@@ -126,8 +126,15 @@ export async function runThoughtCycle(input: OyoThinkInput): Promise<OyoThinkOut
     args: c.params,
   }));
 
-  // 8. Save OYO's reply to session
-  appendOyoTurn(finalText, mood || undefined, oyoToolCalls);
+  // 8. Save OYO's reply to session — include a brief tool annotation so
+  //    the next Gemini turn knows what actions were taken this turn.
+  const sessionContent = toolCalls.length > 0
+    ? `${finalText}\n[I did: ${toolCalls.map((t) => {
+        const key = Object.keys(t.params)[0];
+        return key ? `${t.tool}(${key}=${t.params[key]})` : t.tool;
+      }).join(', ')}]`
+    : finalText;
+  appendOyoTurn(sessionContent, mood || undefined, oyoToolCalls);
 
   // 9. Digest user turn into essence memory (cheap, no API)
   let newMemories: string[] = [];
