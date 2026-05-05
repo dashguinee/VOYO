@@ -374,6 +374,27 @@ const GENRE_BRIDGE: Partial<Record<string, string>> = {
   'trap→hiphop':          'Classic era.',
   'gospel→rnb':           'From sacred to soul.',
   'rnb→gospel':           'Spirit in it.',
+  // New genre bridges — kwaito, soca, hiplife, fuji, afrofolk, bikutsi
+  'afrobeats→kwaito':     'SA deep.',
+  'kwaito→afrobeats':     'Back to Lagos.',
+  'amapiano→kwaito':      'Township roots.',
+  'kwaito→amapiano':      'Piano wave.',
+  'afrobeats→soca':       'Caribbean fire.',
+  'soca→afrobeats':       'Back to the mainland.',
+  'dancehall→soca':       'Island takeover.',
+  'soca→dancehall':       'Bashment mode.',
+  'afrobeats→hiplife':    'Accra on deck.',
+  'hiplife→afrobeats':    'West Africa united.',
+  'highlife→hiplife':     'Ghana evolves.',
+  'hiplife→highlife':     'Ghana roots.',
+  'afrobeats→fuji':       'Yoruba heartland.',
+  'fuji→afrobeats':       'Back to the wave.',
+  'afrobeats→reggaeton':  'Perreo time.',
+  'reggaeton→afrobeats':  'Back to Africa.',
+  'afrobeats→afrofolk':   'Roots and acoustic.',
+  'afrofolk→afrobeats':   'Back to the heat.',
+  'bikutsi→afrobeats':    'Cameroon to Nigeria.',
+  'afrobeats→bikutsi':    'Douala energy.',
 };
 
 function normalizeGenreKey(g: string): string {
