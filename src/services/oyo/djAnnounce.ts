@@ -176,12 +176,44 @@ const REGION_CALLOUT: Record<string, string[]> = {
   diaspora:      ['Diaspora vibes.', 'Bridging the distance.', 'The diaspora showing up.'],
 };
 
-function getRegionCallout(culturalTags: string[] | null | undefined): string | null {
-  if (!culturalTags?.length) return null;
-  for (const tag of culturalTags) {
-    const norm = tag.toLowerCase();
-    if (REGION_CALLOUT[norm]) {
-      return rotate(`region_${norm}`, REGION_CALLOUT[norm]);
+// Genre → primary region — fallback when cultural_tags are absent/junk
+const GENRE_REGION: Record<string, string> = {
+  afrobeats:    'nigeria',
+  afropop:      'west-africa',
+  amapiano:     'south-africa',
+  gqom:         'south-africa',
+  afrohouse:    'south-africa',
+  kizomba:      'angola',
+  zouk:         'angola',
+  'bongo-flava':'tanzania',
+  mbalax:       'senegal',
+  highlife:     'ghana',
+  bikutsi:      'cameroon',
+  makossa:      'cameroon',
+  soukous:      'dr-congo',
+  congolese:    'dr-congo',
+  ndombolo:     'dr-congo',
+  hiphop:       'diaspora',
+  rnb:          'diaspora',
+  dancehall:    'diaspora',
+  drill:        'diaspora',
+};
+
+function getRegionCallout(culturalTags: string[] | null | undefined, genre?: string | null): string | null {
+  // Try cultural_tags first (most specific)
+  if (culturalTags?.length) {
+    for (const tag of culturalTags) {
+      const norm = tag.toLowerCase();
+      if (REGION_CALLOUT[norm]) {
+        return rotate(`region_${norm}`, REGION_CALLOUT[norm]);
+      }
+    }
+  }
+  // Fallback: derive region from primary_genre
+  if (genre) {
+    const region = GENRE_REGION[genre.toLowerCase()];
+    if (region && REGION_CALLOUT[region]) {
+      return rotate(`region_${region}`, REGION_CALLOUT[region]);
     }
   }
   return null;
@@ -334,7 +366,7 @@ function hotLockedAnnouncement(tags: string[], ctx?: TrackContext): DJAnnounceme
   } else if (ctx && getGenreVocab(ctx.genre)) {
     // Genre fires — optionally prepend region for extra specificity ("Naija in the set. Lagos calling.")
     const genreText = getGenreVocab(ctx.genre)!;
-    const regionText = getRegionCallout(ctx.culturalTags);
+    const regionText = getRegionCallout(ctx.culturalTags, ctx.genre);
     text = regionText ? `${regionText} ${genreText}` : genreText;
   } else if (ctx && isLateNight(ctx)) {
     text = rotate('late_night', ['Night shift.', '3am feeling.', 'Low light energy.', 'After dark.', 'Late night only.']);
@@ -419,7 +451,7 @@ function discoveryAnnouncement(tags: string[], ctx?: TrackContext): DJAnnounceme
   } else if (ctx && getGenreVocab(ctx.genre)) {
     // Region + genre combo — most specific discovery callout
     const genreText = getGenreVocab(ctx.genre)!;
-    const regionText = getRegionCallout(ctx.culturalTags);
+    const regionText = getRegionCallout(ctx.culturalTags, ctx.genre);
     text = regionText ? `${regionText} ${genreText}` : genreText;
   } else {
     const intro = getCulturalIntro(tags, ctx);
