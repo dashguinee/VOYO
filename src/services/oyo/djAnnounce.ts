@@ -271,18 +271,27 @@ function getRegionCallout(culturalTags: string[] | null | undefined, genre?: str
 // Hype vocab only fires when isHypeSong(ctx) — ctx required for hype bucket.
 
 const HYPE_PREFIXES: Record<string, string[]> = {
+  // Thematic
   celebration: ['Firebondeem —', 'Kulossaaa —', 'We celebrating —'],
   festival:    ['Firebondeem —', 'Festival energy —', 'The whole block is out —'],
   liberation:  ['E dey fire —', 'Free vibes —', 'Liberation mode —'],
   revolution:  ['E dey fire —', 'The people speak —'],
   anthem:      ['Kulossaaa —', 'This one hits different —'],
+  // Geographic hype (fires from recentCulturalTags when energy is high)
+  nigeria:            ['Naija turning up —', 'Lagos on ten —', 'Firebondeem —'],
+  naija:              ['Naija on fire —', 'Lagos turning up —'],
+  angola:             ['Angola stepping up —', 'Luanda energy —'],
+  'west-africa':      ['The continent is LIT —', 'West Africa on ten —'],
+  diaspora:           ['Diaspora turning up —', 'E dey fire —'],
+  'south-africa':     ['SA stepping up —', 'Mzansi energy —'],
+  mzansi:             ['Mzansi turning up —', 'SA on ten —'],
 };
 
 const NEUTRAL_PREFIXES: Record<string, string[]> = {
+  // Thematic (legacy — kept for edge cases)
   roots:         ['Back to the ground.', 'African roots.', 'Grounded.'],
   motherland:    ['Motherland energy.', 'Back home.', 'From the source.'],
   healing:       ['Soul shift.', 'Medicine music.', 'Let this land.'],
-  diaspora:      ['Bridging the distance.', 'Diaspora energy.', 'Two worlds, one sound.'],
   'pan-african': ['Pan-African move.', 'All of us.', 'The continent in one track.'],
   prayer:        ['Sacred ground.', 'Soul work.', 'Spirit first.'],
   anthem:        ['Anthem time.', 'We stand up.', 'Everyone knows this one.'],
@@ -293,9 +302,26 @@ const NEUTRAL_PREFIXES: Record<string, string[]> = {
   migration:     ['Moving stories.', 'The journey in sound.', 'Wherever home is.'],
   homecoming:    ['Coming back.', 'Full circle.', 'Home sounds like this.'],
   wedding:       ['Celebration mode.', 'For the love.', 'Joy in this one.'],
-  spiritual:     ['Spirit moving.', 'Sacred ground.', 'Soul work.'],
   bridge:        ['Two worlds meeting.', 'The link.', 'Culture crossing.'],
   ghetto:        ['From the ground up.', 'Real streets.', 'They know.'],
+  // Geographic — matches real cultural_tags from video_intelligence DB
+  nigeria:             ['Nigeria wave.', 'Naija run.', 'Lagos keeps going.'],
+  naija:               ['Naija wave.', 'Lagos keeps going.'],
+  angola:              ['Angola run.', 'Luanda sound.', 'Lusophone wave.'],
+  'west-africa':       ['West Africa wave.', 'Continental sound.', 'The continent on top.'],
+  diaspora:            ['Bridging the distance.', 'Diaspora energy.', 'Two worlds, one sound.'],
+  'lusophone-africa':  ['Lusophone sound.', 'Portuguese Africa wave.'],
+  algeria:             ['Maghreb wave.', 'North Africa run.'],
+  'north-africa':      ['North Africa wave.', 'Maghreb in the mix.'],
+  ghana:               ['Ghana wave.', 'Accra sound.'],
+  senegal:             ['Dakar sound.', 'Sénégal wave.'],
+  kenya:               ['East Africa sound.', 'Nairobi wave.'],
+  'east-africa':       ['East side wave.', 'East Africa run.'],
+  'south-africa':      ['SA sound.', 'Jozi wave.'],
+  mzansi:              ['Mzansi wave.', 'SA sound.'],
+  spiritual:           ['Spirit moving.', 'Sacred ground.', 'Soul work.'],
+  uk:                  ['UK wave.', 'London sound.'],
+  usa:                 ['Stateside sound.', 'American wave.'],
 };
 
 function getCulturalIntro(tags: string[], ctx?: TrackContext): string {

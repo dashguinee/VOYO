@@ -85,43 +85,42 @@ export interface DJSessionState {
   sessionStartedAt: number;
 }
 
-// ── Cultural bridge map ───────────────────────────────────────────────────
+// ── Geographic bridge pivot map ───────────────────────────────────────────
 //
-// When the DJ fires a bridge moment, it pivots the cultural_tags away from
-// what's been playing into adjacent territory. The bridge should feel
-// intentional — "oh this fits perfectly" — not random.
+// Bridge moves pivot the cultural context. Keys are real cultural_tags values
+// from the video_intelligence DB (geographic, not thematic). Pivot targets
+// are meaningful cross-regional contrasts that still feel intentional.
 //
-// Logic: what are the user's recentCulturalTags → pick from the pivot targets
-// to create meaningful contrast while maintaining African cultural coherence.
+// Catalog volumes (2026-05-05):
+//   nigeria 2182 | west-africa 2042 | diaspora 1777 | angola 964
+//   lusophone-africa 927 | algeria 499 | north-africa 402 | ghana 62
+//   senegal 46 | kenya 54 | east-africa 41 | south-africa ~108 | spiritual 53
 
-const CULTURAL_PIVOTS: Record<string, string[]> = {
-  celebration:  ['roots', 'tradition', 'healing'],
-  festival:     ['liberation', 'pan-african', 'diaspora'],
-  street:       ['roots', 'motherland', 'tradition'],
-  anthem:       ['prayer', 'healing', 'roots'],
-  roots:        ['anthem', 'celebration', 'festival'],
-  liberation:   ['street', 'anthem', 'revolution'],
-  healing:      ['celebration', 'homecoming', 'prayer'],
-  diaspora:     ['motherland', 'roots', 'pan-african'],
-  'pan-african':['diaspora', 'liberation', 'tradition'],
-  motherland:   ['diaspora', 'roots', 'healing'],
-  survival:     ['liberation', 'street', 'roots'],
-  tradition:    ['celebration', 'roots', 'prayer'],
-  prayer:       ['healing', 'tradition', 'roots'],
-  homecoming:   ['roots', 'celebration', 'healing'],
-  revolution:   ['liberation', 'anthem', 'survival'],
-  bridge:       ['diaspora', 'pan-african', 'homecoming'],
-  protest:      ['liberation', 'survival', 'anthem'],
-  migration:    ['homecoming', 'diaspora', 'roots'],
-  wedding:      ['celebration', 'tradition', 'healing'],
-  ghetto:       ['street', 'survival', 'liberation'],
+const GEO_PIVOTS: Record<string, string[]> = {
+  nigeria:            ['angola', 'algeria', 'kenya', 'east-africa'],
+  naija:              ['angola', 'algeria', 'kenya', 'east-africa'],
+  'west-africa':      ['angola', 'east-africa', 'north-africa', 'diaspora'],
+  diaspora:           ['nigeria', 'angola', 'west-africa', 'north-africa'],
+  angola:             ['nigeria', 'kenya', 'senegal', 'east-africa'],
+  'lusophone-africa': ['nigeria', 'east-africa', 'west-africa'],
+  algeria:            ['nigeria', 'west-africa', 'angola', 'diaspora'],
+  'north-africa':     ['nigeria', 'west-africa', 'angola', 'diaspora'],
+  ghana:              ['angola', 'east-africa', 'north-africa'],
+  senegal:            ['angola', 'nigeria', 'north-africa', 'east-africa'],
+  kenya:              ['angola', 'nigeria', 'west-africa'],
+  'east-africa':      ['nigeria', 'angola', 'west-africa', 'north-africa'],
+  'south-africa':     ['nigeria', 'angola', 'east-africa'],
+  mzansi:             ['nigeria', 'angola', 'east-africa'],
+  spiritual:          ['nigeria', 'west-africa', 'angola', 'diaspora'],
+  uk:                 ['nigeria', 'angola', 'west-africa'],
+  usa:                ['nigeria', 'angola', 'west-africa'],
 };
 
-const DEFAULT_BRIDGE_TAGS = ['roots', 'tradition', 'pan-african', 'diaspora'];
+const DEFAULT_BRIDGE_TAGS = ['angola', 'east-africa', 'north-africa', 'diaspora'];
 
 function getBridgeTags(recentTags: string[]): string[] {
   for (const tag of recentTags) {
-    const pivots = CULTURAL_PIVOTS[tag];
+    const pivots = GEO_PIVOTS[tag];
     if (pivots?.length) return pivots;
   }
   return DEFAULT_BRIDGE_TAGS;
