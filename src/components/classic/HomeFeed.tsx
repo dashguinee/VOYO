@@ -3147,6 +3147,7 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onNavVisibilityChange, onSwitc
         afrohouse:      'warehouse energy — open floor',
         bongo:          'east africa — expanding',
         'bongo-flava':  'east africa — expanding',
+        bongoflava:     'east africa — expanding',
         highlife:       'from ghana — further',
         mbalax:         'from dakar — the full map',
         drill:          'from the block — uncharted',
@@ -3176,6 +3177,7 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onNavVisibilityChange, onSwitc
         fuji:           'from the yoruba heartland — outward',
         afrojuju:       'juju roots — the spirit follows',
         afrofolk:       'west african roots — the old way forward',
+        other:          'outside the box — wherever the sound goes',
       };
       return GENRE_DIRECTION[topGenre.toLowerCase()] ?? `through the ${topGenre} lens`;
     } catch { return undefined; }
