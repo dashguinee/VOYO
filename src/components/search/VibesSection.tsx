@@ -164,7 +164,7 @@ export const VibesSection = ({ query, isVisible }: VibesSectionProps) => {
     // Play first (registers with lanes via app.playTrack), queue rest
     app.playTrack(tracks[0], 'vibe');
     tracks.slice(1).forEach(track => app.addToQueue(track));
-  }, [vibeTracks, selectedVibe, addToQueue]);
+  }, [vibeTracks, selectedVibe]);
 
   // Play individual track
   const handleTrackClick = useCallback((track: VibeTrack) => {
