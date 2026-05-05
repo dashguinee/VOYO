@@ -159,6 +159,9 @@ export async function runThoughtCycle(input: OyoThinkInput): Promise<OyoThinkOut
     if (interestMatch) consciousness = recordInterest(consciousness, interestMatch[1]);
     const artistMatch = mem.match(/mentioned (.+?) positively/i);
     if (artistMatch) consciousness = recordLovedArtist(consciousness, artistMatch[1]);
+    // Mood facts from essence: "User gravitates toward X vibes"
+    const moodMatch = mem.match(/gravitates toward (.+?) vibes/i);
+    if (moodMatch) consciousness = recordMood(consciousness, moodMatch[1]);
   }
   // Also sync saveMemory tool results → consciousness immediately
   for (const r of toolResults) {
