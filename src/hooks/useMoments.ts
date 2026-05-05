@@ -1017,24 +1017,8 @@ export function useMoments(): UseMomentsReturn {
 
     if (!supabase || !isSupabaseConfigured) return;
     try {
-      // Known race: two rapid OYEs can both read voyo_reactions=N and
-      // both write N+1, dropping one increment. Acceptable trade-off for
-      // now — the voyo_signals fanout above is the taste-graph truth;
-      // voyo_moments.voyo_reactions is a displayed counter, not a
-      // source-of-truth. Follow-up ticket: add an atomic
-      // increment_moment_reaction RPC (audit AUDIT-MOMENTS-1 finding #3).
-      const { data: current } = await supabase
-        .from('voyo_moments')
-        .select('voyo_reactions')
-        .eq('id', momentId)
-        .maybeSingle();
-
-      if (current) {
-        await supabase
-          .from('voyo_moments')
-          .update({ voyo_reactions: (current.voyo_reactions || 0) + 1 })
-          .eq('id', momentId);
-      }
+      // Atomic increment via RPC (migration 029). Single UPDATE, no race.
+      await supabase.rpc('record_moment_reaction', { p_moment_id: momentId });
     } catch {
       // Silent fail
     }

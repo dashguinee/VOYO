@@ -4,11 +4,10 @@
  * Queries enriched video_intelligence table with 122K+ tracks
  */
 
-import { useState, useCallback, useEffect, useMemo } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { devWarn } from '../../utils/logger';
 import { Play, ChevronLeft, Music2, Zap } from 'lucide-react';
 import { VoyoIcon } from '../ui/VoyoIcon';
-import { usePlayerStore } from '../../store/playerStore';
 import { app } from '../../services/oyo';
 import { Track } from '../../types';
 import { getThumb } from '../../utils/thumbnail';
@@ -92,8 +91,6 @@ export const VibesSection = ({ query, isVisible }: VibesSectionProps) => {
   const [vibeTracks, setVibeTracks] = useState<VibeTrack[]>([]);
   const [isLoadingTracks, setIsLoadingTracks] = useState(false);
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
-
-  const addToQueue = usePlayerStore(s => s.addToQueue);
 
   // Back gesture peels the vibe detail view back to the grid.
   useBackGuard(!!selectedVibe, () => setSelectedVibe(null), 'vibe-detail');
