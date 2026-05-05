@@ -3164,6 +3164,11 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onNavVisibilityChange, onSwitc
         trap:           'from the trap — into the sound',
         soul:           'soul deep — the long way through',
         funk:           'on the one — keep finding it',
+        pop:            'through the mainstream — find the edges',
+        rock:           'from the guitar — wherever it leads',
+        classical:      'from the classics — the whole arc',
+        electronic:     'from the grid — out into the open',
+        kwaito:         'from sa deep — the long wave',
       };
       return GENRE_DIRECTION[topGenre.toLowerCase()] ?? `through the ${topGenre} lens`;
     } catch { return undefined; }
