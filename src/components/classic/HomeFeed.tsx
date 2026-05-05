@@ -181,8 +181,9 @@ const OYE_SIBLINGS: Record<OyeTitleType, string[]> = OYE_TITLES.reduce((acc, t) 
 
 // Section-filtered helpers (use curator tags from poolCurator)
 const getWestAfricanTracks = (hotPool: PooledTrack[], limit: number = 15): Track[] => {
+  // Match both 'west-african' (original cultural_tags) and 'west-africa' (derived from primary_genre)
   return [...hotPool]
-    .filter(t => t.tags?.includes('west-african'))
+    .filter(t => t.tags?.some(tag => tag === 'west-african' || tag === 'west-africa'))
     .sort((a, b) => (b.poolScore || 0) - (a.poolScore || 0))
     .slice(0, limit) as Track[];
 };
