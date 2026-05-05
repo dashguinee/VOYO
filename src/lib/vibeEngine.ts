@@ -414,6 +414,324 @@ export const VIBES: Record<string, Vibe> = {
       sort_by: 'play_count'
     },
     connected_vibes: ['spiritual-awakening', 'sunday-morning', 'gratitude']
+  },
+
+  // ========== MOOD VIBES (extended) ==========
+
+  'bedroom-vibes': {
+    id: 'bedroom-vibes',
+    name: 'Bedroom Vibes',
+    description: 'Intimate, soft, and close',
+    category: 'mood',
+    energy_level: 2,
+    query_rules: {
+      aesthetic_tags: ['intimate', 'smooth', 'romantic'],
+      matched_artist_patterns: ['tems', 'omah', 'asa', 'simi', 'chike', 'elaine', 'ami'],
+      sort_by: 'random'
+    },
+    connected_vibes: ['chill-vibes', 'late-night', 'slow-wine']
+  },
+
+  'slow-wine': {
+    id: 'slow-wine',
+    name: 'Slow Wine',
+    description: 'Slow, sensual, and irresistible',
+    category: 'mood',
+    energy_level: 2,
+    query_rules: {
+      genres: ['kizomba', 'zouk', 'tarraxo', 'afrosoul'],
+      aesthetic_tags: ['sensual', 'smooth'],
+      sort_by: 'random'
+    },
+    connected_vibes: ['bedroom-vibes', 'luanda-groove', 'guinea-romance']
+  },
+
+  'after-midnight': {
+    id: 'after-midnight',
+    name: 'After Midnight',
+    description: 'The city never sleeps',
+    category: 'mood',
+    energy_level: 3,
+    query_rules: {
+      aesthetic_tags: ['smooth', 'intimate', 'electric'],
+      title_patterns: ['night', 'midnight', '2am', 'late', 'dark'],
+      sort_by: 'random'
+    },
+    connected_vibes: ['late-night', 'bedroom-vibes', 'conakry-nights']
+  },
+
+  'first-love': {
+    id: 'first-love',
+    name: 'First Love',
+    description: 'That feeling you never forget',
+    category: 'mood',
+    energy_level: 2,
+    query_rules: {
+      title_patterns: ['love', 'heart', 'forever', 'always', 'babe', 'baby', 'chérie'],
+      aesthetic_tags: ['romantic', 'tender', 'nostalgic'],
+      sort_by: 'random'
+    },
+    connected_vibes: ['slow-wine', 'bedroom-vibes', 'african-love-letters']
+  },
+
+  'african-love-letters': {
+    id: 'african-love-letters',
+    name: 'African Love Letters',
+    description: 'Romance in every African language',
+    category: 'mood',
+    energy_level: 2,
+    query_rules: {
+      cultural_tags: ['romance', 'love'],
+      aesthetic_tags: ['romantic', 'tender'],
+      title_patterns: ['love', 'amour', 'mariage', 'chérie', 'darling'],
+      sort_by: 'random'
+    },
+    connected_vibes: ['first-love', 'slow-wine', 'guinea-romance']
+  },
+
+  'club-banger': {
+    id: 'club-banger',
+    name: 'Club Banger',
+    description: 'The tracks that shut down the club',
+    category: 'mood',
+    energy_level: 5,
+    query_rules: {
+      prefer_tiers: ['A', 'B'],
+      cultural_tags: ['party', 'dance', 'celebration'],
+      title_patterns: ['dance', 'move', 'hit', 'banger', 'fire'],
+      sort_by: 'play_count'
+    },
+    connected_vibes: ['party-mode', 'naija-party', 'afro-heat']
+  },
+
+  // ========== ACTIVITY VIBES (extended) ==========
+
+  'focus': {
+    id: 'focus',
+    name: 'Deep Focus',
+    description: 'Flow state — nothing but the work',
+    category: 'activity',
+    energy_level: 2,
+    query_rules: {
+      aesthetic_tags: ['instrumental', 'smooth', 'mellow'],
+      sort_by: 'random'
+    },
+    connected_vibes: ['study-flow', 'chill-vibes', 'morning-rise']
+  },
+
+  'wedding-vibes': {
+    id: 'wedding-vibes',
+    name: 'Wedding Vibes',
+    description: 'For the union and the celebration after',
+    category: 'activity',
+    energy_level: 4,
+    query_rules: {
+      cultural_tags: ['celebration', 'wedding', 'party'],
+      title_patterns: ['wedding', 'mariage', 'love', 'forever', 'together'],
+      sort_by: 'play_count'
+    },
+    connected_vibes: ['naija-party', 'african-festival', 'party-mode']
+  },
+
+  'sunday-morning': {
+    id: 'sunday-morning',
+    name: 'Sunday Morning',
+    description: 'Soft and grateful, nowhere to be',
+    category: 'activity',
+    energy_level: 2,
+    query_rules: {
+      aesthetic_tags: ['peaceful', 'uplifting', 'smooth'],
+      title_patterns: ['sunday', 'morning', 'blessed', 'thankful'],
+      sort_by: 'random'
+    },
+    connected_vibes: ['morning-rise', 'african-gospel', 'gratitude']
+  },
+
+  // ========== ERA VIBES (extended) ==========
+
+  'naija-old-school': {
+    id: 'naija-old-school',
+    name: 'Naija Old School',
+    description: '2face, P-Square, D\'Banj era',
+    category: 'era',
+    energy_level: 4,
+    query_rules: {
+      countries: ['NG'],
+      eras: ['2000s', '2010s'],
+      matched_artist_patterns: ['2face', 'psquare', 'dbanj', 'don jazzy', 'timaya', 'banky'],
+      sort_by: 'play_count'
+    },
+    connected_vibes: ['golden-era', 'throwback', 'nostalgia']
+  },
+
+  'nostalgia': {
+    id: 'nostalgia',
+    name: 'Nostalgia',
+    description: 'That sound that takes you back',
+    category: 'era',
+    energy_level: 3,
+    query_rules: {
+      eras: ['1990s', '2000s', '2010s'],
+      prefer_tiers: ['A', 'B'],
+      sort_by: 'canon_level'
+    },
+    connected_vibes: ['throwback', 'golden-era', 'naija-old-school']
+  },
+
+  'trending': {
+    id: 'trending',
+    name: 'Trending Now',
+    description: 'What everyone is playing right now',
+    category: 'era',
+    energy_level: 4,
+    query_rules: {
+      eras: ['2020s'],
+      prefer_tiers: ['A', 'B'],
+      sort_by: 'play_count'
+    },
+    connected_vibes: ['new-wave', 'afrobeats-central', 'afro-heat']
+  },
+
+  // ========== CULTURAL VIBES (extended) ==========
+
+  'afrobeats-central': {
+    id: 'afrobeats-central',
+    name: 'Afrobeats Central',
+    description: 'The definitive Afrobeats experience',
+    category: 'genre',
+    energy_level: 5,
+    query_rules: {
+      genres: ['afrobeats', 'afropop', 'afro-fusion'],
+      prefer_tiers: ['A', 'B'],
+      sort_by: 'play_count'
+    },
+    connected_vibes: ['lagos-nights', 'diaspora-connection', 'trending']
+  },
+
+  'amapiano-movement': {
+    id: 'amapiano-movement',
+    name: 'Amapiano Movement',
+    description: 'Log drums, violins, and African soul',
+    category: 'genre',
+    energy_level: 4,
+    query_rules: {
+      genres: ['amapiano', 'afro-house', 'gqom'],
+      sort_by: 'play_count'
+    },
+    connected_vibes: ['johannesburg-heat', 'club-banger', 'party-mode']
+  },
+
+  'ghana-groove': {
+    id: 'ghana-groove',
+    name: 'Ghana Groove',
+    description: 'From Accra with love — hiplife to highlife to drill',
+    category: 'regional',
+    energy_level: 4,
+    query_rules: {
+      countries: ['GH'],
+      genres: ['highlife', 'hiplife', 'afrobeats', 'afropop'],
+      sort_by: 'play_count'
+    },
+    connected_vibes: ['accra-highlife', 'west-african-classics', 'afrobeats-central']
+  },
+
+  'african-pride': {
+    id: 'african-pride',
+    name: 'African Pride',
+    description: 'Pan-African anthems and pride',
+    category: 'cultural',
+    energy_level: 4,
+    query_rules: {
+      cultural_tags: ['pride', 'identity', 'africa', 'heritage'],
+      title_patterns: ['africa', 'black', 'pride', 'motherland', 'roots'],
+      sort_by: 'play_count'
+    },
+    connected_vibes: ['motherland-roots', 'diaspora-connection', 'african-festival']
+  },
+
+  'african-festival': {
+    id: 'african-festival',
+    name: 'African Festival',
+    description: 'Collective joy and cultural celebration',
+    category: 'cultural',
+    energy_level: 5,
+    query_rules: {
+      cultural_tags: ['festival', 'celebration', 'cultural'],
+      sort_by: 'play_count'
+    },
+    connected_vibes: ['naija-party', 'wedding-vibes', 'african-pride']
+  },
+
+  'global-african': {
+    id: 'global-african',
+    name: 'Global African',
+    description: 'African music taking over the world',
+    category: 'cultural',
+    energy_level: 4,
+    query_rules: {
+      cultural_tags: ['global', 'diaspora', 'world'],
+      prefer_tiers: ['A'],
+      eras: ['2010s', '2020s'],
+      sort_by: 'play_count'
+    },
+    connected_vibes: ['afrobeats-central', 'diaspora-connection', 'trending']
+  },
+
+  'spiritual-awakening': {
+    id: 'spiritual-awakening',
+    name: 'Spiritual Awakening',
+    description: 'Music that moves the soul',
+    category: 'cultural',
+    energy_level: 3,
+    query_rules: {
+      cultural_tags: ['spiritual', 'gospel', 'worship', 'sacred'],
+      sort_by: 'random'
+    },
+    connected_vibes: ['african-gospel', 'sunday-morning', 'gratitude']
+  },
+
+  'gratitude': {
+    id: 'gratitude',
+    name: 'Gratitude',
+    description: 'Counting blessings in song',
+    category: 'cultural',
+    energy_level: 2,
+    query_rules: {
+      aesthetic_tags: ['peaceful', 'uplifting', 'grateful'],
+      title_patterns: ['thanks', 'grateful', 'blessed', 'thank you', 'dankeschön'],
+      sort_by: 'random'
+    },
+    connected_vibes: ['sunday-morning', 'spiritual-awakening', 'african-gospel']
+  },
+
+  'maquis-vibes': {
+    id: 'maquis-vibes',
+    name: 'Maquis Vibes',
+    description: 'The open-air bar where Africa breathes',
+    category: 'cultural',
+    energy_level: 3,
+    query_rules: {
+      regions: ['west-africa'],
+      cultural_tags: ['social', 'gathering', 'bar'],
+      aesthetic_tags: ['smooth', 'electric'],
+      sort_by: 'random'
+    },
+    connected_vibes: ['conakry-nights', 'after-midnight', 'chill-vibes']
+  },
+
+  'west-african-classics': {
+    id: 'west-african-classics',
+    name: 'West African Classics',
+    description: 'The songs that built everything',
+    category: 'cultural',
+    energy_level: 3,
+    query_rules: {
+      regions: ['west-africa'],
+      eras: ['1970s', '1980s', '1990s', '2000s', 'pre-1990'],
+      prefer_tiers: ['A', 'B'],
+      sort_by: 'canon_level'
+    },
+    connected_vibes: ['golden-era', 'accra-highlife', 'motherland-roots']
   }
 };
 
