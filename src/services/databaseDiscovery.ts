@@ -96,6 +96,43 @@ function filterMusicOnly<T extends { title: string; artist?: string }>(tracks: T
   return tracks.filter(track => !isNonMusic(track.title, (track as any).artist));
 }
 
+// Genre → vibe column defaults (mirrors populate-vibe-scores.py).
+// Used when the conductor RPC doesn't return flat vibe columns.
+const GENRE_VIBES_CLIENT: Record<string, { afro: number; party: number; chill: number; late: number; heat: number }> = {
+  afrobeats:    { afro: 85, party: 80, chill: 20, late: 45, heat: 85 },
+  afrohouse:    { afro: 80, party: 82, chill: 18, late: 60, heat: 80 },
+  gqom:         { afro: 82, party: 85, chill: 10, late: 70, heat: 82 },
+  ndombolo:     { afro: 78, party: 82, chill: 15, late: 55, heat: 78 },
+  soukous:      { afro: 74, party: 72, chill: 25, late: 48, heat: 72 },
+  congolese:    { afro: 70, party: 68, chill: 30, late: 50, heat: 68 },
+  bikutsi:      { afro: 72, party: 72, chill: 22, late: 50, heat: 70 },
+  makossa:      { afro: 68, party: 68, chill: 30, late: 48, heat: 66 },
+  mbalax:       { afro: 74, party: 74, chill: 22, late: 45, heat: 72 },
+  dancehall:    { afro: 74, party: 80, chill: 18, late: 65, heat: 76 },
+  amapiano:     { afro: 72, party: 76, chill: 32, late: 62, heat: 72 },
+  afropop:      { afro: 62, party: 64, chill: 38, late: 42, heat: 62 },
+  'bongo-flava':{ afro: 70, party: 68, chill: 32, late: 45, heat: 68 },
+  highlife:     { afro: 66, party: 72, chill: 38, late: 45, heat: 64 },
+  hiphop:       { afro: 62, party: 72, chill: 28, late: 55, heat: 65 },
+  trap:         { afro: 66, party: 74, chill: 22, late: 62, heat: 68 },
+  drill:        { afro: 68, party: 76, chill: 18, late: 62, heat: 70 },
+  pop:          { afro: 50, party: 62, chill: 45, late: 48, heat: 52 },
+  kizomba:      { afro: 35, party: 30, chill: 78, late: 82, heat: 30 },
+  zouk:         { afro: 32, party: 32, chill: 76, late: 80, heat: 28 },
+  rnb:          { afro: 42, party: 45, chill: 68, late: 68, heat: 42 },
+  soul:         { afro: 35, party: 38, chill: 72, late: 65, heat: 35 },
+  gospel:       { afro: 28, party: 22, chill: 64, late: 30, heat: 22 },
+  jazz:         { afro: 22, party: 28, chill: 78, late: 72, heat: 22 },
+  afrofolk:     { afro: 38, party: 32, chill: 65, late: 58, heat: 35 },
+  reggae:       { afro: 45, party: 52, chill: 60, late: 55, heat: 45 },
+  other:        { afro: 55, party: 55, chill: 45, late: 50, heat: 50 },
+};
+const GENRE_VIBES_DEFAULT = { afro: 45, party: 48, chill: 42, late: 40, heat: 45 };
+
+function genreVibes(genre: string | null) {
+  return GENRE_VIBES_CLIENT[genre ?? ''] ?? GENRE_VIBES_DEFAULT;
+}
+
 /**
  * Convert database track to app Track format
  */
@@ -636,13 +673,14 @@ export async function getConductorCandidates(
           primary_genre: r.primary_genre ?? null,
           cultural_tags: r.cultural_tags ?? null,
           heat_score: r.heat_score ?? null,
-          // vibe columns not returned by RPC — energy filter falls back to
-          // unfiltered pool gracefully (MIN_CONDUCTOR_POOL guard in conductorFetch)
-          vibe_afro_heat: null,
-          vibe_chill_vibes: null,
-          vibe_party_mode: null,
-          vibe_late_night: null,
-          vibe_workout: null,
+          // RPC doesn't return flat vibe columns — derive from primary_genre
+          ...(({ afro, party, chill, late, heat }) => ({
+            vibe_afro_heat:   afro,
+            vibe_chill_vibes: chill,
+            vibe_party_mode:  party,
+            vibe_late_night:  late,
+            vibe_workout:     heat,
+          }))(genreVibes(r.primary_genre ?? null)),
         })),
         at: now,
       };
