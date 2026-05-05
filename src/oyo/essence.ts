@@ -58,15 +58,15 @@ const GENRE_KEYWORDS: Array<{ keys: RegExp; label: string }> = [
 ];
 
 const MOOD_KEYWORDS: Array<{ keys: RegExp; label: string }> = [
-  { keys: /\bchill|relax|mellow|wind down|cozy\b/i, label: 'chill' },
-  { keys: /\bparty|turn up|hype|banger\b/i, label: 'party' },
-  { keys: /\bworkout|gym|run|pump\b/i, label: 'workout' },
-  { keys: /\bsad|heartbreak|cry|lonely|melancholic\b/i, label: 'melancholy' },
-  { keys: /\blove|romance|slow jam\b/i, label: 'romance' },
-  { keys: /\bfocus|study|work|deep work\b/i, label: 'focus' },
-  { keys: /\bsleep|bedtime|wind[- ]?down\b/i, label: 'sleep' },
-  { keys: /\bmorning|wake up\b/i, label: 'morning-boost' },
-  { keys: /\blate night|3am|midnight\b/i, label: 'late-night' },
+  { keys: /\b(chill|relax|mellow|wind\s+down|cozy|vibe)\b/i, label: 'chill' },
+  { keys: /\b(party|turn\s+up|hype|banger|lit|vibes)\b/i, label: 'party' },
+  { keys: /\b(workout|gym|run|pump|exercise|grind)\b/i, label: 'workout' },
+  { keys: /\b(sad|heartbreak|cry|lonely|melancholic|blue|down)\b/i, label: 'melancholy' },
+  { keys: /\b(love|romance|slow\s+jam|romantic|feelings)\b/i, label: 'romance' },
+  { keys: /\b(focus|study|work|deep\s+work|concentrate|productive)\b/i, label: 'focus' },
+  { keys: /\b(sleep|bedtime|wind[- ]?down|night\s+cap|sleepy)\b/i, label: 'sleep' },
+  { keys: /\b(morning|wake\s+up|sunrise|early|fresh\s+start)\b/i, label: 'morning-boost' },
+  { keys: /\b(late\s+night|3am|midnight|after\s+hours|2am)\b/i, label: 'late-night' },
 ];
 
 const ARTIST_HINT = /\b(?:burna boy|wizkid|davido|rema|ayra starr|tems|tyla|asake|omah lay|ckay|fela|sampha|frank ocean|kendrick|jay[- ]?z|drake|beyonce|2pac|biggie|nas|andre 3000|outkast|sza|h\.?e\.?r\.?|solange|jorja smith|little simz|kabza de small|kelvin momo|yemi alade|2face idibia|2 face idibia|vigro deep|de mthuda|njelic|dj stokie|romeo makota|stalk ashley|lil wayne|lila ike|naaman|ernest djedje|fantan mojah|black sherif|stonebwoy|sarkodie|m\.?i abaga|asa|tiwa savage|tekno|patoranking|fireboy dml|kizz daniel|joeboy|ruger|victony|bnxn|seun kuti|afrobeats?|afro nation|dj spinall|don jazzy|reekado banks|ladipoe|phyno|falz|olamide|ycee|wande coal|p[- ]?square|dbanj|2baba|flavour|umu obiligbo|diamond platnumz|rayvanny|harmonize|zuchu|vanessa mdee|ali kiba|sauti sol|bahati|masauti|okello max|khaligraph jones|ethic entertainment|nviiri|bien aime baraza|maandy|king kaka|elani|avril|princess jully|wahu|amani|madtraxx|omondi|otile brown|jovial|denno|alikiba|jay melody|barnaba|mbosso|wolper|tanzanite|bongo|kenya|nigeria|ghana|south africa|cameroon|ivory coast|senegal|mali)\b/gi;
