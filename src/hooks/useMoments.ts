@@ -86,6 +86,7 @@ const COUNTRY_TAG_MAP: Record<string, string[]> = {
 const GENRE_TAG_MAP: Record<string, string[]> = {
   'afrobeats':   ['nigeria', 'west-africa', 'naija', 'ghana', 'ng', 'gh'],
   'kizomba':     ['angola', 'lusophone-africa', 'mozambique'],
+  'hiphop':      ['diaspora', 'usa', 'uk'],
   'bongo-flava': ['east-africa', 'kenya', 'tanzania'],
   'gospel':      ['spiritual'],
   'amapiano':    ['south-africa', 'south africa', 'mzansi'],
@@ -194,10 +195,10 @@ export const CATEGORY_PRESETS: Record<CategoryAxis, string[]> = {
   ],
   // Genre compass — African music compass directions. Proxy via cultural_tags
   // until parent_track_id coverage reaches critical mass (target: >500 linked).
-  // Live catalog (2026-05-05): afrobeats ~4000 → kizomba ~1900 → bongo-flava ~120
-  //   → amapiano ~108 → gospel ~53 → for-you (all 6788).
+  // Live catalog (2026-05-05): afrobeats ~4000 → kizomba ~1900 → hiphop ~1775
+  //   → bongo-flava ~120 → amapiano ~108 → gospel ~53 → for-you (all 6788).
   'genre': [
-    'afrobeats', 'kizomba', 'bongo-flava', 'gospel', 'amapiano', 'for-you',
+    'afrobeats', 'kizomba', 'hiphop', 'bongo-flava', 'gospel', 'amapiano', 'for-you',
   ],
 };
 
@@ -219,6 +220,7 @@ const DISPLAY_NAMES: Record<string, string> = {
   // Genre compass sub-cats (v1063 — cultural_tag proxy + parent_track genre)
   'afrobeats':   'Afrobeats',
   'kizomba':     'Kizomba',
+  'hiphop':      'Hip-Hop',
   'bongo-flava': 'Bongo Flava',
   'gospel':      'Gospel',
   'amapiano':    'Amapiano',
@@ -319,14 +321,16 @@ const ADJACENCY: Record<CategoryAxis, Record<string, Record<string, number>>> = 
     'all': {},
   },
   // Genre compass adjacency — drift across sonic siblings.
-  // Afrobeats ↔ Amapiano (both Pan-African dancefloor), Kizomba ↔ Bongo Flava (sensual/groovy).
+  // Afrobeats ↔ Amapiano (Pan-African dancefloor), Kizomba ↔ Bongo Flava (sensual/groovy),
+  // HipHop ↔ Afrobeats (crossover — Afrobeats borrows rap energy, hiphop borrows Afro drums).
   'genre': {
-    'afrobeats':   { 'amapiano': 0.45, 'kizomba': 0.3,  'gospel': 0.15, 'bongo-flava': 0.1 },
-    'kizomba':     { 'afrobeats': 0.5, 'amapiano': 0.3,  'bongo-flava': 0.2 },
-    'bongo-flava': { 'afrobeats': 0.5, 'kizomba': 0.3,   'gospel': 0.2 },
-    'gospel':      { 'afrobeats': 0.6, 'bongo-flava': 0.3, 'kizomba': 0.1 },
-    'amapiano':    { 'afrobeats': 0.55,'kizomba': 0.3,   'gospel': 0.15 },
-    'for-you':     { 'afrobeats': 0.4, 'kizomba': 0.25,  'amapiano': 0.2, 'bongo-flava': 0.15 },
+    'afrobeats':   { 'amapiano': 0.35, 'kizomba': 0.25, 'hiphop': 0.25, 'gospel': 0.1, 'bongo-flava': 0.05 },
+    'kizomba':     { 'afrobeats': 0.45, 'amapiano': 0.3, 'bongo-flava': 0.25 },
+    'hiphop':      { 'afrobeats': 0.5,  'gospel': 0.3,   'amapiano': 0.2 },
+    'bongo-flava': { 'afrobeats': 0.5,  'kizomba': 0.3,  'gospel': 0.2 },
+    'gospel':      { 'afrobeats': 0.5,  'hiphop': 0.25,  'bongo-flava': 0.15, 'kizomba': 0.1 },
+    'amapiano':    { 'afrobeats': 0.5,  'kizomba': 0.3,  'hiphop': 0.2 },
+    'for-you':     { 'afrobeats': 0.35, 'kizomba': 0.2,  'hiphop': 0.2, 'amapiano': 0.15, 'bongo-flava': 0.1 },
   },
 };
 
