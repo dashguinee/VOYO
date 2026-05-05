@@ -466,6 +466,9 @@ function buildSmartQueries(): string[] {
       fuji:          'fuji music nigeria',
       afrojuju:      'juju music yoruba',
       afrofolk:      'african folk music acoustic',
+      electronic:    'afro electronic music',
+      funk:          'afro funk music',
+      pop:           'afro pop music',
     };
     queries.push(GENRE_QUERIES[genre] ?? 'afrobeats trending');
   }
