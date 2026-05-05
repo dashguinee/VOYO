@@ -57,7 +57,7 @@ function getVibeColor(vibe: VibeDefinition): string {
 // African-vibe detection — matches name/description/category against the
 // continent's music vocabulary. Used to apply the signature "diaspora gold +
 // VOYO platform purple" overlay on those cards specifically.
-const AFRICAN_PATTERN = /\b(afric|afro|afri|naija|amapiano|afrobeat|bongo|coup[eé]|kwaito|kompa|soukous|highlife|gqom|kuduro|gengeton|ndombolo|makossa|zouglou|raï|rai|mbalax|mande|sahel|maghreb|sw[aé]ngu|alt[eé])/i;
+const AFRICAN_PATTERN = /\b(afric|afro|afri|naija|amapiano|afrobeat|bongo|coup[eé]|kwaito|kompa|soukous|highlife|gqom|kuduro|gengeton|ndombolo|makossa|zouglou|raï|rai|mbalax|mande|sahel|maghreb|sw[aé]ngu|alt[eé]|singeli|lekompo|semba|benga|taarab|juju|gnawa|chaabi|bikutsi|gengetone|hiplife|soca)/i;
 function isAfricanVibe(vibe: VibeDefinition): boolean {
   const text = `${vibe.name || ''} ${vibe.description || ''} ${vibe.category || ''}`;
   return AFRICAN_PATTERN.test(text);
