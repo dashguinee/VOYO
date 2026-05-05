@@ -3173,7 +3173,7 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onNavVisibilityChange, onSwitc
         kwaito:         'from sa deep — the long wave',
         afrobeat:       'from fela — the roots run deep',
         afrofusion:     'boundaries dissolved — keep moving',
-        reggaeton:      'from the carribean — the world dances',
+        reggaeton:      'from the caribbean — the world dances',
         fuji:           'from the yoruba heartland — outward',
         afrojuju:       'juju roots — the spirit follows',
         afrofolk:       'west african roots — the old way forward',
