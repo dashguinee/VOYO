@@ -380,12 +380,12 @@ export const PortraitVOYO = ({ onSearch, onDahub, onHome }: PortraitVOYOProps) =
                 }
               }
 
-              // Build the Track — tags carry the full merged signal set so OYO DJ
-              // has context even before the next video_intelligence read cycle
+              // Build the Track — genre first (tags[0] = primary_genre is the OYO
+              // convention; _pushTrackContext in oyo/index reads [0] as genre, [1+] cultural)
               const allTags = [
+                ...(viTrack?.primary_genre ? [viTrack.primary_genre] : []),
                 ...(viTrack?.cultural_tags || trackInfo.culturalTagsFromMoment),
                 ...(viTrack?.aesthetic_tags || trackInfo.vibeTagsFromMoment),
-                ...(viTrack?.primary_genre ? [viTrack.primary_genre] : []),
               ].filter((t, i, a) => t && a.indexOf(t) === i);
 
               const track: Track = {
