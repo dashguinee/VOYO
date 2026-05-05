@@ -411,6 +411,7 @@ async function _refillConductorQueue(excludeIds: Set<string>): Promise<void> {
         vibeParty:    raw.vibe_party_mode,
         vibeLatenight:raw.vibe_late_night,
         vibeChill:    raw.vibe_chill_vibes,
+        vibeWorkout:  raw.vibe_workout,
       };
     });
     const existing = new Set(_conductorQueue.map(e => e.track.trackId || e.track.id));

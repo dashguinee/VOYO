@@ -51,6 +51,7 @@ export interface TrackContext {
   vibeParty?: number | null;
   vibeLatenight?: number | null;
   vibeChill?: number | null;
+  vibeWorkout?: number | null;
 }
 
 // ── Event emitter ────────────────────────────────────────────────────────────
@@ -89,6 +90,9 @@ function isChillSong(ctx: TrackContext): boolean {
 }
 function isLateNight(ctx: TrackContext): boolean {
   return (ctx.vibeLatenight ?? 0) > 55;
+}
+function isWorkoutSong(ctx: TrackContext): boolean {
+  return (ctx.vibeWorkout ?? 0) > 60 && (ctx.vibeChill ?? 0) < 35;
 }
 
 // ── Genre vocabulary ─────────────────────────────────────────────────────────
@@ -560,6 +564,8 @@ function hotLockedAnnouncement(tags: string[], ctx?: TrackContext): DJAnnounceme
     const genreText = getGenreVocab(ctx.genre)!;
     const regionText = getRegionCallout(ctx.culturalTags, ctx.genre);
     text = regionText ? `${regionText} ${genreText}` : genreText;
+  } else if (ctx && isWorkoutSong(ctx)) {
+    text = rotate('workout_locked', ['Lock in.', 'Movement track.', 'Energy up.', 'Pure drive.', 'Body moving.']);
   } else if (ctx && isLateNight(ctx)) {
     text = rotate('late_night', ['Night shift.', '3am feeling.', 'Low light energy.', 'After dark.', 'Late night only.']);
   } else if (ctx && isChillSong(ctx)) {
@@ -587,6 +593,8 @@ function hotVibingAnnouncement(tags: string[], ctx?: TrackContext): DJAnnounceme
     const genreText = getGenreVocab(ctx.genre)!;
     const regionText = getRegionCallout(ctx.culturalTags, ctx.genre);
     text = regionText ? `${regionText} ${genreText}` : genreText;
+  } else if (ctx && isWorkoutSong(ctx)) {
+    text = rotate('workout_vibing', ['Keep the energy up.', 'Movement mode.', 'Drive.', 'Don\'t stop.']);
   } else if (ctx && isLateNight(ctx)) {
     text = rotate('late_vibing', ['Night shift.', 'Low light energy.', 'After dark.', 'Late hours.']);
   } else if (ctx && isChillSong(ctx)) {
