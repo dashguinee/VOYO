@@ -101,6 +101,10 @@ function filterMusicOnly<T extends { title: string; artist?: string }>(tracks: T
  */
 function toTrack(dbTrack: DiscoveryTrack): Track {
   const thumbnail = dbTrack.thumbnail_url || `https://i.ytimg.com/vi/${dbTrack.youtube_id}/hqdefault.jpg`;
+  const tags = [
+    ...(dbTrack.primary_genre ? [dbTrack.primary_genre] : []),
+    ...(dbTrack.cultural_tags || []),
+  ];
   return {
     id: dbTrack.youtube_id,
     trackId: dbTrack.youtube_id,
@@ -108,7 +112,7 @@ function toTrack(dbTrack: DiscoveryTrack): Track {
     artist: dbTrack.artist || 'Unknown Artist',
     coverUrl: thumbnail,
     duration: 0,
-    tags: dbTrack.cultural_tags || [],
+    tags,
     oyeScore: Math.round((dbTrack.vibe_match_score || 0) * 100),
     createdAt: new Date().toISOString(),
   };
