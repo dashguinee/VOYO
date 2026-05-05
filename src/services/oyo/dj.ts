@@ -299,11 +299,13 @@ export function getNextMove(userState: UserState): DJMove {
   // ── Phase advancement ──────────────────────────────────────────────────
 
   const currentConfig = arc.phases[session.currentPhase as keyof typeof arc.phases];
+  let phaseJustAdvanced = false;
   if (currentConfig && shouldAdvancePhase(session, currentConfig, session.engagement)) {
     const next = advancePhase(session);
     if (next !== session.currentPhase) {
       session.currentPhase = next;
       session.tracksInPhase = 0;
+      phaseJustAdvanced = true;
     }
   }
 
@@ -323,7 +325,9 @@ export function getNextMove(userState: UserState): DJMove {
     };
   }
 
-  return buildPhaseMove(phaseConfig, session.engagement, userState, session.currentPhase);
+  const move = buildPhaseMove(phaseConfig, session.engagement, userState, session.currentPhase);
+  if (phaseJustAdvanced) (move as typeof move & { phaseAdvanced?: boolean }).phaseAdvanced = true;
+  return move;
 }
 
 /** Read the current session state (for telemetry / debug). */
