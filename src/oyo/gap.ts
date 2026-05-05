@@ -166,18 +166,28 @@ function pick<T>(arr: readonly T[]): T {
 
 // Genre → tone-matched opening lines for player-surface greetings
 const GENRE_PLAYER_GREETINGS: Record<string, string[]> = {
+  afrobeats:  ['Lagos energy in the room. Want me to ride this out?', 'Afrobeats mode — keep the groove or flip the scene?', 'Naija on top. Extend the vibe or switch direction?'],
+  afropop:    ['Afro wave running. Stay in this or go somewhere else?', 'Continent sound — want me to keep it flowing?'],
+  afrofusion: ['Cross-continent vibes. Want me to go deeper or switch?', 'Afro-fusion hour — more of this or different energy?'],
+  afrobeat:   ["Fela's energy in the room. Want to stay in the roots?", 'Original afrobeat. Keep it here or move forward?'],
   kizomba:    ['Slow lane right now. Want me to keep it moving like this?', 'Kizomba hour — I stay or switch the energy?'],
   zouk:       ['Deep in the lusophone feel. More of this or flip?', 'Zouk in the room. Want me to extend it?'],
   amapiano:   ['Piano on deck. Want me to ride this lane out?', 'Yanos energy — I thread it or switch direction?'],
   afrohouse:  ['Warehouse mode. Keep the floor open or change it up?', 'SA club energy — stay in it?'],
   gqom:       ['Township sound running. More of this or flip?', 'Gqom in the set — want me to extend the wave?'],
   hiphop:     ['Bars running. Want me to take it deeper into the culture?', 'Hip-hop mode. Stay in the lane or switch?'],
+  trap:       ['Trap mode running. Keep the drip or flip?', 'Hard in it right now. Want me to stay here or shift?'],
   drill:      ['UK energy. Want me to keep drilling or change the scene?', 'Drill mode — stay cold or flip to something else?'],
   jazz:       ['Jazz hour. Let it breathe or take it somewhere else?', 'Improvising. Want me to extend the mood?'],
   gospel:     ['Sacred ground right now. Want more of this energy?', 'Spirit in the room. Stay in this or shift?'],
   rnb:        ['Feels mode. Want me to keep the slow burn going?', 'R&B lane — stay smooth or shift the energy?'],
+  soul:       ['Soul deep right now. More of this warmth or a change?', 'Feeling this run — want me to keep the soul going?'],
   reggae:     ['One drop running. Want me to ride it out?', 'Roots energy — stay in the groove or flip?'],
   dancehall:  ['Bashment in the set. Keep dancing or switch?', 'Yard vibes — want more of this or different energy?'],
+  highlife:   ['Ghana sound running. Want me to keep it here?', 'Highlife hour — extend the groove or switch direction?'],
+  bongflava:  ['East Africa in the building. Want me to ride it out?', 'Bongo in the set — extend or flip?'],
+  gengetone:  ['Nairobi certified. Want me to keep it Kenyan?', 'Gengetone wave — stay in it or switch direction?'],
+  mbalax:     ['Dakar feeling right now. Want me to keep the Senegalese flow?', 'Mbalax hour — extend or change scene?'],
 };
 
 function buildGenreGreeting(genre: string, title: string, _artist: string): string | null {
