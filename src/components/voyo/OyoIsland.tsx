@@ -223,7 +223,7 @@ export function OyoIsland({ visible, onHide, onActivity }: OyoIslandProps) {
 
     // Genre/vibe requests — route to OYO brain (searchByGenre/searchByVibe tools)
     // even if they start with "play", because Piped can't handle "play some afrobeats"
-    const GENRE_VIBE_PATTERN = /\b(afrobeats?|afrobeat|amapiano|kizomba|zouk|dancehall|gqom|afrohouse|r&b|rnb|hip[- ]?hop|trap|drill|grime|reggae|reggaeton|afropop|afrofusion|lo[- ]?fi|gospel|jazz|soul|funk|highlife|mbalax|bongo[- ]?flava|gengetone|hiplife|soca|makossa|bikutsi|soukous|ndombolo|kwaito|rumba|fuji|juju|afrojuju|congolese|electronic|afrofolk)\b/i;
+    const GENRE_VIBE_PATTERN = /\b(afrobeats?|afrobeat|amapiano|kizomba|zouk|dancehall|gqom|afrohouse|r&b|rnb|hip[- ]?hop|trap|drill|grime|reggae|reggaeton|afropop|afrofusion|lo[- ]?fi|gospel|jazz|soul|funk|highlife|mbalax|bongo[- ]?flava|gengetone|hiplife|soca|makossa|bikutsi|soukous|ndombolo|kwaito|rumba|fuji|juju|afrojuju|congolese|electronic|afrofolk|kuduro|semba|tarraxo|tarraxinha|benga|taarab|singeli|lekompo|palm[- ]?wine|ra[iï]|chaabi|gnawa|afrosoul)\b/i;
     const isGenreVibe = GENRE_VIBE_PATTERN.test(userMessage);
     const isVibeRequest = /\b(chill|relax|vibe|hype|party|workout|late night|focus|study|sad|romantic)\b/i.test(userMessage);
     const routeToBrain = isGenreVibe || isVibeRequest;
