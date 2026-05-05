@@ -3136,7 +3136,7 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onNavVisibilityChange, onSwitc
       const GENRE_DIRECTION: Record<string, string> = {
         afrobeats:      'past the heat — into the cut',
         amapiano:       'from the log drum — wider',
-        kizomba:        'into the slow — deeper still',
+        kizomba:        'from luanda — close and deep',
         zouk:           'smooth moves, uncharted',
         hiphop:         'from the bars — into the world',
         afropop:        'the continent — wider lens',
@@ -3175,7 +3175,7 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onNavVisibilityChange, onSwitc
         reggaeton:      'from the carribean — the world dances',
         fuji:           'from the yoruba heartland — outward',
         afrojuju:       'juju roots — the spirit follows',
-        kizomba:        'from luanda — close and deep',
+        afrofolk:       'west african roots — the old way forward',
       };
       return GENRE_DIRECTION[topGenre.toLowerCase()] ?? `through the ${topGenre} lens`;
     } catch { return undefined; }
