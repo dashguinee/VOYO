@@ -3170,6 +3170,12 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onNavVisibilityChange, onSwitc
         classical:      'from the classics — the whole arc',
         electronic:     'from the grid — out into the open',
         kwaito:         'from sa deep — the long wave',
+        afrobeat:       'from fela — the roots run deep',
+        afrofusion:     'boundaries dissolved — keep moving',
+        reggaeton:      'from the carribean — the world dances',
+        fuji:           'from the yoruba heartland — outward',
+        afrojuju:       'juju roots — the spirit follows',
+        kizomba:        'from luanda — close and deep',
       };
       return GENRE_DIRECTION[topGenre.toLowerCase()] ?? `through the ${topGenre} lens`;
     } catch { return undefined; }
