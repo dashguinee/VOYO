@@ -708,7 +708,9 @@ const MomentCard = memo(({ moment, isOyed, onOye, isActive, isMuted, onToggleMut
   //   4. iframe_embed   — YouTube embed (youtube/youtube_shorts platform).
   //   5. thumbnail      — Static last resort.
   const format: MomentFormat = (() => {
-    if (!videoError && r2SessionAvailable) return 'r2_video';
+    // Instagram has no R2 content — skip to thumbnail immediately.
+    // TikTok/YouTube have R2 populated — try it first, fall back on error.
+    if (moment.source_platform !== 'instagram' && !videoError) return 'r2_video';
     if (moment.source_platform === 'tiktok') return 'tiktok_embed';
     // Instagram embed shows "Watch on Instagram" chrome — thumbnail until R2 is populated.
     if (moment.source_platform === 'youtube' || moment.source_platform === 'youtube_shorts') return 'iframe_embed';

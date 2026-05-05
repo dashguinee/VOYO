@@ -139,7 +139,9 @@ DirectionPulse.displayName = 'DirectionPulse';
 type VideoFormat = 'r2_video' | 'tiktok_embed' | 'instagram_embed' | 'youtube_embed' | 'thumbnail';
 
 function resolveFormat(moment: Moment, r2Failed: boolean): VideoFormat {
-  if (!r2Failed && r2SessionAvailable && moment.r2_video_key) return 'r2_video';
+  // Instagram has no R2 content — skip straight to thumbnail (no stall).
+  // TikTok and YouTube DO have R2 content — try it, fall back on error.
+  if (moment.source_platform !== 'instagram' && !r2Failed && moment.r2_video_key) return 'r2_video';
   if (moment.source_platform === 'tiktok') return 'tiktok_embed';
   if (moment.source_platform === 'youtube' || moment.source_platform === 'youtube_shorts') return 'youtube_embed';
   return 'thumbnail';
