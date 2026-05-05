@@ -95,6 +95,46 @@ function isWorkoutSong(ctx: TrackContext): boolean {
   return (ctx.vibeWorkout ?? 0) > 60 && (ctx.vibeChill ?? 0) < 35;
 }
 
+// ── Vibe combo detection ─────────────────────────────────────────────────────
+
+function getVibeComboPhrase(ctx: TrackContext): string | null {
+  const heat = ctx.vibeAfroHeat ?? 0;
+  const party = ctx.vibeParty ?? 0;
+  const chill = ctx.vibeChill ?? 0;
+  const late = ctx.vibeLatenight ?? 0;
+  const workout = ctx.vibeWorkout ?? 0;
+
+  if (heat > 72 && party > 72) return rotate('combo_peak', [
+    'Peak floor. That\'s it.', 'Maximum heat right now.', 'This is what we came for.', 'No ceiling from here.',
+  ]);
+  if (heat > 65 && late > 65) return rotate('combo_late_heat', [
+    'Late night banger.', 'Hot and late.', '3am energy.', 'Night heat only.',
+  ]);
+  if (chill > 65 && late > 65) return rotate('combo_3am', [
+    '3am soft life.', 'Late night soul.', 'Low light, high feeling.', 'Don\'t sleep on this one.',
+  ]);
+  if (workout > 70 && heat > 60) return rotate('combo_workout', [
+    'Body moving.', 'Physical energy.', 'Movement track.', 'Pure drive right here.',
+  ]);
+  if (chill > 68 && heat < 30) return rotate('combo_deep_chill', [
+    'Total breeze.', 'Soft landing.', 'Take a breath.', 'No rush at all.',
+  ]);
+  if (heat > 58 && chill > 45 && late > 50) return rotate('combo_smooth_heat', [
+    'Smooth and warm.', 'Comfortable heat.', 'Warm in here.', 'Easing into it.',
+  ]);
+  return null;
+}
+
+// ── Time-of-day awareness ────────────────────────────────────────────────────
+
+function getTimeOfDayHint(): string | null {
+  const h = new Date().getHours();
+  if (h >= 5 && h < 9)   return rotate('tod_morning', ['Morning session.', 'Rise and vibe.', 'First track of the day.']);
+  if (h >= 22 || h < 2)  return rotate('tod_midnight', ['Deep night energy.', 'The late crowd.', 'Night owls only.']);
+  if (h >= 2 && h < 5)   return rotate('tod_latenight', ['Very late. Very intentional.', '4am club.', 'The real late shift.']);
+  return null;
+}
+
 // ── Genre vocabulary ─────────────────────────────────────────────────────────
 // Keyed on normalized genre strings (lowercase, no spaces/hyphens).
 
@@ -183,8 +223,10 @@ function artistCallout(artist: string): string {
     `Oye ${artist}!`,
     `${artist} in the set.`,
     `${artist} about to say something.`,
-    `${artist} don't play.`,
+    `${artist} doesn't miss.`,
     `Make some noise for ${artist}!`,
+    `This is ${artist} doing what ${artist} does.`,
+    `${artist} — watch this.`,
   ]);
 }
 
@@ -194,7 +236,9 @@ function unknownArtistCallout(artist: string): string {
     `Big up ${artist}.`,
     `${artist} — the people need to know.`,
     `Make some noise for ${artist}!`,
-    `${artist} on the radar.`,
+    `${artist} on the radar now.`,
+    `${artist} — this one's going somewhere.`,
+    `${artist} is doing something real.`,
   ]);
 }
 
@@ -519,6 +563,48 @@ const GENRE_BRIDGE: Partial<Record<string, string>> = {
   'amapiano→hiphop':         'Bars incoming.',
   'gospel→bongo-flava':      'East Africa spirit.',
   'bongo-flava→gospel':      'Spirit calling.',
+  // Angola family
+  'kizomba→kuduro':          'Luanda keeps going.',
+  'kuduro→kizomba':          'Slow it down Angola style.',
+  'semba→kizomba':           'The evolution.',
+  'kizomba→semba':           'Back to the roots.',
+  'afrobeats→kuduro':        'Angola incoming.',
+  'kuduro→afrobeats':        'Back to the mainland.',
+  // East Africa completions
+  'afrobeats→taarab':        'Swahili coast calling.',
+  'taarab→afrobeats':        'Back to the heat.',
+  'afrobeats→benga':         'Kenya classic incoming.',
+  'benga→afrobeats':         'West Africa respond.',
+  'bongo-flava→benga':       'East Africa moves.',
+  'benga→bongo-flava':       'Tanzania next.',
+  'singeli→bongo-flava':     'From underground to mainstream.',
+  'bongo-flava→singeli':     'Going underground.',
+  // North Africa
+  'afrobeats→rai':           'North Africa calling.',
+  'rai→afrobeats':           'Back south.',
+  'rai→chaabi':              'Algeria roots.',
+  'chaabi→rai':              'Modern Algerian wave.',
+  'afrobeats→gnawa':         'Morocco spiritual.',
+  'gnawa→afrobeats':         'Back to the wave.',
+  // West Africa specifics
+  'afrobeats→juju':          'Yoruba heartland.',
+  'juju→afrobeats':          'Back to the new wave.',
+  'highlife→palmwine':       'Ghana going back.',
+  'palmwine→highlife':       'Ghana evolves.',
+  'afrobeats→palmwine':      'Acoustic Africa.',
+  // SA deep
+  'amapiano→lekompo':        'SA township deep.',
+  'lekompo→amapiano':        'Piano wave calling.',
+  'gqom→lekompo':            'SA underground.',
+  'kwaito→lekompo':          'Township evolution.',
+  // Diaspora connections
+  'afrobeats→afrosoul':      'Soul crossing over.',
+  'afrosoul→afrobeats':      'Back to the heat.',
+  'rnb→afrosoul':            'African soul.',
+  'afrosoul→rnb':            'Smooth like that.',
+  // Lekompo/Singeli
+  'singeli→afrobeats':       'East meets West.',
+  'afrobeats→singeli':       'Underground East Africa.',
 };
 
 function normalizeGenreKey(g: string): string {
@@ -568,6 +654,12 @@ function echoAnnouncement(ctx?: TrackContext): DJAnnouncement {
       `Even ${ctx.artist} has cuts people miss.`,
       `${ctx.artist}, but make it rare.`,
     ]);
+  } else if (ctx?.artist && ctx.artistTier === 'B') {
+    text = rotate('echo_b_tier', [
+      `${ctx.artist} — the other side.`,
+      `${ctx.artist} goes deeper than people check.`,
+      `${ctx.artist}, but make it rare.`,
+    ]);
   } else if (ctx?.artist && isUnderground) {
     // D/C tier or low heat = underground discovery
     text = rotate('echo_artist', [
@@ -608,6 +700,20 @@ function echoAnnouncement(ctx?: TrackContext): DJAnnouncement {
 
 function hotLockedAnnouncement(tags: string[], ctx?: TrackContext): DJAnnouncement {
   let text: string;
+  const comboPhrase = ctx ? getVibeComboPhrase(ctx) : null;
+  if (comboPhrase && Math.random() > 0.4) {
+    // Optionally prepend region for specificity
+    const regionText = getRegionCallout(ctx?.culturalTags, ctx?.genre);
+    text = regionText ? `${regionText} ${comboPhrase}` : comboPhrase;
+    return {
+      text,
+      choices: [
+        { label: 'Go harder', intent: 'boost_energy' },
+        { label: 'Let it breathe', intent: 'drop_energy' },
+      ],
+      moveType: 'hot',
+    };
+  }
   if (ctx?.artist && ctx.artistTier === 'A') {
     text = artistCallout(ctx.artist);
   } else if (ctx && getGenreVocab(ctx.genre)) {
@@ -638,6 +744,19 @@ function hotLockedAnnouncement(tags: string[], ctx?: TrackContext): DJAnnounceme
 
 function hotVibingAnnouncement(tags: string[], ctx?: TrackContext): DJAnnouncement {
   let text: string;
+  const comboPhrase = ctx ? getVibeComboPhrase(ctx) : null;
+  if (comboPhrase && Math.random() > 0.5) {
+    const regionText = getRegionCallout(ctx?.culturalTags, ctx?.genre);
+    text = regionText ? `${regionText} ${comboPhrase}` : comboPhrase;
+    return {
+      text,
+      choices: [
+        { label: 'Hold this', intent: 'keep_energy' },
+        { label: 'Go harder', intent: 'boost_energy' },
+      ],
+      moveType: 'hot',
+    };
+  }
   if (ctx?.artist && ctx.artistTier === 'A') {
     text = artistCallout(ctx.artist);
   } else if (ctx && getGenreVocab(ctx.genre)) {
@@ -666,8 +785,11 @@ function hotVibingAnnouncement(tags: string[], ctx?: TrackContext): DJAnnounceme
 }
 
 function hotWarmingAnnouncement(): DJAnnouncement {
+  // Use time-of-day hint sparingly as a session opener — only fires occasionally
+  const todHint = Math.random() < 0.35 ? getTimeOfDayHint() : null;
+  const base = rotate('hot_warming', ['Reading you.', 'Still reading.', 'Getting warmer.', 'Give it a sec.', 'Hold tight.']);
   return {
-    text: rotate('hot_warming', ['Reading you.', 'Still reading.', 'Getting warmer.', 'Give it a sec.', 'Hold tight.']),
+    text: todHint ? `${todHint} ${base}` : base,
     choices: [
       { label: 'Easy does it', intent: 'drop_energy' },
       { label: 'Drop straight in', intent: 'boost_energy' },
@@ -694,6 +816,13 @@ function discoveryAnnouncement(tags: string[], ctx?: TrackContext): DJAnnounceme
   if (ctx?.artist && isNiche) {
     // Underground or low-profile artist — DJ introduces them
     text = unknownArtistCallout(ctx.artist);
+  } else if (ctx?.artist && ctx.artistTier === 'B') {
+    text = rotate('discovery_b_tier', [
+      `${ctx.artist} doesn't miss.`,
+      `${ctx.artist} — certified.`,
+      `${ctx.artist} holding it down.`,
+      `${ctx.artist} on the come-up.`,
+    ]);
   } else if (ctx?.artist && ctx.artistTier === 'A') {
     // Big name in discovery — unexpected angle
     text = rotate('discovery_big', [
