@@ -61,6 +61,7 @@ const GENRE_KEYWORDS: Array<{ keys: RegExp; label: string }> = [
   { keys: /\bjuju\b|\bafrojuju\b/i, label: 'afrojuju' },
   { keys: /\bkwaito\b/i, label: 'kwaito' },
   { keys: /\bcongolese\b/i, label: 'congolese' },
+  { keys: /\bafrofolk\b|\bafrican\s+folk\b/i, label: 'afrofolk' },
 ];
 
 const MOOD_KEYWORDS: Array<{ keys: RegExp; label: string }> = [

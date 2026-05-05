@@ -201,6 +201,7 @@ const GENRE_PLAYER_GREETINGS: Record<string, string[]> = {
   reggaeton:  ['Perreo mode running. Want me to keep the heat?', 'Reggaeton lane — stay in it or switch direction?'],
   fuji:       ['Traditional Yoruba energy. Want me to stay in the roots?', 'Fuji in the set — extend or move forward?'],
   afrojuju:   ['Juju roots running. Want me to keep the spirit here?', 'Yoruba juju — stay in the tradition or flip?'],
+  afrofolk:   ['West African folk in the room. Want me to keep it grounded?', 'Afro folk roots running — stay here or move it forward?'],
 };
 
 function buildGenreGreeting(genre: string, title: string, _artist: string): string | null {

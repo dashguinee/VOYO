@@ -136,6 +136,7 @@ const GENRE_VOCAB: Record<string, string[]> = {
   rock:       ['Rock out.', 'Guitar up.', 'Electric in the room.'],
   classical:  ['Classical interlude.', 'Orchestral moment.', 'Timeless.'],
   electronic: ['Electronic drop.', 'Synth mode.', 'Plug in.', 'Digital heat.'],
+  afrofolk:   ['Roots acoustic.', 'Folk from the motherland.', 'West African roots.'],
 };
 
 function getGenreVocab(genre: string | null | undefined): string | null {
@@ -238,6 +239,7 @@ const GENRE_REGION: Record<string, string> = {
   reggae:       'jamaica',
   reggaeton:    'caribbean',
   soca:         'caribbean',
+  afrofolk:     'west-africa',
 };
 
 function getRegionCallout(culturalTags: string[] | null | undefined, genre?: string | null): string | null {

@@ -439,7 +439,7 @@ export const MODE_KEYWORDS: Record<VibeMode, string[]> = {
   'chill-vibes': [
     'chill', 'slow', 'calm', 'relax', 'smooth', 'mellow', 'downtempo', // Mood / tempo
     'acoustic', 'rnb', 'r&b', 'soul', 'ballad', 'lofi',                // Genre
-    'kizomba', 'zouk', 'gospel', 'reggae', 'dancehall',                 // Enriched genres
+    'kizomba', 'zouk', 'gospel', 'reggae', 'dancehall', 'afrofolk',     // Enriched genres
   ],
   // PARTY MODE - High energy, danceable
   // Purified 2026-04-22: dropped 'mix', 'dj' — every DJ set / remix hit
