@@ -133,9 +133,11 @@ interface EarthVideoCardProps {
 const EarthVideoCard = memo(({ moment, visible, muted }: EarthVideoCardProps) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [videoReady, setVideoReady] = useState(false);
+  const [thumbLoaded, setThumbLoaded] = useState(false);
 
   useEffect(() => {
     setVideoReady(false);
+    setThumbLoaded(false);
   }, [moment.id]);
 
   useEffect(() => {
@@ -153,6 +155,19 @@ const EarthVideoCard = memo(({ moment, visible, muted }: EarthVideoCardProps) =>
 
   return (
     <div className="absolute inset-0">
+      {/* Thumbnail — always visible until video is ready */}
+      {moment.thumbnail_url && (
+        <img
+          src={moment.thumbnail_url}
+          alt=""
+          onLoad={() => setThumbLoaded(true)}
+          className="absolute inset-0 w-full h-full object-cover"
+          style={{
+            opacity: thumbLoaded && !videoReady ? 1 : 0,
+            transition: 'opacity 400ms cubic-bezier(0.16, 1, 0.3, 1)',
+          }}
+        />
+      )}
       <video
         ref={videoRef}
         src={videoUrl}
