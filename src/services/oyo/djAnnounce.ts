@@ -231,6 +231,7 @@ const GENRE_REGION: Record<string, string> = {
   grime:        'uk',
   dancehall:    'jamaica',
   reggae:       'jamaica',
+  reggaeton:    'caribbean',
   soca:         'caribbean',
 };
 

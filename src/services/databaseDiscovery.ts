@@ -139,6 +139,7 @@ const GENRE_VIBES_CLIENT: Record<string, { afro: number; party: number; chill: n
   jazz:         { afro: 22, party: 28, chill: 78, late: 72, heat: 22 },
   afrofolk:     { afro: 38, party: 32, chill: 65, late: 58, heat: 35 },
   reggae:       { afro: 45, party: 52, chill: 60, late: 55, heat: 45 },
+  reggaeton:    { afro: 45, party: 80, chill: 20, late: 62, heat: 68 },
   electronic:   { afro: 45, party: 68, chill: 35, late: 65, heat: 60 },
   rock:         { afro: 20, party: 50, chill: 48, late: 45, heat: 42 },
   classical:    { afro: 10, party: 12, chill: 82, late: 60, heat: 12 },
@@ -196,6 +197,7 @@ const GENRE_TO_REGION_TAGS: Record<string, string[]> = {
   grime:        ['uk', 'diaspora'],
   dancehall:    ['jamaica', 'diaspora'],
   reggae:       ['jamaica'],
+  reggaeton:    ['caribbean', 'latin'],
   soca:         ['caribbean', 'diaspora'],
 };
 

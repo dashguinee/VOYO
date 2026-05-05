@@ -56,6 +56,11 @@ const GENRE_KEYWORDS: Array<{ keys: RegExp; label: string }> = [
   { keys: /\bbongo[- ]?flava\b/i, label: 'bongo-flava' },
   { keys: /\bgospel\b/i, label: 'gospel' },
   { keys: /\btrap\b/i, label: 'trap' },
+  { keys: /\breggaeton\b/i, label: 'reggaeton' },
+  { keys: /\bfuji\b/i, label: 'fuji' },
+  { keys: /\bjuju\b|\bafrojuju\b/i, label: 'afrojuju' },
+  { keys: /\bkwaito\b/i, label: 'kwaito' },
+  { keys: /\bcongolese\b/i, label: 'congolese' },
 ];
 
 const MOOD_KEYWORDS: Array<{ keys: RegExp; label: string }> = [

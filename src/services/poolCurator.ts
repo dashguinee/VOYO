@@ -459,8 +459,12 @@ function buildSmartQueries(): string[] {
       makossa:       'makossa music',
       dancehall:     'dancehall hits',
       reggae:        'reggae hits',
+      reggaeton:     'reggaeton hits',
       soca:          'soca caribbean',
       zouk:          'zouk music',
+      congolese:     'congolese music',
+      fuji:          'fuji music nigeria',
+      afrojuju:      'juju music yoruba',
     };
     queries.push(GENRE_QUERIES[genre] ?? 'afrobeats trending');
   }

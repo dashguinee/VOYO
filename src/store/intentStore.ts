@@ -430,7 +430,7 @@ export const MODE_KEYWORDS: Record<VibeMode, string[]> = {
     'nigeria', 'ghana', 'african',    // Regions
     'highlife', 'afropop', 'afrofusion', 'rumba', 'soukous', 'ndombolo', 'makossa', // Enriched genres
     'mbalax', 'bikutsi', 'bongo-flava', 'gqom', 'afrohouse', 'kwaito', // More enriched
-    'fuji', 'afrojuju', 'gengetone', 'hiplife', 'soca',                // More African genres
+    'fuji', 'afrojuju', 'gengetone', 'hiplife', 'soca', 'congolese',   // More African genres
   ],
   // CHILL VIBES - Relaxed, smooth listening
   // Purified 2026-04-22: dropped 'love', 'essence', 'vibe' — they matched
@@ -450,6 +450,7 @@ export const MODE_KEYWORDS: Record<VibeMode, string[]> = {
     'edm', 'hype',                                           // Energy tier
     'afro house', 'amapiano', 'baile',                       // Dance subgenres
     'drill', 'grime', 'trap', 'hiphop', 'hip-hop',           // Enriched genres
+    'reggaeton',                                              // Latin Caribbean
   ],
   // LATE NIGHT - Moody, atmospheric
   // Dropped 'feels' — too loose, matches "feels good", "feeling", etc.
