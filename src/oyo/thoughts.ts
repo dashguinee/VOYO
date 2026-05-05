@@ -78,7 +78,7 @@ export async function runThoughtCycle(input: OyoThinkInput): Promise<OyoThinkOut
       explicit: input.explicit,
       isPlaying: !!input.context?.currentTrack,
       currentTrack: input.context?.currentTrack
-        ? { title: input.context.currentTrack.title, artist: input.context.currentTrack.artist }
+        ? { title: input.context.currentTrack.title, artist: input.context.currentTrack.artist, genre: input.context.currentTrack.genre }
         : undefined,
     });
   } catch {
