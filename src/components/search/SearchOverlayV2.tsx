@@ -198,6 +198,9 @@ const COUNTRY_FLAGS: Record<string, string> = {
   GN: '\u{1F1EC}\u{1F1F3}', CI: '\u{1F1E8}\u{1F1EE}', CD: '\u{1F1E8}\u{1F1E9}',
   CM: '\u{1F1E8}\u{1F1F2}', TZ: '\u{1F1F9}\u{1F1FF}', GB: '\u{1F1EC}\u{1F1E7}',
   US: '\u{1F1FA}\u{1F1F8}', FR: '\u{1F1EB}\u{1F1F7}', JM: '\u{1F1EF}\u{1F1F2}',
+  AO: '\u{1F1E6}\u{1F1F4}', MZ: '\u{1F1F2}\u{1F1FF}', MA: '\u{1F1F2}\u{1F1E6}',
+  CV: '\u{1F1E8}\u{1F1FB}', UG: '\u{1F1FA}\u{1F1EC}', ET: '\u{1F1EA}\u{1F1F9}',
+  ML: '\u{1F1F2}\u{1F1F1}',
 };
 
 export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap, onEnterVideoMode }: SearchOverlayProps) => {
