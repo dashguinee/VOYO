@@ -732,6 +732,50 @@ export const VIBES: Record<string, Vibe> = {
       sort_by: 'canon_level'
     },
     connected_vibes: ['golden-era', 'accra-highlife', 'motherland-roots']
+  },
+
+  // ========== GENRE VIBES (extended) ==========
+
+  'alte-scene': {
+    id: 'alte-scene',
+    name: 'Alte Scene',
+    description: 'Nigeria\'s alternative — experimental, fluid, fearless',
+    category: 'genre',
+    energy_level: 3,
+    query_rules: {
+      genres: ['alte', 'afro-fusion'],
+      matched_artist_patterns: ['odunsi', 'amaarae', 'santi', 'cruel', 'lady donli', 'tems'],
+      prefer_tiers: ['A', 'B', 'C'],
+      sort_by: 'play_count'
+    },
+    connected_vibes: ['afrobeats-central', 'bedroom-vibes', 'chill-vibes']
+  },
+
+  'afro-soul': {
+    id: 'afro-soul',
+    name: 'Afro Soul',
+    description: 'Where African rhythm meets deep soul',
+    category: 'genre',
+    energy_level: 2,
+    query_rules: {
+      genres: ['afrosoul', 'afro-soul', 'afro-rnb'],
+      matched_artist_patterns: ['tems', 'simi', 'asa', 'chike', 'elaine', 'ami faku', 'msaki'],
+      sort_by: 'play_count'
+    },
+    connected_vibes: ['chill-vibes', 'slow-wine', 'bedroom-vibes']
+  },
+
+  'african-hip-hop': {
+    id: 'african-hip-hop',
+    name: 'African Hip Hop',
+    description: 'From Lagos to Cape Town — bars, flow, culture',
+    category: 'genre',
+    energy_level: 4,
+    query_rules: {
+      matched_artist_patterns: ['nasty c', 'aka', 'cassper', 'blaqbonez', 'a-reece', 'olamide', 'phyno', 'vector', 'ladipoe', 'falz'],
+      sort_by: 'play_count'
+    },
+    connected_vibes: ['lagos-nights', 'johannesburg-heat', 'trending']
   }
 };
 
