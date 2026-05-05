@@ -385,7 +385,7 @@ export function useMoments(): UseMomentsReturn {
   // is music-first; the music-bridged moments (21% of catalog with
   // a parent_track_id) feed the auto-play-on-dwell flow. Trends
   // sits to the left for the broader explore feel.
-  const [categoryAxis, setCategoryAxisState] = useState<CategoryAxis>('vibes');
+  const [categoryAxis, setCategoryAxisState] = useState<CategoryAxis>('trends');
   const [position, setPosition] = useState<MomentPosition>({ categoryIndex: 0, timeIndex: 0 });
   const [moments, setMoments] = useState<Map<string, Moment[]>>(new Map());
   const [loading, setLoading] = useState(false);

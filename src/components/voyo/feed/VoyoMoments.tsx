@@ -1224,10 +1224,9 @@ export interface MomentTrackInfo {
 export interface VoyoMomentsProps {
   onPlayFullTrack?: (track: MomentTrackInfo) => void;
   onArtistTap?: (artistName: string) => void;
-  onEarth?: () => void;
 }
 
-export const VoyoMoments: React.FC<VoyoMomentsProps> = ({ onPlayFullTrack, onArtistTap, onEarth }) => {
+export const VoyoMoments: React.FC<VoyoMomentsProps> = ({ onPlayFullTrack, onArtistTap }) => {
   const {
     currentMoment: hookCurrentMoment, position, categoryAxis, categories, currentCategory, displayName,
     goUp, goDown, goLeft, goRight, setCategoryAxis, jumpToCategory,
@@ -2015,47 +2014,19 @@ export const VoyoMoments: React.FC<VoyoMomentsProps> = ({ onPlayFullTrack, onArt
             faded with no click for now. Vibes (renamed from Music) is
             the golden music-bridged tab. Friends is the private engaged-
             only space. */}
-        <div style={{ ...S.axisTabs, justifyContent: 'space-between', alignItems: 'center' }}>
-          <div style={{ display: 'flex', gap: 4 }}>
-            {(['trends', 'travel', 'live', 'vibes', 'genre', 'friends'] as CategoryAxis[]).map(a => {
-              const disabled = a === 'live';
-              const isVibes = a === 'vibes';
-              return (
-                <div
-                  key={a}
-                  style={axisTab(categoryAxis === a, { disabled, isVibes })}
-                  onClick={disabled ? undefined : e => { e.stopPropagation(); setCategoryAxis(a); }}
-                  aria-disabled={disabled}
-                >
-                  {TOP_MODE_LABELS[a]}
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Earth compass entry — subtle globe pill, reveals VoyoEarth */}
-          {onEarth && (
-            <div
-              onClick={e => { e.stopPropagation(); onEarth(); }}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 3,
-                padding: '3px 8px',
-                borderRadius: 999,
-                background: 'rgba(255,255,255,0.06)',
-                border: '1px solid rgba(255,255,255,0.1)',
-                cursor: 'pointer',
-                flexShrink: 0,
-                marginLeft: 4,
-              }}
-            >
-              <span style={{ fontSize: 12 }}>🌍</span>
-              <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.45)', fontWeight: 700, letterSpacing: '0.15em', textTransform: 'uppercase' }}>
-                Earth
-              </span>
-            </div>
-          )}
+        <div style={S.axisTabs}>
+          {(['trends', 'travel', 'vibes', 'genre', 'friends'] as CategoryAxis[]).map(a => {
+            const isVibes = a === 'vibes';
+            return (
+              <div
+                key={a}
+                style={axisTab(categoryAxis === a, { isVibes })}
+                onClick={e => { e.stopPropagation(); setCategoryAxis(a); }}
+              >
+                {TOP_MODE_LABELS[a]}
+              </div>
+            );
+          })}
         </div>
         <CompassArc
           categories={categories}
