@@ -47,13 +47,9 @@ import { PlaylistModal } from '../playlist/PlaylistModal';
 import { AccountMenu } from '../profile/AccountMenu';
 import { BoostSettings } from '../ui/BoostSettings';
 import { CardHoldActions } from '../ui/CardHoldActions';
-// All-Time Classics: shelved Apr 28 2026 ("special edition" candidate).
-// Components live in the repo, unused on Home — tree-shaken from bundle.
-//   src/components/classic/ClassicsContractedShelf.tsx
-//   src/components/classic/ClassicsDropCeremony.tsx
-//   src/data/classicsHardcoded.ts
-//   src/services/classicsDropService.ts (subscriber + dismiss helpers)
-// To resurrect: import + render between KeepTheEnergyShelf and African Vibes.
+import { ClassicsDropCeremony } from './ClassicsDropCeremony';
+import { useActiveClassicsDrop, fetchTracksByYoutubeIds } from '../../services/classicsDropService';
+import { CLASSICS_HARDCODED } from '../../data/classicsHardcoded';
 
 // ============================================
 // HELPER FUNCTIONS
@@ -2558,6 +2554,23 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onNavVisibilityChange, onSwitc
   // without losing stability WITHIN a single session.
   const [sessionSeed] = useState(() => Date.now());
 
+  // Classics Drop — cockpit-fired ceremony. useActiveClassicsDrop subscribes
+  // via Supabase realtime; resolves to null when no drop is live.
+  const activeDrop = useActiveClassicsDrop();
+  const [ceremonyTracks, setCeremonyTracks] = useState<Track[]>([]);
+  useEffect(() => {
+    if (!activeDrop) { setCeremonyTracks([]); return; }
+    const ids = activeDrop.track_ids;
+    if (!ids || ids.length === 0) {
+      setCeremonyTracks(CLASSICS_HARDCODED);
+      return;
+    }
+    // Backfill: look up explicit track IDs from video_intelligence.
+    fetchTracksByYoutubeIds(ids).then(fetched => {
+      setCeremonyTracks(fetched.length > 0 ? fetched : CLASSICS_HARDCODED);
+    });
+  }, [activeDrop]);
+
   // Stations — curator-led vibe hubs, shown as a horizontal snap-scroll rail
   // above the shelves. Rail animates parallax on scroll when >1 station.
   // stationsLoading gates a skeleton rail while the query is in flight so
@@ -3317,8 +3330,15 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onNavVisibilityChange, onSwitc
         />
       )}
 
-      {/* All-Time Classics shelf used to render here — shelved Apr 28 2026
-          as a future "special edition" surface. See import-block comment. */}
+      {/* Classics Drop ceremony — fires when Dash triggers from Hub cockpit.
+          Invisible when no drop is active; replaces the shelved classics shelf. */}
+      {activeDrop && ceremonyTracks.length > 0 && (
+        <ClassicsDropCeremony
+          drop={activeDrop}
+          tracks={ceremonyTracks}
+          onPlay={t => playTrack(t)}
+        />
+      )}
 
       {/* 🌍 African Vibes - cultural pillar, holds its ground.
           Watch More moved OFF the header (Apr 2026): it now only appears at the
