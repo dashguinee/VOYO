@@ -201,7 +201,26 @@ const GENRE_PLAYER_GREETINGS: Record<string, string[]> = {
   reggaeton:  ['Perreo mode running. Want me to keep the heat?', 'Reggaeton lane — stay in it or switch direction?'],
   fuji:       ['Traditional Yoruba energy. Want me to stay in the roots?', 'Fuji in the set — extend or move forward?'],
   afrojuju:   ['Juju roots running. Want me to keep the spirit here?', 'Yoruba juju — stay in the tradition or flip?'],
+  juju:       ['Juju roots running. Want me to keep the spirit here?', 'Yoruba juju — stay in the tradition or flip?'],
   afrofolk:   ['West African folk in the room. Want me to keep it grounded?', 'Afro folk roots running — stay here or move it forward?'],
+  // Lusophone Africa
+  kuduro:     ['Luanda energy in the room. Want me to keep the kuduro running?', 'Angola heat — extend or switch direction?'],
+  semba:      ['Semba roots in the set. Stay in Angola or flip?', 'Old Luanda sound running — keep it or move on?'],
+  tarraxo:    ['Tarraxinha mode. Close and slow — keep it here?', 'Angola slow lane. Want me to stay in this feeling?'],
+  // East Africa
+  benga:      ['Nairobi guitar running. Want me to ride the East Africa wave?', 'Benga in the set — extend or flip?'],
+  taarab:     ['Swahili coast in the room. Want me to keep taarab going?', 'East Africa deep — stay in this feeling or move on?'],
+  singeli:    ['Dar es Salaam at full speed. Want me to keep singeli running?', 'Tanzania hyper energy — extend or change direction?'],
+  // West Africa
+  palmwine:   ['Palm wine roots running. Keep it acoustic or pick up the pace?', 'Old Ghana sound — stay in the roots or move forward?'],
+  // North Africa
+  rai:        ['Maghreb feeling right now. Want more raï?', 'North Africa crossing — stay here or explore further?'],
+  chaabi:     ['North African streets in the room. Want me to extend chaabi?', 'Chaabi energy — keep it running or flip?'],
+  gnawa:      ['Gnawa trance in the set. Deep spiritual mode — stay here?', 'Morocco spirit running — extend the ritual or shift?'],
+  // South Africa underground
+  lekompo:    ['Limpopo township energy. Want me to keep lekompo going?', 'SA underground mode — extend or take it somewhere else?'],
+  // Diaspora crossover
+  afrosoul:   ['Diaspora heart. Want me to keep the afrosoul warmth running?', 'Bridge music — stay in this feeling or flip the scene?'],
 };
 
 function buildGenreGreeting(genre: string, title: string, _artist: string): string | null {

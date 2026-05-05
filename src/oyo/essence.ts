@@ -62,6 +62,24 @@ const GENRE_KEYWORDS: Array<{ keys: RegExp; label: string }> = [
   { keys: /\bkwaito\b/i, label: 'kwaito' },
   { keys: /\bcongolese\b/i, label: 'congolese' },
   { keys: /\bafrofolk\b|\bafrican\s+folk\b/i, label: 'afrofolk' },
+  // Lusophone Africa
+  { keys: /\bkuduro\b/i, label: 'kuduro' },
+  { keys: /\bsemba\b/i, label: 'semba' },
+  { keys: /\btarrax[ao]\b/i, label: 'tarraxo' },
+  // East Africa
+  { keys: /\bbenga\b/i, label: 'benga' },
+  { keys: /\btaarab\b/i, label: 'taarab' },
+  { keys: /\bsingeli\b/i, label: 'singeli' },
+  // West Africa
+  { keys: /\bpalm\s*wine\b|\bpalmwine\b/i, label: 'palmwine' },
+  // North Africa
+  { keys: /\bra[iï]\b/i, label: 'rai' },
+  { keys: /\bchaabi\b|\bchaâbi\b/i, label: 'chaabi' },
+  { keys: /\bgnawa\b/i, label: 'gnawa' },
+  // South Africa underground
+  { keys: /\blekompo\b/i, label: 'lekompo' },
+  // Diaspora crossover
+  { keys: /\bafrosoul\b|\bafro[- ]soul\b/i, label: 'afrosoul' },
 ];
 
 const MOOD_KEYWORDS: Array<{ keys: RegExp; label: string }> = [
