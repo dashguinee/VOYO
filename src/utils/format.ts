@@ -23,9 +23,11 @@ export const formatOyeScore = formatViews;
 
 const GENRE_LABELS: Record<string, string> = {
   afrobeats: 'Afrobeats', afropop: 'Afropop', amapiano: 'Amapiano',
+  afrobeat: 'Afrobeat', afrofusion: 'Afro Fusion', 'afro-fusion': 'Afro Fusion',
   afrohouse: 'Afro House', 'afro-house': 'Afro House', gqom: 'Gqom',
-  hiphop: 'Hip-Hop', trap: 'Trap', drill: 'Drill', grime: 'Grime',
-  rnb: 'R&B', soul: 'Soul', gospel: 'Gospel', jazz: 'Jazz',
+  kwaito: 'Kwaito', fuji: 'Fuji', afrojuju: 'Afro Juju',
+  hiphop: 'Hip-Hop', 'hip-hop': 'Hip-Hop', trap: 'Trap', drill: 'Drill', grime: 'Grime',
+  rnb: 'R&B', 'r&b': 'R&B', soul: 'Soul', gospel: 'Gospel', jazz: 'Jazz',
   reggae: 'Reggae', dancehall: 'Dancehall', soca: 'Soca', reggaeton: 'Reggaeton',
   kizomba: 'Kizomba', zouk: 'Zouk', afrofolk: 'Afro Folk',
   highlife: 'Highlife', hiplife: 'Hiplife', mbalax: 'Mbalax',
