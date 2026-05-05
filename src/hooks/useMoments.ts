@@ -77,21 +77,23 @@ const COUNTRY_TAG_MAP: Record<string, string[]> = {
   'ghana':        ['ghana'],
   'angola':       ['angola'],
   'south-africa': ['south-africa', 'mzansi'],
+  'algeria':      ['algeria', 'north-africa', 'morocco'],
   'west-africa':  ['west-africa'],
 };
 
 // Genre → cultural_tag proxy mapping. Powered by video_intelligence.primary_genre
 // enrichment (2026-05). Tags from live catalog distribution (2026-05-05):
-//   nigeria 2181, west-africa 2038, angola 964, lusophone-africa 927,
-//   diaspora 1775, usa 1473, east-africa 41, spiritual 53, south-africa+mzansi 108
+//   nigeria 2182, west-africa 2042, angola 964, lusophone-africa 927,
+//   diaspora 1777, algeria 499, north-africa 402, east-africa 41, spiritual 53, south-africa+mzansi 65
 const GENRE_TAG_MAP: Record<string, string[]> = {
-  'afrobeats':   ['nigeria', 'west-africa', 'naija', 'ghana', 'ng', 'gh'],
-  'kizomba':     ['angola', 'lusophone-africa', 'mozambique'],
-  'hiphop':      ['diaspora', 'usa', 'uk'],
-  'bongo-flava': ['east-africa', 'kenya', 'tanzania'],
-  'gospel':      ['spiritual'],
-  'amapiano':    ['south-africa', 'south africa', 'mzansi'],
-  'for-you':     [],  // no filter = broadest pool
+  'afrobeats':    ['nigeria', 'west-africa', 'naija', 'ghana', 'ng', 'gh'],
+  'kizomba':      ['angola', 'lusophone-africa', 'mozambique'],
+  'hiphop':       ['diaspora', 'usa', 'uk'],
+  'north-africa': ['algeria', 'north-africa', 'morocco'],
+  'bongo-flava':  ['east-africa', 'kenya', 'tanzania'],
+  'gospel':       ['spiritual'],
+  'amapiano':     ['south-africa', 'south africa', 'mzansi'],
+  'for-you':      [],  // no filter = broadest pool
 };
 
 // CategoryAxis — v902 (Dash 2026-04-29): top-bar reorg.
@@ -164,10 +166,11 @@ export const CATEGORY_PRESETS: Record<CategoryAxis, string[]> = {
   ],
   // v911 — Travel sub-cats keyed to cultural_tags coverage in the
   // live catalog. Volumes (May 2026):
-  //   nigeria 2181, west-africa 2038, angola 964, ghana 62, senegal 46,
-  //   south-africa+mzansi 108. Mali/Guinea/IvoryCoast dropped (<10).
+  //   nigeria 2182, west-africa 2042, angola 964, algeria 499, ghana 62,
+  //   senegal 46, south-africa+mzansi 65. Mali/Guinea/IvoryCoast dropped (<10).
+  // v1153: added algeria (499) — larger than ghana/senegal, distinct north-africa cluster.
   'travel': [
-    'nigeria', 'senegal', 'ghana', 'angola', 'south-africa', 'west-africa',
+    'nigeria', 'angola', 'algeria', 'ghana', 'senegal', 'south-africa', 'west-africa',
   ],
   // v860 — Live = virality cuts (NOT time windows). Diagnostic on the
   // live catalog: every moment was ingested in a single 22-minute
@@ -197,9 +200,10 @@ export const CATEGORY_PRESETS: Record<CategoryAxis, string[]> = {
   // Genre compass — African music compass directions. Proxy via cultural_tags
   // until parent_track_id coverage reaches critical mass (target: >500 linked).
   // Live catalog (2026-05-05): afrobeats ~4000 → kizomba ~1900 → hiphop ~1775
-  //   → bongo-flava ~120 → amapiano ~108 → gospel ~53 → for-you (all 6788).
+  //   → north-africa ~901 → bongo-flava ~120 → amapiano ~108 → gospel ~53 → for-you (all 6788).
+  // v1153: added north-africa (algeria+north-africa+morocco = 901 moments) — 4th largest pool.
   'genre': [
-    'afrobeats', 'kizomba', 'hiphop', 'bongo-flava', 'gospel', 'amapiano', 'for-you',
+    'afrobeats', 'kizomba', 'hiphop', 'north-africa', 'bongo-flava', 'gospel', 'amapiano', 'for-you',
   ],
 };
 
@@ -217,16 +221,18 @@ const DISPLAY_NAMES: Record<string, string> = {
   'senegal':      'Sénégal',
   'ghana':        'Ghana',
   'angola':       'Angola',
+  'algeria':      'Algérie',
   'south-africa': 'South Africa',
   'west-africa':  'West Africa',
   // Genre compass sub-cats (v1063 — cultural_tag proxy + parent_track genre)
-  'afrobeats':   'Afrobeats',
-  'kizomba':     'Kizomba',
-  'hiphop':      'Hip-Hop',
-  'bongo-flava': 'Bongo Flava',
-  'gospel':      'Gospel',
-  'amapiano':    'Amapiano',
-  'for-you':     'For You',
+  'afrobeats':    'Afrobeats',
+  'kizomba':      'Kizomba',
+  'hiphop':       'Hip-Hop',
+  'north-africa': 'North Africa',
+  'bongo-flava':  'Bongo Flava',
+  'gospel':       'Gospel',
+  'amapiano':     'Amapiano',
+  'for-you':      'For You',
 };
 
 // v902 — labels for the 5 top modes. Trends leads as the explore
@@ -300,14 +306,15 @@ const ADJACENCY: Record<CategoryAxis, Record<string, Record<string, number>>> = 
   // Travel — drift across cultural-tag regions. v911 weights:
   // anglophone (Nigeria/Ghana) cluster, Senegal francophone bridge,
   // Angola lusophone outpost, west-africa as the meta hub.
-  // SA added as a southern cluster (amapiano/gqom outpost).
+  // SA added as southern cluster, Algeria as north-africa outpost (v1153).
   'travel': {
-    'nigeria':      { 'ghana': 0.35, 'west-africa': 0.3, 'senegal': 0.15, 'angola': 0.1, 'south-africa': 0.1 },
-    'senegal':      { 'west-africa': 0.4, 'ghana': 0.2, 'nigeria': 0.2, 'angola': 0.1, 'south-africa': 0.1 },
+    'nigeria':      { 'ghana': 0.3, 'west-africa': 0.25, 'senegal': 0.15, 'angola': 0.1, 'south-africa': 0.1, 'algeria': 0.1 },
+    'senegal':      { 'west-africa': 0.35, 'algeria': 0.2, 'ghana': 0.2, 'nigeria': 0.15, 'angola': 0.1 },
     'ghana':        { 'nigeria': 0.4, 'west-africa': 0.3, 'senegal': 0.15, 'angola': 0.1, 'south-africa': 0.05 },
     'angola':       { 'west-africa': 0.35, 'nigeria': 0.25, 'south-africa': 0.2, 'ghana': 0.1, 'senegal': 0.1 },
     'south-africa': { 'angola': 0.4, 'west-africa': 0.3, 'nigeria': 0.2, 'ghana': 0.1 },
-    'west-africa':  { 'nigeria': 0.4, 'ghana': 0.25, 'senegal': 0.15, 'angola': 0.1, 'south-africa': 0.1 },
+    'algeria':      { 'west-africa': 0.4, 'senegal': 0.25, 'nigeria': 0.2, 'angola': 0.15 },
+    'west-africa':  { 'nigeria': 0.35, 'ghana': 0.2, 'senegal': 0.15, 'angola': 0.1, 'algeria': 0.1, 'south-africa': 0.1 },
   },
   'live': {
     'pulse':  { 'rising': 0.7, 'gems': 0.3 },
@@ -327,14 +334,16 @@ const ADJACENCY: Record<CategoryAxis, Record<string, Record<string, number>>> = 
   // Genre compass adjacency — drift across sonic siblings.
   // Afrobeats ↔ Amapiano (Pan-African dancefloor), Kizomba ↔ Bongo Flava (sensual/groovy),
   // HipHop ↔ Afrobeats (crossover — Afrobeats borrows rap energy, hiphop borrows Afro drums).
+  // North Africa ↔ Afrobeats (pan-African bridge), North Africa ↔ HipHop (Algerian rap/trap heavy).
   'genre': {
-    'afrobeats':   { 'amapiano': 0.35, 'kizomba': 0.25, 'hiphop': 0.25, 'gospel': 0.1, 'bongo-flava': 0.05 },
-    'kizomba':     { 'afrobeats': 0.45, 'amapiano': 0.3, 'bongo-flava': 0.25 },
-    'hiphop':      { 'afrobeats': 0.5,  'gospel': 0.3,   'amapiano': 0.2 },
-    'bongo-flava': { 'afrobeats': 0.5,  'kizomba': 0.3,  'gospel': 0.2 },
-    'gospel':      { 'afrobeats': 0.5,  'hiphop': 0.25,  'bongo-flava': 0.15, 'kizomba': 0.1 },
-    'amapiano':    { 'afrobeats': 0.5,  'kizomba': 0.3,  'hiphop': 0.2 },
-    'for-you':     { 'afrobeats': 0.35, 'kizomba': 0.2,  'hiphop': 0.2, 'amapiano': 0.15, 'bongo-flava': 0.1 },
+    'afrobeats':    { 'amapiano': 0.3, 'kizomba': 0.25, 'hiphop': 0.2, 'north-africa': 0.15, 'gospel': 0.1 },
+    'kizomba':      { 'afrobeats': 0.45, 'amapiano': 0.3, 'bongo-flava': 0.25 },
+    'hiphop':       { 'afrobeats': 0.45, 'north-africa': 0.25, 'gospel': 0.2, 'amapiano': 0.1 },
+    'north-africa': { 'afrobeats': 0.5,  'hiphop': 0.3,  'amapiano': 0.2 },
+    'bongo-flava':  { 'afrobeats': 0.5,  'kizomba': 0.3,  'gospel': 0.2 },
+    'gospel':       { 'afrobeats': 0.5,  'hiphop': 0.25,  'bongo-flava': 0.15, 'kizomba': 0.1 },
+    'amapiano':     { 'afrobeats': 0.5,  'kizomba': 0.3,  'hiphop': 0.2 },
+    'for-you':      { 'afrobeats': 0.3, 'kizomba': 0.2, 'hiphop': 0.2, 'north-africa': 0.15, 'amapiano': 0.15 },
   },
 };
 
