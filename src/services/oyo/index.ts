@@ -21,6 +21,11 @@ import { getHotTracks, getDiscoveryTracks } from '../databaseDiscovery';
 import { onSignal as oyoPlanSignal } from '../oyoPlan';
 import { onTrackPlay as oyoDJOnTrackPlay, onTrackSkip as oyoDJOnTrackSkip } from '../oyoDJ';
 import { recordPlay as djRecordPlay } from '../intelligentDJ';
+import {
+  recordPlay as patternRecordPlay,
+  recordSkip as patternRecordSkip,
+  recordComplete as patternRecordComplete,
+} from '../../oyo/pattern';
 import { recordTrackInSession } from '../poolCurator';
 import { recordPoolEngagement } from '../personalization';
 import { gateToR2 } from '../r2Gate';
@@ -216,6 +221,7 @@ export function onPlay(track: Track): void {
   djRecordPlay(track);
   recordTrackInSession(track);
   recordPoolEngagement(track.trackId, 'play');
+  void patternRecordPlay({ trackId: track.trackId, artist: track.artist, genre: track.tags[0] });
   // Throttled pool re-rank. Session still adapts, but not 4x/minute.
   maybeRefreshPools();
 }
@@ -237,6 +243,7 @@ export function onSkip(track: Track, positionSec: number = 0): void {
   oyoPlanSignal('skip', track.trackId);
   oyoDJOnTrackSkip(track, positionSec);
   recordPoolEngagement(track.trackId, 'skip');
+  void patternRecordSkip({ trackId: track.trackId, artist: track.artist, genre: track.tags[0] });
   void recordRemoteSignal(track.trackId, 'skip');
 }
 
@@ -255,6 +262,7 @@ export function onComplete(track: Track, completionRate: number = 100): void {
   djRecordPlay(track, false, false);
   oyoPlanSignal('completion', track.trackId);
   recordPoolEngagement(track.trackId, 'complete', { completionRate });
+  void patternRecordComplete({ trackId: track.trackId, artist: track.artist, genre: track.tags[0] });
   void recordRemoteSignal(track.trackId, 'complete');
 }
 
