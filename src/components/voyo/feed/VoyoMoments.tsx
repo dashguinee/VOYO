@@ -707,7 +707,7 @@ const MomentCard = memo(({ moment, isOyed, onOye, isActive, isMuted, onToggleMut
   const format: MomentFormat = (() => {
     if (!videoError) return 'r2_video';
     if (moment.source_platform === 'tiktok') return 'tiktok_embed';
-    if (moment.source_platform === 'instagram') return 'instagram_embed';
+    // Instagram embed shows "Watch on Instagram" chrome — thumbnail until R2 is populated.
     if (moment.source_platform === 'youtube' || moment.source_platform === 'youtube_shorts') return 'iframe_embed';
     return 'thumbnail';
   })();

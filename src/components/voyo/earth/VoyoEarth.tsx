@@ -137,7 +137,8 @@ function resolveFormat(moment: Moment, r2Failed: boolean): VideoFormat {
   if (!r2Failed && moment.r2_video_key) return 'r2_video';
   // Platform-specific embeds — actual video content
   if (moment.source_platform === 'tiktok') return 'tiktok_embed';
-  if (moment.source_platform === 'instagram') return 'instagram_embed';
+  // Instagram embed shows "Watch on Instagram" UI chrome — not usable for fullscreen.
+  // Falls to thumbnail until R2 pipeline populates actual video files.
   if (moment.source_platform === 'youtube' || moment.source_platform === 'youtube_shorts') return 'youtube_embed';
   return 'thumbnail';
 }
