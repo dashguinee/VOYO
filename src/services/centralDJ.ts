@@ -396,8 +396,8 @@ export async function trainVibe(signal: VibeTrainSignal): Promise<boolean> {
       return false;
     }
 
-    // Atomic vibe increment via RPC — note: RPC currently targets voyo_tracks;
-    // once updated to target video_intelligence it will close the training loop.
+    // Atomic vibe increment via RPC. Migration 028 (supabase/migrations/028_train_track_vibe_vi.sql)
+    // retargets this to video_intelligence — run it in the VOYO SQL editor to close the flywheel.
     const { error } = await supabase.rpc('train_track_vibe', {
       p_track_id: signal.trackId,
       p_mode: signal.modeId,
