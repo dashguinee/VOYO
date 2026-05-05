@@ -61,12 +61,12 @@ const ARCS: Record<ArcType, EmotionalArc> = {
         energyMin: 1, energyMax: 2, hotRatio: 0.75, vibeShift: 'hold',
         canonDepth: 'surface', minTracks: 2, maxTracks: 3,
         preferredTiers: ['A', 'B'],
-        culturalFocus: ['celebration', 'healing', 'prayer'],
+        culturalFocus: ['spiritual', 'angola', 'west-africa'],
       },
       hook: {
         energyMin: 2, energyMax: 3, hotRatio: 0.65, vibeShift: 'hold',
         canonDepth: 'surface', minTracks: 2, maxTracks: 2,
-        culturalFocus: ['bridge', 'homecoming', 'roots'],
+        culturalFocus: ['nigeria', 'west-africa', 'angola'],
       },
       build: {
         energyMin: 2, energyMax: 4, hotRatio: 0.55, vibeShift: 'rise',
@@ -97,7 +97,7 @@ const ARCS: Record<ArcType, EmotionalArc> = {
       hook: {
         energyMin: 3, energyMax: 4, hotRatio: 0.65, vibeShift: 'hold',
         canonDepth: 'mixed', minTracks: 2, maxTracks: 2,
-        culturalFocus: ['anthem', 'festival', 'celebration'],
+        culturalFocus: ['nigeria', 'angola', 'east-africa'],
       },
       build: {
         energyMin: 3, energyMax: 5, hotRatio: 0.55, vibeShift: 'rise',
@@ -128,7 +128,7 @@ const ARCS: Record<ArcType, EmotionalArc> = {
       hook: {
         energyMin: 3, energyMax: 4, hotRatio: 0.70, vibeShift: 'rise',
         canonDepth: 'surface', minTracks: 2, maxTracks: 3,
-        culturalFocus: ['celebration', 'festival', 'anthem', 'street'],
+        culturalFocus: ['nigeria', 'west-africa', 'diaspora'],
       },
       build: {
         energyMin: 4, energyMax: 5, hotRatio: 0.60, vibeShift: 'rise',
@@ -154,12 +154,12 @@ const ARCS: Record<ArcType, EmotionalArc> = {
       arrival: {
         energyMin: 3, energyMax: 4, hotRatio: 0.60, vibeShift: 'hold',
         canonDepth: 'mixed', minTracks: 2, maxTracks: 2,
-        culturalFocus: ['street', 'survival', 'diaspora'],
+        culturalFocus: ['diaspora', 'angola', 'nigeria'],
       },
       hook: {
         energyMin: 4, energyMax: 4, hotRatio: 0.50, vibeShift: 'hold',
         canonDepth: 'deep', minTracks: 2, maxTracks: 3,
-        culturalFocus: ['liberation', 'roots', 'motherland', 'pan-african'],
+        culturalFocus: ['angola', 'lusophone-africa', 'east-africa', 'diaspora'],
       },
       build: {
         energyMin: 4, energyMax: 5, hotRatio: 0.40, vibeShift: 'rise',
@@ -172,7 +172,7 @@ const ARCS: Record<ArcType, EmotionalArc> = {
       flow: {
         energyMin: 3, energyMax: 4, hotRatio: 0.35, vibeShift: 'drop',
         canonDepth: 'deep', minTracks: 3, maxTracks: 99,
-        culturalFocus: ['tradition', 'roots', 'healing', 'prayer'],
+        culturalFocus: ['angola', 'spiritual', 'east-africa', 'lusophone-africa'],
       },
     },
     bridgeEvery: 5,   // Late night bridges more — the culture runs deep at 2am
