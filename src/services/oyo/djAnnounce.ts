@@ -98,6 +98,8 @@ const GENRE_VOCAB: Record<string, string[]> = {
   amapiano:   ['Piano on deck.', 'Yanos drop.', 'SA in the building.', 'Log drum szn.'],
   afrobeats:  ['Lagos calling.', 'The groove don\'t lie.', 'Afro in the air.', 'Nigerian on top.'],
   afropop:    ['Afro wave.', 'The continent calling.', 'Pure afro.'],
+  afrofusion: ['Afro fusion.', 'Boundary-crossing.', 'The continent blending.'],
+  afrobeat:   ['Fela\'s children.', 'Lagos roots.', 'The original Afrobeat.'],
   reggae:     ['Riddim.', 'One drop.', 'Roots rock.'],
   dancehall:  ['Bashment.', 'Dance hall lock off.', 'Yard vibes.'],
   reggaeton:  ['La vibra.', 'Perreo szn.'],
@@ -107,6 +109,7 @@ const GENRE_VOCAB: Record<string, string[]> = {
   highlife:   ['Highlife hour.', 'Ghana on it.', 'Accra calling.'],
   kwaito:     ['SA deep.', 'Kwaito bounce.'],
   bongo:      ['Bongo flava.', 'Dar es Salaam in the set.'],
+  bongoflava: ['Bongo flava.', 'Dar es Salaam in the set.'],
   fuji:       ['Fuji vibes.', 'Traditional road.'],
   afrojuju:   ['Juju wave.', 'Nigerian roots.'],
   kizomba:    ['Kizomba hour.', 'Luanda feeling.', 'Slow motion.', 'Angola in the air.'],
@@ -137,7 +140,7 @@ const GENRE_VOCAB: Record<string, string[]> = {
 
 function getGenreVocab(genre: string | null | undefined): string | null {
   if (!genre) return null;
-  const norm = genre.toLowerCase().replace(/[\s\-]+/g, '');
+  const norm = genre.toLowerCase().replace(/[\s\-&]+/g, '');
   if (GENRE_VOCAB[norm]) return rotate(`genre_${norm}`, GENRE_VOCAB[norm]);
   // Substring match for compound genres (e.g. "Congolese Rumba" → "congolese")
   for (const [key, phrases] of Object.entries(GENRE_VOCAB)) {
