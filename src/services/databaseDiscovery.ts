@@ -132,6 +132,9 @@ const GENRE_VIBES_CLIENT: Record<string, { afro: number; party: number; chill: n
   jazz:         { afro: 22, party: 28, chill: 78, late: 72, heat: 22 },
   afrofolk:     { afro: 38, party: 32, chill: 65, late: 58, heat: 35 },
   reggae:       { afro: 45, party: 52, chill: 60, late: 55, heat: 45 },
+  electronic:   { afro: 45, party: 68, chill: 35, late: 65, heat: 60 },
+  rock:         { afro: 20, party: 50, chill: 48, late: 45, heat: 42 },
+  classical:    { afro: 10, party: 12, chill: 82, late: 60, heat: 12 },
   other:        { afro: 55, party: 55, chill: 45, late: 50, heat: 50 },
 };
 const GENRE_VIBES_DEFAULT = { afro: 45, party: 48, chill: 42, late: 40, heat: 45 };

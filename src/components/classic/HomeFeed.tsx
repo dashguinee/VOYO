@@ -3151,6 +3151,17 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onNavVisibilityChange, onSwitc
         reggae:         'one drop — a whole world',
         ndombolo:       'kinshasa roots — outward',
         congolese:      'congo energy — everywhere',
+        rumba:          'from kinshasa — the original wave',
+        soukous:        'congo guitar — the long road',
+        makossa:        'cameroon — deeper in',
+        bikutsi:        'yaoundé rhythm — widening',
+        gengetone:      'nairobi street — out into the world',
+        grime:          'east london — the full spectrum',
+        hiplife:        'ghana hip — the whole canvas',
+        soca:           'caribbean fire — follow the heat',
+        trap:           'from the trap — into the sound',
+        soul:           'soul deep — the long way through',
+        funk:           'on the one — keep finding it',
       };
       return GENRE_DIRECTION[topGenre.toLowerCase()] ?? `through the ${topGenre} lens`;
     } catch { return undefined; }
