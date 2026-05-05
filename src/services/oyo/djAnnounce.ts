@@ -192,6 +192,11 @@ const REGION_CALLOUT: Record<string, string[]> = {
   caribbean:     ['Caribbean fire.', 'Island energy.', 'Tropic vibes.'],
   jamaica:       ['Jamaica in the set.', 'Yard vibes.', 'Kingston calling.'],
   uk:            ['UK certified.', 'London in the building.', 'UK in the set.'],
+  mzansi:        ['Mzansi certified.', 'SA in the building.', 'South Africa on top.'],
+  'lusophone-africa': ['Lusophone Africa in the set.', 'Portuguese Africa vibes.', 'Luanda / Maputo energy.'],
+  usa:           ['USA vibes.', 'American sound.', 'Stateside energy.'],
+  spiritual:     ['Spirit moving.', 'Sacred energy.', 'Soul work.'],
+  latin:         ['Latin heat.', 'Caribbean fire.', 'Perreo energy.'],
 };
 
 // Genre → primary region — fallback when cultural_tags are absent/junk
