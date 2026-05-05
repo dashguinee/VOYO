@@ -208,16 +208,29 @@ export function OyoIsland({ visible, onHide, onActivity }: OyoIslandProps) {
     if (!musicIntent) {
       submittingRef.current = true;
       try {
-        const playerTrack = usePlayerStore.getState().currentTrack;
-        const context = playerTrack ? {
-          currentTrack: {
-            trackId: playerTrack.trackId,
-            title: playerTrack.title,
-            artist: playerTrack.artist,
-            genre: playerTrack.tags?.[0],
-          },
-        } : undefined;
-        const result = await oyo.think({ userMessage, context, surface: 'player' });
+        const playerState = usePlayerStore.getState();
+        const playerTrack = playerState.currentTrack;
+        const recentPlays = playerState.history
+          .slice(-5)
+          .reverse()
+          .map((h) => ({
+            trackId: h.track.trackId,
+            title: h.track.title,
+            artist: h.track.artist,
+            genre: h.track.tags?.[0],
+          }));
+        const context = {
+          ...(playerTrack ? {
+            currentTrack: {
+              trackId: playerTrack.trackId,
+              title: playerTrack.title,
+              artist: playerTrack.artist,
+              genre: playerTrack.tags?.[0],
+            },
+          } : {}),
+          ...(recentPlays.length > 0 ? { recentPlays } : {}),
+        };
+        const result = await oyo.think({ userMessage, context: Object.keys(context).length > 0 ? context : undefined, surface: 'player' });
         setChatHistory(prev => [...prev, { role: 'oyo', message: result.response || '...' }]);
       } catch {
         setChatHistory(prev => [...prev, { role: 'oyo', message: "Signal dropped. Try again." }]);

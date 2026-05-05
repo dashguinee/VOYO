@@ -104,16 +104,17 @@ export async function callGemini(input: GeminiCallInput): Promise<GeminiCallResu
     };
   }
 
-  // Cache lookup
+  // Build Gemini request body — include session history for conversational continuity
+  const history = formatHistoryForGemini(10);
+
+  // Cache lookup — include history length so a repeat message in the same
+  // conversation gets a fresh response rather than the cached earlier answer.
   const contextKey = JSON.stringify(input.context || {});
-  const fp = fingerprint([input.systemPrompt, input.userMessage, contextKey]);
+  const fp = fingerprint([input.systemPrompt, input.userMessage, contextKey, String(history.length)]);
   const cached = getCached(fp);
   if (cached !== null) {
     return { text: cached, cached: true, durationMs: Date.now() - start };
   }
-
-  // Build Gemini request body — include session history for conversational continuity
-  const history = formatHistoryForGemini(10);
   const contents = [
     ...history,
     {

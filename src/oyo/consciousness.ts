@@ -278,6 +278,13 @@ export function buildConsciousnessBlock(state: OyoConsciousness): string {
       .join(', ');
     parts.push(`Top genres: ${gens}`);
   }
+  if (state.signals.topArtists && state.signals.topArtists.length > 0) {
+    const arts = state.signals.topArtists
+      .slice(0, 4)
+      .map((a) => a.artist)
+      .join(', ');
+    parts.push(`Most played artists: ${arts}`);
+  }
 
   if (state.actions.lastSessionSummary) {
     parts.push(`Last session: ${state.actions.lastSessionSummary}`);

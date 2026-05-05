@@ -111,7 +111,7 @@ function buildContextBlock(ctx: OyoContext | undefined): string {
   if (ctx.recentPlays && ctx.recentPlays.length > 0) {
     const recent = ctx.recentPlays
       .slice(0, 5)
-      .map((t) => `${t.title} — ${t.artist}`)
+      .map((t) => `${t.title} — ${t.artist}${t.genre ? ` [${t.genre}]` : ''}`)
       .join(' | ');
     lines.push(`Just played: ${recent}`);
   }

@@ -156,7 +156,7 @@ export interface OyoContext {
     genre?: string;
   };
   timeOfDay?: 'morning' | 'afternoon' | 'evening' | 'night';
-  recentPlays?: Array<{ trackId: string; title: string; artist: string }>;
+  recentPlays?: Array<{ trackId: string; title: string; artist: string; genre?: string }>;
   currentMood?: string;
   userLocale?: string;
 }
