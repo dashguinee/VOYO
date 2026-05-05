@@ -428,6 +428,8 @@ export const MODE_KEYWORDS: Record<VibeMode, string[]> = {
     'amapiano', 'naija', 'lagos',     // Sub-genres & regions
     'burna', 'davido', 'wizkid', 'rema', 'asake', 'ayra', 'tems', 'ckay', 'tyla', // Artists
     'nigeria', 'ghana', 'african',    // Regions
+    'highlife', 'afropop', 'rumba', 'soukous', 'ndombolo', 'makossa', // Enriched genres
+    'mbalax', 'bikutsi', 'bongo-flava', 'gqom', 'afrohouse',          // More enriched
   ],
   // CHILL VIBES - Relaxed, smooth listening
   // Purified 2026-04-22: dropped 'love', 'essence', 'vibe' — they matched
@@ -436,6 +438,7 @@ export const MODE_KEYWORDS: Record<VibeMode, string[]> = {
   'chill-vibes': [
     'chill', 'slow', 'calm', 'relax', 'smooth', 'mellow', 'downtempo', // Mood / tempo
     'acoustic', 'rnb', 'r&b', 'soul', 'ballad', 'lofi',                // Genre
+    'kizomba', 'zouk', 'gospel', 'reggae', 'dancehall',                 // Enriched genres
   ],
   // PARTY MODE - High energy, danceable
   // Purified 2026-04-22: dropped 'mix', 'dj' — every DJ set / remix hit
@@ -445,6 +448,7 @@ export const MODE_KEYWORDS: Record<VibeMode, string[]> = {
     'party', 'banger', 'turn up', 'club', 'dance', 'anthem', // Direct party
     'edm', 'hype',                                           // Energy tier
     'afro house', 'amapiano', 'baile',                       // Dance subgenres
+    'drill', 'grime', 'hiphop', 'hip-hop',                   // Enriched genres
   ],
   // LATE NIGHT - Moody, atmospheric
   // Dropped 'feels' — too loose, matches "feels good", "feeling", etc.
