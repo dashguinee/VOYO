@@ -31,7 +31,8 @@ const GENRE_KEYWORDS: Array<{ keys: RegExp; label: string }> = [
   { keys: /\b(electro|house|techno|edm)\b/i, label: 'electronic' },
   { keys: /\bindie\b/i, label: 'indie' },
   { keys: /\bk[- ]?pop\b/i, label: 'k-pop' },
-  { keys: /\bafropop\b|\bafro[- ]?fusion\b/i, label: 'afro-fusion' },
+  { keys: /\bafropop\b/i, label: 'afropop' },
+  { keys: /\bafro[- ]?fusion\b/i, label: 'afrofusion' },
   { keys: /\blo[- ]?fi\b/i, label: 'lo-fi' },
   // African & Caribbean genres
   { keys: /\bkizomba\b/i, label: 'kizomba' },
