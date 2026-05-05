@@ -160,6 +160,9 @@ const GENRE_VIBES_CLIENT: Record<string, { afro: number; party: number; chill: n
   gnawa:        { afro: 48, party: 45, chill: 55, late: 62, heat: 38 },
   // Cross-regional
   afrosoul:     { afro: 45, party: 42, chill: 68, late: 62, heat: 32 },
+  // SA / East Africa underground
+  lekompo:      { afro: 72, party: 76, chill: 22, late: 58, heat: 70 },
+  singeli:      { afro: 78, party: 82, chill: 12, late: 68, heat: 75 },
   other:        { afro: 55, party: 55, chill: 45, late: 50, heat: 50 },
 };
 const GENRE_VIBES_DEFAULT = { afro: 45, party: 48, chill: 42, late: 40, heat: 45 };
@@ -214,6 +217,8 @@ const GENRE_TO_REGION_TAGS: Record<string, string[]> = {
   rai:          ['algeria', 'north-africa'],
   chaabi:       ['algeria', 'north-africa'],
   gnawa:        ['north-africa'],
+  lekompo:      ['south-africa', 'mzansi'],
+  singeli:      ['tanzania', 'east-africa'],
   gospel:       ['spiritual'],
   jazz:         ['usa', 'diaspora'],
   hiphop:       ['diaspora'],
