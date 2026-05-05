@@ -210,6 +210,7 @@ export function oye(
       emoji: opts.emoji ?? '⚡',
       reactionType: 'oye',
       trackPosition: position,
+      skipPatternRecord: true, // onOye() already fired patternRecordReaction
     });
   } catch { /* non-fatal */ }
 }

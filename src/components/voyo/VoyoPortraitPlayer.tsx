@@ -52,6 +52,7 @@ import {
 
 import { onSignal as oyaPlanSignal } from '../../services/oyoPlan';
 import { app, steerVibe } from '../../services/oyo';
+import { recordReaction as patternRecordReaction } from '../../oyo/pattern';
 
 // OYO Island - DJ Voice Search & Chat
 import { OyoIsland } from './OyoIsland';
@@ -5806,6 +5807,13 @@ export const VoyoPortraitPlayer = ({
       userId: 'user-1',
     } as any);
     oyaPlanSignal('reaction', currentTrack?.artist ?? '');
+    if (currentTrack) {
+      void patternRecordReaction({
+        trackId: currentTrack.trackId,
+        artist: currentTrack.artist,
+        genre: currentTrack.tags?.[0],
+      });
+    }
   };
 
   // (30s teaser preview removed — tap on a stream card now plays the

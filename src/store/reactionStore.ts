@@ -117,6 +117,8 @@ interface ReactionStore {
     reactionType?: ReactionType;
     comment?: string;
     trackPosition?: number; // 0-100 percentage
+    /** Set true when caller already fired patternRecordReaction (e.g. app.oye → onOye) */
+    skipPatternRecord?: boolean;
   }) => Promise<boolean>;
 
   // Fetching
@@ -197,6 +199,7 @@ export const useReactionStore = create<ReactionStore>((set, get) => ({
     reactionType = 'oye',
     comment,
     trackPosition,
+    skipPatternRecord = false,
   }) => {
     if (!isSupabaseConfigured || !supabase) {
       devWarn('[Reactions] Supabase not configured, using local only');
@@ -235,11 +238,13 @@ export const useReactionStore = create<ReactionStore>((set, get) => ({
         artist: trackArtist,
         coverUrl: trackThumbnail,
       } as Track);
-      void patternRecordReaction({
-        trackId,
-        artist: trackArtist,
-        genre: usePlayerStore.getState().currentTrack?.tags?.[0],
-      });
+      if (!skipPatternRecord) {
+        void patternRecordReaction({
+          trackId,
+          artist: trackArtist,
+          genre: usePlayerStore.getState().currentTrack?.tags?.[0],
+        });
+      }
       devLog(`[Reactions] Fed OYO DJ for ${trackId}`);
       return true;
     }
@@ -281,11 +286,13 @@ export const useReactionStore = create<ReactionStore>((set, get) => ({
         artist: trackArtist,
         coverUrl: trackThumbnail,
       } as Track);
-      void patternRecordReaction({
-        trackId,
-        artist: trackArtist,
-        genre: usePlayerStore.getState().currentTrack?.tags?.[0],
-      });
+      if (!skipPatternRecord) {
+        void patternRecordReaction({
+          trackId,
+          artist: trackArtist,
+          genre: usePlayerStore.getState().currentTrack?.tags?.[0],
+        });
+      }
       devLog(`[Reactions] Fed OYO DJ for ${trackId}`);
       return true;
     } catch (err: any) {
