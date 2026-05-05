@@ -346,20 +346,21 @@ export async function hydrateFromSignals(): Promise<void> {
     if (topTrackIds.length === 0) { hydrateDone = true; return; }
 
     const { data: meta, error: metaErr } = await supabase
-      .from('video_intelligence').select('youtube_id, artist').in('youtube_id', topTrackIds.slice(0, 100));
+      .from('video_intelligence').select('youtube_id, artist, primary_genre').in('youtube_id', topTrackIds.slice(0, 100));
 
     if (metaErr) { devWarn('[OYO hydrate] meta query failed — will retry', metaErr); _lastHydrateFailureAt = Date.now(); return; }
     if (!meta) { _lastHydrateFailureAt = Date.now(); return; }
 
     const artistScore = new Map<string, number>();
+    const genreScore = new Map<string, number>();
     for (const row of meta) {
-      if (!row.artist) continue;
-      artistScore.set(row.artist, (artistScore.get(row.artist) || 0) + (trackScore.get(row.youtube_id) || 0));
+      const s = trackScore.get(row.youtube_id) || 0;
+      if (row.artist) artistScore.set(row.artist, (artistScore.get(row.artist) || 0) + s);
+      if (row.primary_genre) genreScore.set(row.primary_genre, (genreScore.get(row.primary_genre) || 0) + s);
     }
 
     const topArtists = [...artistScore.entries()]
       .filter(([, s]) => s > 0).sort((a, b) => b[1] - a[1]).slice(0, 20).map(([a]) => a);
-    if (topArtists.length === 0) { hydrateDone = true; return; }
 
     // Merge hydrated top artists (sorted by score) with in-session reactions.
     // HEAD slice keeps highest-scored cross-session favorites first.
@@ -368,9 +369,27 @@ export async function hydrateFromSignals(): Promise<void> {
     for (const a of djProfile.relationship.favoriteArtists) union.add(a);
     djProfile.relationship.favoriteArtists = [...union].slice(0, 20);
 
+    // Hydrate favoriteGenres — expand the rolling window with top cross-session genres
+    // weighted by signal score. Genres are pushed multiple times proportional to score
+    // so the top-3 derivation in playerStore gives them dominant weight.
+    const topGenres = [...genreScore.entries()]
+      .filter(([, s]) => s > 0).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([g]) => g);
+    if (topGenres.length > 0) {
+      const existingGenres = new Set(djProfile.relationship.favoriteGenres);
+      // Prepend hydrated genres (up to 3x each for weight) then existing session data
+      const hydratedEntries: string[] = [];
+      for (const g of topGenres.slice(0, 5)) {
+        hydratedEntries.push(g, g, g);
+      }
+      djProfile.relationship.favoriteGenres = [
+        ...hydratedEntries,
+        ...djProfile.relationship.favoriteGenres.filter(g => !existingGenres.has(g) || topGenres.includes(g)),
+      ].slice(-40);
+    }
+
     saveProfile();
     hydrateDone = true;
-    devLog(`[OYO hydrate] merged ${topArtists.length} artists from ${signalRows.length} signals`);
+    devLog(`[OYO hydrate] merged ${topArtists.length} artists + ${topGenres.length} genres from ${signalRows.length} signals`);
   } catch (err) {
     devWarn('[OYO hydrate] failed — will retry', err);
     _lastHydrateFailureAt = Date.now();
