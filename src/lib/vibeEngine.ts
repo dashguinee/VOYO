@@ -34,6 +34,10 @@ export interface VibeQueryRules {
   // Era filtering
   eras?: string[];
 
+  // Primary genre DB filter — applied at query level when enrichment is populated.
+  // When set, matched_artist_patterns is skipped (genre is more precise).
+  genres?: string[];
+
   // Region/country
   regions?: string[];
   countries?: string[];
@@ -156,7 +160,7 @@ export const VIBES: Record<string, Vibe> = {
     energy_level: 3,
     query_rules: {
       countries: ['GH'],
-      matched_artist_patterns: ['sarkodie', 'stonebwoy', 'black sherif', 'shatta'],
+      genres: ['highlife', 'hiplife', 'palmwine', 'afropop', 'afrobeats'],
       aesthetic_tags: ['classic', 'jazzy'],
       sort_by: 'play_count'
     },
@@ -172,12 +176,54 @@ export const VIBES: Record<string, Vibe> = {
     query_rules: {
       countries: ['ZA'],
       regions: ['south-africa'],
-      matched_artist_patterns: ['kabza', 'maphorisa', 'tyla', 'black coffee'],
-      title_patterns: ['amapiano', 'piano'],
-      prefer_tiers: ['A', 'B'],
+      genres: ['amapiano', 'gqom', 'kwaito', 'lekompo', 'afrohouse', 'afro-house'],
+      prefer_tiers: ['A', 'B', 'C'],
       sort_by: 'play_count'
     },
     connected_vibes: ['amapiano-movement', 'late-night', 'club-banger']
+  },
+
+  'luanda-groove': {
+    id: 'luanda-groove',
+    name: 'Luanda Groove',
+    description: 'Angola full spectrum — kuduro to kizomba to semba',
+    category: 'regional',
+    energy_level: 4,
+    query_rules: {
+      countries: ['AO'],
+      regions: ['lusophone-africa'],
+      genres: ['kuduro', 'kizomba', 'semba', 'tarraxo'],
+      sort_by: 'play_count'
+    },
+    connected_vibes: ['johannesburg-heat', 'chill-vibes', 'late-night']
+  },
+
+  'east-africa-waves': {
+    id: 'east-africa-waves',
+    name: 'East Africa Waves',
+    description: 'From Dar es Salaam to Nairobi — the eastern sound',
+    category: 'regional',
+    energy_level: 3,
+    query_rules: {
+      regions: ['east-africa'],
+      genres: ['bongo-flava', 'benga', 'taarab', 'singeli', 'gengetone'],
+      sort_by: 'play_count'
+    },
+    connected_vibes: ['motherland-roots', 'chill-vibes', 'afro-heat']
+  },
+
+  'north-africa-sound': {
+    id: 'north-africa-sound',
+    name: 'North Africa Sound',
+    description: 'Algiers to Casablanca — the Mediterranean crossing',
+    category: 'regional',
+    energy_level: 3,
+    query_rules: {
+      regions: ['north-africa'],
+      genres: ['rai', 'chaabi', 'gnawa'],
+      sort_by: 'play_count'
+    },
+    connected_vibes: ['motherland-roots', 'late-night', 'chill-vibes']
   },
 
   // ========== MOOD VIBES ==========
@@ -362,6 +408,7 @@ export const VIBES: Record<string, Vibe> = {
     category: 'cultural',
     energy_level: 3,
     query_rules: {
+      genres: ['gospel'],
       cultural_tags: ['spiritual', 'gospel', 'worship'],
       title_patterns: ['god', 'lord', 'praise', 'worship', 'hallelujah'],
       sort_by: 'play_count'
@@ -448,6 +495,12 @@ export const vibeEngine = {
       query = query.in('era', rules.eras);
     }
 
+    // Apply genre filter — DB-level when primary_genre is enriched.
+    // Skips matched_artist_patterns client-side pass (genre is more precise).
+    if (rules.genres && rules.genres.length > 0) {
+      query = query.in('primary_genre', rules.genres);
+    }
+
     // Apply sorting
     switch (rules.sort_by) {
       case 'play_count':
@@ -477,8 +530,8 @@ export const vibeEngine = {
 
     let tracks = (data || []) as VibeTrack[];
 
-    // Client-side filtering for pattern matching
-    if (rules.matched_artist_patterns && rules.matched_artist_patterns.length > 0) {
+    // Client-side artist pattern matching — skipped when genres DB filter already scoped result set
+    if (!rules.genres?.length && rules.matched_artist_patterns && rules.matched_artist_patterns.length > 0) {
       const patterns = rules.matched_artist_patterns.map(p => p.toLowerCase());
       tracks = tracks.filter(t => {
         const artist = (t.matched_artist || t.artist || '').toLowerCase();
