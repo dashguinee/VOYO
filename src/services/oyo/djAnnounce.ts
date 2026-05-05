@@ -267,6 +267,20 @@ const GENRE_REGION: Record<string, string> = {
   reggaeton:    'caribbean',
   soca:         'caribbean',
   afrofolk:     'west-africa',
+  // New catalog genres
+  kuduro:       'angola',
+  semba:        'angola',
+  tarraxo:      'angola',
+  benga:        'kenya',
+  taarab:       'east-africa',
+  juju:         'nigeria',
+  palmwine:     'ghana',
+  rai:          'algeria',
+  chaabi:       'algeria',
+  gnawa:        'north-africa',
+  afrosoul:     'diaspora',
+  lekompo:      'south-africa',
+  singeli:      'tanzania',
 };
 
 function getRegionCallout(culturalTags: string[] | null | undefined, genre?: string | null): string | null {
@@ -345,6 +359,21 @@ const NEUTRAL_PREFIXES: Record<string, string[]> = {
   spiritual:           ['Spirit moving.', 'Sacred ground.', 'Soul work.'],
   uk:                  ['UK wave.', 'London sound.'],
   usa:                 ['Stateside sound.', 'American wave.'],
+  // Additional geographic coverage
+  morocco:             ['Morocco wave.', 'Marrakech energy.', 'Maghreb sound.'],
+  tanzania:            ['Dar es Salaam wave.', 'Tanzania run.', 'Bongo sound.'],
+  cameroon:            ['Cameroon wave.', 'Douala sound.', 'Yaoundé run.'],
+  'ivory-coast':       ['Abidjan wave.', 'Côte d\'Ivoire sound.', 'Abidjan energy.'],
+  ethiopia:            ['Addis wave.', 'Ethiopia run.', 'Habesha sound.'],
+  uganda:              ['Kampala wave.', 'Uganda sound.'],
+  'dr-congo':          ['Kinshasa wave.', 'DRC sound.', 'Congo run.'],
+  'central-africa':    ['Central Africa wave.', 'Heart of the continent.'],
+  'cape-verde':        ['Cabo Verde wave.', 'Atlantic African sound.'],
+  guinea:              ['Conakry wave.', 'Guinea energy.'],
+  mali:                ['Bamako sound.', 'Mali wave.', 'Sahel music.'],
+  caribbean:           ['Caribbean wave.', 'Island sound.'],
+  jamaica:             ['Jamaica wave.', 'Kingston sound.'],
+  latin:               ['Latin wave.', 'Diaspora groove.'],
 };
 
 function getCulturalIntro(tags: string[], ctx?: TrackContext): string {
