@@ -97,7 +97,11 @@ function computeSnapshot(signals: BehaviorSignal[]): PatternSnapshot {
   for (const s of signals) {
     const weight = SIGNAL_WEIGHTS[s.type] ?? 1;
     if (s.artist) artistCount.set(s.artist, (artistCount.get(s.artist) || 0) + weight);
-    if (s.genre) genreCount.set(s.genre, (genreCount.get(s.genre) || 0) + weight);
+    // Normalize genre to lowercase so "Afrobeats" and "afrobeats" merge into one bucket
+    if (s.genre) {
+      const norm = s.genre.toLowerCase();
+      genreCount.set(norm, (genreCount.get(norm) || 0) + weight);
+    }
     if (s.timeOfDay) timeCount.set(s.timeOfDay, (timeCount.get(s.timeOfDay) || 0) + 1);
     typeCount.set(s.type, (typeCount.get(s.type) || 0) + 1);
   }
