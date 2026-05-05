@@ -25,6 +25,7 @@ import {
   recordPlay as patternRecordPlay,
   recordSkip as patternRecordSkip,
   recordComplete as patternRecordComplete,
+  recordReaction as patternRecordReaction,
 } from '../../oyo/pattern';
 import { recordTrackInSession } from '../poolCurator';
 import { recordPoolEngagement } from '../personalization';
@@ -277,6 +278,7 @@ export function onOye(track: Track): void {
   oyoPlanSignal('reaction', track.trackId);
   recordPoolEngagement(track.trackId, 'react');
   void recordRemoteSignal(track.trackId, 'react');
+  void patternRecordReaction({ trackId: track.trackId, artist: track.artist, genre: track.tags[0] });
 }
 
 // ── Tracks out (always R2-gated) ──────────────────────────────────────────

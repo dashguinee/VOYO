@@ -129,6 +129,10 @@ const GENRE_VOCAB: Record<string, string[]> = {
   gengetone:  ['Nairobi in the set.', 'Gengetone wave.', 'Kenya certified.'],
   soca:       ['Soca jump.', 'Caribbean on fire.', 'Trini vibes.'],
   funk:       ['Funk in the set.', 'Groove heavy.', 'On the one.'],
+  pop:        ['Pop wave.', 'Mainstream on deck.', 'Radio ready.'],
+  rock:       ['Rock out.', 'Guitar up.', 'Electric in the room.'],
+  classical:  ['Classical interlude.', 'Orchestral moment.', 'Timeless.'],
+  electronic: ['Electronic drop.', 'Synth mode.', 'Plug in.', 'Digital heat.'],
 };
 
 function getGenreVocab(genre: string | null | undefined): string | null {
@@ -326,6 +330,24 @@ const GENRE_BRIDGE: Partial<Record<string, string>> = {
   'reggae→afrobeats':     'Linking the diaspora.',
   'afrobeats→highlife':   'Ghana on it.',
   'highlife→afrobeats':   'Nigerian wave.',
+  'afrobeats→pop':        'Crossing over.',
+  'pop→afrobeats':        'Back to the culture.',
+  'rnb→pop':              'Mainstream mode.',
+  'pop→rnb':              'Soul in it.',
+  'hiphop→pop':           'Radio check.',
+  'pop→hiphop':           'Real rap.',
+  'afrobeats→electronic': 'Electronic wave.',
+  'electronic→afrobeats': 'Back to the roots.',
+  'dancehall→reggae':     'Roots and culture.',
+  'reggae→dancehall':     'Dance floor calling.',
+  'soukous→ndombolo':     'Congo keeps going.',
+  'ndombolo→soukous':     'Vintage Congo.',
+  'amapiano→afrohouse':   'SA warehouse.',
+  'afrohouse→amapiano':   'Log drum calling.',
+  'hiphop→trap':          'Drip incoming.',
+  'trap→hiphop':          'Classic era.',
+  'gospel→rnb':           'From sacred to soul.',
+  'rnb→gospel':           'Spirit in it.',
 };
 
 function bridgeAnnouncement(tags: string[], ctx?: TrackContext, prevGenre?: string | null): DJAnnouncement {

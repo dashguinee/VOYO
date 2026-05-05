@@ -138,6 +138,15 @@ const shuffleQueueTool: ToolDefinition = {
 // searchByVibe
 // ---------------------------------------------------------------------------
 
+// Maps natural-language vibe keywords → VibeMode for mode-based scoring bonus
+const VIBE_MODE_MAP: Array<{ keywords: string[]; mode: string; bonus: number }> = [
+  { keywords: ['chill', 'relax', 'mellow', 'calm', 'soft', 'slow', 'quiet', 'easy', 'lofi', 'lo-fi', 'smooth', 'vibes'], mode: 'chill-vibes', bonus: 40 },
+  { keywords: ['hype', 'fire', 'energy', 'heat', 'afro', 'hard', 'loud', 'afrobeats', 'intense', 'banger', 'lit'], mode: 'afro-heat', bonus: 40 },
+  { keywords: ['party', 'dance', 'club', 'fun', 'turn up', 'turnt', 'celebration', 'groove'], mode: 'party-mode', bonus: 40 },
+  { keywords: ['late night', 'midnight', 'dark', 'late', '2am', 'insomnia', 'night', 'moody', 'introspective'], mode: 'late-night', bonus: 40 },
+  { keywords: ['workout', 'gym', 'run', 'training', 'sprint', 'pump', 'boost', 'motivation'], mode: 'workout', bonus: 40 },
+];
+
 const searchByVibeTool: ToolDefinition = {
   name: 'searchByVibe',
   description:
@@ -153,7 +162,18 @@ const searchByVibeTool: ToolDefinition = {
       const pool = useTrackPoolStore.getState();
       const lowered = vibe.toLowerCase();
 
-      // Score tracks by tag/mood/title/artist overlap
+      // Resolve which VibeMode(s) this vibe maps to
+      const matchedModes = new Map<string, number>();
+      for (const entry of VIBE_MODE_MAP) {
+        for (const kw of entry.keywords) {
+          if (lowered.includes(kw)) {
+            matchedModes.set(entry.mode, Math.max(matchedModes.get(entry.mode) ?? 0, entry.bonus));
+            break;
+          }
+        }
+      }
+
+      // Score tracks by text overlap + detectedMode bonus
       const candidates = pool.hotPool
         .map((t) => {
           let score = 0;
@@ -162,6 +182,10 @@ const searchByVibeTool: ToolDefinition = {
             if (text.includes(word)) score += 10;
           }
           if (t.mood && lowered.includes(t.mood)) score += 25;
+          // Mode-based bonus — big lift for tracks already classified into the matched mode
+          if (matchedModes.has(t.detectedMode)) {
+            score += matchedModes.get(t.detectedMode)!;
+          }
           return { track: t, score };
         })
         .filter((s) => s.score > 0)
@@ -277,13 +301,17 @@ const getCurrentContextTool: ToolDefinition = {
 
       parts.push(`Time of day: ${currentTimeOfDay()}`);
       if (current) {
-        parts.push(`Now playing: ${current.title} — ${current.artist}`);
+        const genre = current.tags?.[0] ? ` [${current.tags[0]}]` : '';
+        parts.push(`Now playing: ${current.title} — ${current.artist}${genre}`);
       } else {
         parts.push('Now playing: nothing');
       }
       if (recent.length > 0) {
         parts.push(
-          `Recent:\n${recent.map((h) => `  - ${h.track.title} — ${h.track.artist}`).join('\n')}`,
+          `Recent:\n${recent.map((h) => {
+            const g = h.track.tags?.[0] ? ` [${h.track.tags[0]}]` : '';
+            return `  - ${h.track.title} — ${h.track.artist}${g}`;
+          }).join('\n')}`,
         );
       }
       if (player.currentMood) {
