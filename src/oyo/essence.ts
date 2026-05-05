@@ -69,7 +69,13 @@ const MOOD_KEYWORDS: Array<{ keys: RegExp; label: string }> = [
   { keys: /\blate night|3am|midnight\b/i, label: 'late-night' },
 ];
 
-const ARTIST_HINT = /\b(?:burna boy|wizkid|davido|rema|ayra starr|tems|tyla|asake|omah lay|ckay|fela|sampha|frank ocean|kendrick|jay[- ]?z|drake|beyonce|2pac|biggie|nas|andre 3000|outkast|sza|h\.?e\.?r\.?|solange|jorja smith|little simz)\b/gi;
+const ARTIST_HINT = /\b(?:burna boy|wizkid|davido|rema|ayra starr|tems|tyla|asake|omah lay|ckay|fela|sampha|frank ocean|kendrick|jay[- ]?z|drake|beyonce|2pac|biggie|nas|andre 3000|outkast|sza|h\.?e\.?r\.?|solange|jorja smith|little simz|kabza de small|kelvin momo|yemi alade|2face idibia|2 face idibia|vigro deep|de mthuda|njelic|dj stokie|romeo makota|stalk ashley|lil wayne|lila ike|naaman|ernest djedje|fantan mojah|black sherif|stonebwoy|sarkodie|m\.?i abaga|asa|tiwa savage|tekno|patoranking|fireboy dml|kizz daniel|joeboy|ruger|victony|bnxn|seun kuti|afrobeats?|afro nation|dj spinall|don jazzy|reekado banks|ladipoe|phyno|falz|olamide|ycee|wande coal|p[- ]?square|dbanj|2baba|flavour|umu obiligbo|diamond platnumz|rayvanny|harmonize|zuchu|vanessa mdee|ali kiba|sauti sol|bahati|masauti|okello max|khaligraph jones|ethic entertainment|nviiri|bien aime baraza|maandy|king kaka|elani|avril|princess jully|wahu|amani|madtraxx|omondi|otile brown|jovial|denno|alikiba|jay melody|barnaba|mbosso|wolper|tanzanite|bongo|kenya|nigeria|ghana|south africa|cameroon|ivory coast|senegal|mali)\b/gi;
+
+// Pattern to extract artist from "I love X" / "X is my fav" / "play more X"
+const ARTIST_MENTION_PATTERNS = [
+  /(?:i love|my favorite|i like|i'm into|obsessed with|play more)\s+([A-Z][a-zA-Z\s'.]{2,30}?)(?:\s*$|\s*[,!.]|\s+(?:is|was|are|right now|lately|vibes?|music|song|track))/gm,
+  /(?:put on|drop some|more)\s+([A-Z][a-zA-Z\s'.]{2,20}?)(?:\s*$|\s*[,!.]|\s+(?:please|right|for me))/gm,
+];
 
 // ---------------------------------------------------------------------------
 // Extraction
@@ -97,12 +103,25 @@ function extractFromTurn(turn: ConversationTurn): ExtractedFact[] {
     }
   }
 
+  // Known-artist regex
   const artistMatches = text.match(ARTIST_HINT);
+  const artistSet = new Set<string>();
   if (artistMatches) {
-    const unique = [...new Set(artistMatches.map((a) => a.toLowerCase()))];
-    for (const a of unique) {
-      facts.push({ fact: `User mentioned ${a} positively`, category: 'artist' });
+    for (const a of artistMatches) artistSet.add(a.toLowerCase());
+  }
+  // Free-form "I love / put on / more X" extraction
+  for (const pattern of ARTIST_MENTION_PATTERNS) {
+    pattern.lastIndex = 0;
+    let m: RegExpExecArray | null;
+    while ((m = pattern.exec(text)) !== null) {
+      const candidate = m[1]?.trim();
+      if (candidate && candidate.length > 2 && candidate.length < 40) {
+        artistSet.add(candidate.toLowerCase());
+      }
     }
+  }
+  for (const a of artistSet) {
+    facts.push({ fact: `User mentioned ${a} positively`, category: 'artist' });
   }
 
   // Explicit love/hate statements
