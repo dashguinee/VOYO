@@ -101,6 +101,13 @@ function filterMusicOnly<T extends { title: string; artist?: string }>(tracks: T
 const GENRE_VIBES_CLIENT: Record<string, { afro: number; party: number; chill: number; late: number; heat: number }> = {
   afrobeats:    { afro: 85, party: 80, chill: 20, late: 45, heat: 85 },
   afrohouse:    { afro: 80, party: 82, chill: 18, late: 60, heat: 80 },
+  'afro-house': { afro: 80, party: 82, chill: 18, late: 60, heat: 80 },
+  hiplife:      { afro: 68, party: 70, chill: 30, late: 45, heat: 66 },
+  gengetone:    { afro: 72, party: 76, chill: 25, late: 58, heat: 70 },
+  grime:        { afro: 65, party: 72, chill: 20, late: 60, heat: 68 },
+  rumba:        { afro: 68, party: 65, chill: 30, late: 52, heat: 65 },
+  soca:         { afro: 75, party: 82, chill: 18, late: 55, heat: 74 },
+  funk:         { afro: 68, party: 78, chill: 30, late: 55, heat: 68 },
   gqom:         { afro: 82, party: 85, chill: 10, late: 70, heat: 82 },
   ndombolo:     { afro: 78, party: 82, chill: 15, late: 55, heat: 78 },
   soukous:      { afro: 74, party: 72, chill: 25, late: 48, heat: 72 },
@@ -130,7 +137,11 @@ const GENRE_VIBES_CLIENT: Record<string, { afro: number; party: number; chill: n
 const GENRE_VIBES_DEFAULT = { afro: 45, party: 48, chill: 42, late: 40, heat: 45 };
 
 function genreVibes(genre: string | null) {
-  return GENRE_VIBES_CLIENT[genre ?? ''] ?? GENRE_VIBES_DEFAULT;
+  if (!genre) return GENRE_VIBES_DEFAULT;
+  return GENRE_VIBES_CLIENT[genre]
+    ?? GENRE_VIBES_CLIENT[genre.toLowerCase()]
+    ?? GENRE_VIBES_CLIENT[genre.toLowerCase().replace(/[-\s]+/g, '')]
+    ?? GENRE_VIBES_DEFAULT;
 }
 
 /**

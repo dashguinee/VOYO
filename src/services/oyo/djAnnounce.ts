@@ -121,9 +121,14 @@ const GENRE_VOCAB: Record<string, string[]> = {
   mbalax:    ['Dakar calling.', 'Mbalax in the house.', 'Sénégal on the set.'],
   bikutsi:   ['Cameroon vibes.', 'Bikutsi time.', 'Yaoundé energy.'],
   makossa:   ['Makossa move.', 'Douala on it.', 'Cameroon classic.'],
-  drill:     ['Drill on.', 'UK certified.', 'London vibes.'],
-  grime:     ['Grime wave.', 'London on top.', 'East London.'],
-  zouk:      ['Zouk flow.', 'Lusophone love.', 'Move close.'],
+  drill:      ['Drill on.', 'UK certified.', 'London vibes.'],
+  grime:      ['Grime wave.', 'London on top.', 'East London.'],
+  zouk:       ['Zouk flow.', 'Lusophone love.', 'Move close.'],
+  hiplife:    ['Hiplife bounce.', 'Ghana on deck.', 'Accra energy.'],
+  gengetone:  ['Nairobi in the set.', 'Gengetone wave.', 'Kenya certified.'],
+  soca:       ['Soca jump.', 'Caribbean on fire.', 'Trini vibes.'],
+  rumba:      ['Congo rumba.', 'Kinshasa roots.', 'Rumba time.', 'The original groove.'],
+  funk:       ['Funk in the set.', 'Groove heavy.', 'On the one.'],
 };
 
 function getGenreVocab(genre: string | null | undefined): string | null {
@@ -197,6 +202,12 @@ const GENRE_REGION: Record<string, string> = {
   rnb:          'diaspora',
   dancehall:    'diaspora',
   drill:        'diaspora',
+  grime:        'diaspora',
+  hiplife:      'ghana',
+  gengetone:    'kenya',
+  soca:         'diaspora',
+  rumba:        'dr-congo',
+  'afro-house': 'south-africa',
 };
 
 function getRegionCallout(culturalTags: string[] | null | undefined, genre?: string | null): string | null {
