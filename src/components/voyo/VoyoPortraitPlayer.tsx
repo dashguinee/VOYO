@@ -230,7 +230,10 @@ const DEFAULT_MIX_MODES: MixMode[] = [
     taglines: ["Asambe! 🔥", "Lagos to Accra!", "E Choke! 💥", "Fire on Fire!", "No Wahala!"],
     mood: 'energetic',
     textAnimation: 'bounce',
-    keywords: ['afrobeat', 'afro', 'lagos', 'naija', 'amapiano', 'burna', 'davido', 'wizkid'],
+    keywords: ['afrobeat', 'afro', 'lagos', 'naija', 'amapiano', 'burna', 'davido', 'wizkid',
+      'gqom', 'ndombolo', 'soukous', 'congolese', 'highlife', 'hiplife', 'gengetone',
+      'mbalax', 'bongo-flava', 'bongoflava', 'rumba', 'makossa', 'bikutsi', 'kwaito',
+      'fuji', 'afrojuju', 'soca', 'hiphop', 'hip-hop'],
   },
   {
     id: 'chill-vibes',
@@ -240,7 +243,8 @@ const DEFAULT_MIX_MODES: MixMode[] = [
     taglines: ["It's Your Eazi...", "Slow Wine Time", "Easy Does It", "Float Away~", "Pon Di Ting"],
     mood: 'chill',
     textAnimation: 'slideUp',
-    keywords: ['chill', 'slow', 'r&b', 'soul', 'acoustic', 'mellow', 'relax', 'smooth'],
+    keywords: ['chill', 'slow', 'r&b', 'soul', 'acoustic', 'mellow', 'relax', 'smooth',
+      'kizomba', 'zouk', 'gospel', 'reggae', 'afrofolk', 'jazz'],
   },
   {
     id: 'party-mode',
@@ -250,7 +254,8 @@ const DEFAULT_MIX_MODES: MixMode[] = [
     taglines: ["Another One! 🎉", "We The Best!", "Ku Lo Sa!", "Turn Up! 🔊", "Major Vibes Only"],
     mood: 'hype',
     textAnimation: 'scaleIn',
-    keywords: ['party', 'dance', 'club', 'edm', 'dj', 'hype', 'turn up', 'banger'],
+    keywords: ['party', 'dance', 'club', 'edm', 'dj', 'hype', 'turn up', 'banger',
+      'reggaeton', 'dancehall', 'grime', 'trap', 'drill'],
   },
   {
     id: 'late-night',
