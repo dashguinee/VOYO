@@ -14,6 +14,8 @@
 import { create } from 'zustand';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { onTrackReaction as oyoOnTrackReaction } from '../services/oyoDJ';
+import { recordReaction as patternRecordReaction } from '../oyo/pattern';
+import { usePlayerStore } from './playerStore';
 import { devLog, devWarn } from '../utils/logger';
 import type { Track } from '../types';
 import { makeReconnectingChannel } from '../lib/realtime/reconnect';
@@ -233,6 +235,11 @@ export const useReactionStore = create<ReactionStore>((set, get) => ({
         artist: trackArtist,
         coverUrl: trackThumbnail,
       } as Track);
+      void patternRecordReaction({
+        trackId,
+        artist: trackArtist,
+        genre: usePlayerStore.getState().currentTrack?.tags?.[0],
+      });
       devLog(`[Reactions] Fed OYO DJ for ${trackId}`);
       return true;
     }
@@ -274,6 +281,11 @@ export const useReactionStore = create<ReactionStore>((set, get) => ({
         artist: trackArtist,
         coverUrl: trackThumbnail,
       } as Track);
+      void patternRecordReaction({
+        trackId,
+        artist: trackArtist,
+        genre: usePlayerStore.getState().currentTrack?.tags?.[0],
+      });
       devLog(`[Reactions] Fed OYO DJ for ${trackId}`);
       return true;
     } catch (err: any) {
