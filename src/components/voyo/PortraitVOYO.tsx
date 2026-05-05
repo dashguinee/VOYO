@@ -347,7 +347,7 @@ export const PortraitVOYO = ({ onSearch, onDahub, onHome }: PortraitVOYOProps) =
                 supabase.rpc('record_moment_play', {
                   p_moment_id: trackInfo.momentId,
                   p_tapped_full_song: true,
-                }).catch(() => {});
+                }).then(() => {}, () => {});
               }
 
               // Fetch full signals from video_intelligence while launching playback.
