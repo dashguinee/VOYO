@@ -199,12 +199,19 @@ export function OyoIsland({ visible, onHide, onActivity }: OyoIslandProps) {
     // Check for play intent keywords
     const playIntent = /^(play|queue|hit|drop|spin)\s+/i.test(userMessage);
 
-    // Check for music search intent (explicit song/artist references)
-    const musicIntent = playIntent ||
-      /\b(song|track|music|album|artist|by|feat|ft\.?|featuring)\b/i.test(userMessage) ||
-      /^(find|search|look for|got any)\s+/i.test(userMessage);
+    // Genre/vibe requests — route to OYO brain (searchByGenre/searchByVibe tools)
+    // even if they start with "play", because Piped can't handle "play some afrobeats"
+    const GENRE_VIBE_PATTERN = /\b(afrobeats?|amapiano|kizomba|zouk|dancehall|gqom|afrohouse|r&b|rnb|hip[- ]?hop|trap|drill|grime|reggae|afropop|afrofusion|lo[- ]?fi|gospel|jazz|soul|funk|highlife|mbalax|bongo[- ]?flava|gengetone|hiplife|soca|makossa|bikutsi|soukous|ndombolo|kwaito|rumba)\b/i;
+    const isGenreVibe = GENRE_VIBE_PATTERN.test(userMessage);
+    const isVibeRequest = /\b(chill|relax|vibe|hype|party|workout|late night|focus|study|sad|romantic)\b/i.test(userMessage);
+    const routeToBrain = isGenreVibe || isVibeRequest;
 
-    // Non-music conversational intent — route through the full OYO brain
+    // Check for music search intent (explicit song/artist references)
+    const musicIntent = !routeToBrain && (playIntent ||
+      /\b(song|track|music|album|artist|by|feat|ft\.?|featuring)\b/i.test(userMessage) ||
+      /^(find|search|look for|got any)\s+/i.test(userMessage));
+
+    // Non-music conversational intent OR genre/vibe request → route through the full OYO brain
     if (!musicIntent) {
       submittingRef.current = true;
       try {
