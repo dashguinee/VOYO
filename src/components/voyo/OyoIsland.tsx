@@ -13,6 +13,7 @@
  */
 
 import { useState, useEffect, useRef, useCallback, memo } from 'react';
+import { oyo } from '../../oyo';
 import { getProfile } from '../../services/oyoDJ';
 import {
   voiceSearch,
@@ -203,38 +204,27 @@ export function OyoIsland({ visible, onHide, onActivity }: OyoIslandProps) {
       /\b(song|track|music|album|artist|by|feat|ft\.?|featuring)\b/i.test(userMessage) ||
       /^(find|search|look for|got any)\s+/i.test(userMessage);
 
-    // Conversation responses - when NOT looking for music
+    // Non-music conversational intent — route through the full OYO brain
     if (!musicIntent) {
-      // Greetings
-      if (/^(hey|hi|hello|yo|sup|what'?s? ?up|wazzguan|wazguan)/i.test(lowerMessage)) {
-        setChatHistory(prev => [...prev, { role: 'oyo', message: "What's good." }]);
-        return;
+      submittingRef.current = true;
+      try {
+        const playerTrack = usePlayerStore.getState().currentTrack;
+        const context = playerTrack ? {
+          currentTrack: {
+            trackId: playerTrack.trackId,
+            title: playerTrack.title,
+            artist: playerTrack.artist,
+            genre: playerTrack.tags?.[0],
+          },
+        } : undefined;
+        const result = await oyo.think({ userMessage, context, surface: 'player' });
+        setChatHistory(prev => [...prev, { role: 'oyo', message: result.response || '...' }]);
+      } catch {
+        setChatHistory(prev => [...prev, { role: 'oyo', message: "Signal dropped. Try again." }]);
+      } finally {
+        submittingRef.current = false;
       }
-      // How are you
-      if (/how (are|r) (you|u)|how('?s| is) it going/i.test(lowerMessage)) {
-        setChatHistory(prev => [...prev, { role: 'oyo', message: "In the mix. What do you need?" }]);
-        return;
-      }
-      // Thanks
-      if (/^(thanks|thank you|thx|ty|appreciate)/i.test(lowerMessage)) {
-        setChatHistory(prev => [...prev, { role: 'oyo', message: "That's what I'm here for." }]);
-        return;
-      }
-      // What can you do
-      if (/what (can|do) you do|help|commands/i.test(lowerMessage)) {
-        setChatHistory(prev => [...prev, { role: 'oyo', message: "Play something, find something, read a room. Say a name, hum a melody, or just describe the feeling." }]);
-        return;
-      }
-      // Mood/recommendation request
-      if (/recommend|suggest|something (good|fire|chill|hype)|what should i/i.test(lowerMessage)) {
-        setChatHistory(prev => [...prev, { role: 'oyo', message: "Tell me the feeling. I'll handle it." }]);
-        return;
-      }
-      // Fallback for short non-music messages
-      if (userMessage.length < 15 && !/[A-Z]/.test(userMessage.slice(1))) {
-        setChatHistory(prev => [...prev, { role: 'oyo', message: "I'm here. Name it." }]);
-        return;
-      }
+      return;
     }
 
     // Music search flow
