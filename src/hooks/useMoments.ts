@@ -72,11 +72,12 @@ let _momentsBlocked = false;
 // countries (Mali 4, Guinea 5, Côte d'Ivoire 0) dropped — surfacing
 // a sub-cat that cannot fill is worse UX than not surfacing it.
 const COUNTRY_TAG_MAP: Record<string, string[]> = {
-  'nigeria':     ['nigeria', 'naija'],
-  'senegal':     ['senegal'],
-  'ghana':       ['ghana'],
-  'angola':      ['angola'],
-  'west-africa': ['west-africa'],
+  'nigeria':      ['nigeria', 'naija'],
+  'senegal':      ['senegal'],
+  'ghana':        ['ghana'],
+  'angola':       ['angola'],
+  'south-africa': ['south-africa', 'mzansi'],
+  'west-africa':  ['west-africa'],
 };
 
 // Genre → cultural_tag proxy mapping. Powered by video_intelligence.primary_genre
@@ -162,11 +163,11 @@ export const CATEGORY_PRESETS: Record<CategoryAxis, string[]> = {
     'all', 'dance', 'comedy', 'fashion',
   ],
   // v911 — Travel sub-cats keyed to cultural_tags coverage in the
-  // live catalog. Volumes (April 2026):
-  //   nigeria 2170, west-africa 2027, angola 964, ghana 62, senegal 46
-  // Mali / Guinea / Ivory-Coast dropped (all <10 — under one creator-cap).
+  // live catalog. Volumes (May 2026):
+  //   nigeria 2181, west-africa 2038, angola 964, ghana 62, senegal 46,
+  //   south-africa+mzansi 108. Mali/Guinea/IvoryCoast dropped (<10).
   'travel': [
-    'nigeria', 'senegal', 'ghana', 'angola', 'west-africa',
+    'nigeria', 'senegal', 'ghana', 'angola', 'south-africa', 'west-africa',
   ],
   // v860 — Live = virality cuts (NOT time windows). Diagnostic on the
   // live catalog: every moment was ingested in a single 22-minute
@@ -212,11 +213,12 @@ const DISPLAY_NAMES: Record<string, string> = {
   // Live sub-categories (virality cuts)
   'pulse': 'Pulse', 'rising': 'Rising', 'gems': 'Gems',
   // Travel sub-cats (v911 — cultural_tags-keyed)
-  'nigeria':     'Nigeria',
-  'senegal':     'Sénégal',
-  'ghana':       'Ghana',
-  'angola':      'Angola',
-  'west-africa': 'West Africa',
+  'nigeria':      'Nigeria',
+  'senegal':      'Sénégal',
+  'ghana':        'Ghana',
+  'angola':       'Angola',
+  'south-africa': 'South Africa',
+  'west-africa':  'West Africa',
   // Genre compass sub-cats (v1063 — cultural_tag proxy + parent_track genre)
   'afrobeats':   'Afrobeats',
   'kizomba':     'Kizomba',
@@ -298,12 +300,14 @@ const ADJACENCY: Record<CategoryAxis, Record<string, Record<string, number>>> = 
   // Travel — drift across cultural-tag regions. v911 weights:
   // anglophone (Nigeria/Ghana) cluster, Senegal francophone bridge,
   // Angola lusophone outpost, west-africa as the meta hub.
+  // SA added as a southern cluster (amapiano/gqom outpost).
   'travel': {
-    'nigeria':     { 'ghana': 0.4, 'west-africa': 0.35, 'senegal': 0.15, 'angola': 0.1 },
-    'senegal':     { 'west-africa': 0.45, 'ghana': 0.2, 'nigeria': 0.2, 'angola': 0.15 },
-    'ghana':       { 'nigeria': 0.4, 'west-africa': 0.3, 'senegal': 0.2, 'angola': 0.1 },
-    'angola':      { 'west-africa': 0.4, 'nigeria': 0.3, 'ghana': 0.15, 'senegal': 0.15 },
-    'west-africa': { 'nigeria': 0.4, 'ghana': 0.25, 'senegal': 0.2, 'angola': 0.15 },
+    'nigeria':      { 'ghana': 0.35, 'west-africa': 0.3, 'senegal': 0.15, 'angola': 0.1, 'south-africa': 0.1 },
+    'senegal':      { 'west-africa': 0.4, 'ghana': 0.2, 'nigeria': 0.2, 'angola': 0.1, 'south-africa': 0.1 },
+    'ghana':        { 'nigeria': 0.4, 'west-africa': 0.3, 'senegal': 0.15, 'angola': 0.1, 'south-africa': 0.05 },
+    'angola':       { 'west-africa': 0.35, 'nigeria': 0.25, 'south-africa': 0.2, 'ghana': 0.1, 'senegal': 0.1 },
+    'south-africa': { 'angola': 0.4, 'west-africa': 0.3, 'nigeria': 0.2, 'ghana': 0.1 },
+    'west-africa':  { 'nigeria': 0.4, 'ghana': 0.25, 'senegal': 0.15, 'angola': 0.1, 'south-africa': 0.1 },
   },
   'live': {
     'pulse':  { 'rising': 0.7, 'gems': 0.3 },

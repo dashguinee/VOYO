@@ -227,6 +227,7 @@ const GENRE_REGION: Record<string, string> = {
   ndombolo:     'dr-congo',
   rumba:        'dr-congo',
   gengetone:    'kenya',
+  gospel:       'spiritual',
   hiphop:       'diaspora',
   'hip-hop':    'diaspora',
   trap:         'diaspora',
