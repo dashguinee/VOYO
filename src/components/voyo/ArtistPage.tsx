@@ -44,13 +44,23 @@ const COUNTRY_FLAGS: Record<string, string> = {
   US: '\u{1F1FA}\u{1F1F8}',
   FR: '\u{1F1EB}\u{1F1F7}',
   JM: '\u{1F1EF}\u{1F1F2}',
+  AO: '\u{1F1E6}\u{1F1F4}',
+  MZ: '\u{1F1F2}\u{1F1FF}',
+  MA: '\u{1F1F2}\u{1F1E6}',
+  CV: '\u{1F1E8}\u{1F1FB}',
+  UG: '\u{1F1FA}\u{1F1EC}',
+  ET: '\u{1F1EA}\u{1F1F9}',
+  ML: '\u{1F1F2}\u{1F1F1}',
 };
 
 const REGION_GRADIENTS: Record<string, string> = {
-  'west-africa': 'linear-gradient(135deg, #e8b230, #d4770a)',
-  'east-africa': 'linear-gradient(135deg, #4a9e4a, #2d7d2d)',
-  'southern-africa': 'linear-gradient(135deg, #cc4444, #993333)',
-  'diaspora': 'linear-gradient(135deg, #7b68ee, #5b4ecc)',
+  'west-africa':      'linear-gradient(135deg, #e8b230, #d4770a)',
+  'east-africa':      'linear-gradient(135deg, #4a9e4a, #2d7d2d)',
+  'southern-africa':  'linear-gradient(135deg, #cc4444, #993333)',
+  'diaspora':         'linear-gradient(135deg, #7b68ee, #5b4ecc)',
+  'north-africa':     'linear-gradient(135deg, #c4922a, #8b5e1a)',
+  'central-africa':   'linear-gradient(135deg, #3a8a3a, #226622)',
+  'lusophone-africa': 'linear-gradient(135deg, #2a7a9e, #1a5570)',
 };
 
 const DEFAULT_GRADIENT = 'linear-gradient(135deg, #555, #333)';
@@ -72,6 +82,13 @@ const COUNTRY_NAMES: Record<string, string> = {
   US: 'United States',
   FR: 'France',
   JM: 'Jamaica',
+  AO: 'Angola',
+  MZ: 'Mozambique',
+  MA: 'Morocco',
+  CV: 'Cape Verde',
+  UG: 'Uganda',
+  ET: 'Ethiopia',
+  ML: 'Mali',
 };
 
 // ============================================

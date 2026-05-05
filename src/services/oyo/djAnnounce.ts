@@ -528,7 +528,6 @@ const GENRE_BRIDGE: Partial<Record<string, string>> = {
   'afrobeats→bikutsi':    'Douala energy.',
   // Afropop transitions
   'afropop→afrobeats':    'Heat rising.',
-  'afropop→amapiano':     'Piano wave incoming.',
   'afropop→highlife':     'Ghana roots.',
   'afropop→gospel':       'Spirit calling.',
   'gospel→afropop':       'Back in the groove.',
@@ -549,12 +548,10 @@ const GENRE_BRIDGE: Partial<Record<string, string>> = {
   'ndombolo→afrobeats':   'Back to Lagos.',
   'rumba→soukous':        'Congo evolves.',
   'soukous→rumba':        'Roots calling.',
-  'congolese→afrobeats':  'West Africa connects.',
   // Makossa / Mbalax
   'makossa→afrobeats':    'West Africa united.',
   'afrobeats→makossa':    'Cameroon calling.',
   'mbalax→afrobeats':     'Dakar to Lagos.',
-  'afrobeats→mbalax':     'Senegal sound.',
   // Soul / R&B family
   'afrobeats→soul':       'Deep and smooth.',
   'soul→afrobeats':       'Back to the heat.',
