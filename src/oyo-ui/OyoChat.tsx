@@ -138,6 +138,7 @@ export const OyoChat = forwardRef<OyoChatHandle, OyoChatProps>(function OyoChat(
           artist: h.track.artist,
           genre: h.track.tags?.[0],
         }));
+      const detectedMode = (playerTrack as unknown as { detectedMode?: string })?.detectedMode;
       const context = {
         ...(playerTrack ? {
           currentTrack: {
@@ -148,6 +149,7 @@ export const OyoChat = forwardRef<OyoChatHandle, OyoChatProps>(function OyoChat(
           },
         } : {}),
         ...(recentPlays.length > 0 ? { recentPlays } : {}),
+        ...(detectedMode ? { currentMood: detectedMode } : {}),
         userLocale: navigator.language,
       };
       const result = await oyo.think({ userMessage: message, context });

@@ -226,6 +226,7 @@ export function OyoIsland({ visible, onHide, onActivity }: OyoIslandProps) {
             artist: h.track.artist,
             genre: h.track.tags?.[0],
           }));
+        const detectedMode = (playerTrack as unknown as { detectedMode?: string })?.detectedMode;
         const context = {
           ...(playerTrack ? {
             currentTrack: {
@@ -236,6 +237,7 @@ export function OyoIsland({ visible, onHide, onActivity }: OyoIslandProps) {
             },
           } : {}),
           ...(recentPlays.length > 0 ? { recentPlays } : {}),
+          ...(detectedMode ? { currentMood: detectedMode } : {}),
           userLocale: navigator.language,
         };
         const result = await oyo.think({ userMessage, context, surface: 'player' });
