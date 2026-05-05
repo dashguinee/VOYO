@@ -3178,6 +3178,25 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onNavVisibilityChange, onSwitc
         afrojuju:       'juju roots — the spirit follows',
         afrofolk:       'west african roots — the old way forward',
         other:          'outside the box — wherever the sound goes',
+        // Lusophone Africa
+        kuduro:         'from luanda — full kinetic energy',
+        semba:          'angola roots — the old pulse',
+        tarraxo:        'tarraxinha slow — close and precise',
+        // East Africa
+        benga:          'nairobi guitar — the long coast',
+        taarab:         'swahili coast — the ancient wave',
+        singeli:        'dar es salaam speed — full throttle',
+        // West Africa
+        juju:           'yoruba spirit — the deep tradition',
+        palmwine:       'palm wine roots — the quiet origin',
+        // North Africa
+        rai:            'algiers — the mediterranean crossing',
+        chaabi:         'north africa — the people\'s sound',
+        gnawa:          'gnawa trance — the spirit path',
+        // South Africa underground
+        lekompo:        'limpopo township — the new south',
+        // Diaspora crossover
+        afrosoul:       'diaspora heart — bridge music',
       };
       return GENRE_DIRECTION[topGenre.toLowerCase()] ?? `through the ${topGenre} lens`;
     } catch { return undefined; }
