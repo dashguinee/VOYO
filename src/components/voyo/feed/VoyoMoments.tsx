@@ -636,7 +636,7 @@ OyeAnimations.displayName = 'OyeAnimations';
 // MOMENT CARD
 // ============================================
 
-type MomentFormat = 'r2_video' | 'iframe_embed' | 'thumbnail';
+type MomentFormat = 'r2_video' | 'tiktok_embed' | 'instagram_embed' | 'iframe_embed' | 'thumbnail';
 
 interface MomentCardProps {
   moment: Moment;
@@ -699,17 +699,16 @@ const MomentCard = memo(({ moment, isOyed, onOye, isActive, isMuted, onToggleMut
   }, [moment.source_id]);
 
   // Resolve presentation format:
-  //   1. r2_video — primary (Edge Worker CDN). Optimistic: mount <video>,
-  //      fall back on onError.
-  //   2. iframe_embed — YouTube embed when R2 fails. YouTube always requires
-  //      muted autoplay; audio comes from the VOYO player via the Play Now
-  //      button when parent_track_id is set.
-  //   3. thumbnail — last resort for platforms that don't support embeds
-  //      (Instagram, TikTok — their oEmbed flows are too unreliable for PWA).
-  const canIframe = moment.source_platform === 'youtube' || moment.source_platform === 'youtube_shorts';
+  //   1. r2_video       — VOYO CDN edge stream (populated by download pipeline).
+  //   2. tiktok_embed   — TikTok's official embed; autoplays muted.
+  //   3. instagram_embed — Instagram reel player iframe.
+  //   4. iframe_embed   — YouTube embed (youtube/youtube_shorts platform).
+  //   5. thumbnail      — Static last resort.
   const format: MomentFormat = (() => {
     if (!videoError) return 'r2_video';
-    if (canIframe) return 'iframe_embed';
+    if (moment.source_platform === 'tiktok') return 'tiktok_embed';
+    if (moment.source_platform === 'instagram') return 'instagram_embed';
+    if (moment.source_platform === 'youtube' || moment.source_platform === 'youtube_shorts') return 'iframe_embed';
     return 'thumbnail';
   })();
 
@@ -750,10 +749,10 @@ const MomentCard = memo(({ moment, isOyed, onOye, isActive, isMuted, onToggleMut
     return () => vid.removeEventListener('playing', onPlaying);
   }, [format]);
 
-  // iframe is unmounted when isActive=false (audio stop + no wasted load).
-  // Reset iframeLoaded so the thumbnail shows again on remount.
+  // Unmount embed iframes when inactive — stops audio bleed + saves resources.
+  // Reset iframeLoaded so thumbnail shows again when user returns to this card.
   useEffect(() => {
-    if (format === 'iframe_embed' && !isActive) {
+    if (!isActive && (format === 'iframe_embed' || format === 'tiktok_embed' || format === 'instagram_embed')) {
       setIframeLoaded(false);
     }
   }, [isActive, format]);
@@ -789,7 +788,7 @@ const MomentCard = memo(({ moment, isOyed, onOye, isActive, isMuted, onToggleMut
             opacity: (() => {
               if (!thumbLoaded) return 0;
               if (format === 'r2_video') return videoFramePainted ? 0 : 1;
-              if (format === 'iframe_embed') return iframeLoaded ? 0 : 1;
+              if (format === 'iframe_embed' || format === 'tiktok_embed' || format === 'instagram_embed') return iframeLoaded ? 0 : 1;
               return 1; // thumbnail format — stays
             })(),
             transition: 'opacity 400ms cubic-bezier(0.16, 1, 0.3, 1)',
@@ -827,6 +826,7 @@ const MomentCard = memo(({ moment, isOyed, onOye, isActive, isMuted, onToggleMut
           user swipes away. The shared thumbnail backdrop above stays visible
           while the iframe loads; `onLoad` fires when YouTube page is ready
           and triggers the crossfade. enablejsapi=1 added for future control. */}
+      {/* === FORMAT: YOUTUBE IFRAME === */}
       {format === 'iframe_embed' && isActive && (
         <iframe
           ref={iframeRef}
@@ -840,6 +840,43 @@ const MomentCard = memo(({ moment, isOyed, onOye, isActive, isMuted, onToggleMut
             transition: 'opacity 500ms cubic-bezier(0.16, 1, 0.3, 1)',
           }}
           allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+          title={moment.title || 'Moment'}
+        />
+      )}
+
+      {/* === FORMAT: TIKTOK EMBED — autoplays muted === */}
+      {format === 'tiktok_embed' && isActive && (
+        <iframe
+          key={`tk-${moment.source_id}`}
+          src={`https://www.tiktok.com/embed/v2/${moment.source_id}?autoplay=1&muted=1`}
+          onLoad={() => setIframeLoaded(true)}
+          style={{
+            position: 'absolute', inset: 0, width: '100%', height: '100%',
+            border: 'none', backgroundColor: '#0B0703',
+            opacity: iframeLoaded ? 1 : 0,
+            transition: 'opacity 500ms cubic-bezier(0.16, 1, 0.3, 1)',
+          }}
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+          allowFullScreen
+          title={moment.title || 'Moment'}
+        />
+      )}
+
+      {/* === FORMAT: INSTAGRAM EMBED — reel player === */}
+      {format === 'instagram_embed' && isActive && (
+        <iframe
+          key={`ig-${moment.source_id}`}
+          src={`https://www.instagram.com/p/${moment.source_id}/embed/`}
+          onLoad={() => setIframeLoaded(true)}
+          scrolling="no"
+          style={{
+            position: 'absolute', inset: 0, width: '100%', height: '100%',
+            border: 'none', backgroundColor: '#0B0703',
+            opacity: iframeLoaded ? 1 : 0,
+            transition: 'opacity 500ms cubic-bezier(0.16, 1, 0.3, 1)',
+          }}
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+          allowFullScreen
           title={moment.title || 'Moment'}
         />
       )}

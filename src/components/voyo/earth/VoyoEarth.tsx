@@ -1,22 +1,25 @@
 /**
- * VoyoEarth — Cultural Compass Explorer
+ * VoyoEarth — Cultural Compass Explorer v2
  *
- * Swipe to travel the continent through captured moments. No categories,
- * no labels. The compass is discovered through gesture:
+ * The compass is driven by geographic longitude + depth:
+ *   LEFT / RIGHT = drift through geographic hemisphere (geoLon ± 15°)
+ *   UP            = deeper into the current geo category (compassDepth ++)
+ *   DOWN          = drift toward For You (compassDepth --)
  *
- *   UP    = THE FLOOR — what's heating right now (heat_score)
- *   DOWN  = THE VAULT — undiscovered fresh content (low plays)
- *   LEFT  = WEST — Nigeria, Ghana, Senegal, Atlantic diaspora
- *   RIGHT = EAST — Kenya, Angola, SA, Lusophone + North Africa
- *
- * Music keeps playing behind every moment. Cultural origin floats below.
+ * Video hierarchy (best available, per moment):
+ *   1. R2 video   — VOYO CDN edge stream (future state once pipeline runs)
+ *   2. TikTok embed   — autoplays muted, full video
+ *   3. Instagram embed — shows reel player (tap to play)
+ *   4. YouTube embed  — for youtube/youtube_shorts platform
+ *   5. Thumbnail      — static backdrop, last resort
  */
 
 import React, {
   useState, useRef, useEffect, useCallback, memo,
 } from 'react';
 import { X, Heart, Play } from 'lucide-react';
-import { useEarth, EarthDir } from '../../../hooks/useEarth';
+import { useEarth, EarthDir, getNearestClusterLabel } from '../../../hooks/useEarth';
+import { usePlayerStore } from '../../../store/playerStore';
 import type { Moment } from '../../../types/moments';
 
 const VOYO_API = import.meta.env.VITE_API_URL || 'https://voyo-edge.dash-webtv.workers.dev';
@@ -41,6 +44,7 @@ const ORIGIN_MAP: Record<string, { flag: string; label: string }> = {
   'southern-africa': { flag: '🇿🇦', label: 'Southern Africa' },
   mzansi: { flag: '🇿🇦', label: 'Mzansi' },
   algeria: { flag: '🇩🇿', label: 'Algiers' },
+  morocco: { flag: '🇲🇦', label: 'Marrakech' },
   'north-africa': { flag: '🌍', label: 'North Africa' },
   'west-africa': { flag: '🌍', label: 'West Africa' },
   'east-africa': { flag: '🌍', label: 'East Africa' },
@@ -50,13 +54,12 @@ const ORIGIN_MAP: Record<string, { flag: string; label: string }> = {
   uk: { flag: '🇬🇧', label: 'London' },
   france: { flag: '🇫🇷', label: 'Paris' },
   caribbean: { flag: '🌴', label: 'Caribbean' },
-  'dr-congo': { flag: '🇨🇩', label: 'Kinshasa' },
+  congo: { flag: '🇨🇩', label: 'Kinshasa' },
+  drc: { flag: '🇨🇩', label: 'Kinshasa' },
   'central-africa': { flag: '🌍', label: 'Central Africa' },
-  'ivory-coast':    { flag: '🇨🇮', label: 'Abidjan' },
-  'cape-verde':     { flag: '🇨🇻', label: 'Cabo Verde' },
-  morocco:          { flag: '🇲🇦', label: 'Marrakech' },
+  'ivory-coast': { flag: '🇨🇮', label: 'Abidjan' },
+  'cape-verde': { flag: '🇨🇻', label: 'Cabo Verde' },
   jamaica: { flag: '🇯🇲', label: 'Kingston' },
-  latin: { flag: '🌎', label: 'Latin America' },
 };
 
 function getOrigin(tags: string[]): { flag: string; label: string } | null {
@@ -67,99 +70,77 @@ function getOrigin(tags: string[]): { flag: string; label: string } | null {
   return null;
 }
 
-// ── Direction labels (brief compass hint) ────────────────────────────────
-
-// Direction labels — culturally informed (Afropiano/Afrobeats up top,
-// Singeli/Lekompo/underground in the vault, Atlantic West, Continental East)
-const DIR_LABELS: Record<EarthDir, string> = {
-  up:    'THE FLOOR',      // Afropiano, Afrobeats, party heat
-  down:  'THE VAULT',      // Singeli, Lekompo, Way-Way, undiscovered
-  left:  'NAIJA WAVE',     // Nigeria, Ghana, Senegal, Atlantic diaspora
-  right: 'CONTINENTAL',   // East Africa, SA, Lusophone, North Africa
-};
-
-// ── CompassHint — shown once per session, fades after 4s ─────────────────
+// ── Compass hint ──────────────────────────────────────────────────────────
 
 const COMPASS_SHOWN_KEY = 'voyo-earth-compass-v1';
 
 const CompassHint = memo(({ onDone }: { onDone: () => void }) => {
   const [opacity, setOpacity] = useState(0);
-
   useEffect(() => {
     const rAF = requestAnimationFrame(() => setOpacity(1));
-    const fadeTimer = setTimeout(() => setOpacity(0), 3800);
-    const doneTimer = setTimeout(onDone, 4400);
-    return () => {
-      cancelAnimationFrame(rAF);
-      clearTimeout(fadeTimer);
-      clearTimeout(doneTimer);
-    };
+    const fade = setTimeout(() => setOpacity(0), 3800);
+    const done = setTimeout(onDone, 4400);
+    return () => { cancelAnimationFrame(rAF); clearTimeout(fade); clearTimeout(done); };
   }, [onDone]);
-
   return (
     <div
-      className="absolute inset-0 z-40 flex items-center justify-center pointer-events-none"
-      style={{ opacity, transition: 'opacity 600ms cubic-bezier(0.16, 1, 0.3, 1)' }}
+      className="absolute inset-0 z-40 flex flex-col items-center justify-center gap-8 pointer-events-none"
+      style={{ opacity, transition: 'opacity 600ms ease', background: 'rgba(11,7,3,0.6)' }}
     >
-      <div
-        className="flex flex-col items-center gap-1"
-        style={{ color: 'rgba(255,255,255,0.85)' }}
-      >
-        {/* UP label */}
-        <span className="text-[10px] font-bold tracking-[0.2em] uppercase">THE FLOOR ↑</span>
-        <span className="text-[9px] tracking-wide" style={{ color: 'rgba(255,255,255,0.35)', marginTop: -2 }}>Afropiano · Afrobeats · heat</span>
-
-        {/* Horizontal row */}
-        <div className="flex items-center gap-6 mt-1">
-          <div className="flex flex-col items-end gap-0.5">
-            <span className="text-[10px] font-bold tracking-[0.2em] uppercase">← NAIJA WAVE</span>
-            <span className="text-[8px]" style={{ color: 'rgba(255,255,255,0.3)' }}>Lagos · Accra · diaspora</span>
-          </div>
-
-          {/* Center rose */}
-          <div
-            className="w-9 h-9 rounded-full border border-white/15 flex items-center justify-center flex-shrink-0"
-            style={{ background: 'rgba(255,255,255,0.04)' }}
-          >
-            <div className="w-1.5 h-1.5 rounded-full bg-white/50" />
-          </div>
-
-          <div className="flex flex-col items-start gap-0.5">
-            <span className="text-[10px] font-bold tracking-[0.2em] uppercase">CONTINENTAL →</span>
-            <span className="text-[8px]" style={{ color: 'rgba(255,255,255,0.3)' }}>Nairobi · Joburg · Luanda</span>
-          </div>
+      {[
+        { arrow: '↑', label: 'DEEPER' },
+        { arrow: '← →', label: 'DRIFT GEOGRAPHIC' },
+        { arrow: '↓', label: 'FOR YOU' },
+      ].map(({ arrow, label }) => (
+        <div key={label} className="flex flex-col items-center gap-1">
+          <span className="text-2xl text-white/70">{arrow}</span>
+          <span className="text-[10px] font-bold tracking-[0.25em] text-white/45 uppercase">{label}</span>
         </div>
-
-        <span className="text-[10px] font-bold tracking-[0.2em] uppercase mt-1">↓ THE VAULT</span>
-        <span className="text-[9px] tracking-wide" style={{ color: 'rgba(255,255,255,0.35)', marginTop: -2 }}>Singeli · Lekompo · underground</span>
-      </div>
+      ))}
     </div>
   );
 });
 CompassHint.displayName = 'CompassHint';
 
-// ── DirectionPulse — brief flash in swipe direction ──────────────────────
+// ── Direction pulse ───────────────────────────────────────────────────────
 
 const DirectionPulse = memo(({ dir, active }: { dir: EarthDir | null; active: boolean }) => {
   if (!dir || !active) return null;
-
-  const pos: Record<EarthDir, React.CSSProperties> = {
-    up:    { top: 0, left: 0, right: 0, height: '35%', background: 'linear-gradient(to bottom, rgba(255,255,255,0.06) 0%, transparent 100%)' },
-    down:  { bottom: 0, left: 0, right: 0, height: '35%', background: 'linear-gradient(to top, rgba(255,255,255,0.06) 0%, transparent 100%)' },
-    left:  { top: 0, left: 0, bottom: 0, width: '35%', background: 'linear-gradient(to right, rgba(255,255,255,0.06) 0%, transparent 100%)' },
-    right: { top: 0, right: 0, bottom: 0, width: '35%', background: 'linear-gradient(to left, rgba(255,255,255,0.06) 0%, transparent 100%)' },
+  const pos: Record<EarthDir, string> = {
+    up: 'inset-x-0 top-0 h-24 bg-gradient-to-b',
+    down: 'inset-x-0 bottom-0 h-24 bg-gradient-to-t',
+    left: 'inset-y-0 left-0 w-24 bg-gradient-to-r',
+    right: 'inset-y-0 right-0 w-24 bg-gradient-to-l',
   };
-
   return (
     <div
-      className="absolute pointer-events-none"
-      style={{ ...pos[dir], zIndex: 30, transition: 'opacity 300ms ease-out' }}
+      className={`absolute z-10 pointer-events-none ${pos[dir]} from-white/8 to-transparent`}
+      style={{ animation: 'pulse-once 350ms ease-out forwards' }}
     />
   );
 });
 DirectionPulse.displayName = 'DirectionPulse';
 
-// ── EarthVideoCard — R2-first with iframe + thumbnail fallback ────────────
+// ── EarthVideoCard ─────────────────────────────────────────────────────────
+//
+// Video format hierarchy:
+//   r2_video      — VOYO CDN (populated by download pipeline)
+//   tiktok_embed  — autoplays muted via TikTok's embed endpoint
+//   instagram_embed — shows reel player iframe
+//   youtube_embed — YouTube autoplay embed
+//   thumbnail     — static last resort
+
+type VideoFormat = 'r2_video' | 'tiktok_embed' | 'instagram_embed' | 'youtube_embed' | 'thumbnail';
+
+function resolveFormat(moment: Moment, r2Failed: boolean): VideoFormat {
+  // R2 is preferred when it exists and hasn't failed yet
+  if (!r2Failed && moment.r2_video_key) return 'r2_video';
+  // Platform-specific embeds — actual video content
+  if (moment.source_platform === 'tiktok') return 'tiktok_embed';
+  if (moment.source_platform === 'instagram') return 'instagram_embed';
+  if (moment.source_platform === 'youtube' || moment.source_platform === 'youtube_shorts') return 'youtube_embed';
+  return 'thumbnail';
+}
 
 interface EarthVideoCardProps {
   moment: Moment;
@@ -171,15 +152,16 @@ const EarthVideoCard = memo(({ moment, visible, muted }: EarthVideoCardProps) =>
   const videoRef = useRef<HTMLVideoElement>(null);
   const [thumbLoaded, setThumbLoaded] = useState(false);
   const [videoReady, setVideoReady] = useState(false);
-  const [videoErr, setVideoErr] = useState(false);
+  const [r2Failed, setR2Failed] = useState(false);
+  const [embedLoaded, setEmbedLoaded] = useState(false);
 
-  const canIframe = moment.source_platform === 'youtube' || moment.source_platform === 'youtube_shorts';
-  const format = videoErr && canIframe ? 'iframe' : videoErr ? 'thumb' : 'video';
+  const format = resolveFormat(moment, r2Failed);
 
   useEffect(() => {
     setVideoReady(false);
-    setVideoErr(false);
+    setR2Failed(false);
     setThumbLoaded(false);
+    setEmbedLoaded(false);
   }, [moment.id]);
 
   useEffect(() => {
@@ -189,15 +171,23 @@ const EarthVideoCard = memo(({ moment, visible, muted }: EarthVideoCardProps) =>
 
   useEffect(() => {
     const v = videoRef.current;
-    if (!v || !visible || format !== 'video') return;
+    if (!v || !visible || format !== 'r2_video') return;
     void v.play().catch(() => {});
   }, [visible, format]);
 
   const videoUrl = `${VOYO_API}/r2/feed/${moment.source_id}`;
 
+  // Thumb opacity: fades out only when a video/embed is ready
+  const thumbOpacity = (() => {
+    if (!thumbLoaded) return 0;
+    if (format === 'r2_video' && videoReady) return 0;
+    if ((format === 'instagram_embed' || format === 'tiktok_embed' || format === 'youtube_embed') && embedLoaded) return 0;
+    return 1;
+  })();
+
   return (
     <div className="absolute inset-0">
-      {/* Thumbnail — always visible as base layer */}
+      {/* Thumbnail — always present as backdrop */}
       {moment.thumbnail_url && (
         <img
           src={moment.thumbnail_url}
@@ -205,14 +195,14 @@ const EarthVideoCard = memo(({ moment, visible, muted }: EarthVideoCardProps) =>
           onLoad={() => setThumbLoaded(true)}
           className="absolute inset-0 w-full h-full object-cover"
           style={{
-            opacity: thumbLoaded ? (format === 'video' && videoReady ? 0 : 1) : 0,
+            opacity: thumbOpacity,
             transition: 'opacity 400ms cubic-bezier(0.16, 1, 0.3, 1)',
           }}
         />
       )}
 
-      {/* R2 video — optimistic mount, fallback on error */}
-      {format === 'video' && (
+      {/* R2 video stream */}
+      {format === 'r2_video' && (
         <video
           ref={videoRef}
           src={videoUrl}
@@ -221,7 +211,7 @@ const EarthVideoCard = memo(({ moment, visible, muted }: EarthVideoCardProps) =>
           playsInline
           preload={visible ? 'auto' : 'metadata'}
           onCanPlay={() => setVideoReady(true)}
-          onError={() => setVideoErr(true)}
+          onError={() => setR2Failed(true)}
           className="absolute inset-0 w-full h-full object-cover"
           style={{
             opacity: videoReady ? 1 : 0,
@@ -231,22 +221,64 @@ const EarthVideoCard = memo(({ moment, visible, muted }: EarthVideoCardProps) =>
         />
       )}
 
-      {/* YouTube iframe fallback */}
-      {format === 'iframe' && visible && (
+      {/* TikTok embed — autoplays muted, full video */}
+      {format === 'tiktok_embed' && visible && (
+        <iframe
+          key={`tk-${moment.source_id}`}
+          src={`https://www.tiktok.com/embed/v2/${moment.source_id}?autoplay=1&muted=1`}
+          className="absolute inset-0 w-full h-full border-0"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+          allowFullScreen
+          onLoad={() => setEmbedLoaded(true)}
+          style={{
+            opacity: embedLoaded ? 1 : 0,
+            transition: 'opacity 500ms cubic-bezier(0.16, 1, 0.3, 1)',
+          }}
+          title={moment.title || 'Moment'}
+        />
+      )}
+
+      {/* Instagram embed — reel player */}
+      {format === 'instagram_embed' && visible && (
+        <iframe
+          key={`ig-${moment.source_id}`}
+          src={`https://www.instagram.com/p/${moment.source_id}/embed/`}
+          className="absolute inset-0 w-full h-full border-0"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+          allowFullScreen
+          scrolling="no"
+          onLoad={() => setEmbedLoaded(true)}
+          style={{
+            opacity: embedLoaded ? 1 : 0,
+            transition: 'opacity 500ms cubic-bezier(0.16, 1, 0.3, 1)',
+          }}
+          title={moment.title || 'Moment'}
+        />
+      )}
+
+      {/* YouTube embed */}
+      {format === 'youtube_embed' && visible && (
         <iframe
           key={`yt-${moment.source_id}`}
           src={`https://www.youtube.com/embed/${moment.source_id}?autoplay=1&mute=1&loop=1&playlist=${moment.source_id}&controls=0&playsinline=1&modestbranding=1&rel=0`}
           className="absolute inset-0 w-full h-full border-0"
           allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+          allowFullScreen
+          onLoad={() => setEmbedLoaded(true)}
+          style={{
+            opacity: embedLoaded ? 1 : 0,
+            transition: 'opacity 500ms cubic-bezier(0.16, 1, 0.3, 1)',
+          }}
+          title={moment.title || 'Moment'}
         />
       )}
 
-      {/* Gradient vignette — bottom for text legibility */}
+      {/* Gradient vignette */}
       <div
         className="absolute inset-x-0 bottom-0 pointer-events-none"
         style={{
-          height: '55%',
-          background: 'linear-gradient(to top, rgba(11,7,3,0.9) 0%, rgba(11,7,3,0.4) 50%, transparent 100%)',
+          height: '60%',
+          background: 'linear-gradient(to top, rgba(11,7,3,0.92) 0%, rgba(11,7,3,0.45) 45%, transparent 100%)',
         }}
       />
     </div>
@@ -254,7 +286,13 @@ const EarthVideoCard = memo(({ moment, visible, muted }: EarthVideoCardProps) =>
 });
 EarthVideoCard.displayName = 'EarthVideoCard';
 
-// ── VoyoEarth main component ──────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────────
+
+function wrapLon(lon: number): number {
+  return ((lon + 180 + 360) % 360) - 180;
+}
+
+// ── VoyoEarth main ────────────────────────────────────────────────────────
 
 export interface VoyoEarthProps {
   onClose: () => void;
@@ -265,10 +303,15 @@ const SWIPE_THRESHOLD = 45;
 const DOUBLE_TAP_MS = 280;
 
 export const VoyoEarth: React.FC<VoyoEarthProps> = ({ onClose, onPlayTrack }) => {
-  const { current, transitioning, lastDir, loading, loadInitial, navigate, recordPlay, recordOye } =
-    useEarth();
+  const {
+    current, transitioning, lastDir, loading,
+    geoLon, compassDepth,
+    loadInitial, navigate, seedFromGenre, recordPlay, recordOye,
+  } = useEarth();
 
-  const [isMuted] = useState(true); // moments default muted; audio comes from portrait player
+  const currentTrack = usePlayerStore(s => s.currentTrack);
+
+  const [isMuted] = useState(true);
   const [oyedIds, setOyedIds] = useState<Set<string>>(new Set());
   const [reactionDeltas, setReactionDeltas] = useState<Record<string, number>>({});
   const [showCompass, setShowCompass] = useState(false);
@@ -279,6 +322,7 @@ export const VoyoEarth: React.FC<VoyoEarthProps> = ({ onClose, onPlayTrack }) =>
   const touchStart = useRef<{ x: number; y: number; t: number } | null>(null);
   const lastTap = useRef(0);
   const playedIds = useRef(new Set<string>());
+  const seededTrackId = useRef<string | null>(null);
 
   // Init
   useEffect(() => {
@@ -290,6 +334,24 @@ export const VoyoEarth: React.FC<VoyoEarthProps> = ({ onClose, onPlayTrack }) =>
     }
   }, [loadInitial]);
 
+  // Seed compass from playing track genre when entering Moments
+  useEffect(() => {
+    if (!currentTrack || currentTrack.id === seededTrackId.current) return;
+    seededTrackId.current = currentTrack.id;
+    // Use mood as genre proxy — maps broadly but seeds the geo direction
+    const moodToGenre: Record<string, string> = {
+      afro: 'afrobeats',
+      dance: 'afrobeats',
+      party: 'naija-party',
+      street: 'afrobeats',
+      hype: 'naija-party',
+      rnb: 'afro-r&b',
+      chill: 'afro-soul',
+    };
+    const genre = currentTrack.mood ? (moodToGenre[currentTrack.mood] ?? 'afrobeats') : 'afrobeats';
+    void seedFromGenre(genre);
+  }, [currentTrack, seedFromGenre]);
+
   // Record play after 1.5s dwell
   useEffect(() => {
     if (!current || playedIds.current.has(current.id)) return;
@@ -300,17 +362,28 @@ export const VoyoEarth: React.FC<VoyoEarthProps> = ({ onClose, onPlayTrack }) =>
     return () => clearTimeout(t);
   }, [current, recordPlay]);
 
-  // Fade out when transitioning, fade in when settled
+  // Fade on transition
   useEffect(() => {
     setCardOpacity(transitioning ? 0 : 1);
   }, [transitioning]);
 
+  // Compute dynamic direction labels based on current compass state
+  function getDirLabel(dir: EarthDir): string {
+    switch (dir) {
+      case 'left':  return getNearestClusterLabel(wrapLon(geoLon - 15));
+      case 'right': return getNearestClusterLabel(wrapLon(geoLon + 15));
+      case 'up':    return compassDepth >= 0.75 ? 'DEEP' : 'DEEPER';
+      case 'down':  return compassDepth <= 0.25 ? 'FOR YOU' : 'SURFACE';
+    }
+  }
+
   const flashDirection = useCallback((dir: EarthDir) => {
     setDirPulse(dir);
-    setDirLabel({ text: DIR_LABELS[dir], visible: true });
+    setDirLabel({ text: getDirLabel(dir), visible: true });
     setTimeout(() => setDirPulse(null), 350);
     setTimeout(() => setDirLabel(d => ({ ...d, visible: false })), 1200);
-  }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [geoLon, compassDepth]);
 
   const handleNavigate = useCallback((dir: EarthDir) => {
     flashDirection(dir);
@@ -319,16 +392,11 @@ export const VoyoEarth: React.FC<VoyoEarthProps> = ({ onClose, onPlayTrack }) =>
 
   const handleOye = useCallback(() => {
     if (!current || oyedIds.has(current.id)) return;
-    setOyedIds(prev => {
-      const next = new Set(prev);
-      next.add(current.id);
-      return next;
-    });
+    setOyedIds(prev => { const n = new Set(prev); n.add(current.id); return n; });
     setReactionDeltas(prev => ({ ...prev, [current.id]: (prev[current.id] ?? 0) + 1 }));
     void recordOye(current.id);
   }, [current, oyedIds, recordOye]);
 
-  // Touch gesture handler
   const onTouchStart = useCallback((e: React.TouchEvent) => {
     const t = e.changedTouches[0];
     touchStart.current = { x: t.clientX, y: t.clientY, t: Date.now() };
@@ -338,12 +406,10 @@ export const VoyoEarth: React.FC<VoyoEarthProps> = ({ onClose, onPlayTrack }) =>
     const start = touchStart.current;
     touchStart.current = null;
     if (!start) return;
-
     const t = e.changedTouches[0];
     const dx = t.clientX - start.x;
     const dy = t.clientY - start.y;
     const dist = Math.sqrt(dx * dx + dy * dy);
-
     if (dist > SWIPE_THRESHOLD) {
       if (Math.abs(dx) > Math.abs(dy)) {
         handleNavigate(dx < 0 ? 'right' : 'left');
@@ -351,11 +417,8 @@ export const VoyoEarth: React.FC<VoyoEarthProps> = ({ onClose, onPlayTrack }) =>
         handleNavigate(dy < 0 ? 'up' : 'down');
       }
     } else {
-      // Tap handling
       const now = Date.now();
-      if (now - lastTap.current < DOUBLE_TAP_MS) {
-        handleOye();
-      }
+      if (now - lastTap.current < DOUBLE_TAP_MS) handleOye();
       lastTap.current = now;
     }
   }, [handleNavigate, handleOye]);
@@ -371,6 +434,10 @@ export const VoyoEarth: React.FC<VoyoEarthProps> = ({ onClose, onPlayTrack }) =>
     if (n >= 1_000) return `${(n / 1_000).toFixed(0)}K`;
     return n > 0 ? String(n) : '';
   }
+
+  // Compass position indicator — shows cluster name + depth bar
+  const clusterLabel = getNearestClusterLabel(geoLon);
+  const depthPct = Math.round(compassDepth * 100);
 
   return (
     <div
@@ -397,13 +464,13 @@ export const VoyoEarth: React.FC<VoyoEarthProps> = ({ onClose, onPlayTrack }) =>
         )}
       </div>
 
-      {/* Direction pulse overlay */}
+      {/* Direction pulse */}
       <DirectionPulse dir={dirPulse} active={!!dirPulse} />
 
       {/* Compass hint — first visit only */}
       {showCompass && <CompassHint onDone={() => setShowCompass(false)} />}
 
-      {/* Loading state */}
+      {/* Loading */}
       {loading && (
         <div className="absolute inset-0 flex items-center justify-center z-20">
           <div
@@ -416,17 +483,14 @@ export const VoyoEarth: React.FC<VoyoEarthProps> = ({ onClose, onPlayTrack }) =>
       {/* Direction label flash */}
       <div
         className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none z-20"
-        style={{
-          opacity: dirLabel.visible ? 1 : 0,
-          transition: 'opacity 400ms ease',
-        }}
+        style={{ opacity: dirLabel.visible ? 1 : 0, transition: 'opacity 400ms ease' }}
       >
         <span className="text-[11px] font-bold tracking-[0.25em] text-white/60 uppercase">
           {dirLabel.text}
         </span>
       </div>
 
-      {/* Top bar: close button */}
+      {/* Top bar */}
       <div className="absolute top-0 left-0 right-0 z-30 flex items-start justify-between px-4 pt-safe">
         <button
           onClick={onClose}
@@ -436,32 +500,41 @@ export const VoyoEarth: React.FC<VoyoEarthProps> = ({ onClose, onPlayTrack }) =>
           <X size={18} color="rgba(255,255,255,0.8)" />
         </button>
 
-        {/* Earth wordmark */}
-        <div className="mt-4 mr-1">
+        {/* Compass position — cluster name + depth */}
+        <div className="mt-3 mr-1 flex flex-col items-end gap-1">
           <span
-            className="text-[11px] font-black tracking-[0.3em] uppercase"
-            style={{ color: 'rgba(255,255,255,0.35)' }}
+            className="text-[10px] font-black tracking-[0.2em] uppercase"
+            style={{ color: 'rgba(255,255,255,0.4)' }}
           >
-            EARTH
+            {clusterLabel}
           </span>
+          {/* Depth bar */}
+          <div
+            className="w-16 h-0.5 rounded-full overflow-hidden"
+            style={{ background: 'rgba(255,255,255,0.12)' }}
+          >
+            <div
+              className="h-full rounded-full"
+              style={{
+                width: `${depthPct}%`,
+                background: depthPct < 30
+                  ? 'rgba(139,92,246,0.7)'   // purple = For You
+                  : 'rgba(212,160,83,0.7)',   // amber = geo deep
+                transition: 'width 400ms ease, background 400ms ease',
+              }}
+            />
+          </div>
         </div>
       </div>
 
-      {/* Right action rail: OYE */}
+      {/* OYE action rail */}
       <div className="absolute right-3 bottom-32 z-30 flex flex-col items-center gap-4">
-        <button
-          onClick={handleOye}
-          className="flex flex-col items-center gap-1"
-        >
+        <button onClick={handleOye} className="flex flex-col items-center gap-1">
           <div
             className="w-11 h-11 rounded-full flex items-center justify-center"
             style={{
-              background: isOyed
-                ? 'rgba(251, 191, 36, 0.25)'
-                : 'rgba(0,0,0,0.45)',
-              border: isOyed
-                ? '1px solid rgba(251, 191, 36, 0.5)'
-                : '1px solid rgba(255,255,255,0.1)',
+              background: isOyed ? 'rgba(251,191,36,0.25)' : 'rgba(0,0,0,0.45)',
+              border: isOyed ? '1px solid rgba(251,191,36,0.5)' : '1px solid rgba(255,255,255,0.1)',
               backdropFilter: 'blur(8px)',
               transition: 'all 200ms ease',
             }}
@@ -491,48 +564,31 @@ export const VoyoEarth: React.FC<VoyoEarthProps> = ({ onClose, onPlayTrack }) =>
             transition: 'opacity 300ms ease',
           }}
         >
-          {/* Creator */}
           <div className="flex items-end justify-between mb-2">
             <div className="flex-1 mr-14">
               {(current.creator_username || current.creator_name) && (
-                <p
-                  className="text-sm font-semibold truncate"
-                  style={{ color: 'rgba(255,255,255,0.9)' }}
-                >
-                  {current.creator_username
-                    ? `@${current.creator_username}`
-                    : current.creator_name}
+                <p className="text-sm font-semibold truncate" style={{ color: 'rgba(255,255,255,0.9)' }}>
+                  {current.creator_username ? `@${current.creator_username}` : current.creator_name}
                 </p>
               )}
               {current.title && (
-                <p
-                  className="text-xs mt-0.5 line-clamp-2"
-                  style={{ color: 'rgba(255,255,255,0.55)' }}
-                >
+                <p className="text-xs mt-0.5 line-clamp-2" style={{ color: 'rgba(255,255,255,0.55)' }}>
                   {current.title}
                 </p>
               )}
               {current.view_count > 0 && (
-                <p
-                  className="text-[10px] mt-1"
-                  style={{ color: 'rgba(255,255,255,0.3)' }}
-                >
+                <p className="text-[10px] mt-1" style={{ color: 'rgba(255,255,255,0.3)' }}>
                   {fmtCount(current.view_count)} views
                 </p>
               )}
             </div>
 
-            {/* Cultural origin tag */}
             {origin && (
               <div
                 className="flex items-center gap-1.5 px-2.5 py-1 rounded-full flex-shrink-0"
                 style={{
-                  background: current.featured
-                    ? 'rgba(212,160,83,0.15)'
-                    : 'rgba(0,0,0,0.5)',
-                  border: current.featured
-                    ? '1px solid rgba(212,160,83,0.35)'
-                    : '1px solid rgba(255,255,255,0.1)',
+                  background: current.featured ? 'rgba(212,160,83,0.15)' : 'rgba(0,0,0,0.5)',
+                  border: current.featured ? '1px solid rgba(212,160,83,0.35)' : '1px solid rgba(255,255,255,0.1)',
                   backdropFilter: 'blur(8px)',
                 }}
               >
@@ -550,16 +606,9 @@ export const VoyoEarth: React.FC<VoyoEarthProps> = ({ onClose, onPlayTrack }) =>
             )}
           </div>
 
-          {/* Track link — if moment is tied to a full track */}
           {current.parent_track_id && current.parent_track_title && onPlayTrack && (
             <button
-              onClick={() =>
-                onPlayTrack(
-                  current.parent_track_id!,
-                  current.parent_track_title!,
-                  current.parent_track_artist || '',
-                )
-              }
+              onClick={() => onPlayTrack(current.parent_track_id!, current.parent_track_title!, current.parent_track_artist || '')}
               className="flex items-center gap-2 py-2"
             >
               <div
@@ -568,10 +617,7 @@ export const VoyoEarth: React.FC<VoyoEarthProps> = ({ onClose, onPlayTrack }) =>
               >
                 <Play size={10} color="rgba(139,92,246,0.9)" fill="rgba(139,92,246,0.9)" />
               </div>
-              <span
-                className="text-xs truncate"
-                style={{ color: 'rgba(139,92,246,0.9)' }}
-              >
+              <span className="text-xs truncate" style={{ color: 'rgba(139,92,246,0.9)' }}>
                 {current.parent_track_title}
                 {current.parent_track_artist && ` — ${current.parent_track_artist}`}
               </span>
