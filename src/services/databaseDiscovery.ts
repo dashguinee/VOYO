@@ -147,6 +147,46 @@ function genreVibes(genre: string | null) {
     ?? GENRE_VIBES_DEFAULT;
 }
 
+// Genre → regional cultural tags injected when the track's own cultural_tags are absent.
+// Feeds _recentCulturalTags in oyo/index.ts so the conductor V-filter has signal.
+const GENRE_TO_REGION_TAGS: Record<string, string[]> = {
+  afrobeats:    ['nigeria', 'west-africa'],
+  afropop:      ['west-africa'],
+  amapiano:     ['south-africa', 'mzansi'],
+  afrohouse:    ['south-africa'],
+  'afro-house': ['south-africa'],
+  gqom:         ['south-africa', 'mzansi'],
+  kizomba:      ['angola', 'lusophone-africa'],
+  zouk:         ['lusophone-africa'],
+  'bongo-flava':['east-africa'],
+  mbalax:       ['senegal', 'west-africa'],
+  highlife:     ['ghana', 'west-africa'],
+  hiplife:      ['ghana', 'west-africa'],
+  gengetone:    ['kenya', 'east-africa'],
+  bikutsi:      ['cameroon'],
+  makossa:      ['cameroon'],
+  soukous:      ['dr-congo', 'central-africa'],
+  congolese:    ['dr-congo', 'central-africa'],
+  ndombolo:     ['dr-congo', 'central-africa'],
+  rumba:        ['dr-congo', 'central-africa'],
+  hiphop:       ['diaspora'],
+  trap:         ['diaspora'],
+  rnb:          ['diaspora'],
+  soul:         ['diaspora'],
+  drill:        ['uk', 'diaspora'],
+  grime:        ['uk', 'diaspora'],
+  dancehall:    ['jamaica', 'diaspora'],
+  reggae:       ['jamaica'],
+  soca:         ['caribbean', 'diaspora'],
+};
+
+function deriveRegionTags(genre: string | null | undefined, existingTags: string[] | null | undefined): string[] {
+  if (existingTags?.length) return existingTags;
+  if (!genre) return [];
+  const norm = genre.toLowerCase().replace(/\s+/g, '-');
+  return GENRE_TO_REGION_TAGS[norm] ?? GENRE_TO_REGION_TAGS[norm.replace(/-/g, '')] ?? [];
+}
+
 /**
  * Convert database track to app Track format
  */
@@ -154,7 +194,7 @@ function toTrack(dbTrack: DiscoveryTrack): Track {
   const thumbnail = dbTrack.thumbnail_url || `https://i.ytimg.com/vi/${dbTrack.youtube_id}/hqdefault.jpg`;
   const tags = [
     ...(dbTrack.primary_genre ? [dbTrack.primary_genre] : []),
-    ...(dbTrack.cultural_tags || []),
+    ...deriveRegionTags(dbTrack.primary_genre, dbTrack.cultural_tags),
   ];
   return {
     id: dbTrack.youtube_id,
@@ -712,9 +752,11 @@ export function rawEntryToTrack(entry: RawPoolEntry): Track {
   const thumbnail = entry.thumbnail_url || `https://i.ytimg.com/vi/${entry.youtube_id}/hqdefault.jpg`;
   // primary_genre first so it surfaces as the HomeFeed genre label and feeds
   // into _recentCulturalTags in oyo/index.ts — mirrors PortraitVOYO behavior.
+  // deriveRegionTags: when cultural_tags are absent, inject region tags from genre
+  // so the conductor V-filter and getCulturalIntro have signal even for untagged tracks.
   const tags = [
     ...(entry.primary_genre ? [entry.primary_genre] : []),
-    ...(entry.cultural_tags || []),
+    ...deriveRegionTags(entry.primary_genre, entry.cultural_tags),
   ];
   return {
     id: entry.youtube_id,
