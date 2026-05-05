@@ -233,12 +233,42 @@ function getCulturalIntro(tags: string[], ctx?: TrackContext): string {
 
 // ── Template bank ─────────────────────────────────────────────────────────────
 
-function bridgeAnnouncement(tags: string[], ctx?: TrackContext): DJAnnouncement {
-  const intro = getCulturalIntro(tags, ctx);
-  const bases = ['Culture shift.', 'We switching it up.', 'New territory.', 'Trust the move.', 'Going somewhere else.', 'Hold on — different energy.'];
-  const base = rotate('bridge', bases);
+// Genre-pair bridge phrases — "from X → to Y" narrative
+const GENRE_BRIDGE: Partial<Record<string, string>> = {
+  'afrobeats→kizomba':   'From Lagos to Luanda.',
+  'kizomba→afrobeats':   'Switching lanes.',
+  'afrobeats→amapiano':  'SA calling.',
+  'amapiano→afrobeats':  'Back to the mainland.',
+  'afrobeats→gospel':    'Spirit shift.',
+  'gospel→afrobeats':    'Back to the heat.',
+  'afrobeats→bongo-flava': 'East Africa in the building.',
+  'kizomba→amapiano':    'Southern Africa on top.',
+  'amapiano→kizomba':    'Slow it down.',
+  'afrobeats→hiphop':    'Culture crossing.',
+  'hiphop→afrobeats':    'Back to Africa.',
+  'afrobeats→rnb':       'Feel this.',
+  'rnb→afrobeats':       'Back to the groove.',
+  'afrobeats→drill':     'Taking it darker.',
+};
+
+function bridgeAnnouncement(tags: string[], ctx?: TrackContext, prevGenre?: string | null): DJAnnouncement {
+  let text: string | null = null;
+
+  // Genre-pair bridge: if we know source and destination genres
+  if (prevGenre && ctx?.genre && prevGenre !== ctx.genre) {
+    const key = `${prevGenre}→${ctx.genre}`;
+    text = GENRE_BRIDGE[key] ?? null;
+  }
+
+  if (!text) {
+    const intro = getCulturalIntro(tags, ctx);
+    const bases = ['Culture shift.', 'We switching it up.', 'New territory.', 'Trust the move.', 'Going somewhere else.', 'Hold on — different energy.'];
+    const base = rotate('bridge', bases);
+    text = intro ? `${intro} ${base}` : base;
+  }
+
   return {
-    text: intro ? `${intro} ${base}` : base,
+    text,
     choices: [
       { label: 'Keep in this', intent: 'stay_culture' },
       { label: 'Back to heat', intent: 'pivot_culture' },
@@ -417,11 +447,12 @@ export function generateAnnouncement(
   move: DJMove & { phaseAdvanced?: boolean },
   culturalTags: string[],
   ctx?: TrackContext,
+  prevGenre?: string | null,
 ): DJAnnouncement | null {
   const engagementMatch = move.thought.match(/:(searching|warming|vibing|locked)\]/);
   const engagement = (engagementMatch?.[1] ?? 'warming') as Engagement;
 
-  if (move.type === 'bridge') return bridgeAnnouncement(culturalTags, ctx);
+  if (move.type === 'bridge') return bridgeAnnouncement(culturalTags, ctx, prevGenre);
   if (move.type === 'echo')   return echoAnnouncement(ctx);
   if (move.phaseAdvanced)     return peakPhaseAnnouncement(culturalTags, ctx);
 

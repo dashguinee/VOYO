@@ -167,9 +167,13 @@ function _pushAction(action: 'skip' | 'complete' | 'react'): void {
 
 function _pushTrackContext(track: Track): void {
   if (track.tags?.length) {
-    // tags[0] is primary_genre (not a cultural/thematic tag) — skip it here.
-    // Cultural context window needs geographic/thematic tags (angola, diaspora…)
-    // for getCulturalIntro. Per-track region callout uses firstRawCtx.culturalTags instead.
+    // tags[0] is primary_genre — push to genre window for bridge context
+    const genre = track.tags[0];
+    if (genre) {
+      _recentGenres.push(genre);
+      if (_recentGenres.length > 10) _recentGenres.splice(0, _recentGenres.length - 10);
+    }
+    // tags[1+] are cultural/geographic tags — push to cultural window for getCulturalIntro
     const culturalSlice = track.tags.slice(1, 3);
     if (culturalSlice.length) {
       _recentCulturalTags.push(...culturalSlice);
@@ -390,9 +394,14 @@ async function _refillConductorQueue(excludeIds: Set<string>): Promise<void> {
     });
     const existing = new Set(_conductorQueue.map(e => e.track.trackId || e.track.id));
 
+    // Previous dominant genre (most frequent in recent 10-track window)
+    const prevGenre = _recentGenres.length > 0
+      ? [..._recentGenres].reverse().find(g => g !== firstRawCtx?.genre) ?? null
+      : null;
+
     // Generate one announcement for the first new track in this batch.
     // Only bridge/echo/phase-advance always get one; flow tracks use probability.
-    const ann = generateAnnouncement(move, userState.recentCulturalTags, firstRawCtx);
+    const ann = generateAnnouncement(move, userState.recentCulturalTags, firstRawCtx, prevGenre);
     let firstSlot = true;
 
     for (const t of candidates) {
