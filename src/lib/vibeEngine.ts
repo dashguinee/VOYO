@@ -114,6 +114,7 @@ export const VIBES: Record<string, Vibe> = {
     energy_level: 2,
     query_rules: {
       countries: ['GN'],
+      matched_artist_patterns: ['sekouba', 'pivi', 'tiguida', 'manfila', 'macir', 'salam diallo'],
       title_patterns: ['amour', 'love', 'mariage', 'woman'],
       aesthetic_tags: ['romantic', 'tender'],
       sort_by: 'play_count'
@@ -146,6 +147,7 @@ export const VIBES: Record<string, Vibe> = {
     query_rules: {
       countries: ['NG'],
       prefer_tiers: ['A', 'B'],
+      matched_artist_patterns: ['burna', 'asake', 'davido', 'olamide', 'naira marley', 'fireboy', 'wizkid', 'ckay'],
       title_patterns: ['party', 'dance', 'celebration', 'turn up'],
       cultural_tags: ['celebration', 'party'],
       sort_by: 'play_count'
