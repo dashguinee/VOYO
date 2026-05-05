@@ -190,7 +190,7 @@ const getWestAfricanTracks = (hotPool: PooledTrack[], limit: number = 15): Track
 
 const getCuratedTrendingTracks = (hotPool: PooledTrack[], limit: number = 15): Track[] => {
   return [...hotPool]
-    .filter(t => t.tags?.includes('trending'))
+    .filter(t => t.source === 'trending')
     .sort((a, b) => (b.poolScore || 0) - (a.poolScore || 0))
     .slice(0, limit) as Track[];
 };
