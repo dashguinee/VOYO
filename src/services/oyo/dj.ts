@@ -411,9 +411,25 @@ export async function conductorFetch(
     if (echoPool.length >= MIN_CONDUCTOR_POOL) pool = echoPool;
   }
 
-  // Shuffle and slice
+  // Shuffle, then pick with artist diversity — no artist repeats within the batch
+  // unless pool is too small to satisfy the limit without repeats.
   const shuffled = pool.slice().sort(() => Math.random() - 0.5);
-  const sliced = shuffled.slice(0, limit);
+  const sliced: typeof shuffled = [];
+  const usedArtists = new Set<string>();
+  for (const entry of shuffled) {
+    if (sliced.length >= limit) break;
+    const artistKey = (entry.artist || '').toLowerCase().trim();
+    if (artistKey && usedArtists.has(artistKey)) continue;
+    sliced.push(entry);
+    if (artistKey) usedArtists.add(artistKey);
+  }
+  // Fallback: if dedup left us short, fill with remaining entries
+  if (sliced.length < limit) {
+    for (const entry of shuffled) {
+      if (sliced.length >= limit) break;
+      if (!sliced.includes(entry)) sliced.push(entry);
+    }
+  }
   if (onFirstRaw && sliced[0]) onFirstRaw(sliced[0]);
   return sliced.map(rawEntryToTrack);
 }

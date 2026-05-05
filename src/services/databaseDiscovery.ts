@@ -725,7 +725,11 @@ export async function getConductorCandidates(
           thumbnail_url: r.thumbnail_url ?? null,
           artist_tier: r.artist_tier ?? null,
           primary_genre: r.primary_genre ?? null,
-          cultural_tags: r.cultural_tags ?? null,
+          // Derive region tags when DB cultural_tags are absent — gives conductor V-filter signal.
+          cultural_tags: (() => {
+            const derived = deriveRegionTags(r.primary_genre, r.cultural_tags ?? null);
+            return derived.length ? derived : (r.cultural_tags ?? null);
+          })(),
           heat_score: r.heat_score ?? null,
           // RPC doesn't return flat vibe columns — derive from primary_genre
           ...(({ afro, party, chill, late, heat }) => ({
