@@ -84,9 +84,20 @@ function computeSnapshot(signals: BehaviorSignal[]): PatternSnapshot {
   const timeCount = new Map<string, number>();
   const typeCount = new Map<SignalType, number>();
 
+  // Weighted signal scoring: reaction > complete > queue-add > play > skip
+  const SIGNAL_WEIGHTS: Partial<Record<SignalType, number>> = {
+    reaction: 3,
+    complete: 2,
+    'queue-add': 1.5,
+    play: 1,
+    search: 0.5,
+    skip: 0,
+  };
+
   for (const s of signals) {
-    if (s.artist) artistCount.set(s.artist, (artistCount.get(s.artist) || 0) + 1);
-    if (s.genre) genreCount.set(s.genre, (genreCount.get(s.genre) || 0) + 1);
+    const weight = SIGNAL_WEIGHTS[s.type] ?? 1;
+    if (s.artist) artistCount.set(s.artist, (artistCount.get(s.artist) || 0) + weight);
+    if (s.genre) genreCount.set(s.genre, (genreCount.get(s.genre) || 0) + weight);
     if (s.timeOfDay) timeCount.set(s.timeOfDay, (timeCount.get(s.timeOfDay) || 0) + 1);
     typeCount.set(s.type, (typeCount.get(s.type) || 0) + 1);
   }
