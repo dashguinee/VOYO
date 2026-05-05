@@ -1518,8 +1518,8 @@ const getTrackElement = (track: Track): TrackElement => {
   if (m && ['focus', 'worship'].includes(m)) return 'air';
   const tags = track.tags?.map(t => t.toLowerCase()) ?? [];
   if (tags.some(t => ['fire','hot','hype','drill','trap','afrobeats','gqom','ndombolo','dancehall','grime','afrohouse','afro-house','soca','reggaeton','kuduro','singeli'].includes(t))) return 'fire';
-  if (tags.some(t => ['chill','smooth','rnb','soul','sad','love','kizomba','zouk','gospel','jazz','reggae','afrosoul'].includes(t))) return 'water';
-  if (tags.some(t => ['afro','amapiano','afropop','bongo','bongo-flava','highlife','mbalax','makossa','bikutsi','soukous','rumba','hiphop','congolese','gengetone','hiplife','afrobeat','afrofusion','fuji','afrojuju','kwaito','afrofolk','semba','benga','taarab','rai','chaabi','gnawa','juju','lekompo'].includes(t))) return 'earth';
+  if (tags.some(t => ['chill','smooth','rnb','soul','sad','love','kizomba','zouk','gospel','jazz','reggae','afrosoul','tarraxo'].includes(t))) return 'water';
+  if (tags.some(t => ['afro','amapiano','afropop','bongo','bongo-flava','highlife','mbalax','makossa','bikutsi','soukous','rumba','hiphop','congolese','gengetone','hiplife','afrobeat','afrofusion','fuji','afrojuju','kwaito','afrofolk','semba','benga','taarab','rai','chaabi','gnawa','juju','lekompo','palmwine'].includes(t))) return 'earth';
   return 'air';
 };
 

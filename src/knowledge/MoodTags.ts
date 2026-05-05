@@ -238,16 +238,22 @@ export type AfricanGenre =
   // Nigerian
   | 'afrobeats' | 'afropop' | 'afro-fusion' | 'alte' | 'fuji' | 'juju'
   // Ghanaian
-  | 'highlife' | 'hiplife' | 'azonto' | 'ghana-gospel'
+  | 'highlife' | 'hiplife' | 'azonto' | 'ghana-gospel' | 'palmwine'
   // South African
-  | 'amapiano' | 'gqom' | 'kwaito' | 'maskandi' | 'sa-house'
+  | 'amapiano' | 'gqom' | 'kwaito' | 'maskandi' | 'sa-house' | 'lekompo'
   // East African
-  | 'bongo-flava' | 'gengetone' | 'benga' | 'taarab'
+  | 'bongo-flava' | 'gengetone' | 'benga' | 'taarab' | 'singeli'
+  // North African
+  | 'rai' | 'chaabi' | 'gnawa'
   // Francophone
   | 'coupe-decale' | 'ndombolo' | 'makossa' | 'mbalax' | 'zouk'
+  // Lusophone Africa
+  | 'kuduro' | 'kizomba' | 'semba' | 'tarraxo'
+  // Diaspora crossover
+  | 'afrosoul'
   // Other
   | 'afro-house' | 'afro-soul' | 'afro-rnb' | 'african-gospel'
-  | 'rumba' | 'soukous' | 'kuduro' | 'kizomba' | 'semba';
+  | 'rumba' | 'soukous';
 
 // ============================================
 // VIBE COMBINATIONS (Common mood patterns)
@@ -366,10 +372,10 @@ export function estimateEnergy(title: string, genre?: AfricanGenre): EnergyLevel
 
   // Genre-based defaults
   if (genre) {
-    const highEnergy: AfricanGenre[] = ['gqom', 'gengetone', 'coupe-decale'];
-    const medHighEnergy: AfricanGenre[] = ['afrobeats', 'amapiano', 'ndombolo'];
-    const medEnergy: AfricanGenre[] = ['highlife', 'bongo-flava', 'mbalax'];
-    const lowEnergy: AfricanGenre[] = ['afro-soul', 'afro-rnb', 'kizomba'];
+    const highEnergy: AfricanGenre[] = ['gqom', 'gengetone', 'coupe-decale', 'kuduro', 'singeli', 'lekompo'];
+    const medHighEnergy: AfricanGenre[] = ['afrobeats', 'amapiano', 'ndombolo', 'rai', 'benga', 'juju'];
+    const medEnergy: AfricanGenre[] = ['highlife', 'bongo-flava', 'mbalax', 'palmwine', 'semba', 'chaabi', 'gnawa'];
+    const lowEnergy: AfricanGenre[] = ['afro-soul', 'afro-rnb', 'kizomba', 'taarab', 'tarraxo', 'afrosoul'];
 
     if (highEnergy.includes(genre)) return 5;
     if (medHighEnergy.includes(genre)) return 4;
