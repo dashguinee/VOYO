@@ -30,7 +30,7 @@ import { onSignal as oyaPlanSignal } from '../../services/oyoPlan';
 import { useBackGuard } from '../../hooks/useBackGuard';
 import { useR2KnownStore, markR2KnownMany } from '../../store/r2KnownStore';
 import { useWarmingStore, markWarming } from '../../store/warmingStore';
-import { formatViews } from '../../utils/format';
+import { formatViews, fmtGenre } from '../../utils/format';
 
 interface SearchOverlayProps {
   isOpen: boolean;
@@ -967,7 +967,7 @@ export const SearchOverlayV2 = ({ isOpen, onClose, onArtistTap, onEnterVideoMode
                           <div className="flex-1 min-w-0">
                             <h4 className="text-white/90 font-medium truncate text-sm">{artist.canonical_name}</h4>
                             <p className="text-white/40 text-xs truncate">
-                              {COUNTRY_FLAGS[artist.country] || ''} {artist.primary_genre} · Tier {artist.tier}
+                              {COUNTRY_FLAGS[artist.country] || ''} {fmtGenre(artist.primary_genre)} · Tier {artist.tier}
                             </p>
                           </div>
                           <User className="w-4 h-4 text-white/20" />
