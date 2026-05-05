@@ -44,6 +44,7 @@ export interface DJAnnouncement {
 export interface TrackContext {
   artist?: string | null;
   genre?: string | null;
+  culturalTags?: string[] | null;
   artistTier?: string | null;
   heatScore?: number | null;
   vibeAfroHeat?: number | null;
@@ -156,7 +157,34 @@ function unknownArtistCallout(artist: string): string {
     `Big up ${artist}.`,
     `${artist} — the people need to know.`,
     `Make some noise for ${artist}!`,
+    `${artist} on the radar.`,
   ]);
+}
+
+// ── Region callout (from incoming track's cultural_tags) ─────────────────────
+const REGION_CALLOUT: Record<string, string[]> = {
+  nigeria:       ['Naija in the set.', 'Lagos knows.', 'Nigeria certified.'],
+  angola:        ['Angola on top.', 'Luanda vibes.', 'Angola in the building.'],
+  senegal:       ['Dakar represent.', 'Sénégal in the set.', 'Senegal on the move.'],
+  ghana:         ['Accra on it.', 'Ghana certified.', 'Gold Coast energy.'],
+  cameroon:      ['Cameroon represent.', 'Douala on set.', 'Yaoundé energy.'],
+  kenya:         ['Nairobi on top.', 'East Africa vibes.', 'Kenya in the set.'],
+  'south-africa':['SA in the building.', 'Jozi certified.', 'Cape Town vibes.'],
+  'dr-congo':    ['Kinshasa on fire.', 'DRC in the set.', 'Congo certified.'],
+  tanzania:      ['Dar es Salaam represent.', 'Tanzania in the house.', 'Bongo land.'],
+  'west-africa': ['West Africa represent.', 'The continent calling.', 'West Africa on top.'],
+  diaspora:      ['Diaspora vibes.', 'Bridging the distance.', 'The diaspora showing up.'],
+};
+
+function getRegionCallout(culturalTags: string[] | null | undefined): string | null {
+  if (!culturalTags?.length) return null;
+  for (const tag of culturalTags) {
+    const norm = tag.toLowerCase();
+    if (REGION_CALLOUT[norm]) {
+      return rotate(`region_${norm}`, REGION_CALLOUT[norm]);
+    }
+  }
+  return null;
 }
 
 // ── Cultural prefix overrides ────────────────────────────────────────────────
@@ -207,7 +235,7 @@ function getCulturalIntro(tags: string[], ctx?: TrackContext): string {
 
 function bridgeAnnouncement(tags: string[], ctx?: TrackContext): DJAnnouncement {
   const intro = getCulturalIntro(tags, ctx);
-  const bases = ['Culture shift.', 'We switching it up.', 'New territory.', 'Trust the move.'];
+  const bases = ['Culture shift.', 'We switching it up.', 'New territory.', 'Trust the move.', 'Going somewhere else.', 'Hold on — different energy.'];
   const base = rotate('bridge', bases);
   return {
     text: intro ? `${intro} ${base}` : base,
@@ -233,7 +261,9 @@ function echoAnnouncement(ctx?: TrackContext): DJAnnouncement {
       'Bro listen.',
       'They slept on this.',
       'This one\'s been waiting.',
-      'OYO found something.',
+      'OYO dug deep.',
+      'Pay attention.',
+      'This one hits different.',
     ]);
   }
   return {
@@ -251,15 +281,17 @@ function hotLockedAnnouncement(tags: string[], ctx?: TrackContext): DJAnnounceme
   if (ctx?.artist && ctx.artistTier === 'A') {
     text = artistCallout(ctx.artist);
   } else if (ctx && getGenreVocab(ctx.genre)) {
-    // Genre vocab fires regardless of energy — vibe columns often null for conductor tracks
-    text = getGenreVocab(ctx.genre)!;
+    // Genre fires — optionally prepend region for extra specificity ("Naija in the set. Lagos calling.")
+    const genreText = getGenreVocab(ctx.genre)!;
+    const regionText = getRegionCallout(ctx.culturalTags);
+    text = regionText ? `${regionText} ${genreText}` : genreText;
   } else if (ctx && isLateNight(ctx)) {
-    text = rotate('late_night', ['Night shift.', '3am feeling.', 'Low light energy.', 'After dark.']);
+    text = rotate('late_night', ['Night shift.', '3am feeling.', 'Low light energy.', 'After dark.', 'Late night only.']);
   } else if (ctx && isChillSong(ctx)) {
-    text = rotate('chill_locked', ['Soft life vibes.', 'Soul food.', 'Take it down.', 'We breathing.']);
+    text = rotate('chill_locked', ['Soft life vibes.', 'Soul food.', 'Take it down.', 'We breathing.', 'Low and slow.']);
   } else {
     const intro = getCulturalIntro(tags, ctx);
-    const base = rotate('hot_locked', ['We in the zone.', 'Full send.', 'No stops from here.', 'We locked.']);
+    const base = rotate('hot_locked', ['We in the zone.', 'Full send.', 'No stops from here.', 'We locked.', 'Straight like that.', 'This don\'t miss.']);
     text = intro ? `${intro} ${base}` : base;
   }
   return {
@@ -279,12 +311,12 @@ function hotVibingAnnouncement(tags: string[], ctx?: TrackContext): DJAnnounceme
   } else if (ctx && getGenreVocab(ctx.genre)) {
     text = getGenreVocab(ctx.genre)!;
   } else if (ctx && isLateNight(ctx)) {
-    text = rotate('late_vibing', ['Night shift.', 'Low light energy.', 'After dark.']);
+    text = rotate('late_vibing', ['Night shift.', 'Low light energy.', 'After dark.', 'Late hours.']);
   } else if (ctx && isChillSong(ctx)) {
-    text = rotate('chill_vibing', ['Soft life.', 'Soul food.', 'We breathing.']);
+    text = rotate('chill_vibing', ['Soft life.', 'Soul food.', 'We breathing.', 'Easy now.']);
   } else {
     const intro = getCulturalIntro(tags, ctx);
-    const base = rotate('hot_vibing', ['Riding this.', 'We cooking.', 'Hold the wave.', 'This is working.']);
+    const base = rotate('hot_vibing', ['Riding this.', 'We cooking.', 'Hold the wave.', 'This is working.', 'Real talk.', 'Feel that.']);
     text = intro ? `${intro} ${base}` : base;
   }
   return {
@@ -299,7 +331,7 @@ function hotVibingAnnouncement(tags: string[], ctx?: TrackContext): DJAnnounceme
 
 function hotWarmingAnnouncement(): DJAnnouncement {
   return {
-    text: rotate('hot_warming', ['Reading you.', 'Still reading.', 'Getting warmer.']),
+    text: rotate('hot_warming', ['Reading you.', 'Still reading.', 'Getting warmer.', 'Give it a sec.', 'Hold tight.']),
     choices: [
       { label: 'Easy does it', intent: 'drop_energy' },
       { label: 'Drop straight in', intent: 'boost_energy' },
@@ -310,7 +342,7 @@ function hotWarmingAnnouncement(): DJAnnouncement {
 
 function hotSearchingAnnouncement(): DJAnnouncement {
   return {
-    text: rotate('hot_searching', ['Finding your frequency.', 'Let\'s see what lands.', 'On the search.']),
+    text: rotate('hot_searching', ['Scanning the set.', 'Let\'s see what lands.', 'OYO\'s on it.', 'Hold on.', 'Digging for you.']),
     choices: [
       { label: 'Keep it familiar', intent: 'surface_hits' },
       { label: 'Surprise me', intent: 'go_deep' },
@@ -321,14 +353,17 @@ function hotSearchingAnnouncement(): DJAnnouncement {
 
 function discoveryAnnouncement(tags: string[], ctx?: TrackContext): DJAnnouncement {
   let text: string;
-  // Low-heat artist on a discovery move — DJ introduces the unknown
   if (ctx?.artist && (ctx.heatScore ?? 50) < 30) {
+    // Low-heat artist — DJ introduces the unknown
     text = unknownArtistCallout(ctx.artist);
   } else if (ctx && getGenreVocab(ctx.genre)) {
-    text = getGenreVocab(ctx.genre)!;
+    // For discovery, add region context if genre fires — "Angola in the building. Kizomba hour."
+    const genreText = getGenreVocab(ctx.genre)!;
+    const regionText = getRegionCallout(ctx.culturalTags);
+    text = regionText ? `${regionText} ${genreText}` : genreText;
   } else {
     const intro = getCulturalIntro(tags, ctx);
-    const base = rotate('discovery', ['Taking you somewhere.', 'Going left for a sec.', 'Expanding the map.', 'Trust the move.']);
+    const base = rotate('discovery', ['Taking you somewhere.', 'Going left for a sec.', 'Expanding the map.', 'Trust the move.', 'Something different.', 'OYO dug deep.']);
     text = intro ? `${intro} ${base}` : base;
   }
   return {
@@ -347,14 +382,14 @@ function peakPhaseAnnouncement(tags: string[], ctx?: TrackContext): DJAnnounceme
     text = artistCallout(ctx.artist);
   } else if (ctx && getGenreVocab(ctx.genre)) {
     const genrePhrase = getGenreVocab(ctx.genre)!;
-    const base = rotate('peak_hype', ['Peak hour.', 'This is the top.', 'We\'re there.', 'No ceiling.']);
+    const base = rotate('peak_hype', ['Peak hour.', 'This is the top.', 'No ceiling.', 'This is it.', 'We made it here.']);
     text = `${genrePhrase} ${base}`;
   } else if (ctx && isHypeSong(ctx)) {
     const intro = getCulturalIntro(tags, ctx);
-    const base = rotate('peak_hype', ['Peak hour.', 'This is the top.', 'We\'re there.', 'No ceiling.']);
+    const base = rotate('peak_hype', ['Peak hour.', 'This is the top.', 'No ceiling.', 'This is it.', 'We made it here.']);
     text = intro ? `${intro} ${base}` : base;
   } else {
-    text = rotate('peak', ['Peak hour.', 'This is the top.', 'We\'re there.', 'Full arc.']);
+    text = rotate('peak', ['Peak hour.', 'This is the top.', 'Full arc.', 'We\'re there.', 'Right here.']);
   }
   return {
     text,

@@ -373,6 +373,7 @@ async function _refillConductorQueue(excludeIds: Set<string>): Promise<void> {
       firstRawCtx = {
         artist:       raw.artist,
         genre:        raw.primary_genre,
+        culturalTags: raw.cultural_tags,
         artistTier:   raw.artist_tier,
         heatScore:    raw.heat_score,
         vibeAfroHeat: raw.vibe_afro_heat,

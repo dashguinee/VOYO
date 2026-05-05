@@ -1243,7 +1243,7 @@ const AfricanVibesCarousel = ({
   const currentTrack = usePlayerStore((s) => s.currentTrack);
   const prewarmCount = useMemo(() => {
     const fireMoods = new Set(['hype', 'dance', 'party', 'gym', 'street', 'afro']);
-    const fireTags = new Set(['afrobeats', 'amapiano', 'workout', 'hype', 'party', 'afro-heat', 'street']);
+    const fireTags = new Set(['afrobeats', 'amapiano', 'workout', 'hype', 'party', 'afro-heat', 'street', 'gqom', 'ndombolo', 'drill', 'dancehall', 'afrohouse']);
     if (currentTrack?.mood && fireMoods.has(currentTrack.mood)) return 3;
     const tags = currentTrack?.tags ?? [];
     if (tags.some((t) => fireTags.has(t.toLowerCase()))) return 3;
