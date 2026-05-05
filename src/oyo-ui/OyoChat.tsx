@@ -148,8 +148,9 @@ export const OyoChat = forwardRef<OyoChatHandle, OyoChatProps>(function OyoChat(
           },
         } : {}),
         ...(recentPlays.length > 0 ? { recentPlays } : {}),
+        userLocale: navigator.language,
       };
-      const result = await oyo.think({ userMessage: message, context: Object.keys(context).length > 0 ? context : undefined });
+      const result = await oyo.think({ userMessage: message, context });
       setTurns((prev) => [
         ...prev,
         {

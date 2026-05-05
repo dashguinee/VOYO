@@ -229,8 +229,9 @@ export function OyoIsland({ visible, onHide, onActivity }: OyoIslandProps) {
             },
           } : {}),
           ...(recentPlays.length > 0 ? { recentPlays } : {}),
+          userLocale: navigator.language,
         };
-        const result = await oyo.think({ userMessage, context: Object.keys(context).length > 0 ? context : undefined, surface: 'player' });
+        const result = await oyo.think({ userMessage, context, surface: 'player' });
         setChatHistory(prev => [...prev, { role: 'oyo', message: result.response || '...' }]);
       } catch {
         setChatHistory(prev => [...prev, { role: 'oyo', message: "Signal dropped. Try again." }]);
