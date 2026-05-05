@@ -13,6 +13,7 @@
  */
 
 import { useState, useEffect, useRef, useCallback, memo } from 'react';
+import { useMessagingViewport } from '../../hooks/useMessagingViewport';
 import { oyo } from '../../oyo';
 import { getProfile } from '../../services/oyoDJ';
 import {
@@ -80,6 +81,26 @@ export function OyoIsland({ visible, onHide, onActivity }: OyoIslandProps) {
 
   const djProfile = getProfile();
   const submittingRef = useRef(false);
+  const { keyboardOpen, vh } = useMessagingViewport();
+  const keyboardKeepAliveRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // While keyboard is open, poll onActivity every 3.8s to prevent the parent's
+  // 5s auto-hide timer from firing — user is composing a message.
+  useEffect(() => {
+    if (keyboardOpen && visible) {
+      keyboardKeepAliveRef.current = setInterval(() => onActivity?.(), 3800);
+    } else {
+      if (keyboardKeepAliveRef.current) {
+        clearInterval(keyboardKeepAliveRef.current);
+        keyboardKeepAliveRef.current = null;
+      }
+    }
+    return () => {
+      if (keyboardKeepAliveRef.current) {
+        clearInterval(keyboardKeepAliveRef.current);
+      }
+    };
+  }, [keyboardOpen, visible, onActivity]);
 
   // Open directly to chat whenever the island becomes visible.
   // Also clear chat history on each new invocation so users don't land on
@@ -338,9 +359,11 @@ export function OyoIsland({ visible, onHide, onActivity }: OyoIslandProps) {
           djName={djProfile.name}
           history={chatHistory}
           input={chatInput}
+          keyboardHeight={keyboardOpen && typeof window !== 'undefined' ? Math.max(0, window.innerHeight - vh) : 0}
           onInputChange={(val) => { handleActivity(); setChatInput(val); }}
           onSubmit={() => { handleActivity(); handleChatSubmit(); }}
           onCollapse={collapseToIsland}
+          onFocus={handleActivity}
         />
       )}
 
@@ -491,16 +514,20 @@ function ChatIsland({
   djName,
   history,
   input,
+  keyboardHeight = 0,
   onInputChange,
   onSubmit,
   onCollapse,
+  onFocus,
 }: {
   djName: string;
   history: Array<{ role: 'user' | 'oyo'; message: string }>;
   input: string;
+  keyboardHeight?: number;
   onInputChange: (value: string) => void;
   onSubmit: () => void;
   onCollapse: () => void;
+  onFocus?: () => void;
 }) {
   const chatEndRef = useRef<HTMLDivElement>(null);
 
@@ -510,8 +537,13 @@ function ChatIsland({
 
   return (
     <div
-      className="fixed bottom-20 right-4 z-50"
-      style={{ width: '320px', maxWidth: 'calc(100vw - 32px)' }}
+      className="fixed right-4 z-50"
+      style={{
+        width: '320px',
+        maxWidth: 'calc(100vw - 32px)',
+        bottom: `${80 + keyboardHeight}px`,
+        transition: 'bottom 200ms ease-out',
+      }}
     >
       <div
         style={{
@@ -617,6 +649,7 @@ function ChatIsland({
             value={input}
             onChange={(e) => onInputChange(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && onSubmit()}
+            onFocus={onFocus}
             placeholder="Name it."
             style={{
               flex: 1,
