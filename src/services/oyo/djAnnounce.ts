@@ -395,6 +395,30 @@ const GENRE_BRIDGE: Partial<Record<string, string>> = {
   'afrofolk→afrobeats':   'Back to the heat.',
   'bikutsi→afrobeats':    'Cameroon to Nigeria.',
   'afrobeats→bikutsi':    'Douala energy.',
+  // Afropop transitions
+  'afropop→afrobeats':    'Heat rising.',
+  'afropop→amapiano':     'Piano wave incoming.',
+  'afropop→highlife':     'Ghana roots.',
+  // Rumba / Soukous / Congolese family
+  'afrobeats→rumba':      'Kinshasa calling.',
+  'rumba→afrobeats':      'West Africa rising.',
+  'afrobeats→soukous':    'Congo guitar mode.',
+  'soukous→afrobeats':    'Back to the wave.',
+  'afrobeats→ndombolo':   'Ndombolo time.',
+  'ndombolo→afrobeats':   'Back to Lagos.',
+  'rumba→soukous':        'Congo evolves.',
+  'soukous→rumba':        'Roots calling.',
+  'congolese→afrobeats':  'West Africa connects.',
+  // Makossa / Mbalax
+  'makossa→afrobeats':    'West Africa united.',
+  'afrobeats→makossa':    'Cameroon calling.',
+  'mbalax→afrobeats':     'Dakar to Lagos.',
+  'afrobeats→mbalax':     'Senegal sound.',
+  // Soul / R&B family
+  'afrobeats→soul':       'Deep and smooth.',
+  'soul→afrobeats':       'Back to the heat.',
+  'soul→rnb':             'Silky transition.',
+  'rnb→soul':             'Going deeper.',
 };
 
 function normalizeGenreKey(g: string): string {
