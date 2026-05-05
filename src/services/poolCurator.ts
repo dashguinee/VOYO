@@ -469,6 +469,25 @@ function buildSmartQueries(): string[] {
       electronic:    'afro electronic music',
       funk:          'afro funk music',
       pop:           'afro pop music',
+      // Lusophone Africa
+      kuduro:        'kuduro angola music',
+      semba:         'semba angola music',
+      tarraxo:       'tarraxinha angola',
+      // East Africa
+      benga:         'benga kenya music',
+      taarab:        'taarab swahili coast',
+      singeli:       'singeli tanzania',
+      // West Africa
+      juju:          'juju music nigeria yoruba',
+      palmwine:      'palmwine music ghana',
+      // North Africa
+      rai:           'raï algerian music',
+      chaabi:        'chaabi north africa',
+      gnawa:         'gnawa music morocco',
+      // South Africa
+      lekompo:       'lekompo south africa limpopo',
+      // Diaspora
+      afrosoul:      'afro soul r&b diaspora',
     };
     queries.push(GENRE_QUERIES[genre] ?? 'afrobeats trending');
   }
