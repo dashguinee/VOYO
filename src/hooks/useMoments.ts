@@ -80,8 +80,9 @@ const COUNTRY_TAG_MAP: Record<string, string[]> = {
 };
 
 // Genre → cultural_tag proxy mapping. Powered by video_intelligence.primary_genre
-// enrichment (2026-05). Tags keyed from live catalog distribution:
-//   nigeria 122, west-africa 106, angola 41, east-africa 17, spiritual 28, south-africa 5
+// enrichment (2026-05). Tags from live catalog distribution (2026-05-05):
+//   nigeria 2181, west-africa 2038, angola 964, lusophone-africa 927,
+//   diaspora 1775, usa 1473, east-africa 41, spiritual 53, south-africa+mzansi 108
 const GENRE_TAG_MAP: Record<string, string[]> = {
   'afrobeats':   ['nigeria', 'west-africa', 'naija', 'ghana', 'ng', 'gh'],
   'kizomba':     ['angola', 'lusophone-africa', 'mozambique'],
@@ -193,8 +194,8 @@ export const CATEGORY_PRESETS: Record<CategoryAxis, string[]> = {
   ],
   // Genre compass — African music compass directions. Proxy via cultural_tags
   // until parent_track_id coverage reaches critical mass (target: >500 linked).
-  // Ranked by catalog volume: afrobeats (255 moments) → kizomba (77) → bongo-flava (29)
-  //   → gospel (28) → amapiano (11) → for-you (all 6788).
+  // Live catalog (2026-05-05): afrobeats ~4000 → kizomba ~1900 → bongo-flava ~120
+  //   → amapiano ~108 → gospel ~53 → for-you (all 6788).
   'genre': [
     'afrobeats', 'kizomba', 'bongo-flava', 'gospel', 'amapiano', 'for-you',
   ],
