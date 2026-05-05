@@ -167,8 +167,14 @@ function _pushAction(action: 'skip' | 'complete' | 'react'): void {
 
 function _pushTrackContext(track: Track): void {
   if (track.tags?.length) {
-    _recentCulturalTags.push(...track.tags.slice(0, 2));
-    if (_recentCulturalTags.length > 12) _recentCulturalTags.splice(0, _recentCulturalTags.length - 12);
+    // tags[0] is primary_genre (not a cultural/thematic tag) — skip it here.
+    // Cultural context window needs geographic/thematic tags (angola, diaspora…)
+    // for getCulturalIntro. Per-track region callout uses firstRawCtx.culturalTags instead.
+    const culturalSlice = track.tags.slice(1, 3);
+    if (culturalSlice.length) {
+      _recentCulturalTags.push(...culturalSlice);
+      if (_recentCulturalTags.length > 12) _recentCulturalTags.splice(0, _recentCulturalTags.length - 12);
+    }
   }
 }
 

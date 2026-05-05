@@ -258,9 +258,25 @@ function inferTags(title: string, artist: string): string[] {
   const tags: string[] = [];
   const lower = ((title || '') + ' ' + (artist || '')).toLowerCase();
 
-  if (lower.includes('amapiano') || lower.includes('piano')) tags.push('amapiano');
-  if (lower.includes('afrobeat')) tags.push('afrobeats');
-  if (lower.includes('dancehall')) tags.push('dancehall');
+  // Genre detection — ordered most→least specific to avoid double-tag
+  if (lower.includes('amapiano') || lower.includes('yanos') || lower.includes('log drum')) tags.push('amapiano');
+  else if (lower.includes('gqom')) tags.push('gqom');
+  else if (lower.includes('kizomba')) tags.push('kizomba');
+  else if (lower.includes('zouk')) tags.push('zouk');
+  else if (lower.includes('bongo flava') || lower.includes('bongo-flava')) tags.push('bongo-flava');
+  else if (lower.includes('mbalax')) tags.push('mbalax');
+  else if (lower.includes('ndombolo')) tags.push('ndombolo');
+  else if (lower.includes('rumba') || lower.includes('soukous')) tags.push('rumba');
+  else if (lower.includes('highlife')) tags.push('highlife');
+  else if (lower.includes('afrobeats') || lower.includes('afrobeat')) tags.push('afrobeats');
+  else if (lower.includes('afropop')) tags.push('afropop');
+  else if (lower.includes('afro house') || lower.includes('afrohouse')) tags.push('afrohouse');
+  else if (lower.includes('dancehall')) tags.push('dancehall');
+  else if (lower.includes('drill')) tags.push('drill');
+  else if (lower.includes('grime')) tags.push('grime');
+  else if (lower.includes('gospel') || lower.includes('praise') || lower.includes('worship')) tags.push('gospel');
+
+  // Mood/cultural tags (non-exclusive)
   if (lower.includes('rnb') || lower.includes('r&b')) tags.push('rnb');
   if (lower.includes('love') || lower.includes('heart')) tags.push('love');
   if (lower.includes('party') || lower.includes('club')) tags.push('party');
@@ -273,9 +289,9 @@ function inferTags(title: string, artist: string): string[] {
 
 function inferMood(title: string): 'afro' | 'hype' | 'chill' | 'rnb' {
   const lower = (title || '').toLowerCase();
-  if (lower.includes('party') || lower.includes('dance')) return 'hype';
-  if (lower.includes('love') || lower.includes('heart')) return 'rnb';
-  if (lower.includes('chill') || lower.includes('relax')) return 'chill';
+  if (lower.includes('party') || lower.includes('dance') || lower.includes('club') || lower.includes('drill') || lower.includes('gqom')) return 'hype';
+  if (lower.includes('love') || lower.includes('heart') || lower.includes('kizomba') || lower.includes('zouk')) return 'rnb';
+  if (lower.includes('chill') || lower.includes('relax') || lower.includes('gospel') || lower.includes('praise')) return 'chill';
   return 'afro';
 }
 
