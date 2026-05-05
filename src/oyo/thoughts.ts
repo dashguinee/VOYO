@@ -160,6 +160,15 @@ export async function runThoughtCycle(input: OyoThinkInput): Promise<OyoThinkOut
     const artistMatch = mem.match(/mentioned (.+?) positively/i);
     if (artistMatch) consciousness = recordLovedArtist(consciousness, artistMatch[1]);
   }
+  // Also sync saveMemory tool results → consciousness immediately
+  for (const r of toolResults) {
+    if (r.tool === 'saveMemory' && r.success && r.metadata) {
+      const { fact, category } = r.metadata as { fact?: string; category?: string };
+      if (fact && category === 'genre') consciousness = recordInterest(consciousness, fact);
+      if (fact && category === 'artist') consciousness = recordLovedArtist(consciousness, fact);
+      if (fact && category === 'mood') consciousness = recordMood(consciousness, fact);
+    }
+  }
   saveConsciousness(consciousness);
 
   // 11. Attach tool result summaries to the response for debugging

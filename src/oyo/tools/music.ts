@@ -277,7 +277,7 @@ const saveMemoryTool: ToolDefinition = {
 
     try {
       const saved = await saveEssence(fact, cat, 'user-told');
-      return ok('saveMemory', `Saved: ${saved.fact}`);
+      return ok('saveMemory', `Saved: ${saved.fact}`, { fact: saved.fact, category: cat });
     } catch (err) {
       return fail('saveMemory', `Save failed: ${String(err)}`);
     }
