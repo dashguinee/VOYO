@@ -654,6 +654,12 @@ export async function getConductorCandidates(
 /** Convert a RawPoolEntry to Track for playback. */
 export function rawEntryToTrack(entry: RawPoolEntry): Track {
   const thumbnail = entry.thumbnail_url || `https://i.ytimg.com/vi/${entry.youtube_id}/hqdefault.jpg`;
+  // primary_genre first so it surfaces as the HomeFeed genre label and feeds
+  // into _recentCulturalTags in oyo/index.ts — mirrors PortraitVOYO behavior.
+  const tags = [
+    ...(entry.primary_genre ? [entry.primary_genre] : []),
+    ...(entry.cultural_tags || []),
+  ];
   return {
     id: entry.youtube_id,
     trackId: entry.youtube_id,
@@ -661,7 +667,7 @@ export function rawEntryToTrack(entry: RawPoolEntry): Track {
     artist: entry.artist || 'Unknown Artist',
     coverUrl: thumbnail,
     duration: 0,
-    tags: entry.cultural_tags || [],
+    tags,
     oyeScore: Math.round((entry.heat_score || 0) * 10),
     createdAt: new Date().toISOString(),
   };
