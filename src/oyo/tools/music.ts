@@ -438,6 +438,64 @@ const repeatTool: ToolDefinition = {
 };
 
 // ---------------------------------------------------------------------------
+// searchByGenre — genre-specific track discovery using primary_genre (tags[0])
+// ---------------------------------------------------------------------------
+
+function normalizeGenre(g: string): string {
+  return g.toLowerCase().replace(/[\s\-&]+/g, '');
+}
+
+const searchByGenreTool: ToolDefinition = {
+  name: 'searchByGenre',
+  description:
+    'Find tracks in the pool by genre (afrobeats, amapiano, r&b, hip-hop, etc). Uses primary_genre tag — more precise than searchByVibe for genre requests.',
+  parameters: [
+    { name: 'genre', type: 'string', description: 'Genre name (e.g. "afrobeats", "r&b", "amapiano")', required: true },
+    { name: 'limit', type: 'number', description: 'Max results (default 6)', required: false },
+  ],
+  execute: async (params) => {
+    const { genre, limit } = params;
+    if (!genre) return fail('searchByGenre', 'Missing genre');
+
+    try {
+      const pool = useTrackPoolStore.getState();
+      const normTarget = normalizeGenre(genre);
+      const maxResults = Math.min(12, Math.max(1, Number(limit) || 6));
+
+      const scored = pool.hotPool
+        .map((t) => {
+          const primary = t.tags?.[0];
+          if (!primary) return null;
+          const normPrimary = normalizeGenre(primary);
+          // Exact normalized match = high score; partial containment = lower
+          if (normPrimary === normTarget) return { track: t, score: 100 };
+          if (normPrimary.includes(normTarget) || normTarget.includes(normPrimary)) return { track: t, score: 60 };
+          // Secondary tags
+          const anyTag = (t.tags || []).some((tag) => normalizeGenre(tag) === normTarget);
+          if (anyTag) return { track: t, score: 40 };
+          return null;
+        })
+        .filter((s): s is { track: typeof pool.hotPool[0]; score: number } => s !== null)
+        .sort((a, b) => b.score - a.score)
+        .slice(0, maxResults);
+
+      if (scored.length === 0) {
+        return ok('searchByGenre', `No tracks found for genre "${genre}". Try searchByVibe instead.`);
+      }
+
+      const formatted = scored
+        .map((s) => `${s.track.trackId}: ${s.track.title} — ${s.track.artist} [${s.track.tags?.[0] ?? ''}]`)
+        .join('\n');
+      return ok('searchByGenre', `${genre} tracks:\n${formatted}`, {
+        trackIds: scored.map((s) => s.track.trackId),
+      });
+    } catch (err) {
+      return fail('searchByGenre', `Failed: ${String(err)}`);
+    }
+  },
+};
+
+// ---------------------------------------------------------------------------
 // Export all tools
 // ---------------------------------------------------------------------------
 
@@ -446,6 +504,7 @@ export const MUSIC_TOOLS: ToolDefinition[] = [
   addToQueueTool,
   shuffleQueueTool,
   searchByVibeTool,
+  searchByGenreTool,
   recallMemoryTool,
   saveMemoryTool,
   getCurrentContextTool,
