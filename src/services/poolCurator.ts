@@ -406,17 +406,29 @@ function buildSmartQueries(): string[] {
     queries.push(`${artists[0]} latest`);
   }
 
-  // Query 2: Related artist or genre
+  // Query 2: Related artist or genre — primary_genre is tags[0] via rawEntryToTrack
   const lastTrack = recentTracks[recentTracks.length - 1]?.track;
   if (lastTrack) {
     const tags = lastTrack.tags || [];
-    if (tags.includes('amapiano')) {
-      queries.push('amapiano hits 2024');
-    } else if (tags.includes('rnb')) {
-      queries.push('afro rnb songs');
-    } else {
-      queries.push('afrobeats trending');
-    }
+    const genre = tags[0]; // primary_genre when enriched
+    const GENRE_QUERIES: Record<string, string> = {
+      amapiano:   'amapiano hits 2024',
+      afrobeats:  'afrobeats trending',
+      afropop:    'afropop bangers',
+      kizomba:    'kizomba latest',
+      'bongo-flava': 'bongo flava hits',
+      rumba:      'congolese rumba',
+      gospel:     'african gospel music',
+      hiphop:     'african hip hop',
+      rnb:        'afro rnb songs',
+      drill:      'uk afro drill',
+      gqom:       'gqom south africa',
+      highlife:   'ghana highlife',
+      mbalax:     'mbalax senegal',
+      afrohouse:  'afro house music',
+      dancehall:  'dancehall hits',
+    };
+    queries.push(GENRE_QUERIES[genre] ?? 'afrobeats trending');
   }
 
   // Query 3: Discovery - similar but new
