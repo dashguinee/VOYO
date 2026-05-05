@@ -27,6 +27,11 @@ import {
   recordComplete as patternRecordComplete,
   recordReaction as patternRecordReaction,
 } from '../../oyo/pattern';
+import {
+  loadConsciousness,
+  saveConsciousness,
+  recordSkippedArtist,
+} from '../../oyo/consciousness';
 import { recordTrackInSession } from '../poolCurator';
 import { recordPoolEngagement } from '../personalization';
 import { gateToR2 } from '../r2Gate';
@@ -246,6 +251,10 @@ export function onSkip(track: Track, positionSec: number = 0): void {
   recordPoolEngagement(track.trackId, 'skip');
   void patternRecordSkip({ trackId: track.trackId, artist: track.artist, genre: track.tags[0] });
   void recordRemoteSignal(track.trackId, 'skip');
+  if (track.artist) {
+    const c = loadConsciousness();
+    saveConsciousness(recordSkippedArtist(c, track.artist));
+  }
 }
 
 /**

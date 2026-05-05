@@ -124,6 +124,8 @@ export interface OyoConsciousness {
     avoidedArtists: string[];
     lovedTracks: string[];
     skippedTracks: string[];
+    /** Per-artist skip tally — promotes to avoidedArtists at threshold 3 */
+    skipCounts?: Record<string, number>;
   };
 
   // A — Actions (what OYO has done)

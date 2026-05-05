@@ -180,6 +180,25 @@ export function recordLovedArtist(state: OyoConsciousness, artist: string): OyoC
   };
 }
 
+const AVOID_SKIP_THRESHOLD = 3;
+
+export function recordSkippedArtist(state: OyoConsciousness, artist: string): OyoConsciousness {
+  const counts = { ...(state.decisions.skipCounts || {}) };
+  counts[artist] = (counts[artist] || 0) + 1;
+  const shouldAvoid = counts[artist] >= AVOID_SKIP_THRESHOLD;
+  return {
+    ...state,
+    decisions: {
+      ...state.decisions,
+      skipCounts: counts,
+      avoidedArtists: shouldAvoid
+        ? uniquePush(state.decisions.avoidedArtists, artist, 20)
+        : state.decisions.avoidedArtists,
+    },
+    updatedAt: Date.now(),
+  };
+}
+
 export function recordRecommendation(state: OyoConsciousness, summary?: string): OyoConsciousness {
   return {
     ...state,
