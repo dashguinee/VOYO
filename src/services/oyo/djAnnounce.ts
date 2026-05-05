@@ -489,7 +489,10 @@ function bridgeAnnouncement(tags: string[], ctx?: TrackContext, prevGenre?: stri
   }
 
   if (!text) {
-    const intro = getCulturalIntro(tags, ctx);
+    // Bridge intro uses the DESTINATION tags (ctx.culturalTags), not the user's
+    // recent history — we want "Angola run." not "Nigeria wave." when pivoting to Angola.
+    const destTags = (ctx?.culturalTags?.length ? ctx.culturalTags : null) ?? tags;
+    const intro = getCulturalIntro(destTags, ctx);
     const bases = ['Culture shift.', 'We switching it up.', 'New territory.', 'Trust the move.', 'Going somewhere else.', 'Hold on — different energy.'];
     const base = rotate('bridge', bases);
     text = intro ? `${intro} ${base}` : base;

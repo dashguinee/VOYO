@@ -43,6 +43,7 @@ import {
   generateAnnouncement, _emitAnnouncement, resetAnnounceRotation,
   type VibeIntent, type DJAnnouncement, type TrackContext,
 } from './djAnnounce';
+import { notifyNextUp } from '../oyoNotifications';
 export { usePools } from './usePools';
 export { app, type PlaySource } from './app';
 export type { VibeIntent, DJAnnouncement } from './djAnnounce';
@@ -391,10 +392,15 @@ async function _refillConductorQueue(excludeIds: Set<string>): Promise<void> {
       _vibeOverride = null;
     }
 
-    // Blend MixBoard intent into the energy axis (Gap 2 fix)
+    // Blend MixBoard intent into the energy axis + inject vibe_column overrides
     try {
       const essence = getVibeEssence();
       _blendMixBoardEnergy(move, essence);
+      // When workout mode is dominant, bias the pool toward high vibe_workout tracks.
+      // (vibe_columns is defined in VibeRules but was never populated from conductor.)
+      if (essence.workout >= 0.5) {
+        move.vibeRules.vibe_columns = [{ col: 'vibe_workout', min: 50 }];
+      }
     } catch { /* non-fatal — arc defaults hold */ }
 
     // Capture raw metadata from the first candidate for context-aware announcements.
@@ -457,6 +463,10 @@ export function drainConductorQueue(excludeIds: Set<string>): Track | null {
   }
   // Emit the announcement so the OYO DJ bar can pick it up
   if (entry.announcement) _emitAnnouncement(entry.announcement);
+  // Background OS notification — fires only when the app is not visible
+  if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+    notifyNextUp(entry.track.title, entry.track.artist);
+  }
   if (_conductorQueue.length < 3) void _refillConductorQueue(excludeIds);
   return entry.track;
 }

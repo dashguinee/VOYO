@@ -407,6 +407,17 @@ export async function conductorFetch(
     if (tierFiltered.length >= MIN_CONDUCTOR_POOL) pool = tierFiltered;
   }
 
+  // Step 5 (V): custom vibe column overrides (e.g. workout mode → vibe_workout ≥ min)
+  if (move.vibeRules.vibe_columns?.length) {
+    const colFiltered = pool.filter(e =>
+      move.vibeRules.vibe_columns!.every(({ col, min }) => {
+        const score = (e as unknown as Record<string, unknown>)[col];
+        return typeof score === 'number' && score >= min;
+      }),
+    );
+    if (colFiltered.length >= MIN_CONDUCTOR_POOL) pool = colFiltered;
+  }
+
   // Echo special filter: low heat (hidden gems), decent vibe quality
   if (move.type === 'echo') {
     const echoPool = pool.filter(e => {
