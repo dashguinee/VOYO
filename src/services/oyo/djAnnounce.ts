@@ -250,12 +250,9 @@ function hotLockedAnnouncement(tags: string[], ctx?: TrackContext): DJAnnounceme
   let text: string;
   if (ctx?.artist && ctx.artistTier === 'A') {
     text = artistCallout(ctx.artist);
-  } else if (ctx && isHypeSong(ctx)) {
-    text = getGenreVocab(ctx.genre) ?? (() => {
-      const intro = getCulturalIntro(tags, ctx);
-      const base = rotate('hot_locked', ['We in the zone.', 'Full send.', 'No stops from here.', 'We locked.']);
-      return intro ? `${intro} ${base}` : base;
-    })();
+  } else if (ctx && getGenreVocab(ctx.genre)) {
+    // Genre vocab fires regardless of energy — vibe columns often null for conductor tracks
+    text = getGenreVocab(ctx.genre)!;
   } else if (ctx && isLateNight(ctx)) {
     text = rotate('late_night', ['Night shift.', '3am feeling.', 'Low light energy.', 'After dark.']);
   } else if (ctx && isChillSong(ctx)) {
@@ -279,12 +276,8 @@ function hotVibingAnnouncement(tags: string[], ctx?: TrackContext): DJAnnounceme
   let text: string;
   if (ctx?.artist && ctx.artistTier === 'A') {
     text = artistCallout(ctx.artist);
-  } else if (ctx && isHypeSong(ctx)) {
-    text = getGenreVocab(ctx.genre) ?? (() => {
-      const intro = getCulturalIntro(tags, ctx);
-      const base = rotate('hot_vibing', ['Riding this.', 'We cooking.', 'Hold the wave.', 'This is working.']);
-      return intro ? `${intro} ${base}` : base;
-    })();
+  } else if (ctx && getGenreVocab(ctx.genre)) {
+    text = getGenreVocab(ctx.genre)!;
   } else if (ctx && isLateNight(ctx)) {
     text = rotate('late_vibing', ['Night shift.', 'Low light energy.', 'After dark.']);
   } else if (ctx && isChillSong(ctx)) {
@@ -331,12 +324,8 @@ function discoveryAnnouncement(tags: string[], ctx?: TrackContext): DJAnnounceme
   // Low-heat artist on a discovery move — DJ introduces the unknown
   if (ctx?.artist && (ctx.heatScore ?? 50) < 30) {
     text = unknownArtistCallout(ctx.artist);
-  } else if (ctx && isHypeSong(ctx)) {
-    text = getGenreVocab(ctx.genre) ?? (() => {
-      const intro = getCulturalIntro(tags, ctx);
-      const base = rotate('discovery', ['Taking you somewhere.', 'Going left for a sec.', 'Expanding the map.', 'Trust the move.']);
-      return intro ? `${intro} ${base}` : base;
-    })();
+  } else if (ctx && getGenreVocab(ctx.genre)) {
+    text = getGenreVocab(ctx.genre)!;
   } else {
     const intro = getCulturalIntro(tags, ctx);
     const base = rotate('discovery', ['Taking you somewhere.', 'Going left for a sec.', 'Expanding the map.', 'Trust the move.']);
@@ -354,12 +343,16 @@ function discoveryAnnouncement(tags: string[], ctx?: TrackContext): DJAnnounceme
 
 function peakPhaseAnnouncement(tags: string[], ctx?: TrackContext): DJAnnouncement {
   let text: string;
-  if (ctx && isHypeSong(ctx)) {
+  if (ctx?.artist && ctx.artistTier === 'A') {
+    text = artistCallout(ctx.artist);
+  } else if (ctx && getGenreVocab(ctx.genre)) {
+    const genrePhrase = getGenreVocab(ctx.genre)!;
+    const base = rotate('peak_hype', ['Peak hour.', 'This is the top.', 'We\'re there.', 'No ceiling.']);
+    text = `${genrePhrase} ${base}`;
+  } else if (ctx && isHypeSong(ctx)) {
     const intro = getCulturalIntro(tags, ctx);
     const base = rotate('peak_hype', ['Peak hour.', 'This is the top.', 'We\'re there.', 'No ceiling.']);
     text = intro ? `${intro} ${base}` : base;
-  } else if (ctx?.artist && ctx.artistTier === 'A') {
-    text = artistCallout(ctx.artist);
   } else {
     text = rotate('peak', ['Peak hour.', 'This is the top.', 'We\'re there.', 'Full arc.']);
   }
