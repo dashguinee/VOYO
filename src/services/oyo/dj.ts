@@ -390,6 +390,13 @@ export async function conductorFetch(
     if (tagFiltered.length >= MIN_CONDUCTOR_POOL) pool = tagFiltered;
   }
 
+  // Step 3.5 (V): primary_genre filter — bias toward genres from user's recent plays
+  if (move.vibeRules.genres?.length) {
+    const genres = new Set(move.vibeRules.genres.map(g => g.toLowerCase()));
+    const genreFiltered = pool.filter(e => e.primary_genre && genres.has(e.primary_genre.toLowerCase()));
+    if (genreFiltered.length >= MIN_CONDUCTOR_POOL) pool = genreFiltered;
+  }
+
   // Step 4 (V): tier filter
   if (move.vibeRules.tiers?.length) {
     const tiers = new Set<string>(move.vibeRules.tiers);
