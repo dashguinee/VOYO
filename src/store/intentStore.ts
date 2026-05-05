@@ -431,6 +431,7 @@ export const MODE_KEYWORDS: Record<VibeMode, string[]> = {
     'highlife', 'afropop', 'afrofusion', 'rumba', 'soukous', 'ndombolo', 'makossa', // Enriched genres
     'mbalax', 'bikutsi', 'bongo-flava', 'gqom', 'afrohouse', 'kwaito', // More enriched
     'fuji', 'afrojuju', 'gengetone', 'hiplife', 'soca', 'congolese',   // More African genres
+    'kuduro', 'singeli', 'lekompo', 'semba', 'benga', 'juju', 'rai', 'chaabi', // New catalog genres
   ],
   // CHILL VIBES - Relaxed, smooth listening
   // Purified 2026-04-22: dropped 'love', 'essence', 'vibe' — they matched
@@ -440,6 +441,7 @@ export const MODE_KEYWORDS: Record<VibeMode, string[]> = {
     'chill', 'slow', 'calm', 'relax', 'smooth', 'mellow', 'downtempo', // Mood / tempo
     'acoustic', 'rnb', 'r&b', 'soul', 'ballad', 'lofi',                // Genre
     'kizomba', 'zouk', 'gospel', 'reggae', 'dancehall', 'afrofolk',     // Enriched genres
+    'taarab', 'tarraxo', 'palmwine', 'afrosoul',                       // New: slow/chill catalog genres
   ],
   // PARTY MODE - High energy, danceable
   // Purified 2026-04-22: dropped 'mix', 'dj' — every DJ set / remix hit
@@ -459,6 +461,7 @@ export const MODE_KEYWORDS: Record<VibeMode, string[]> = {
     'dark', 'moody',                  // Mood
     'heartbreak', 'sad', 'emotional', // Emotional
     'last last',                      // Specific tracks with late night vibe
+    'gnawa',                          // Spiritual trance — high late_night score (62)
   ],
   // WORKOUT - Pump up energy
   // Dropped 'run' (matches "running", "runtime") and 'power' (matches
