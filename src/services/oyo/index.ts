@@ -43,7 +43,7 @@ import {
   generateAnnouncement, _emitAnnouncement, resetAnnounceRotation,
   type VibeIntent, type DJAnnouncement, type TrackContext,
 } from './djAnnounce';
-import { notifyNextUp } from '../oyoNotifications';
+import { notifyNextUp, notifyMilestone } from '../oyoNotifications';
 export { usePools } from './usePools';
 export { app, type PlaySource } from './app';
 export type { VibeIntent, DJAnnouncement } from './djAnnounce';
@@ -156,6 +156,8 @@ if (typeof window !== 'undefined' && !(window as unknown as BgWindow).__voyoSign
         _conductorQueue = [];
         _vibeOverride = null;
         _recentActions.length = 0;
+        _sessionListenMs = 0;
+        _lastMilestoneHrs = 0;
         // Eager refill — don't wait for the first drain call. Queue is ready
         // before the user's first skip after a long BG session.
         void _refillConductorQueue(new Set());
@@ -171,6 +173,9 @@ const _recentActions: Array<'skip' | 'complete' | 'react'> = [];
 const _favoriteArtists: Map<string, number> = new Map(); // artist → OYÉ count
 const _recentGenres: string[] = [];
 const _recentCulturalTags: string[] = [];
+
+let _sessionListenMs  = 0; // accumulated completed-track duration this session
+let _lastMilestoneHrs = 0; // last milestone that fired (1, 2, …)
 
 function _pushAction(action: 'skip' | 'complete' | 'react'): void {
   _recentActions.push(action);
@@ -275,6 +280,18 @@ export function onComplete(track: Track, completionRate: number = 100): void {
   recordPoolEngagement(track.trackId, 'complete', { completionRate });
   void patternRecordComplete({ trackId: track.trackId, artist: track.artist, genre: track.tags[0] });
   void recordRemoteSignal(track.trackId, 'complete');
+
+  // Listening milestone — fire at 1h, 2h, … when app is backgrounded
+  if (track.duration > 0) {
+    _sessionListenMs += track.duration * 1000;
+    const hoursListened = Math.floor(_sessionListenMs / (60 * 60 * 1000));
+    if (hoursListened > _lastMilestoneHrs) {
+      _lastMilestoneHrs = hoursListened;
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+        notifyMilestone(hoursListened);
+      }
+    }
+  }
 }
 
 /**
