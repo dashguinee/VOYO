@@ -208,7 +208,7 @@ export const VibesSection = ({ query, isVisible }: VibesSectionProps) => {
         <VoyoIcon name="radio-vibes" size={22} glow />
         <h3 className="text-white text-base font-bold font-display tracking-tight"
             style={{ color: 'rgba(232,208,158,0.97)' }}>Vibes</h3>
-        <span className="text-white/30 text-xs">{vibes.length} moods</span>
+        <span className="text-white/30 text-xs">{vibes.length} vibes</span>
       </div>
 
       {/* Category Pills */}

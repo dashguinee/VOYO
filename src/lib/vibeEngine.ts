@@ -53,7 +53,8 @@ export interface VibeQueryRules {
   title_patterns?: string[];
 
   // Sort preferences
-  sort_by?: 'play_count' | 'random' | 'canon_level' | 'recent';
+  sort_by?: 'play_count' | 'random' | 'canon_level' | 'recent'
+    | 'vibe_heat' | 'vibe_chill' | 'vibe_party' | 'vibe_late_night' | 'vibe_workout';
 }
 
 export interface VibeTrack {
@@ -237,7 +238,7 @@ export const VIBES: Record<string, Vibe> = {
     query_rules: {
       aesthetic_tags: ['smooth', 'mellow', 'relaxed'],
       matched_artist_patterns: ['asa', 'simi', 'tems', 'omah'],
-      sort_by: 'random'
+      sort_by: 'vibe_chill'
     },
     connected_vibes: ['late-night', 'bedroom-vibes', 'slow-wine']
   },
@@ -251,7 +252,7 @@ export const VIBES: Record<string, Vibe> = {
     query_rules: {
       prefer_tiers: ['A', 'B'],
       eras: ['2020s', '2010s'],
-      sort_by: 'play_count'
+      sort_by: 'vibe_heat'
     },
     connected_vibes: ['lagos-nights', 'naija-party', 'workout']
   },
@@ -265,7 +266,7 @@ export const VIBES: Record<string, Vibe> = {
     query_rules: {
       aesthetic_tags: ['smooth', 'intimate'],
       title_patterns: ['night', 'midnight', 'late'],
-      sort_by: 'random'
+      sort_by: 'vibe_late_night'
     },
     connected_vibes: ['chill-vibes', 'bedroom-vibes', 'slow-wine']
   },
@@ -279,7 +280,7 @@ export const VIBES: Record<string, Vibe> = {
     query_rules: {
       prefer_tiers: ['A', 'B'],
       title_patterns: ['run', 'go', 'up', 'energy'],
-      sort_by: 'play_count'
+      sort_by: 'vibe_workout'
     },
     connected_vibes: ['afro-heat', 'naija-party', 'club-banger']
   },
@@ -339,7 +340,7 @@ export const VIBES: Record<string, Vibe> = {
     query_rules: {
       prefer_tiers: ['A', 'B'],
       cultural_tags: ['celebration', 'party', 'festival'],
-      sort_by: 'play_count'
+      sort_by: 'vibe_party'
     },
     connected_vibes: ['naija-party', 'club-banger', 'wedding-vibes']
   },
@@ -838,7 +839,7 @@ export const vibeEngine = {
     // cached set being smaller than total catalog.
     let query = supabase
       .from('video_intelligence')
-      .select('youtube_id, title, artist, thumbnail_url, artist_tier, matched_artist, era')
+      .select('youtube_id, title, artist, thumbnail_url, artist_tier, matched_artist, era, vibe_afro_heat, vibe_chill_vibes, vibe_party_mode, vibe_late_night, vibe_workout')
       .eq('r2_cached', true);
 
     // Apply tier filter
@@ -872,12 +873,26 @@ export const vibeEngine = {
         query = query.order('first_seen', { ascending: false, nullsFirst: false });
         break;
       case 'canon_level':
-        // Order by tier (A first)
         query = query.order('artist_tier', { ascending: true });
+        break;
+      case 'vibe_heat':
+        query = query.order('vibe_afro_heat', { ascending: false, nullsFirst: false });
+        break;
+      case 'vibe_chill':
+        query = query.order('vibe_chill_vibes', { ascending: false, nullsFirst: false });
+        break;
+      case 'vibe_party':
+        query = query.order('vibe_party_mode', { ascending: false, nullsFirst: false });
+        break;
+      case 'vibe_late_night':
+        query = query.order('vibe_late_night', { ascending: false, nullsFirst: false });
+        break;
+      case 'vibe_workout':
+        query = query.order('vibe_workout', { ascending: false, nullsFirst: false });
         break;
       case 'random':
       default:
-        // We'll shuffle client-side for true randomness
+        // Shuffle client-side for true randomness
         break;
     }
 
