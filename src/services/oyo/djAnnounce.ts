@@ -659,7 +659,9 @@ function discoveryAnnouncement(tags: string[], ctx?: TrackContext): DJAnnounceme
     const regionText = getRegionCallout(ctx.culturalTags, ctx.genre);
     text = regionText ? `${regionText} ${genreText}` : genreText;
   } else {
-    const intro = getCulturalIntro(tags, ctx);
+    // For discovery, prefer the track's own cultural tags (destination) over user history.
+    const destTags = (ctx?.culturalTags?.length ? ctx.culturalTags : null) ?? tags;
+    const intro = getCulturalIntro(destTags, ctx);
     const base = rotate('discovery', ['Taking you somewhere.', 'Going left for a sec.', 'Expanding the map.', 'Trust the move.', 'Something different.', 'OYO dug deep.', 'Wide world of music.']);
     text = intro ? `${intro} ${base}` : base;
   }
