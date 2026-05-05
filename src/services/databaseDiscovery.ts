@@ -144,6 +144,22 @@ const GENRE_VIBES_CLIENT: Record<string, { afro: number; party: number; chill: n
   electronic:   { afro: 45, party: 68, chill: 35, late: 65, heat: 60 },
   rock:         { afro: 20, party: 50, chill: 48, late: 45, heat: 42 },
   classical:    { afro: 10, party: 12, chill: 82, late: 60, heat: 12 },
+  // Lusophone African
+  kuduro:       { afro: 78, party: 82, chill: 15, late: 65, heat: 72 },
+  semba:        { afro: 65, party: 62, chill: 40, late: 48, heat: 52 },
+  tarraxo:      { afro: 42, party: 38, chill: 72, late: 80, heat: 22 },
+  // East African
+  benga:        { afro: 68, party: 70, chill: 30, late: 45, heat: 60 },
+  taarab:       { afro: 48, party: 45, chill: 62, late: 55, heat: 38 },
+  // West African
+  juju:         { afro: 65, party: 65, chill: 38, late: 48, heat: 55 },
+  palmwine:     { afro: 50, party: 52, chill: 58, late: 45, heat: 40 },
+  // North African
+  rai:          { afro: 55, party: 60, chill: 42, late: 55, heat: 52 },
+  chaabi:       { afro: 52, party: 55, chill: 48, late: 50, heat: 48 },
+  gnawa:        { afro: 48, party: 45, chill: 55, late: 62, heat: 38 },
+  // Cross-regional
+  afrosoul:     { afro: 45, party: 42, chill: 68, late: 62, heat: 32 },
   other:        { afro: 55, party: 55, chill: 45, late: 50, heat: 50 },
 };
 const GENRE_VIBES_DEFAULT = { afro: 45, party: 48, chill: 42, late: 40, heat: 45 };
