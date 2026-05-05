@@ -890,32 +890,38 @@ export const vibeEngine = {
       return [];
     }
 
-    let tracks = (data || []) as VibeTrack[];
+    const allTracks = (data || []) as VibeTrack[];
 
     // Client-side artist pattern matching — skipped when genres DB filter already scoped result set
+    let artistMatched = allTracks;
     if (!rules.genres?.length && rules.matched_artist_patterns && rules.matched_artist_patterns.length > 0) {
       const patterns = rules.matched_artist_patterns.map(p => p.toLowerCase());
-      tracks = tracks.filter(t => {
+      artistMatched = allTracks.filter(t => {
         const artist = (t.matched_artist || t.artist || '').toLowerCase();
         return patterns.some(p => artist.includes(p));
       });
     }
 
+    // Title patterns search the FULL pre-artist-filter set, then union with artist matches.
+    // This means a track appears if it matches artist OR title — not artist AND title.
+    let tracks: VibeTrack[];
     if (rules.title_patterns && rules.title_patterns.length > 0) {
       const patterns = rules.title_patterns.map(p => p.toLowerCase());
-      const patternFiltered = tracks.filter(t => {
+      const titleMatched = allTracks.filter(t => {
         const title = (t.title || '').toLowerCase();
         return patterns.some(p => title.includes(p));
       });
-      // Merge pattern-filtered with artist-filtered
-      if (patternFiltered.length > 0) {
-        const existingIds = new Set(tracks.map(t => t.youtube_id));
-        for (const t of patternFiltered) {
-          if (!existingIds.has(t.youtube_id)) {
-            tracks.push(t);
-          }
+      // Union: artist matches ∪ title matches (deduped)
+      const seen = new Set(artistMatched.map(t => t.youtube_id));
+      tracks = [...artistMatched];
+      for (const t of titleMatched) {
+        if (!seen.has(t.youtube_id)) {
+          seen.add(t.youtube_id);
+          tracks.push(t);
         }
       }
+    } else {
+      tracks = artistMatched;
     }
 
     // Shuffle if random sort requested
