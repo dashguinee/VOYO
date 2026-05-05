@@ -50,6 +50,10 @@ const ORIGIN_MAP: Record<string, { flag: string; label: string }> = {
   uk: { flag: '🇬🇧', label: 'London' },
   france: { flag: '🇫🇷', label: 'Paris' },
   caribbean: { flag: '🌴', label: 'Caribbean' },
+  'dr-congo': { flag: '🇨🇩', label: 'Kinshasa' },
+  'central-africa': { flag: '🌍', label: 'Central Africa' },
+  jamaica: { flag: '🇯🇲', label: 'Kingston' },
+  latin: { flag: '🌎', label: 'Latin America' },
 };
 
 function getOrigin(tags: string[]): { flag: string; label: string } | null {
