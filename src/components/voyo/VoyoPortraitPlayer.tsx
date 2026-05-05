@@ -280,9 +280,10 @@ const getTrackModeColor = (
   trackTitle: string,
   trackArtist: string,
   modes: MixMode[],
-  modeBoosts?: Record<string, number>
+  modeBoosts?: Record<string, number>,
+  trackTags?: string[]
 ): { neon: string; glow: string; intensity: number } | null => {
-  const searchText = `${trackTitle} ${trackArtist}`.toLowerCase();
+  const searchText = `${trackTitle} ${trackArtist} ${(trackTags || []).join(' ')}`.toLowerCase();
   for (const mode of modes) {
     for (const keyword of mode.keywords) {
       if (searchText.includes(keyword.toLowerCase())) {
@@ -1924,7 +1925,7 @@ const PortalBelt = memo(({ tracks, onTap, playedTrackIds, type, mixModes, modeBo
                 track={track}
                 onTap={() => onTap(track)}
                 isPlayed={playedTrackIds.has(track.id)}
-                modeColor={mixModes ? getTrackModeColor(track.title, track.artist, mixModes, modeBoosts) : null}
+                modeColor={mixModes ? getTrackModeColor(track.title, track.artist, mixModes, modeBoosts, track.tags) : null}
               />
             </div>
           );
@@ -4553,7 +4554,7 @@ export const VoyoPortraitPlayer = ({
 
   // Detect which mode a track belongs to (returns mode id or 'random-mixer' as fallback)
   const detectTrackMode = useCallback((track: Track): string => {
-    const searchText = `${track.title} ${track.artist}`.toLowerCase();
+    const searchText = `${track.title} ${track.artist} ${(track.tags || []).join(' ')}`.toLowerCase();
     for (const mode of DEFAULT_MIX_MODES) {
       for (const keyword of mode.keywords) {
         if (searchText.includes(keyword.toLowerCase())) {
@@ -4632,9 +4633,9 @@ export const VoyoPortraitPlayer = ({
     // Combine hot and discovery tracks
     const allTracks = [...hotTracks, ...discoverTracks];
 
-    // Find tracks matching this mode's keywords
+    // Find tracks matching this mode's keywords (title + artist + primary_genre tag)
     const matchingTracks = allTracks.filter(track => {
-      const searchText = `${track.title} ${track.artist}`.toLowerCase();
+      const searchText = `${track.title} ${track.artist} ${(track.tags || []).join(' ')}`.toLowerCase();
       return mode.keywords.some(keyword => searchText.includes(keyword.toLowerCase()));
     });
 
