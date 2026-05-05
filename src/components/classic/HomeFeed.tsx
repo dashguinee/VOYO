@@ -11,6 +11,7 @@
 import { useState, useMemo, useEffect, useRef, memo, useCallback } from 'react';
 import { useShallow } from 'zustand/shallow';
 import { devWarn } from '../../utils/logger';
+import { fmtGenre } from '../../utils/format';
 import { Search, Play, Zap } from 'lucide-react';
 import { AfricaIcon } from '../ui/AfricaIcon';
 import { getThumb, generatePlaceholder } from '../../utils/thumbnail';
@@ -100,22 +101,6 @@ const getTrendingTracks = (hotPool: PooledTrack[], limit: number = 15): Track[] 
     .slice(0, limit) as Track[];
 };
 
-// Display labels for raw genre keys — shown in the genre pill on track cards.
-const GENRE_DISPLAY: Record<string, string> = {
-  afrobeats: 'Afrobeats', afropop: 'Afropop', amapiano: 'Amapiano',
-  afrohouse: 'Afro House', 'afro-house': 'Afro House', gqom: 'Gqom',
-  hiphop: 'Hip-Hop', trap: 'Trap', drill: 'Drill', grime: 'Grime',
-  rnb: 'R&B', soul: 'Soul', gospel: 'Gospel', jazz: 'Jazz',
-  reggae: 'Reggae', dancehall: 'Dancehall', soca: 'Soca', reggaeton: 'Reggaeton',
-  kizomba: 'Kizomba', zouk: 'Zouk', afrofolk: 'Afro Folk',
-  highlife: 'Highlife', hiplife: 'Hiplife', mbalax: 'Mbalax',
-  bikutsi: 'Bikutsi', makossa: 'Makossa', soukous: 'Soukous',
-  congolese: 'Congolese', ndombolo: 'Ndombolo', 'bongo-flava': 'Bongo Flava',
-  gengetone: 'Gengetone', rumba: 'Rumba', funk: 'Funk', pop: 'Pop',
-  rock: 'Rock', electronic: 'Electronic', classical: 'Classical', other: 'World',
-};
-const fmtGenre = (g: string): string =>
-  GENRE_DISPLAY[g.toLowerCase()] ?? GENRE_DISPLAY[g.toLowerCase().replace(/[-\s]+/g, '')] ?? g;
 
 // OYÉ section header rotation. African capitals + diaspora-heavy
 // places where the music lives. Tagged by category so the subtitle

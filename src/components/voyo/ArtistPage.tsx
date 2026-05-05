@@ -12,7 +12,7 @@ import { X, ArrowLeft, Play, Search, Loader2, Music2, ExternalLink } from 'lucid
 import { VoyoCloseX } from '../ui/VoyoCloseX';
 import { useArtist, ArtistTrack, ArtistMoment } from '../../hooks/useArtist';
 import { useBackGuard } from '../../hooks/useBackGuard';
-import { formatTime as formatDuration } from '../../utils/format';
+import { formatTime as formatDuration, fmtGenre } from '../../utils/format';
 
 // ============================================
 // TYPES
@@ -571,7 +571,7 @@ export const ArtistPage: React.FC<ArtistPageProps> = ({
   // Build metadata line
   const metaParts: string[] = [];
   if (countryName) metaParts.push(countryName);
-  if (genre) metaParts.push(genre.charAt(0).toUpperCase() + genre.slice(1));
+  if (genre) metaParts.push(fmtGenre(genre));
 
   // Build stats line
   const statParts: string[] = [];

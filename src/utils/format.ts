@@ -21,6 +21,26 @@ export const formatViews = (views: number): string => {
 
 export const formatOyeScore = formatViews;
 
+const GENRE_LABELS: Record<string, string> = {
+  afrobeats: 'Afrobeats', afropop: 'Afropop', amapiano: 'Amapiano',
+  afrohouse: 'Afro House', 'afro-house': 'Afro House', gqom: 'Gqom',
+  hiphop: 'Hip-Hop', trap: 'Trap', drill: 'Drill', grime: 'Grime',
+  rnb: 'R&B', soul: 'Soul', gospel: 'Gospel', jazz: 'Jazz',
+  reggae: 'Reggae', dancehall: 'Dancehall', soca: 'Soca', reggaeton: 'Reggaeton',
+  kizomba: 'Kizomba', zouk: 'Zouk', afrofolk: 'Afro Folk',
+  highlife: 'Highlife', hiplife: 'Hiplife', mbalax: 'Mbalax',
+  bikutsi: 'Bikutsi', makossa: 'Makossa', soukous: 'Soukous',
+  congolese: 'Congolese', ndombolo: 'Ndombolo', 'bongo-flava': 'Bongo Flava',
+  gengetone: 'Gengetone', rumba: 'Rumba', funk: 'Funk', pop: 'Pop',
+  rock: 'Rock', electronic: 'Electronic', classical: 'Classical', other: 'World',
+};
+
+export const fmtGenre = (g: string | null | undefined): string => {
+  if (!g) return '';
+  const key = g.toLowerCase();
+  return GENRE_LABELS[key] ?? GENRE_LABELS[key.replace(/[-\s]+/g, '')] ?? (g.charAt(0).toUpperCase() + g.slice(1));
+};
+
 export const formatRelativeDate = (dateString: string): string => {
   const date = new Date(dateString);
   const diffDays = Math.floor((Date.now() - date.getTime()) / 86400000);
