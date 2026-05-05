@@ -127,6 +127,11 @@ const GENRE_VIBES_CLIENT: Record<string, { afro: number; party: number; chill: n
   kizomba:      { afro: 35, party: 30, chill: 78, late: 82, heat: 30 },
   zouk:         { afro: 32, party: 32, chill: 76, late: 80, heat: 28 },
   rnb:          { afro: 42, party: 45, chill: 68, late: 68, heat: 42 },
+  'r&b':        { afro: 42, party: 45, chill: 68, late: 68, heat: 42 },
+  'hip-hop':    { afro: 62, party: 72, chill: 28, late: 55, heat: 65 },
+  afrobeat:     { afro: 80, party: 70, chill: 25, late: 45, heat: 78 }, // Fela-style vs afrobeats
+  afrofusion:   { afro: 65, party: 62, chill: 42, late: 48, heat: 62 },
+  'bongo-flava':{ afro: 70, party: 68, chill: 32, late: 45, heat: 68 },
   soul:         { afro: 35, party: 38, chill: 72, late: 65, heat: 35 },
   gospel:       { afro: 28, party: 22, chill: 64, late: 30, heat: 22 },
   jazz:         { afro: 22, party: 28, chill: 78, late: 72, heat: 22 },
@@ -141,9 +146,11 @@ const GENRE_VIBES_DEFAULT = { afro: 45, party: 48, chill: 42, late: 40, heat: 45
 
 function genreVibes(genre: string | null) {
   if (!genre) return GENRE_VIBES_DEFAULT;
+  const lower = genre.toLowerCase();
   return GENRE_VIBES_CLIENT[genre]
-    ?? GENRE_VIBES_CLIENT[genre.toLowerCase()]
-    ?? GENRE_VIBES_CLIENT[genre.toLowerCase().replace(/[-\s]+/g, '')]
+    ?? GENRE_VIBES_CLIENT[lower]
+    ?? GENRE_VIBES_CLIENT[lower.replace(/[-\s]+/g, '')]
+    ?? GENRE_VIBES_CLIENT[lower.replace(/[-\s&]+/g, '')]
     ?? GENRE_VIBES_DEFAULT;
 }
 
