@@ -24,11 +24,6 @@ import type { Moment } from '../../../types/moments';
 
 const VOYO_API = import.meta.env.VITE_API_URL || 'https://voyo-edge.dash-webtv.workers.dev';
 
-// Session-level R2 availability flag.
-// Flips to false on the first 404 — all subsequent cards skip the R2 attempt
-// and go straight to their embed/thumbnail fallback without a stall.
-// Resets to true when the download pipeline populates R2 and deploys.
-let r2SessionAvailable = true;
 
 // ── Cultural origin map ───────────────────────────────────────────────────
 
@@ -128,24 +123,6 @@ const DirectionPulse = memo(({ dir, active }: { dir: EarthDir | null; active: bo
 DirectionPulse.displayName = 'DirectionPulse';
 
 // ── EarthVideoCard ─────────────────────────────────────────────────────────
-//
-// Video format hierarchy:
-//   r2_video      — VOYO CDN (populated by download pipeline)
-//   tiktok_embed  — autoplays muted via TikTok's embed endpoint
-//   instagram_embed — shows reel player iframe
-//   youtube_embed — YouTube autoplay embed
-//   thumbnail     — static last resort
-
-type VideoFormat = 'r2_video' | 'tiktok_embed' | 'instagram_embed' | 'youtube_embed' | 'thumbnail';
-
-function resolveFormat(moment: Moment, r2Failed: boolean): VideoFormat {
-  // Instagram has no R2 content — skip straight to thumbnail (no stall).
-  // TikTok and YouTube DO have R2 content — try it, fall back on error.
-  if (moment.source_platform !== 'instagram' && !r2Failed && moment.r2_video_key) return 'r2_video';
-  if (moment.source_platform === 'tiktok') return 'tiktok_embed';
-  if (moment.source_platform === 'youtube' || moment.source_platform === 'youtube_shorts') return 'youtube_embed';
-  return 'thumbnail';
-}
 
 interface EarthVideoCardProps {
   moment: Moment;
@@ -155,18 +132,10 @@ interface EarthVideoCardProps {
 
 const EarthVideoCard = memo(({ moment, visible, muted }: EarthVideoCardProps) => {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const [thumbLoaded, setThumbLoaded] = useState(false);
   const [videoReady, setVideoReady] = useState(false);
-  const [r2Failed, setR2Failed] = useState(false);
-  const [embedLoaded, setEmbedLoaded] = useState(false);
-
-  const format = resolveFormat(moment, r2Failed);
 
   useEffect(() => {
     setVideoReady(false);
-    setR2Failed(false);
-    setThumbLoaded(false);
-    setEmbedLoaded(false);
   }, [moment.id]);
 
   useEffect(() => {
@@ -176,107 +145,29 @@ const EarthVideoCard = memo(({ moment, visible, muted }: EarthVideoCardProps) =>
 
   useEffect(() => {
     const v = videoRef.current;
-    if (!v || !visible || format !== 'r2_video') return;
+    if (!v || !visible) return;
     void v.play().catch(() => {});
-  }, [visible, format]);
+  }, [visible]);
 
   const videoUrl = `${VOYO_API}/r2/feed/${moment.source_id}`;
 
-  // Thumb opacity: fades out only when a video/embed is ready
-  const thumbOpacity = (() => {
-    if (!thumbLoaded) return 0;
-    if (format === 'r2_video' && videoReady) return 0;
-    if ((format === 'instagram_embed' || format === 'tiktok_embed' || format === 'youtube_embed') && embedLoaded) return 0;
-    return 1;
-  })();
-
   return (
     <div className="absolute inset-0">
-      {/* Thumbnail — always present as backdrop */}
-      {moment.thumbnail_url && (
-        <img
-          src={moment.thumbnail_url}
-          alt=""
-          onLoad={() => setThumbLoaded(true)}
-          className="absolute inset-0 w-full h-full object-cover"
-          style={{
-            opacity: thumbOpacity,
-            transition: 'opacity 400ms cubic-bezier(0.16, 1, 0.3, 1)',
-          }}
-        />
-      )}
-
-      {/* R2 video stream */}
-      {format === 'r2_video' && (
-        <video
-          ref={videoRef}
-          src={videoUrl}
-          muted={muted}
-          loop
-          playsInline
-          preload={visible ? 'auto' : 'metadata'}
-          onCanPlay={() => setVideoReady(true)}
-          onError={() => { r2SessionAvailable = false; setR2Failed(true); }}
-          className="absolute inset-0 w-full h-full object-cover"
-          style={{
-            opacity: videoReady ? 1 : 0,
-            transition: 'opacity 400ms cubic-bezier(0.16, 1, 0.3, 1)',
-            background: '#0B0703',
-          }}
-        />
-      )}
-
-      {/* TikTok embed — autoplays muted, full video */}
-      {format === 'tiktok_embed' && visible && (
-        <iframe
-          key={`tk-${moment.source_id}`}
-          src={`https://www.tiktok.com/embed/v2/${moment.source_id}?autoplay=1&muted=1`}
-          className="absolute inset-0 w-full h-full border-0"
-          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-          allowFullScreen
-          onLoad={() => setEmbedLoaded(true)}
-          style={{
-            opacity: embedLoaded ? 1 : 0,
-            transition: 'opacity 500ms cubic-bezier(0.16, 1, 0.3, 1)',
-          }}
-          title={moment.title || 'Moment'}
-        />
-      )}
-
-      {/* Instagram embed — reel player */}
-      {format === 'instagram_embed' && visible && (
-        <iframe
-          key={`ig-${moment.source_id}`}
-          src={`https://www.instagram.com/p/${moment.source_id}/embed/`}
-          className="absolute inset-0 w-full h-full border-0"
-          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-          allowFullScreen
-          scrolling="no"
-          onLoad={() => setEmbedLoaded(true)}
-          style={{
-            opacity: embedLoaded ? 1 : 0,
-            transition: 'opacity 500ms cubic-bezier(0.16, 1, 0.3, 1)',
-          }}
-          title={moment.title || 'Moment'}
-        />
-      )}
-
-      {/* YouTube embed */}
-      {format === 'youtube_embed' && visible && (
-        <iframe
-          key={`yt-${moment.source_id}`}
-          src={`https://www.youtube.com/embed/${moment.source_id}?autoplay=1&mute=1&loop=1&playlist=${moment.source_id}&controls=0&playsinline=1&modestbranding=1&rel=0`}
-          className="absolute inset-0 w-full h-full border-0"
-          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-          allowFullScreen
-          onLoad={() => setEmbedLoaded(true)}
-          style={{
-            opacity: embedLoaded ? 1 : 0,
-            transition: 'opacity 500ms cubic-bezier(0.16, 1, 0.3, 1)',
-          }}
-          title={moment.title || 'Moment'}
-        />
-      )}
+      <video
+        ref={videoRef}
+        src={videoUrl}
+        muted={muted}
+        loop
+        playsInline
+        preload={visible ? 'auto' : 'metadata'}
+        onCanPlay={() => setVideoReady(true)}
+        className="absolute inset-0 w-full h-full object-cover"
+        style={{
+          opacity: videoReady ? 1 : 0,
+          transition: 'opacity 400ms cubic-bezier(0.16, 1, 0.3, 1)',
+          background: '#0B0703',
+        }}
+      />
 
       {/* Gradient vignette */}
       <div

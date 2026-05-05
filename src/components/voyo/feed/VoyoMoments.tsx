@@ -16,7 +16,6 @@ import { Heart, Flame, MessageCircle, ExternalLink, Play, Volume2, VolumeX, X, S
 import { useMoments, CategoryAxis, NavAction, CATEGORY_PRESETS, TOP_MODE_LABELS } from '../../../hooks/useMoments';
 import { markTrackMovedAway } from '../../../services/momentsEngine';
 import type { Moment } from '../../../types/moments';
-import { devWarn } from '../../../utils/logger';
 import { usePlayerStore } from '../../../store/playerStore';
 import { useMessagingViewport } from '../../../hooks/useMessagingViewport';
 
@@ -42,8 +41,6 @@ function getSpring(action: NavAction) {
 // API base for R2 feed video streaming — Edge Worker (300+ locations)
 const VOYO_API = import.meta.env.VITE_API_URL || 'https://voyo-edge.dash-webtv.workers.dev';
 
-// Session-level R2 flag — flips false on first 404, skipping R2 for all subsequent cards.
-let r2SessionAvailable = true;
 
 const css = (obj: React.CSSProperties) => obj;
 
@@ -639,7 +636,6 @@ OyeAnimations.displayName = 'OyeAnimations';
 // MOMENT CARD
 // ============================================
 
-type MomentFormat = 'r2_video' | 'tiktok_embed' | 'instagram_embed' | 'iframe_embed' | 'thumbnail';
 
 interface MomentCardProps {
   moment: Moment;
@@ -664,68 +660,20 @@ const MomentCard = memo(({ moment, isOyed, onOye, isActive, isMuted, onToggleMut
   const initial = (moment.creator_name || moment.creator_username || '?')[0].toUpperCase();
   const creator = moment.creator_name || moment.creator_username || 'Unknown';
   const videoRef = useRef<HTMLVideoElement>(null);
-  const iframeRef = useRef<HTMLIFrameElement>(null);
-  const [videoError, setVideoError] = useState(false);
-  // Tracks whether the static thumbnail <img> has finished decoding.
-  // While loading (or if it never loads), we keep it at opacity:0 so the
-  // browser's broken-image icon never paints — the dark amber container
-  // bg shows through instead. (Dash 2026-04-29 v829: "no placeholder
-  // image icon before video loads".)
   const [thumbLoaded, setThumbLoaded] = useState(false);
-  // Gates the cross-fade from thumbnail to video — only flips true once
-  // the <video> element fires its `playing` event (i.e. real frames are
-  // being decoded). Without this gate, the video element rendered at
-  // full opacity above the thumbnail; if the first decoded frame wasn't
-  // identical to moment.thumbnail_url, you'd see a flash as the swap
-  // happened. Fired per format/active flip.
   const [videoFramePainted, setVideoFramePainted] = useState(false);
-  // Gates thumbnail → iframe crossfade. Fires on iframe `load` event
-  // (YouTube page loaded = safe to reveal). Reset when going inactive
-  // so the thumbnail shows again if the user returns to this moment.
-  const [iframeLoaded, setIframeLoaded] = useState(false);
 
   const videoUrl = `${VOYO_API}/r2/feed/${moment.source_id}`;
 
-  // v829: dropped the /check round trip. Was a 100-300ms RTT to the
-  // edge worker BEFORE the <video> element even started loading —
-  // measurably the biggest snap-blocker on the feed. Now we mount
-  // the <video> optimistically; on 404/error it fires onError and
-  // we fall back to audio_cover or thumbnail. Wasted bandwidth on
-  // a non-video moment is ~one HEAD-equivalent 404 from the worker.
-  // Reset the error flag when the moment itself changes (different
-  // source_id) so a previous failure doesn't poison the new card.
   useEffect(() => {
-    setVideoError(false);
     setThumbLoaded(false);
     setVideoFramePainted(false);
-    setIframeLoaded(false);
   }, [moment.source_id]);
 
-  // Resolve presentation format:
-  //   1. r2_video       — VOYO CDN edge stream (populated by download pipeline).
-  //   2. tiktok_embed   — TikTok's official embed; autoplays muted.
-  //   3. instagram_embed — Instagram reel player iframe.
-  //   4. iframe_embed   — YouTube embed (youtube/youtube_shorts platform).
-  //   5. thumbnail      — Static last resort.
-  const format: MomentFormat = (() => {
-    // Instagram has no R2 content — skip to thumbnail immediately.
-    // TikTok/YouTube have R2 populated — try it first, fall back on error.
-    if (moment.source_platform !== 'instagram' && !videoError) return 'r2_video';
-    if (moment.source_platform === 'tiktok') return 'tiktok_embed';
-    // Instagram embed shows "Watch on Instagram" chrome — thumbnail until R2 is populated.
-    if (moment.source_platform === 'youtube' || moment.source_platform === 'youtube_shorts') return 'iframe_embed';
-    return 'thumbnail';
-  })();
-
-  // Auto-play/pause based on active state (only for r2_video format)
-  // Also pauses on background to avoid competing with main audio element
   useEffect(() => {
     const vid = videoRef.current;
-    if (!vid || format !== 'r2_video') return;
-
+    if (!vid) return;
     if (isActive && !document.hidden) {
-      // Reset paint-gate so the cross-fade re-runs from the thumbnail
-      // each time we re-activate (e.g. user swipes back to this moment).
       setVideoFramePainted(false);
       vid.currentTime = 0;
       vid.play().catch(() => {});
@@ -733,56 +681,26 @@ const MomentCard = memo(({ moment, isOyed, onOye, isActive, isMuted, onToggleMut
       vid.pause();
       setVideoFramePainted(false);
     }
-
-    // Pause moment video when app backgrounds — prevents audio focus theft
-    const onVis = () => {
-      if (document.hidden && vid) vid.pause();
-    };
+    const onVis = () => { if (document.hidden && vid) vid.pause(); };
     document.addEventListener('visibilitychange', onVis);
     return () => document.removeEventListener('visibilitychange', onVis);
-  }, [isActive, format]);
+  }, [isActive]);
 
-  // Listen for the `playing` event — fires when the video element
-  // actually starts decoding frames. That's when it's safe to cross-fade
-  // the thumbnail out: any earlier and the user sees a black/empty
-  // <video> over the thumbnail mid-fade.
   useEffect(() => {
     const vid = videoRef.current;
-    if (!vid || format !== 'r2_video') return;
+    if (!vid) return;
     const onPlaying = () => setVideoFramePainted(true);
     vid.addEventListener('playing', onPlaying);
     return () => vid.removeEventListener('playing', onPlaying);
-  }, [format]);
+  }, []);
 
-  // Unmount embed iframes when inactive — stops audio bleed + saves resources.
-  // Reset iframeLoaded so thumbnail shows again when user returns to this card.
-  useEffect(() => {
-    if (!isActive && (format === 'iframe_embed' || format === 'tiktok_embed' || format === 'instagram_embed')) {
-      setIframeLoaded(false);
-    }
-  }, [isActive, format]);
-
-  // Sync muted state
   useEffect(() => {
     const vid = videoRef.current;
     if (vid) vid.muted = isMuted;
   }, [isMuted]);
 
-  const handleVideoError = useCallback(() => {
-    r2SessionAvailable = false;
-    setVideoError(true);
-    devWarn(`[MomentCard] Video load failed for ${moment.source_id}, falling back`);
-  }, [moment.source_id]);
-
   return (
     <div style={S.card}>
-      {/* === SHARED THUMBNAIL BACKDROP ===
-          Persists across all three formats. During r2_video it cross-fades
-          out when frames start painting; during iframe_embed it stays visible
-          while the iframe loads then fades when it's ready; for thumbnail
-          format it stays visible permanently. This prevents the blank-flash
-          that happened when format switched from r2_video → iframe_embed
-          (old code removed the thumbnail from the DOM at that moment). */}
       {moment.thumbnail_url && (
         <img
           src={moment.thumbnail_url}
@@ -791,12 +709,7 @@ const MomentCard = memo(({ moment, isOyed, onOye, isActive, isMuted, onToggleMut
           onError={() => setThumbLoaded(false)}
           style={{
             ...S.thumb,
-            opacity: (() => {
-              if (!thumbLoaded) return 0;
-              if (format === 'r2_video') return videoFramePainted ? 0 : 1;
-              if (format === 'iframe_embed' || format === 'tiktok_embed' || format === 'instagram_embed') return iframeLoaded ? 0 : 1;
-              return 1; // thumbnail format — stays
-            })(),
+            opacity: thumbLoaded && !videoFramePainted ? 1 : 0,
             transition: 'opacity 400ms cubic-bezier(0.16, 1, 0.3, 1)',
           }}
           loading="lazy"
@@ -805,87 +718,20 @@ const MomentCard = memo(({ moment, isOyed, onOye, isActive, isMuted, onToggleMut
         />
       )}
 
-      {/* === FORMAT: R2 VIDEO === */}
-      {format === 'r2_video' && (
-        <video
-          ref={videoRef}
-          src={videoUrl}
-          className="absolute inset-0 w-full h-full object-cover"
-          muted={isMuted}
-          loop
-          playsInline
-          // 'metadata' on all cards warms the header without streaming
-          // the full clip — active flip is instant, no poster blink on first play().
-          preload={isActive ? 'auto' : 'metadata'}
-          onError={handleVideoError}
-          style={{
-            opacity: videoFramePainted ? 1 : 0,
-            transition: 'opacity 400ms cubic-bezier(0.16, 1, 0.3, 1)',
-            backgroundColor: '#0B0703',
-          }}
-        />
-      )}
-
-      {/* === FORMAT: YOUTUBE IFRAME EMBED ===
-          Only mounted when isActive — unmounting is the pause mechanism
-          (no postMessage, no src swap). This stops audio bleed when the
-          user swipes away. The shared thumbnail backdrop above stays visible
-          while the iframe loads; `onLoad` fires when YouTube page is ready
-          and triggers the crossfade. enablejsapi=1 added for future control. */}
-      {/* === FORMAT: YOUTUBE IFRAME === */}
-      {format === 'iframe_embed' && isActive && (
-        <iframe
-          ref={iframeRef}
-          key={`yt-${moment.source_id}`}
-          src={`https://www.youtube.com/embed/${moment.source_id}?autoplay=1&mute=1&loop=1&playlist=${moment.source_id}&controls=0&playsinline=1&modestbranding=1&rel=0&enablejsapi=1`}
-          onLoad={() => setIframeLoaded(true)}
-          style={{
-            position: 'absolute', inset: 0, width: '100%', height: '100%',
-            border: 'none', backgroundColor: '#0B0703',
-            opacity: iframeLoaded ? 1 : 0,
-            transition: 'opacity 500ms cubic-bezier(0.16, 1, 0.3, 1)',
-          }}
-          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-          title={moment.title || 'Moment'}
-        />
-      )}
-
-      {/* === FORMAT: TIKTOK EMBED — autoplays muted === */}
-      {format === 'tiktok_embed' && isActive && (
-        <iframe
-          key={`tk-${moment.source_id}`}
-          src={`https://www.tiktok.com/embed/v2/${moment.source_id}?autoplay=1&muted=1`}
-          onLoad={() => setIframeLoaded(true)}
-          style={{
-            position: 'absolute', inset: 0, width: '100%', height: '100%',
-            border: 'none', backgroundColor: '#0B0703',
-            opacity: iframeLoaded ? 1 : 0,
-            transition: 'opacity 500ms cubic-bezier(0.16, 1, 0.3, 1)',
-          }}
-          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-          allowFullScreen
-          title={moment.title || 'Moment'}
-        />
-      )}
-
-      {/* === FORMAT: INSTAGRAM EMBED — reel player === */}
-      {format === 'instagram_embed' && isActive && (
-        <iframe
-          key={`ig-${moment.source_id}`}
-          src={`https://www.instagram.com/p/${moment.source_id}/embed/`}
-          onLoad={() => setIframeLoaded(true)}
-          scrolling="no"
-          style={{
-            position: 'absolute', inset: 0, width: '100%', height: '100%',
-            border: 'none', backgroundColor: '#0B0703',
-            opacity: iframeLoaded ? 1 : 0,
-            transition: 'opacity 500ms cubic-bezier(0.16, 1, 0.3, 1)',
-          }}
-          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-          allowFullScreen
-          title={moment.title || 'Moment'}
-        />
-      )}
+      <video
+        ref={videoRef}
+        src={videoUrl}
+        className="absolute inset-0 w-full h-full object-cover"
+        muted={isMuted}
+        loop
+        playsInline
+        preload={isActive ? 'auto' : 'metadata'}
+        style={{
+          opacity: videoFramePainted ? 1 : 0,
+          transition: 'opacity 400ms cubic-bezier(0.16, 1, 0.3, 1)',
+          backgroundColor: '#0B0703',
+        }}
+      />
 
       <div style={S.grad} />
 
