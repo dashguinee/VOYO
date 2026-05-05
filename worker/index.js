@@ -1165,7 +1165,47 @@ export default {
       }
     }
 
-    // Stream video from R2 for a moment
+    // Direct R2 stream — platform-aware, no Supabase lookup.
+    // Route: /r2/feed/{platform}/{source_id}
+    // Key:   moments/{platform}/{source_id}.mp4
+    // This is the fast path — use this from the frontend.
+    if (url.pathname.match(/^\/r2\/feed\/(tiktok|instagram|youtube)\/[^/]+$/)) {
+      const parts = url.pathname.split('/');
+      const platform = parts[3];
+      const sourceId = parts[4];
+      if (!sourceId) {
+        return new Response(JSON.stringify({ error: 'Missing source_id' }), {
+          status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+      try {
+        const r2Key = `moments/${platform}/${sourceId}.mp4`;
+        const rangeHeader = request.headers.get('Range');
+        if (rangeHeader) {
+          const object = await env.VOYO_AUDIO.get(r2Key);
+          if (!object) return new Response(JSON.stringify({ error: 'Not found', key: r2Key }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+          const rangeMatch = rangeHeader.match(/bytes=(\d+)-(\d*)/);
+          if (rangeMatch) {
+            const start = parseInt(rangeMatch[1]);
+            const end = rangeMatch[2] ? parseInt(rangeMatch[2]) : object.size - 1;
+            const rangedObject = await env.VOYO_AUDIO.get(r2Key, { range: { offset: start, length: end - start + 1 } });
+            return new Response(rangedObject.body, {
+              status: 206,
+              headers: { ...corsHeaders, 'Content-Type': 'video/mp4', 'Content-Range': `bytes ${start}-${end}/${object.size}`, 'Content-Length': end - start + 1, 'Cache-Control': 'public, max-age=31536000', 'Accept-Ranges': 'bytes', 'X-VOYO-Source': 'r2-direct' }
+            });
+          }
+        }
+        const object = await env.VOYO_AUDIO.get(r2Key);
+        if (!object) return new Response(JSON.stringify({ error: 'Not found', key: r2Key }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        return new Response(object.body, {
+          headers: { ...corsHeaders, 'Content-Type': 'video/mp4', 'Content-Length': object.size, 'Cache-Control': 'public, max-age=31536000', 'Accept-Ranges': 'bytes', 'X-VOYO-Source': 'r2-direct' }
+        });
+      } catch (err) {
+        return new Response(JSON.stringify({ error: err.message }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+    }
+
+    // Legacy: stream video from R2 with Supabase key lookup (slow path, kept for compatibility)
     if (url.pathname.match(/^\/r2\/feed\/[^/]+$/) && !url.pathname.endsWith('/check')) {
       const sourceId = url.pathname.split('/')[3];
       if (!sourceId) {

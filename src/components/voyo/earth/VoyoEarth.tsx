@@ -151,7 +151,7 @@ const EarthVideoCard = memo(({ moment, visible, muted }: EarthVideoCardProps) =>
     void v.play().catch(() => {});
   }, [visible]);
 
-  const videoUrl = `${VOYO_API}/r2/feed/${moment.source_id}`;
+  const videoUrl = `${VOYO_API}/r2/feed/${moment.source_platform}/${moment.source_id}`;
 
   return (
     <div className="absolute inset-0">

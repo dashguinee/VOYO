@@ -663,7 +663,7 @@ const MomentCard = memo(({ moment, isOyed, onOye, isActive, isMuted, onToggleMut
   const [thumbLoaded, setThumbLoaded] = useState(false);
   const [videoFramePainted, setVideoFramePainted] = useState(false);
 
-  const videoUrl = `${VOYO_API}/r2/feed/${moment.source_id}`;
+  const videoUrl = `${VOYO_API}/r2/feed/${moment.source_platform}/${moment.source_id}`;
 
   useEffect(() => {
     setThumbLoaded(false);
