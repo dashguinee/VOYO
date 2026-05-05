@@ -141,6 +141,25 @@ const GENRE_VOCAB: Record<string, string[]> = {
   classical:  ['Classical interlude.', 'Orchestral moment.', 'Timeless.'],
   electronic: ['Electronic drop.', 'Synth mode.', 'Plug in.', 'Digital heat.'],
   afrofolk:   ['Roots acoustic.', 'Folk from the motherland.', 'West African roots.'],
+  // Angola / Lusophone Africa
+  kuduro:     ['Kuduro hour.', 'Luanda walls shaking.', 'Angola on fire.', 'Batukadeiras energy.'],
+  semba:      ['Semba time.', 'Angola roots.', 'The original kizomba.'],
+  tarraxo:    ['Tarraxo wave.', 'Slow and precise.', 'Lusophone groove.'],
+  // East Africa
+  benga:      ['Benga on.', 'Kenya classic.', 'Lake Victoria groove.'],
+  taarab:     ['Taarab moment.', 'Swahili coast.', 'East Africa gold.'],
+  // North Africa
+  rai:        ['Rai hour.', 'Algeria calling.', 'North Africa wave.', 'Wahrani groove.'],
+  chaabi:     ['Chaabi flow.', 'Algiers on the set.', 'North African roots.'],
+  gnawa:      ['Gnawa ceremony.', 'Morocco deep.', 'Spirit frequencies.'],
+  // West Africa
+  juju:       ['Juju wave.', 'Lagos classic.', 'Yoruba guitar.', 'King Sunny Ade roads.'],
+  palmwine:   ['Palm-wine mood.', 'Old school Ghana.', 'Acoustic Africa.'],
+  // Diaspora / Cross-regional
+  afrosoul:   ['Afro soul.', 'The feeling runs deep.', 'Soulful Africa.'],
+  // Lekompo / Singeli / Underground
+  lekompo:    ['Lekompo bounce.', 'SA township.', 'Limpopo sound.'],
+  singeli:    ['Singeli speed.', 'Dar es Salaam underground.', 'East Africa underground.'],
   other:      ['Something different.', 'Outside the box.', 'Unexpected.'],
 };
 
