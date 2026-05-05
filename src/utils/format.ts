@@ -32,7 +32,7 @@ const GENRE_LABELS: Record<string, string> = {
   kizomba: 'Kizomba', zouk: 'Zouk', afrofolk: 'Afro Folk',
   highlife: 'Highlife', hiplife: 'Hiplife', mbalax: 'Mbalax',
   bikutsi: 'Bikutsi', makossa: 'Makossa', soukous: 'Soukous',
-  congolese: 'Congolese', ndombolo: 'Ndombolo', 'bongo-flava': 'Bongo Flava',
+  congolese: 'Congolese', ndombolo: 'Ndombolo', 'bongo-flava': 'Bongo Flava', bongoflava: 'Bongo Flava',
   gengetone: 'Gengetone', rumba: 'Rumba', funk: 'Funk', pop: 'Pop',
   rock: 'Rock', electronic: 'Electronic', classical: 'Classical', other: 'World',
 };
