@@ -129,9 +129,14 @@ function getVibeComboPhrase(ctx: TrackContext): string | null {
 
 function getTimeOfDayHint(): string | null {
   const h = new Date().getHours();
-  if (h >= 5 && h < 9)   return rotate('tod_morning', ['Morning session.', 'Rise and vibe.', 'First track of the day.']);
-  if (h >= 22 || h < 2)  return rotate('tod_midnight', ['Deep night energy.', 'The late crowd.', 'Night owls only.']);
-  if (h >= 2 && h < 5)   return rotate('tod_latenight', ['Very late. Very intentional.', '4am club.', 'The real late shift.']);
+  if (h >= 5 && h < 9)   return rotate('tod_morning',   ['Morning session.', 'Rise and vibe.', 'First track of the day.']);
+  if (h >= 9 && h < 12)  return rotate('tod_midmorning',['Mid-morning energy.', 'Day is moving.', 'In motion now.']);
+  if (h >= 12 && h < 15) return rotate('tod_afternoon',  ['Afternoon run.', 'Midday heat.', 'Lunch break vibes.']);
+  if (h >= 15 && h < 18) return rotate('tod_lateafternoon', ['Late afternoon.', 'Day winding.', 'Golden hour incoming.']);
+  if (h >= 18 && h < 21) return rotate('tod_evening',    ['Evening session.', 'Sun\'s down. Volume up.', 'Night is beginning.']);
+  if (h >= 21 && h < 22) return rotate('tod_prenight',   ['Pre-night energy.', 'Getting in the mood.', 'Night about to start.']);
+  if (h >= 22 || h < 2)  return rotate('tod_midnight',   ['Deep night energy.', 'The late crowd.', 'Night owls only.']);
+  if (h >= 2 && h < 5)   return rotate('tod_latenight',  ['Very late. Very intentional.', '4am club.', 'The real late shift.']);
   return null;
 }
 
