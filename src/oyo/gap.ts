@@ -186,8 +186,21 @@ const GENRE_PLAYER_GREETINGS: Record<string, string[]> = {
   dancehall:  ['Bashment in the set. Keep dancing or switch?', 'Yard vibes — want more of this or different energy?'],
   highlife:   ['Ghana sound running. Want me to keep it here?', 'Highlife hour — extend the groove or switch direction?'],
   bongflava:  ['East Africa in the building. Want me to ride it out?', 'Bongo in the set — extend or flip?'],
+  bongoflava: ['East Africa in the building. Want me to ride it out?', 'Bongo in the set — extend or flip?'],
   gengetone:  ['Nairobi certified. Want me to keep it Kenyan?', 'Gengetone wave — stay in it or switch direction?'],
   mbalax:     ['Dakar feeling right now. Want me to keep the Senegalese flow?', 'Mbalax hour — extend or change scene?'],
+  kwaito:     ['SA deep right now. Want me to keep the kwaito energy?', 'Kwaito running — stay in the bounce or flip?'],
+  congolese:  ['Congo roots in the room. Want me to ride it out?', 'DRC energy — extend or take it somewhere else?'],
+  ndombolo:   ['Kinshasa on fire. Want me to keep the ndombolo moving?', 'DRC dance energy — stay in it or switch?'],
+  soukous:    ['Congo guitar running. Want more of this or switch lanes?', 'Soukous hour — extend the groove or flip?'],
+  rumba:      ['Congo rumba in the set. Want me to ride the rhythm?', 'Kinshasa roots — keep it here or move on?'],
+  makossa:    ['Cameroon in the room. Want me to extend the makossa wave?', 'Douala energy — stay here or switch direction?'],
+  bikutsi:    ["Yaoundé rhythm running. Want me to keep it Cameroonian?", 'Bikutsi energy — extend or go somewhere else?'],
+  hiplife:    ['Ghana hip energy. Want me to keep the hiplife going?', 'Accra sound — stay in this or switch it up?'],
+  soca:       ['Caribbean fire right now. Want me to keep the soca burning?', 'Trini vibes in the set — ride it out or flip?'],
+  reggaeton:  ['Perreo mode running. Want me to keep the heat?', 'Reggaeton lane — stay in it or switch direction?'],
+  fuji:       ['Traditional Yoruba energy. Want me to stay in the roots?', 'Fuji in the set — extend or move forward?'],
+  afrojuju:   ['Juju roots running. Want me to keep the spirit here?', 'Yoruba juju — stay in the tradition or flip?'],
 };
 
 function buildGenreGreeting(genre: string, title: string, _artist: string): string | null {
