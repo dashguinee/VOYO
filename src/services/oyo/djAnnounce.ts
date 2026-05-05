@@ -430,6 +430,14 @@ const GENRE_BRIDGE: Partial<Record<string, string>> = {
   'soul→afrobeats':       'Back to the heat.',
   'soul→rnb':             'Silky transition.',
   'rnb→soul':             'Going deeper.',
+  // Compass genre adjacency completions (hiphop + bongo-flava pairs)
+  'bongo-flava→afrobeats':   'West Africa calling.',
+  'kizomba→bongo-flava':     'East Africa next.',
+  'bongo-flava→kizomba':     'Slow it all the way down.',
+  'hiphop→amapiano':         'SA wave incoming.',
+  'amapiano→hiphop':         'Bars incoming.',
+  'gospel→bongo-flava':      'East Africa spirit.',
+  'bongo-flava→gospel':      'Spirit calling.',
 };
 
 function normalizeGenreKey(g: string): string {
