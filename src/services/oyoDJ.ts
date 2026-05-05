@@ -32,6 +32,7 @@ export interface DJRelationship {
   favoriteArtists: string[];
   dislikedArtists: string[];
   favoriteMoods: string[];
+  favoriteGenres: string[];
   peakListeningHours: number[];
   totalTracksShared: number;
   totalSessionsStarted: number;
@@ -65,6 +66,7 @@ const DEFAULT_PROFILE: DJProfile = {
     favoriteArtists: [],
     dislikedArtists: [],
     favoriteMoods: [],
+    favoriteGenres: [],
     peakListeningHours: [],
     totalTracksShared: 0,
     totalSessionsStarted: 0,
@@ -186,6 +188,13 @@ function learnFromBehavior(behavior: {
     if (rel.favoriteMoods.length > 30) rel.favoriteMoods = rel.favoriteMoods.slice(-30);
   }
 
+  // Genre tracking — tags[0] is primary_genre when enriched
+  if ((type === 'complete' || type === 'reaction') && track.tags?.[0]) {
+    const genre = track.tags[0];
+    rel.favoriteGenres.push(genre);
+    if (rel.favoriteGenres.length > 40) rel.favoriteGenres = rel.favoriteGenres.slice(-40);
+  }
+
   saveProfile();
 }
 
@@ -283,6 +292,7 @@ export function onTrackComplete(track: Track, listenDuration: number): void {
 export function getInsights(): {
   favoriteArtists: string[];
   favoriteMoods: string[];
+  favoriteGenres: string[];
   peakHours: number[];
   totalTime: number;
   milestones: DJMilestone[];
@@ -290,6 +300,7 @@ export function getInsights(): {
   return {
     favoriteArtists: djProfile.relationship.favoriteArtists,
     favoriteMoods: djProfile.relationship.favoriteMoods,
+    favoriteGenres: djProfile.relationship.favoriteGenres,
     peakHours: djProfile.relationship.peakListeningHours,
     totalTime: djProfile.relationship.totalTimeListened,
     milestones: djProfile.relationship.milestones,

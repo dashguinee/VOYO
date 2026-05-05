@@ -1719,13 +1719,27 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
           const favoriteArtists = new Set(
             oyoInsights.favoriteArtists.map(a => a.toLowerCase())
           );
-          const mergedHot = favoriteArtists.size === 0
+          // Top-3 genres by frequency from the rolling 40-track genre window
+          const genreFreq = new Map<string, number>();
+          for (const g of (oyoInsights.favoriteGenres ?? [])) {
+            genreFreq.set(g, (genreFreq.get(g) ?? 0) + 1);
+          }
+          const topGenres = new Set(
+            [...genreFreq.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3).map(([g]) => g)
+          );
+          const hasOyoSignal = favoriteArtists.size > 0 || topGenres.size > 0;
+          const mergedHot = !hasOyoSignal
             ? mergedHotRaw.slice(0, MAX_HOT_POOL)
             : [...mergedHotRaw]
                 .sort((a, b) => {
-                  const aFav = favoriteArtists.has((a.artist ?? '').toLowerCase()) ? 1 : 0;
-                  const bFav = favoriteArtists.has((b.artist ?? '').toLowerCase()) ? 1 : 0;
-                  return bFav - aFav; // favourites first
+                  // Artist match = 2 pts, genre match = 1 pt (artist wins)
+                  const aScore =
+                    (favoriteArtists.has((a.artist ?? '').toLowerCase()) ? 2 : 0) +
+                    (topGenres.has((a.tags?.[0] ?? '').toLowerCase()) ? 1 : 0);
+                  const bScore =
+                    (favoriteArtists.has((b.artist ?? '').toLowerCase()) ? 2 : 0) +
+                    (topGenres.has((b.tags?.[0] ?? '').toLowerCase()) ? 1 : 0);
+                  return bScore - aScore;
                 })
                 .slice(0, MAX_HOT_POOL);
 

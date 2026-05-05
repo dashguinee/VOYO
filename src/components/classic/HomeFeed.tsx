@@ -3003,21 +3003,31 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onNavVisibilityChange, onSwitc
     try {
       const hot = Array.isArray(pools.hot) ? pools.hot : [];
       if (hot.length === 0) return [];
-      let favs = new Set<string>();
+      let favArtists = new Set<string>();
+      let favGenres = new Set<string>();
       try {
         const insights = getOyoInsights();
         if (insights?.favoriteArtists) {
-          favs = new Set(insights.favoriteArtists
+          favArtists = new Set(insights.favoriteArtists
             .filter((a): a is string => typeof a === 'string')
             .map(a => a.toLowerCase()));
         }
+        // Top-3 genres by frequency
+        if (insights?.favoriteGenres?.length) {
+          const freq = new Map<string, number>();
+          for (const g of insights.favoriteGenres) freq.set(g, (freq.get(g) ?? 0) + 1);
+          [...freq.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3).forEach(([g]) => favGenres.add(g));
+        }
       } catch { /* insights may be unavailable on first run */ }
+      const isFav = (t: Track) =>
+        favArtists.has((t.artist ?? '').toLowerCase()) ||
+        favGenres.has((t.tags?.[0] ?? '').toLowerCase());
       const dedup = Array.isArray(discoverMoreTracks) ? discoverMoreTracks : [];
       const usedIds = new Set(dedup.map(t => t?.id).filter(Boolean));
       const filtered = hot.filter(t => t?.id && !usedIds.has(t.id));
       // Shuffle within each group so repeated sessions surface variety.
-      const favGroup = seededShuffle(filtered.filter(t => favs.has((t.artist ?? '').toLowerCase())), sessionSeed);
-      const restGroup = seededShuffle(filtered.filter(t => !favs.has((t.artist ?? '').toLowerCase())), sessionSeed + 1);
+      const favGroup = seededShuffle(filtered.filter(t => isFav(t)), sessionSeed);
+      const restGroup = seededShuffle(filtered.filter(t => !isFav(t)), sessionSeed + 1);
       return [...favGroup, ...restGroup].slice(0, 15);
     } catch (e) {
       devWarn('[HomeFeed] oyosPicks failed:', e);
