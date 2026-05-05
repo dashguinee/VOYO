@@ -2294,6 +2294,7 @@ interface NextVoyageShelfProps {
   tracks: Track[];
   onPlay: (track: Track) => void;
   onPlaylist: (track: Track) => void;
+  subtitle?: string;
 }
 
 // END-OF-RAIL DWELL: after the user scrolls to the final marker and it
@@ -2305,7 +2306,7 @@ interface NextVoyageShelfProps {
 const END_DWELL_MS = 10000;
 const END_FADE_MS = 800;
 
-const NextVoyageShelf = memo(({ tracks, onPlay, onPlaylist }: NextVoyageShelfProps) => {
+const NextVoyageShelf = memo(({ tracks, onPlay, onPlaylist, subtitle }: NextVoyageShelfProps) => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const [dismissed, setDismissed] = useState(false);
@@ -2352,7 +2353,12 @@ const NextVoyageShelf = memo(({ tracks, onPlay, onPlaylist }: NextVoyageShelfPro
   return (
     <div className="mb-10">
       <div className="flex justify-between items-center px-4 mb-5">
-        <h2 className="text-white font-semibold text-base">Next Voyage</h2>
+        <div>
+          <h2 className="text-white font-semibold text-base">Next Voyage</h2>
+          {subtitle && (
+            <p className="text-white/40 text-[10px] tracking-wide mt-0.5 uppercase">{subtitle}</p>
+          )}
+        </div>
       </div>
       <div
         ref={scrollRef}
@@ -3115,6 +3121,41 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onNavVisibilityChange, onSwitc
     }
   };
 
+  // Genre-direction subtitle for Next Voyage — reflects the user's sound without being literal
+  const nextVoyageSubtitle = useMemo((): string | undefined => {
+    try {
+      const insights = getOyoInsights();
+      if (!insights?.favoriteGenres?.length) return undefined;
+      const freq = new Map<string, number>();
+      for (const g of insights.favoriteGenres) freq.set(g, (freq.get(g) ?? 0) + 1);
+      const topGenre = [...freq.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
+      if (!topGenre) return undefined;
+      const GENRE_DIRECTION: Record<string, string> = {
+        afrobeats:      'past the heat — into the cut',
+        amapiano:       'from the log drum — wider',
+        kizomba:        'into the slow — deeper still',
+        zouk:           'smooth moves, uncharted',
+        hiphop:         'from the bars — into the world',
+        afropop:        'the continent — wider lens',
+        dancehall:      'from Kingston — all the way through',
+        gospel:         'spirit first — see where it goes',
+        rnb:            'through the feels — somewhere new',
+        gqom:           'from the township — beyond',
+        afrohouse:      'warehouse energy — open floor',
+        bongo:          'east africa — expanding',
+        'bongo-flava':  'east africa — expanding',
+        highlife:       'from ghana — further',
+        mbalax:         'from dakar — the full map',
+        drill:          'from the block — uncharted',
+        jazz:           'after midnight — wide open',
+        reggae:         'one drop — a whole world',
+        ndombolo:       'kinshasa roots — outward',
+        congolese:      'congo energy — everywhere',
+      };
+      return GENRE_DIRECTION[topGenre.toLowerCase()] ?? `through the ${topGenre} lens`;
+    } catch { return undefined; }
+  }, []);
+
   const hasHistory = recentlyPlayed.length > 0;
   const hasPreferences = heavyRotation.length > 0;
   const hasArtists = artistsYouLove.length > 0;
@@ -3347,6 +3388,7 @@ export const HomeFeed = ({ onTrackPlay, onSearch, onNavVisibilityChange, onSwitc
           tracks={discoverMoreTracks21}
           onPlay={playTrackFull}
           onPlaylist={setPlaylistModalTrack}
+          subtitle={nextVoyageSubtitle}
         />
       )}
 

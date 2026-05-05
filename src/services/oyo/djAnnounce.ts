@@ -279,12 +279,32 @@ function bridgeAnnouncement(tags: string[], ctx?: TrackContext, prevGenre?: stri
 
 function echoAnnouncement(ctx?: TrackContext): DJAnnouncement {
   let text: string;
-  if (ctx?.artist && (ctx.heatScore ?? 100) < 30) {
+  const isUnderground = ctx?.artistTier === 'D' || ctx?.artistTier === 'C' || (ctx?.heatScore ?? 100) < 30;
+  const isBigName = ctx?.artistTier === 'A';
+
+  if (ctx?.artist && isBigName) {
+    // A-tier appearing in echo = unexpected deep cut
+    text = rotate('echo_big', [
+      `${ctx.artist} — the deeper side.`,
+      `Even ${ctx.artist} has cuts people miss.`,
+      `${ctx.artist}, but make it rare.`,
+    ]);
+  } else if (ctx?.artist && isUnderground) {
+    // D/C tier or low heat = underground discovery
     text = rotate('echo_artist', [
       `${ctx.artist}, for you people.`,
       `${ctx.artist} goes deeper than people know.`,
-      `They slept on this one.`,
       `Big up ${ctx.artist}.`,
+      `${ctx.artist} — on the radar now.`,
+      `${ctx.artist}, they slept.`,
+    ]);
+  } else if (ctx?.genre && getGenreVocab(ctx.genre)) {
+    // Known genre but hidden gem
+    const genrePhrase = getGenreVocab(ctx.genre)!;
+    text = rotate('echo_genre', [
+      `${genrePhrase} But deep.`,
+      `Hidden ${ctx.genre} — OYO found it.`,
+      `They slept on this one. ${genrePhrase}`,
     ]);
   } else {
     text = rotate('echo', [
@@ -294,6 +314,7 @@ function echoAnnouncement(ctx?: TrackContext): DJAnnouncement {
       'OYO dug deep.',
       'Pay attention.',
       'This one hits different.',
+      'Off the radar.',
     ]);
   }
   return {
@@ -383,17 +404,26 @@ function hotSearchingAnnouncement(): DJAnnouncement {
 
 function discoveryAnnouncement(tags: string[], ctx?: TrackContext): DJAnnouncement {
   let text: string;
-  if (ctx?.artist && (ctx.heatScore ?? 50) < 30) {
-    // Low-heat artist — DJ introduces the unknown
+  const isNiche = ctx?.artistTier === 'D' || ctx?.artistTier === 'C' || (ctx?.heatScore ?? 50) < 30;
+
+  if (ctx?.artist && isNiche) {
+    // Underground or low-profile artist — DJ introduces them
     text = unknownArtistCallout(ctx.artist);
+  } else if (ctx?.artist && ctx.artistTier === 'A') {
+    // Big name in discovery — unexpected angle
+    text = rotate('discovery_big', [
+      `${ctx.artist}, but from another angle.`,
+      `${ctx.artist} in the discovery stream — that's OYO for you.`,
+      `Even ${ctx.artist} has songs that deserve more.`,
+    ]);
   } else if (ctx && getGenreVocab(ctx.genre)) {
-    // For discovery, add region context if genre fires — "Angola in the building. Kizomba hour."
+    // Region + genre combo — most specific discovery callout
     const genreText = getGenreVocab(ctx.genre)!;
     const regionText = getRegionCallout(ctx.culturalTags);
     text = regionText ? `${regionText} ${genreText}` : genreText;
   } else {
     const intro = getCulturalIntro(tags, ctx);
-    const base = rotate('discovery', ['Taking you somewhere.', 'Going left for a sec.', 'Expanding the map.', 'Trust the move.', 'Something different.', 'OYO dug deep.']);
+    const base = rotate('discovery', ['Taking you somewhere.', 'Going left for a sec.', 'Expanding the map.', 'Trust the move.', 'Something different.', 'OYO dug deep.', 'Wide world of music.']);
     text = intro ? `${intro} ${base}` : base;
   }
   return {
