@@ -39,6 +39,11 @@ const GENRE_LABELS: Record<string, string> = {
   'sa-house': 'SA House', sahouse: 'SA House',
   'afro-soul': 'Afro Soul', afrosoul: 'Afro Soul',
   'coupe-decale': 'Coupé-Décalé', coupedecale: 'Coupé-Décalé', coupdecale: 'Coupé-Décalé',
+  // Lusophone / East / North African catalog additions
+  kuduro: 'Kuduro', semba: 'Semba', tarraxo: 'Tarraxinha',
+  benga: 'Benga', taarab: 'Taarab', singeli: 'Singeli', lekompo: 'Lekompo',
+  rai: 'Raï', chaabi: 'Chaâbi', gnawa: 'Gnawa',
+  juju: 'Jùjú', palmwine: 'Palm Wine',
 };
 
 export const fmtGenre = (g: string | null | undefined): string => {
