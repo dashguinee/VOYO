@@ -99,7 +99,8 @@ function buildContextBlock(ctx: OyoContext | undefined): string {
   const lines: string[] = ['=== RIGHT NOW ==='];
 
   if (ctx.currentTrack) {
-    lines.push(`Playing: ${ctx.currentTrack.title} — ${ctx.currentTrack.artist}`);
+    const genre = ctx.currentTrack.genre ? ` [${ctx.currentTrack.genre}]` : '';
+    lines.push(`Playing: ${ctx.currentTrack.title} — ${ctx.currentTrack.artist}${genre}`);
   }
   if (ctx.timeOfDay) {
     lines.push(`Time of day: ${ctx.timeOfDay}`);

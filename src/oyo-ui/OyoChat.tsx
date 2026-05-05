@@ -25,6 +25,7 @@ import {
   useState,
 } from 'react';
 import { oyo } from '../oyo';
+import { usePlayerStore } from '../store/playerStore';
 import { devWarn } from '../utils/logger';
 
 export type ChatRole = 'user' | 'oyo';
@@ -126,7 +127,16 @@ export const OyoChat = forwardRef<OyoChatHandle, OyoChatProps>(function OyoChat(
     setThinking(true);
 
     try {
-      const result = await oyo.think({ userMessage: message });
+      const playerTrack = usePlayerStore.getState().currentTrack;
+      const context = playerTrack ? {
+        currentTrack: {
+          trackId: playerTrack.trackId,
+          title: playerTrack.title,
+          artist: playerTrack.artist,
+          genre: playerTrack.tags?.[0],
+        },
+      } : undefined;
+      const result = await oyo.think({ userMessage: message, context });
       setTurns((prev) => [
         ...prev,
         {
