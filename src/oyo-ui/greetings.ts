@@ -40,12 +40,44 @@ export const GREETINGS: Record<InvocationSurface, string[]> = {
   ],
 };
 
+// Time-of-day overrides — fire at 50% chance to keep it varied
+const TIME_GREETINGS: Partial<Record<InvocationSurface, Record<string, string[]>>> = {
+  player: {
+    morning:   ['Morning session. Good start.', 'Rise and vibe — what are we opening with?'],
+    afternoon: ["Afternoon run. What's the energy today?", 'Midday check-in. Where are we?'],
+    evening:   ["Evening mode. Let's set the tone.", "Sun's down. Where are we taking this?"],
+    latenight: ['Late crew. Still up. What are we doing?', "Deep night session. I'm with it."],
+    midnight:  ['Midnight energy. No filters. Talk to me.', "Still here. What's on?"],
+  },
+  home: {
+    morning:   ['Morning. What are we starting with?', 'Early doors. What is the move?'],
+    evening:   ['Evening vibes. What are we doing?', 'End of day. Talk to me.'],
+    latenight: ['Late night pull. Something on your mind?', 'Night hours. Low light. What?'],
+    midnight:  ['Midnight. You here for a reason?', 'Still up? I heard you.'],
+  },
+};
+
+function getTimeSlot(): string | null {
+  const h = new Date().getHours();
+  if (h >= 5 && h < 9) return 'morning';
+  if (h >= 12 && h < 18) return 'afternoon';
+  if (h >= 18 && h < 22) return 'evening';
+  if (h >= 22 || h < 2) return 'midnight';
+  if (h >= 2 && h < 5) return 'latenight';
+  return null;
+}
+
 /**
- * Pick a greeting for a given surface. Pure random for now; later
- * versions can weight by time-of-day, last-mood, or streak.
+ * Pick a contextual greeting weighted by time-of-day (50% chance) and surface.
  */
 export function pickGreeting(surface: InvocationSurface): string {
+  const slot = getTimeSlot();
+  if (slot && Math.random() < 0.5) {
+    const timeOptions = TIME_GREETINGS[surface]?.[slot];
+    if (timeOptions?.length) {
+      return timeOptions[Math.floor(Math.random() * timeOptions.length)];
+    }
+  }
   const options = GREETINGS[surface];
-  const idx = Math.floor(Math.random() * options.length);
-  return options[idx];
+  return options[Math.floor(Math.random() * options.length)];
 }

@@ -29,6 +29,7 @@ import {
 } from '../../services/lyricsEngine';
 import { usePlayerStore } from '../../store/playerStore';
 import { app } from '../../services/oyo';
+import { pickGreeting } from '../../oyo-ui';
 import { searchAlbums, getAlbumTracks } from '../../services/piped';
 import { pipedTrackToVoyoTrack } from '../../data/tracks';
 
@@ -103,13 +104,13 @@ export function OyoIsland({ visible, onHide, onActivity }: OyoIslandProps) {
   }, [keyboardOpen, visible, onActivity]);
 
   // Open directly to chat whenever the island becomes visible.
-  // Also clear chat history on each new invocation so users don't land on
-  // stale context from a previous session — OYO always starts fresh.
+  // Seed chat with a contextual OYO greeting so the user isn't staring at an
+  // empty input box. Time-of-day aware via pickGreeting('player').
   const prevVisibleRef = useRef(false);
   useEffect(() => {
     if (visible && !prevVisibleRef.current) {
       setMode('chat');
-      setChatHistory([]);
+      setChatHistory([{ role: 'oyo', message: pickGreeting('player') }]);
       setVoiceState({ isRecording: false, isProcessing: false });
     }
     prevVisibleRef.current = visible;
