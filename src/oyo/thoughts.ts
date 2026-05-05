@@ -31,6 +31,7 @@ import {
   bumpConversation,
   recordRecommendation,
   recordMood,
+  recordInterest,
   updateSignals,
 } from './consciousness';
 import {
@@ -143,6 +144,12 @@ export async function runThoughtCycle(input: OyoThinkInput): Promise<OyoThinkOut
       consciousness,
       `Moves made: ${toolCalls.map((t) => t.tool).join(', ')}`,
     );
+  }
+  // Feed essence facts (genre/artist) into musicalInterests so the system
+  // prompt's "Musical interests:" line stays fresh from conversation.
+  for (const mem of newMemories) {
+    const genreMatch = mem.match(/interest in (.+)/i) || mem.match(/mentioned (.+?) positively/i);
+    if (genreMatch) consciousness = recordInterest(consciousness, genreMatch[1]);
   }
   saveConsciousness(consciousness);
 
