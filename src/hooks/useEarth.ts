@@ -127,14 +127,36 @@ export function useEarth() {
   }, []);
 
   const recordOye = useCallback(async (momentId: string) => {
+    // Route through OYO taste graph if the moment has a linked track
+    const moment = trail.current.find(m => m.id === momentId) ?? (current?.id === momentId ? current : null);
+    if (moment?.parent_track_id) {
+      try {
+        const [{ oyo }] = await Promise.all([import('../services/oyo/index')]);
+        oyo.onOye({
+          id: moment.parent_track_id,
+          trackId: moment.parent_track_id,
+          title: moment.parent_track_title || moment.title,
+          artist: moment.parent_track_artist || moment.creator_name || '',
+          coverUrl: moment.thumbnail_url,
+        } as never);
+      } catch { /* non-fatal */ }
+    }
+
     if (!supabase || !isSupabaseConfigured) return;
     try {
-      await supabase.rpc('record_moment_play', {
-        p_moment_id: momentId,
-        p_tapped_full_song: false,
-      });
+      const { data: cur } = await supabase
+        .from('voyo_moments')
+        .select('voyo_reactions')
+        .eq('id', momentId)
+        .maybeSingle();
+      if (cur) {
+        await supabase
+          .from('voyo_moments')
+          .update({ voyo_reactions: (cur.voyo_reactions || 0) + 1 })
+          .eq('id', momentId);
+      }
     } catch { /* best-effort */ }
-  }, []);
+  }, [current]);
 
   return {
     current,
