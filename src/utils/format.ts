@@ -35,6 +35,10 @@ const GENRE_LABELS: Record<string, string> = {
   congolese: 'Congolese', ndombolo: 'Ndombolo', 'bongo-flava': 'Bongo Flava', bongoflava: 'Bongo Flava',
   gengetone: 'Gengetone', rumba: 'Rumba', funk: 'Funk', pop: 'Pop',
   rock: 'Rock', electronic: 'Electronic', classical: 'Classical', other: 'World',
+  // artist_master.json genre aliases
+  'sa-house': 'SA House', sahouse: 'SA House',
+  'afro-soul': 'Afro Soul', afrosoul: 'Afro Soul',
+  'coupe-decale': 'Coupé-Décalé', coupedecale: 'Coupé-Décalé', coupdecale: 'Coupé-Décalé',
 };
 
 export const fmtGenre = (g: string | null | undefined): string => {
