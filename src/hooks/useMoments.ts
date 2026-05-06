@@ -458,7 +458,11 @@ export function useMoments(): UseMomentsReturn {
           let q = supabase!
             .from('voyo_moments')
             .select('*')
-            .eq('is_active', true);
+            .eq('is_active', true)
+            // v1196 — feed only serves rows in the active pool OR
+            // permanent core. Archived rows are creator-page-only.
+            // Migration 031 introduced the rotating-pool architecture.
+            .or('in_pool.eq.true,is_core.eq.true');
           if (orderBy === 'virality') {
             q = q.order('virality_score', { ascending: false, nullsFirst: false })
                  .order('discovered_at', { ascending: false });
