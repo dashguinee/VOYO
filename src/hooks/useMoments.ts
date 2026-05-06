@@ -481,12 +481,15 @@ export function useMoments(): UseMomentsReturn {
               q = q.eq('content_type', category);
             }
           } else if (axis === 'travel') {
-            // v911 Travel — cultural_tags overlap. The catalog has a
-            // populated cultural_tags column with real country/region
-            // tokens, so this is the strict-but-actually-hits filter.
+            // v1194 Travel — curator-first like genre, fallback to
+            // cultural_tags. Once travel/angola etc are curated the
+            // hand-picked rows take precedence; until then we still
+            // hit the cultural_tags long tail.
             const tags = COUNTRY_TAG_MAP[category];
             if (!tags || tags.length === 0) return null;
-            q = q.overlaps('cultural_tags', tags);
+            const tagsExpr = `cultural_tags.ov.{${tags.join(',')}}`;
+            const curatedExpr = `curated_lane.eq.travel/${category}`;
+            q = q.or(`${curatedExpr},${tagsExpr}`);
           } else if (axis === 'live') {
             // v860 — virality cuts (NOT time windows). The catalog
             // is static (last ingest 87d ago per circulation
@@ -511,16 +514,29 @@ export function useMoments(): UseMomentsReturn {
             const maxV = maxViralityFor[category];
             if (maxV !== null && maxV !== undefined) q = q.lt('virality_score', maxV);
           } else if (axis === 'genre') {
-            // Genre compass — cultural_tag proxy for African music directions.
-            // 'for-you' = no filter (broadest pool). Other genres filter by
-            // cultural_tags overlap (Nigeria → Afrobeats, Angola → Kizomba, etc).
-            // Phase 2: when parent_track_id coverage > 500, switch to
-            //   q.not('parent_track_id', 'is', null) + server-side genre join.
+            // Genre compass — curator-first as of v1194.
+            //
+            // The new curated_lane column carries an explicit bucket label
+            // (e.g. 'genre/kizomba') populated by the curated-ingest worker.
+            // Those rows are the BACKBONE of the lane: hand-vetted creators,
+            // ranked by real view counts.
+            //
+            // For lanes with curated coverage we OR (curated_lane = X) with
+            // (cultural_tags && X_tags). Curated rows naturally bubble to
+            // the top via their real virality_score (YouTube view counts);
+            // the cultural_tags fallback fills the long tail until curation
+            // covers every bucket. 'for-you' has no filter — broadest pool.
             const tags = GENRE_TAG_MAP[category];
-            if (tags && tags.length > 0) {
-              q = q.overlaps('cultural_tags', tags);
+            const curatedKey = `genre/${category}`;
+            if (category !== 'for-you') {
+              const tagsExpr = tags && tags.length > 0
+                ? `cultural_tags.ov.{${tags.join(',')}}`
+                : null;
+              const curatedExpr = `curated_lane.eq.${curatedKey}`;
+              const orFilter = tagsExpr ? `${curatedExpr},${tagsExpr}` : curatedExpr;
+              q = q.or(orFilter);
             }
-            // 'for-you' gets no tag filter — falls through to broadest pool
+            // 'for-you' gets no filter — broadest pool
           } else if (axis === 'friends') {
             // Social graph — moments by creators the user has
             // engaged with. v860 v1: pull from sessionStarred +
