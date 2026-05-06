@@ -283,8 +283,16 @@ const MAX_PER_CREATOR = 2;          // hard cap per creator per page
 // user sees a full feed even in a sparse category.
 // v910 — bumped 0.6 → 0.75. Bleed/rescue cascade fires earlier so
 // thin lanes (fashion 68, cover 51 etc) reach a full page reliably.
-// Healthy lanes are unaffected (they exceed both thresholds).
-const BLEED_THRESHOLD_RATIO = 0.75;
+// v1193 — bumped to 2.0 so any lane under 40 raw rows triggers bleed.
+// Sparse lanes (algeria 18, live/pulse 26, north-africa 18, vibes/live
+// 20) were technically "above threshold" at 0.75 but barely cleared a
+// single page, leaving DOWN as a dead-end after a handful of swipes.
+// Healthy lanes (>40 raw) still skip bleed.
+const BLEED_THRESHOLD_RATIO = 2.0;
+// v1193 — Phase B (broad-rescue) threshold. If after Phase A the pool
+// is still below 2.5× page, pull top-virality site-wide. Guarantees a
+// 50+ moment tail per lane → ~10 minutes of swipes before edge cases.
+const RESCUE_THRESHOLD_RATIO = 2.5;
 
 // ============================================
 // ADJACENCY MAPS (weighted neighbors for drift/bleed)
@@ -625,6 +633,12 @@ export function useMoments(): UseMomentsReturn {
 
         const tooShort = () =>
           filledRaw.length < Math.floor(MOMENTS_PER_PAGE * BLEED_THRESHOLD_RATIO);
+        // v1193 — separate threshold for Phase B broad rescue. Even
+        // after neighbor bleed, lanes whose neighbors are also thin
+        // (genre/kizomba → angola 5, lusophone <10) need site-wide
+        // virality top-up to reach a comfortable scroll depth.
+        const needsRescue = () =>
+          filledRaw.length < Math.floor(MOMENTS_PER_PAGE * RESCUE_THRESHOLD_RATIO);
 
         if (tooShort()) {
           // Phase A — neighbor-cat bleed.
@@ -683,7 +697,11 @@ export function useMoments(): UseMomentsReturn {
         // contract is to stay strictly engaged-creator-only, and an
         // empty Friends lane signals "follow some creators" instead of
         // pouring in random content).
-        if (tooShort() && axis !== 'friends') {
+        // v1193: gated on needsRescue() (50-row floor) instead of
+        // tooShort(). After Phase A bleed, even a 40-row pool is below
+        // a comfortable scroll depth — pull broadly so every lane has
+        // an effectively infinite tail.
+        if (needsRescue() && axis !== 'friends') {
           try {
             const broadQ = supabase!
               .from('voyo_moments')
@@ -691,7 +709,7 @@ export function useMoments(): UseMomentsReturn {
               .eq('is_active', true)
               .order('virality_score', { ascending: false, nullsFirst: false })
               .order('discovered_at', { ascending: false })
-              .range(0, MOMENTS_PER_PAGE * 3 - 1);
+              .range(0, MOMENTS_PER_PAGE * 5 - 1);
             const { data: broadData } = await broadQ;
             for (const m of (broadData || []) as Moment[]) {
               if (m?.id && !seenIds.has(m.id)) {
@@ -847,8 +865,36 @@ export function useMoments(): UseMomentsReturn {
       let newTimeIndex = Math.min(prev.timeIndex + skip, categoryMoments.length - 1);
       newTimeIndex = Math.max(newTimeIndex, 0);
 
-      // Auto-paginate near end
-      if (newTimeIndex >= categoryMoments.length - 3 && cat) {
+      // v1193 — END-OF-LANE GUARD. If user is already at the last card,
+      // DOWN was a no-op (same cap → same index → "stuck on one video").
+      // Auto-drift to a weighted neighbor so the feed never dead-ends.
+      // Pagination on sparse lanes is unreliable (PostgREST returns the
+      // same rows when offset > total), so drift is the safety net.
+      // Healthy lanes (length >> timeIndex) hit this branch only at the
+      // tail, after 100+ swipes, where drift is the right move anyway.
+      if (
+        categoryMoments.length > 0 &&
+        prev.timeIndex >= categoryMoments.length - 1 &&
+        cats.length > 1
+      ) {
+        const driftTarget = pickWeightedNeighbor(categoryAxis, cat, getRecentCategories(), 0.5);
+        const driftIdx = cats.indexOf(driftTarget);
+        if (driftIdx !== -1 && driftIdx !== prev.categoryIndex) {
+          consecutiveUpsRef.current = 0;
+          fetchMomentsForCategory(categoryAxis, driftTarget);
+          return { categoryIndex: driftIdx, timeIndex: 0 };
+        }
+      }
+
+      // Auto-paginate near end — only when the lane is dense enough that
+      // there's likely more in the DB. For sparse lanes (<60 rows) the
+      // primary fetch already drained the table; further calls hit the
+      // same rows and waste a roundtrip. EOL guard above handles those.
+      if (
+        categoryMoments.length >= 60 &&
+        newTimeIndex >= categoryMoments.length - 3 &&
+        cat
+      ) {
         fetchMomentsForCategory(categoryAxis, cat, categoryMoments.length);
       }
 
